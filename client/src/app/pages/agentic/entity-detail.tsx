@@ -107,7 +107,11 @@ export const EntityDetailLoading: React.FC<EntityDetailLoadingProps> = ({
 
 export interface EntityDetailUnavailableProps {
   breadcrumbs: BreadCrumbPathProps["breadcrumbs"];
-  /** The API answered 404 (or the id can never exist). Otherwise the fetch failed. */
+  /**
+   * The API answered 404 (`isNotFoundError`) or the id can never exist. Every
+   * other failure (5xx, network) is the error branch: the trail and the shared
+   * `StateError`, with no retry.
+   */
   isNotFound: boolean;
   notFoundTitle: string;
   notFoundBody: string;
