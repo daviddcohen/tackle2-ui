@@ -1,7 +1,6 @@
-import { FC, Ref, useState } from "react";
+import { FC, useRef, useState } from "react";
 import {
   MenuToggle,
-  MenuToggleElement,
   MenuToggleProps,
   Select,
   SelectList,
@@ -9,6 +8,8 @@ import {
 } from "@patternfly/react-core";
 
 import { FilterSelectOptionProps } from "../FilterToolbar";
+
+import { claimEscapeForOpenMenu } from "./selectUtils";
 
 interface SimpleSelectProps {
   isScrollable?: boolean;
@@ -38,8 +39,15 @@ const SimpleSelect: FC<SimpleSelectProps> = ({
   toggleStatus,
 }) => {
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const onEscapeKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (claimEscapeForOpenMenu(event, isFilterDropdownOpen)) {
+      setIsFilterDropdownOpen(false);
+      toggleRef.current?.focus();
+    }
+  };
 
-  const toggle = (toggleRef: Ref<MenuToggleElement>) => {
+  const renderToggle = () => {
     const selectedOption = options.find(
       (option) => option.value === selectedValue
     );
@@ -56,6 +64,7 @@ const SimpleSelect: FC<SimpleSelectProps> = ({
         onClick={() => {
           setIsFilterDropdownOpen(!isFilterDropdownOpen);
         }}
+        onKeyDownCapture={onEscapeKeyDown}
         isExpanded={isFilterDropdownOpen}
         isDisabled={isDisabled || options.length === 0}
         isFullWidth={isFullWidth}
@@ -70,7 +79,7 @@ const SimpleSelect: FC<SimpleSelectProps> = ({
       ouiaId={`${toggleId}-select`}
       isScrollable={isScrollable}
       aria-label={ariaLabel ?? toggleAriaLabel}
-      toggle={toggle}
+      toggle={{ toggleNode: renderToggle(), toggleRef }}
       onOpenChange={(isOpen) => setIsFilterDropdownOpen(isOpen)}
       selected={selectedValue}
       onSelect={(_, value) => {
@@ -80,7 +89,7 @@ const SimpleSelect: FC<SimpleSelectProps> = ({
       isOpen={isFilterDropdownOpen}
       shouldFocusToggleOnSelect
     >
-      <SelectList id={`${toggleId}-listbox`}>
+      <SelectList id={`${toggleId}-listbox`} onKeyDownCapture={onEscapeKeyDown}>
         {options.map(({ label, value, optionProps }) => (
           <SelectOption
             {...optionProps}

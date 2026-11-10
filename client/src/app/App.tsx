@@ -8,16 +8,26 @@ import { DefaultLayout } from "./layout";
 
 import "./app.css";
 
-const App: React.FC = () => {
+export interface AppProps {
+  /**
+   * Optional wrapper inside the router, used by index.tsx to mount the
+   * agentic prototype controls in development. The app works without it.
+   */
+  shell?: React.ComponentType<React.PropsWithChildren>;
+}
+
+const App: React.FC<AppProps> = ({ shell: Shell = React.Fragment }) => {
   return (
     <BrowserRouter>
-      <NotificationsProvider>
-        <TaskManagerProvider>
-          <DefaultLayout>
-            <AppRoutes />
-          </DefaultLayout>
-        </TaskManagerProvider>
-      </NotificationsProvider>
+      <Shell>
+        <NotificationsProvider>
+          <TaskManagerProvider>
+            <DefaultLayout>
+              <AppRoutes />
+            </DefaultLayout>
+          </TaskManagerProvider>
+        </NotificationsProvider>
+      </Shell>
     </BrowserRouter>
   );
 };

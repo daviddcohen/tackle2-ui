@@ -8,6 +8,8 @@ node_modules/
 
 # testing
 coverage/
+test-results/
+playwright-report/
 
 # production
 dist/
@@ -19,6 +21,7 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+.opencode/
 
 npm-debug.log*
 

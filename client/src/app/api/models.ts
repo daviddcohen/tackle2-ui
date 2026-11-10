@@ -1084,7 +1084,7 @@ export interface Scope {
 }
 
 /**
- * PAT (Personal Access Token) — request body for POST,
+ * PAT (Personal Access Token), request body for POST,
  * and the response from POST (which includes the one-time raw secret).
  * Also aliased as APIKey.
  */
