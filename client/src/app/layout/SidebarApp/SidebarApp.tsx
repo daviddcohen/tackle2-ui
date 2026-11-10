@@ -244,6 +244,12 @@ const MigrationSidebar = ({
             <SidebarNavItem to={DevPaths.agents}>
               {t("sidebar.agents")}
             </SidebarNavItem>
+            <SidebarNavItem to={DevPaths.migrationPlans}>
+              {t("sidebar.plans")}
+            </SidebarNavItem>
+            <SidebarNavItem to={DevPaths.planRuns}>
+              {t("sidebar.planRuns")}
+            </SidebarNavItem>
             <SidebarNavItem to={DevPaths.skills}>
               {t("sidebar.skills")}
             </SidebarNavItem>
