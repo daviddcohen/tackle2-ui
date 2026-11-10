@@ -186,9 +186,14 @@ describe("EntityDetailUnavailable", () => {
         <EntityDetailUnavailable {...props} isNotFound={false} />
       </Router>
     );
-    expect(screen.queryByText("Agent not found")).not.toBeInTheDocument();
+    // The trail stays, with the noun leaf, above the shared error state.
+    expect(screen.getByRole("link", { name: "Agents" })).toBeInTheDocument();
+    expect(screen.getByText("Agent")).toHaveAttribute("aria-current", "page");
     expect(
-      screen.queryByRole("button", { name: "Back to agents" })
-    ).not.toBeInTheDocument();
+      screen.getByRole("heading", { name: "message.unableToConnect" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Agent not found")).not.toBeInTheDocument();
+    // No retry and no way back (parity with the other error states).
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

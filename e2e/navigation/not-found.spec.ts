@@ -4,7 +4,14 @@
  * entity and keeps a breadcrumb back to the owning list. Request-level checks
  * (no retries on 404, no `/NaN` or `/0` ids) live in data-layer/.
  */
-import { breadcrumb, expect, mainHeading, protoUrl, test } from "../support";
+import {
+  breadcrumb,
+  currentCrumb,
+  expect,
+  mainHeading,
+  protoUrl,
+  test,
+} from "../support";
 
 const cases: [path: string, message: RegExp, list: string, listPath: string][] =
   [
@@ -80,3 +87,27 @@ test("/applications/abc is not an application id: the inventory is shown", async
   await expect(mainHeading(page)).toHaveText("Application inventory");
   await expect(page.getByText("Loading...")).toHaveCount(0);
 });
+
+// A failed fetch (every call returns 503) is the error branch, never "not
+// found": the trail keeps the entity noun as its leaf above the shared error.
+const errorCases: [path: string, leaf: string][] = [
+  ["/agents/2", "Agent"],
+  ["/migration-plans/1", "Migration plan"],
+  ["/plan-runs/1", "Plan run"],
+  ["/plan-runs/1/stages/1", "Stage"],
+  ["/skills/1", "Skill"],
+  ["/skills/collections/1", "Skill collection"],
+];
+
+for (const [path, leaf] of errorCases) {
+  test(`${path} reports an API failure as an error, not as not found`, async ({
+    page,
+  }) => {
+    await page.goto(protoUrl(path, { scenario: "apiError" }));
+    await expect(page.getByText("Unable to connect")).toBeVisible({
+      timeout: 20000,
+    });
+    await expect(page.getByText(/not found/i)).toHaveCount(0);
+    await expect(currentCrumb(page)).toHaveText(leaf);
+  });
+}
