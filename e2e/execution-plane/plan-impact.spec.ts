@@ -81,7 +81,7 @@ test.describe("Plan impact and lifecycle", () => {
       "Plan in use by a run"
     );
 
-    await page.getByRole("link", { name: "Migration Plans" }).click();
+    await page.getByRole("link", { name: "Migration plans" }).click();
     await page
       .getByRole("row", { name: /Plan in use by a run/ })
       .getByRole("button", { name: /Kebab toggle/ })

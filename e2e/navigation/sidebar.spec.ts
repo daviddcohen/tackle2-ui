@@ -10,14 +10,15 @@ import {
   test,
 } from "../support";
 
+// In sidebar order: primary objects first, building blocks after.
 const agenticItems = [
-  { name: "Agents", href: "/agents", heading: "Agents" },
   {
-    name: "Migration Plans",
+    name: "Migration plans",
     href: "/migration-plans",
-    heading: "Migration Plans",
+    heading: "Migration plans",
   },
-  { name: "Plan Runs", href: "/plan-runs", heading: "Plan Runs" },
+  { name: "Plan runs", href: "/plan-runs", heading: "Plan runs" },
+  { name: "Agents", href: "/agents", heading: "Agents" },
   { name: "Skills", href: "/skills", heading: "Skills" },
 ];
 
@@ -54,7 +55,7 @@ const migrationItems = [
 const adminItems = [
   { name: "General", href: "/general", heading: "General configuration" },
   { name: "Credentials", href: "/identities", heading: "Credentials" },
-  { name: "Providers", href: "/providers", heading: "Providers" },
+  { name: "Model providers", href: "/providers", heading: "Model providers" },
   { name: "Models", href: "/models", heading: "Models" },
   { name: "Git", href: "/repositories/git", heading: "Git configuration" },
   {
@@ -88,22 +89,28 @@ for (const persona of [
   "enterpriseArchitect",
   "hubMigrator",
 ] as Persona[]) {
-  test(`${persona}: Migration sidebar exposes every item and the Agentic Migration group`, async ({
+  test(`${persona}: Migration sidebar exposes every item and the Agentic migration group`, async ({
     page,
   }) => {
     await page.goto(protoUrl("/applications", { persona }));
     await expect(mainHeading(page)).toHaveText("Application inventory");
     const nav = sidebar(page);
+    const groupName = { name: "Agentic migration" };
+    await expect(nav.getByRole("button", groupName)).toBeVisible();
+    // Items are listed in sidebar order: primary objects first.
     await expect(
-      nav.getByRole("button", { name: "Agentic Migration" })
-    ).toBeVisible();
+      nav
+        .getByRole("listitem")
+        .filter({ has: page.getByRole("button", groupName) })
+        .getByRole("link")
+    ).toHaveText(agenticItems.map((item) => item.name));
     for (const item of [...migrationItems, ...agenticItems]) {
       await expect(
         nav.getByRole("link", { name: item.name, exact: true })
       ).toHaveAttribute("href", item.href);
     }
     // Administration-only items never leak into the Migration perspective.
-    for (const name of ["Models", "Providers", "General"]) {
+    for (const name of ["Models", "Model providers", "General"]) {
       await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(0);
     }
   });
@@ -124,7 +131,7 @@ for (const persona of [
   });
 }
 
-test("Administration sidebar lists every upstream item plus Providers and Models", async ({
+test("Administration sidebar lists every upstream item plus Model providers and Models", async ({
   page,
 }) => {
   await page.goto(protoUrl("/general", { persona: "platformEngineer" }));
@@ -134,6 +141,11 @@ test("Administration sidebar lists every upstream item plus Providers and Models
       sidebar(page).getByRole("link", { name: item.name, exact: true })
     ).toHaveAttribute("href", item.href);
   }
+  await expect(
+    sidebar(page).getByRole("link", {
+      name: /^(Credentials|Model providers|Models)$/,
+    })
+  ).toHaveText(["Credentials", "Model providers", "Models"]);
 });
 
 test("Administration sidebar items open their pages and highlight", async ({
@@ -168,8 +180,8 @@ test("Task Manager opened from Administration keeps the Administration sidebar",
 test("detail pages highlight their owning sidebar item", async ({ page }) => {
   for (const [path, item] of [
     ["/agents/1", "Agents"],
-    ["/migration-plans/1", "Migration Plans"],
-    ["/plan-runs/1/stages/2", "Plan Runs"],
+    ["/migration-plans/1", "Migration plans"],
+    ["/plan-runs/1/stages/2", "Plan runs"],
     ["/skills/collections/1", "Skills"],
     ["/applications/1", "Application inventory"],
     ["/archetypes/1/target-profiles", "Archetypes"],

@@ -30,27 +30,27 @@ const routes: RouteCase[] = [
   },
   {
     path: "/migration-plans",
-    heading: "Migration Plans",
-    nav: "Migration Plans",
+    heading: "Migration plans",
+    nav: "Migration plans",
   },
   {
     path: "/migration-plans/1",
     heading: "Java EE to Quarkus",
-    nav: "Migration Plans",
-    crumbs: ["Migration Plans", "Java EE to Quarkus"],
+    nav: "Migration plans",
+    crumbs: ["Migration plans", "Java EE to Quarkus"],
   },
-  { path: "/plan-runs", heading: "Plan Runs", nav: "Plan Runs" },
+  { path: "/plan-runs", heading: "Plan runs", nav: "Plan runs" },
   {
     path: "/plan-runs/1",
     heading: "Run #1 — Java EE to Quarkus",
-    nav: "Plan Runs",
-    crumbs: ["Plan Runs", "Run #1 — Java EE to Quarkus"],
+    nav: "Plan runs",
+    crumbs: ["Plan runs", "Run #1 — Java EE to Quarkus"],
   },
   {
     path: "/plan-runs/1/stages/1",
     heading: "Prepare proposal: Run #1 — Java EE to Quarkus",
-    nav: "Plan Runs",
-    crumbs: ["Plan Runs", "Run #1 — Java EE to Quarkus", "Prepare proposal"],
+    nav: "Plan runs",
+    crumbs: ["Plan runs", "Run #1 — Java EE to Quarkus", "Prepare proposal"],
   },
   { path: "/skills", heading: "Skills", nav: "Skills" },
   {
@@ -80,8 +80,8 @@ const routes: RouteCase[] = [
   {
     path: "/providers",
     persona: "platformEngineer",
-    heading: "Providers",
-    nav: "Providers",
+    heading: "Model providers",
+    nav: "Model providers",
   },
   // Upstream Migration routes
   {

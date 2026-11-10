@@ -184,7 +184,7 @@ test("cold deep links use the canonical hierarchy and each crumb works", async (
   for (const [path, crumbs] of [
     [
       "/plan-runs/1/stages/2",
-      ["Plan Runs", "Run #1 — Java EE to Quarkus", "Migrate"],
+      ["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"],
     ],
     ["/skills/collections/1", ["Skills", "Java modernization foundation"]],
     [
@@ -235,7 +235,7 @@ test("a not-found detail keeps the trail it was reached from", async ({
   // Simulate the stage disappearing: navigate within the SPA with the run's trail.
   await page.evaluate(() => {
     const crumbs = [
-      { title: "Plan Runs", path: "/plan-runs" },
+      { title: "Plan runs", path: "/plan-runs" },
       { title: "Run #1 — Java EE to Quarkus", path: "/plan-runs/1" },
     ];
     window.history.pushState(
@@ -252,5 +252,5 @@ test("a not-found detail keeps the trail it was reached from", async ({
   await expect(page.getByText("Stage not found").first()).toBeVisible();
   await expect
     .poll(() => breadcrumbTitles(page))
-    .toEqual(["Plan Runs", "Run #1 — Java EE to Quarkus", "Stage"]);
+    .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Stage"]);
 });

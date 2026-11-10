@@ -10,6 +10,8 @@ The shared URL persistence hook preserves unrelated location state and fragments
 
 Explicit persona changes and Reset start a fresh trail and clear the previous view parameters. Starting a migration captures the Inventory URL after its scenario transition. Detail error states retain the originating trail so an unavailable association still has a return path.
 
+Sidebar = route, breadcrumb = origin. The sidebar highlights the section of the current route; the breadcrumb shows where the user came from. A plan run opened from an application keeps the Plan runs item highlighted while its trail starts at Application inventory. This is intentional, not a mismatch to fix. A trail's root crumb is the sidebar label of the section where the trail started, so every root title comes from a `sidebar.*` key. While an entity is loading, missing, or failed, its leaf crumb is the entity noun ("Agent", "Plan run"), never the raw ID.
+
 The `history` dependency is declared directly because the shared helper uses its path parser and formatter. Its version matches the existing React Router dependency.
 
 ## Entity destinations

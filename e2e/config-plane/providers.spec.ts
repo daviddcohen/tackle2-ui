@@ -29,7 +29,7 @@ test.describe("Providers list", () => {
     diagnostics,
   }) => {
     await expect(
-      page.getByRole("heading", { level: 1, name: "Providers" })
+      page.getByRole("heading", { level: 1, name: "Model providers" })
     ).toBeVisible();
     const anthropic = rowByText(page, "Anthropic Production");
     await expect(anthropic).toContainText("Anthropic");

@@ -405,7 +405,7 @@
       "analysisResults": "Analysis Results",
       "configuration": "Configuration",
       "userManagement": "User Management",
-      "agenticConfiguration": "Agentic Migration"
+      "agenticConfiguration": "Agentic migration"
     },
     "users": "Users",
     "tokens": "Tokens",
@@ -414,9 +414,9 @@
     "agents": "Agents",
     "skills": "Skills",
     "models": "Models",
-    "plans": "Migration Plans",
-    "planRuns": "Plan Runs",
-    "providers": "Providers",
+    "plans": "Migration plans",
+    "planRuns": "Plan runs",
+    "providers": "Model providers",
     "selectPersona": "{{persona}}, select persona"
   },
   "taskState": {
@@ -1396,7 +1396,7 @@
       "notFoundBody": "This migration plan may have been deleted, or the link is out of date.",
       "notFoundTitle": "Migration plan not found",
       "plansDescription": "Define reusable migration workflows and associate them with the application paths they support.",
-      "plansTitle": "Migration Plans",
+      "plansTitle": "Migration plans",
       "namePlaceholder": "For example, Java EE to Quarkus",
       "reviewStep": "Review",
       "removeStage": "Remove {{stage}}",
@@ -1715,7 +1715,7 @@
       "skillCollection": "Skill collection"
     },
     "planRun": {
-      "title": "Plan Runs",
+      "title": "Plan runs",
       "description": "History of all migration plan runs across your application portfolio.",
       "tableLabel": "Plan runs table",
       "plan": "Migration Plan",
@@ -1822,7 +1822,7 @@
       "taskCancelFailed": "Task cancelation failed"
     },
     "provider": {
-      "title": "Providers",
+      "title": "Model providers",
       "description": "Manage LLM provider connections. Models are configured from verified providers.",
       "tableLabel": "Providers table",
       "create": "Add provider",

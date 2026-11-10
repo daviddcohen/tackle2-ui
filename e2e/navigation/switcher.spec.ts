@@ -70,13 +70,13 @@ test.describe("persona changes", () => {
         scenario: "running",
       })
     );
-    await expect(mainHeading(page)).toHaveText("Plan Runs");
+    await expect(mainHeading(page)).toHaveText("Plan runs");
     await personaSelect(page).selectOption("platformEngineer");
     await expect(mainHeading(page)).toHaveText("Models");
     await expect(perspectiveToggle(page)).toHaveText("Administration");
 
     await page.goBack();
-    await expect(mainHeading(page)).toHaveText("Plan Runs");
+    await expect(mainHeading(page)).toHaveText("Plan runs");
     await expectCanonicalProto(page, "enterpriseArchitect", "running");
     await expect(personaSelect(page)).toHaveValue("enterpriseArchitect");
     await expect(perspectiveToggle(page)).toHaveText("Migration");
@@ -109,7 +109,7 @@ test.describe("every persona x scenario combination", () => {
         // Navigate through the sidebar: prototype state must follow.
         for (const [link, heading] of [
           ["Agents", "Agents"],
-          ["Plan Runs", "Plan Runs"],
+          ["Plan runs", "Plan runs"],
           ["Skills", "Skills"],
           ["Application inventory", "Application inventory"],
         ] as const) {
@@ -201,7 +201,7 @@ test.describe("reset and URL validation", () => {
       pageErrors,
     }) => {
       await page.goto(`/plan-runs?${query}`);
-      await expect(mainHeading(page)).toHaveText("Plan Runs");
+      await expect(mainHeading(page)).toHaveText("Plan runs");
       await expectCanonicalProto(page, persona, scenario);
       expect(searchParam(page, "protoStage")).toBe(stage);
       await expect(scenarioSelect(page)).toHaveValue(scenario);

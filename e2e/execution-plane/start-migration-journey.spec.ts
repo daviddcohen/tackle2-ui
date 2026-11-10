@@ -137,7 +137,7 @@ test.describe("Start migration journey", () => {
       .locator(".pf-v6-c-label")
       .first()
       .innerText();
-    await page.getByRole("link", { name: "Plan Runs" }).click();
+    await page.getByRole("link", { name: "Plan runs" }).click();
     await expect(
       page.getByRole("row", { name: new RegExp(title.replace(/[#—]/g, ".")) })
     ).toContainText(detailStatus);
