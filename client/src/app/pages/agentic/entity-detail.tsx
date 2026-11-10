@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import {
   Button,
+  Divider,
   Dropdown,
   DropdownItem,
   DropdownList,
@@ -112,7 +113,15 @@ export const EntityDetailUnavailable: React.FC<
   );
 };
 
+export interface EntityDetailAction {
+  key: string;
+  label: string;
+  onClick: () => void;
+}
+
 export interface EntityDetailActionsProps {
+  /** Entity verbs listed before Edit, for example "Test agent". */
+  items?: EntityDetailAction[];
   onEdit: () => void;
   onDelete: () => void;
   /** When set, Delete stays visible but is aria-disabled with this tooltip. */
@@ -120,10 +129,13 @@ export interface EntityDetailActionsProps {
 }
 
 /**
- * Header "Actions" menu (Edit, Delete). Render it only for users with the
- * entity's write scopes, the same check the list page uses for its row actions.
+ * Header "Actions" menu: the entity verbs from `items`, Edit, a separator and
+ * Delete, in the same order as the list row menu. Render it only for users
+ * with the entity's write scopes, the same check the list page uses for its
+ * row actions.
  */
 export const EntityDetailActions: React.FC<EntityDetailActionsProps> = ({
+  items = [],
   onEdit,
   onDelete,
   deleteDisabledReason,
@@ -149,12 +161,18 @@ export const EntityDetailActions: React.FC<EntityDetailActionsProps> = ({
       )}
     >
       <DropdownList>
+        {items.map((item) => (
+          <DropdownItem key={item.key} onClick={item.onClick}>
+            {item.label}
+          </DropdownItem>
+        ))}
         <DropdownItem key="edit" onClick={onEdit}>
           {t("actions.edit")}
         </DropdownItem>
+        <Divider component="li" key="separator" />
         <DropdownItem
           key="delete"
-          isDanger
+          isDanger={!isDeleteDisabled}
           isAriaDisabled={isDeleteDisabled}
           tooltipProps={
             isDeleteDisabled ? { content: deleteDisabledReason } : undefined
