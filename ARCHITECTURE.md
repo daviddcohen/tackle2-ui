@@ -20,7 +20,7 @@ tackle2-ui is the frontend for [Konveyor](https://konveyor.io), an application m
 
 When `AUTH_REQUIRED` is enabled, the Hub's built-in OIDC provider handles authentication. Access control is scope-based, using OAuth2 resource:verb pairs (e.g., `applications:get`). The legacy Keycloak SSO integration has been removed.
 
-When `AGENTIC_ENABLED` is `true`, the UI also renders the agentic migration UI (configuration of Skills, Models, Agents and Plans, and plan runs started from the application inventory) for [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller). In this prototype it runs against a mocked API. See [Agentic Console](#agentic-console).
+When `AGENTIC_ENABLED` is `true`, the UI also renders the agentic migration UI (configuration of Skills, Models, Agents and Plans, and plan runs started from the application inventory) for [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller). On this branch it runs against a mocked API. See [Agentic Console](#agentic-console).
 
 ## Monorepo Structure
 
@@ -79,7 +79,7 @@ The UI supports build-time branding via the `BRANDING` environment variable. The
 
 ## Agentic Console
 
-Upstream ships a dev-preview agentic console (agent runs, agents, skills, workflows, a live ACP session panel). **This prototype replaces it with the agentic migration UI**: the pages under `client/src/app/pages/agentic/` plus agentic parts of the inventory, application detail, archetypes and Administration (Providers, Models). Its API is mocked; [docs/agentic-handoff.md](docs/agentic-handoff.md) is the guide for wiring it to the Hub's `/agentic/*` API, and [docs/prototype-architecture.md](docs/prototype-architecture.md) describes the prototype boundaries.
+Upstream ships a dev-preview agentic console (agent runs, agents, skills, workflows, a live ACP session panel). **This branch replaces it with the agentic migration UI prototype**: the pages under `client/src/app/pages/agentic/` plus agentic parts of the inventory, application detail, archetypes and Administration (Providers, Models). Its API is mocked; [docs/agentic-handoff.md](docs/agentic-handoff.md) is the guide for wiring it to the Hub's `/agentic/*` API, and [docs/prototype-architecture.md](docs/prototype-architecture.md) describes the prototype boundaries.
 
 ### Feature flags
 
@@ -88,7 +88,7 @@ Both flags are read from the server's environment in `server/src/serverConfig.js
 | Variable                | Default                                                                      | Gates                                                                                                                                                                                                                        |
 | ----------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AGENTIC_ENABLED`       | `true` when `MOCK` stubs the `agentic` endpoints (`MOCK=stub`), else `false` | Every agentic route, the agentic sidebar group, Administration > Providers / Models, and the agentic parts of the inventory, application detail, archetype drawer and target profiles page. There is no flag per capability. |
-| `AGENTIC_STEER_ENABLED` | `false`                                                                      | Nothing in this prototype (upstream: steering a live run from its chat panel, which this prototype does not include).                                                                                                        |
+| `AGENTIC_STEER_ENABLED` | `false`                                                                      | Nothing on this branch (upstream: steering a live run from its chat panel, which this branch removed).                                                                                                                       |
 
 The pages call `/hub/prototype/agentic/*` (`client/src/app/api/rest/agentic.ts`), which only the development mock (MSW, `client/src/mocks/stub-new-work/agentic/`) serves; MSW is not part of production bundles. Keep `AGENTIC_ENABLED` off in production until the API is wired. On an operator-managed install the [Konveyor operator](https://github.com/konveyor/operator) exposes both flags as `spec.agentic_enabled` and `spec.agentic_steer_enabled` (both default `false`, [konveyor/operator#596](https://github.com/konveyor/operator/pull/596)).
 

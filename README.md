@@ -8,9 +8,9 @@ tackle2-ui is the web-based user interface for [Konveyor](https://konveyor.io), 
 
 Key capabilities include application inventory management, assessment questionnaires, static code analysis, migration wave planning, dependency tracking, and issue/insight visualization.
 
-## Agentic migration UI (prototype)
+## Agentic migration frontend workspace
 
-This prototype adds the agentic migration UI on top of tackle2-ui. Run the mock-backed review environment with:
+This workspace adds the agentic migration frontend on top of tackle2-ui. Run the mock-backed review environment with:
 
 ```sh
 MOCK=stub AUTH_REQUIRED=false npm run start:dev
@@ -129,12 +129,12 @@ The React and Patternfly based UI is composed of web pages served by an http ser
 - The agentic migration UI is feature-flagged. The server passes two variables to the browser
   with the rest of the environment:
   - `AGENTIC_ENABLED` &rarr; `true` shows the agentic pages, Administration &gt; Providers and
-    Models, and the agentic parts of the inventory, application detail and archetypes. In this
-    prototype those pages call the prototype API (`/hub/prototype/agentic/*`), which only the
+    Models, and the agentic parts of the inventory, application detail and archetypes. On this
+    branch those pages call the prototype API (`/hub/prototype/agentic/*`), which only the
     development mock serves; [docs/agentic-handoff.md](docs/agentic-handoff.md) covers wiring
     the real Hub.
   - `AGENTIC_STEER_ENABLED` &rarr; upstream's switch for steering a live run from its chat panel.
-    This prototype has no chat panel, so the flag has no effect.
+    This branch has no chat panel, so the flag has no effect.
 
   An explicit value always wins. Otherwise `AGENTIC_ENABLED` is `true` only when `MOCK` stubs the
   agentic endpoints (`server/src/serverConfig.js`, `client/config/rspack.dev.mts`), and

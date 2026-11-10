@@ -4,10 +4,10 @@ For the frontend developer who connects this prototype to the real Konveyor back
 
 Facts were checked against:
 
-- this change set on top of `a7554896` (with every fix wave merged) plus the hand-off review fixes;
+- this repository on top of `a7554896` (with every fix wave merged) plus the hand-off review fixes;
 - konveyor/tackle2-hub `main` @ `fabeb1e3` (`internal/api/agentic.go`, `internal/api/base.go`, `internal/api/error.go`, `shared/api/pkg.go`, `internal/auth/seed/roles.yaml`, `go.mod`);
 - konveyor/agentic-controller `main` @ `369070c6` (`api/v1alpha1/*`, `internal/controller/{doc,gateway_controller,agentrun_controller,agentworkflowrun_controller}.go`, `harness/` and `config/{defaults,samples}`);
-- konveyor/tackle2-ui `main` @ `a7554896` for the dev-preview console this change set removes. Read a removed file with `git show a7554896:<path>`.
+- konveyor/tackle2-ui `main` @ `a7554896` (`upstream/main`) for the dev-preview console this branch removed. Read a removed file with `git show upstream/main:<path>`.
 
 The TypeScript contract for the backend is `client/src/app/api/agentic/contract.ts` (pinned to agentic-controller `22fee493`). **The version it has to match is the controller API the Hub compiles against**, not controller `main`: the Hub decodes request bodies strictly and pins `github.com/konveyor/agentic-controller/api` at `38046470` (`go.mod:19`). See [Contract drift](#contract-drift).
 
@@ -43,7 +43,7 @@ Read this first. These four are product, UX or backend decisions, not wiring tas
   1. Attended approval only: approvals are answered in a live session panel; the inventory shows that a run in approval mode needs someone watching, not a pending decision.
   2. Backend change: the harness parks asks durably (a status condition or a Hub record) and resumes when answered. Needs controller and harness design.
   3. Do not offer approval mode for unattended starts.
-- **Reference.** Upstream `client/src/app/pages/agent-runs/components/ChatPanel.tsx` (`git show a7554896:client/src/app/pages/agent-runs/components/ChatPanel.tsx`) is the live session panel: it mints the nonce, dials only while `ACPReady` is True, renders permission asks and questions inline, and answers them. It drives `client/src/app/api/agentic/acp.ts` (`AcpSession`), which this change set keeps with no consumers.
+- **Reference.** Upstream `client/src/app/pages/agent-runs/components/ChatPanel.tsx` (`git show upstream/main:client/src/app/pages/agent-runs/components/ChatPanel.tsx`) is the live session panel: it mints the nonce, dials only while `ACPReady` is True, renders permission asks and questions inline, and answers them. It drives `client/src/app/api/agentic/acp.ts` (`AcpSession`), which this branch keeps with no consumers.
 
 ### B. Runs need inputs the UI does not collect
 
@@ -51,7 +51,7 @@ Read this first. These four are product, UX or backend decisions, not wiring tas
 - **Target branch.** The migration harness refuses to start without `TARGET_BRANCH` (`harness/internal/config/config.go:183-193`). The start-migration dialog collects one; the Agent test dialog does not.
 - **Parameters.** Required Agent parameters and workflow parameters have no input anywhere.
 - **What is in place.** `AgentTestRunRequest` has optional `modelId`, `targetBranch` and `params`; `StartApplicationMigrationsRequest` has optional `modelId` and `params`. The adapters write them as `spec.gateway`, env `TARGET_BRANCH` and `spec.params` (`toCreateRunInput`, `toWorkflowRunInputs`). No UI sets them, and the prototype API ignores them.
-- **Reference.** Upstream solved the inputs in `client/src/app/pages/agent-runs/components/GatewayPicker.tsx` (`gatewayRequiredFor`, `defaultGatewayFor`: which Gateways to offer and when a choice is required) and `client/src/app/pages/agent-runs/components/ParamFields.tsx` (`ParamValueField`, `paramValueInvalidReason`), used by `pages/agent-runs/components/CreateRunModal.tsx`, `pages/workflow-runs/components/CreateWorkflowRunModal.tsx` and `pages/applications/agent-run-modal/BulkAgentRunModal.tsx` (all at `a7554896`).
+- **Reference.** Upstream solved the inputs in `client/src/app/pages/agent-runs/components/GatewayPicker.tsx` (`gatewayRequiredFor`, `defaultGatewayFor`: which Gateways to offer and when a choice is required) and `client/src/app/pages/agent-runs/components/ParamFields.tsx` (`ParamValueField`, `paramValueInvalidReason`), used by `pages/agent-runs/components/CreateRunModal.tsx`, `pages/workflow-runs/components/CreateWorkflowRunModal.tsx` and `pages/applications/agent-run-modal/BulkAgentRunModal.tsx` (all on `upstream/main`).
 - **Decision.** Where a run's Model comes from (a picker per start, or the organization default Model as the default `spec.gateway`, which needs the missing stored default), and whether missing required parameters block a start.
 
 ### C. Names are immutable
@@ -94,7 +94,7 @@ Read this first. These four are product, UX or backend decisions, not wiring tas
 
 - Upstream flag (`common/src/env-types.ts`). Explicit value wins; otherwise it is `"true"` exactly when `MOCK` stubs the `agentic` group (`server/src/serverConfig.js`, `client/config/rspack.dev.mts`).
 - `isAgenticEnabled` (`client/src/app/Constants.ts`) gates the agentic routes (`Routes.tsx`), the sidebar group, Administration > Providers / Models, and the agentic parts of the inventory, application detail, archetype drawer and target profiles page. It is one switch for everything; there is no flag per capability (see checklist step 8).
-- `AGENTIC_STEER_ENABLED` (upstream, default `"false"`, `isAgenticSteerEnabled`) has no consumer in this change set: upstream's `ChatPanel` was its only one.
+- `AGENTIC_STEER_ENABLED` (upstream, default `"false"`, `isAgenticSteerEnabled`) has no consumer on this branch: upstream's `ChatPanel` was its only one.
 - When wiring the real backend, keep the flag and drop the MOCK-derived branch of its default.
 
 ### Prototype shell and switcher
