@@ -94,24 +94,55 @@ const AssetGenerators = lazy(
   () => import("./pages/asset-generators/asset-generators")
 );
 
-const AgentRuns = lazy(() => import("./pages/agent-runs"));
-const AgentRunDetails = lazy(
-  () => import("./pages/agent-runs/agent-run-detail-page")
+// Agentic migration pages
+const AgentsPage = lazy(() => import("./pages/agentic/agents/agents"));
+const AgentDetail = lazy(
+  () => import("./pages/agentic/agents/agent-detail/agent-detail")
 );
-const Agents = lazy(() => import("./pages/agents"));
-const Skills = lazy(() => import("./pages/skills"));
-const Workflows = lazy(() => import("./pages/workflows"));
-const WorkflowRuns = lazy(() => import("./pages/workflow-runs"));
-const Gateways = lazy(() => import("./pages/gateways"));
-const WorkflowRunDetails = lazy(
-  () => import("./pages/workflow-runs/workflow-run-detail-page")
+const SkillsPage = lazy(() => import("./pages/agentic/skills/skills"));
+const SkillDetail = lazy(
+  () => import("./pages/agentic/skills/skill-detail/skill-detail")
+);
+const SkillCollectionDetail = lazy(
+  () =>
+    import(
+      "./pages/agentic/skills/skill-collection-detail/skill-collection-detail"
+    )
+);
+const ModelsPage = lazy(() => import("./pages/agentic/models/models"));
+const ProvidersPage = lazy(
+  () => import("./pages/administration/providers/providers")
 );
 
 export interface IRoute<T> {
   path: T;
   comp: ComponentType;
   exact?: boolean;
+  /**
+   * Only match when every `:somethingId` param is numeric, so a sibling word
+   * path (e.g. `/applications/analysis-tab`) is not captured as an id.
+   */
+  numericIds?: boolean;
 }
+
+const ID_PARAM = /:(\w+Id)(?=\/|$)/g;
+
+/** The react-router path pattern to register for a route. */
+export const toRoutePath = ({ path, numericIds }: IRoute<string>): string =>
+  numericIds ? path.replace(ID_PARAM, ":$1(\\d+)") : path;
+
+/**
+ * Skill collections are listed on the Skills page (type filter
+ * "collection"), so the declared collections path opens that view.
+ */
+const SkillCollectionsRedirect = () => {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.set("skills:filters", JSON.stringify({ type: ["collection"] }));
+  return (
+    <Redirect to={{ pathname: Paths.skills, search: params.toString() }} />
+  );
+};
 
 export const migrationRoutes: IRoute<DevPathValues>[] = [
   {
@@ -273,52 +304,47 @@ export const migrationRoutes: IRoute<DevPathValues>[] = [
 ];
 
 /**
- * The agentic console. Registered only when AGENTIC_ENABLED opts the
- * deployment in — its pages talk to the hub's `/hub/agentic/*` endpoints, and
- * without that backend every page in this section fails on load, so a
- * deployment that has none gets no routes at all rather than routes that
- * error.
+ * The agentic migration UI. Registered only when AGENTIC_ENABLED opts the
+ * deployment in (it defaults on when MOCK stubs the agentic endpoints): its
+ * pages need the hub's agentic endpoints, so a deployment without that
+ * backend gets no routes at all rather than routes that error. More specific
+ * paths must come before less specific ones.
+ *
+ * Detail ids are deliberately not constrained to digits: the prototype mocks
+ * numeric ids, but the agentic controller keys its resources by name, so the
+ * pages (not the router) own invalid-id handling.
  */
 export const agenticRoutes: IRoute<DevPathValues>[] = isAgenticEnabled
   ? [
       {
-        path: Paths.agentRunDetails,
-        comp: AgentRunDetails,
-        exact: true,
-      },
-      {
-        path: Paths.agentRuns,
-        comp: AgentRuns,
+        path: Paths.agentDetails,
+        comp: AgentDetail,
         exact: true,
       },
       {
         path: Paths.agents,
-        comp: Agents,
+        comp: AgentsPage,
+        exact: true,
+      },
+      // Skill collection paths must come before skills to avoid /skills matching first
+      {
+        path: Paths.skillCollections,
+        comp: SkillCollectionsRedirect,
+        exact: true,
+      },
+      {
+        path: Paths.skillCollectionDetails,
+        comp: SkillCollectionDetail,
+        exact: true,
+      },
+      {
+        path: Paths.skillDetails,
+        comp: SkillDetail,
         exact: true,
       },
       {
         path: Paths.skills,
-        comp: Skills,
-        exact: true,
-      },
-      {
-        path: Paths.workflows,
-        comp: Workflows,
-        exact: true,
-      },
-      {
-        path: Paths.workflowRunDetails,
-        comp: WorkflowRunDetails,
-        exact: true,
-      },
-      {
-        path: Paths.workflowRuns,
-        comp: WorkflowRuns,
-        exact: true,
-      },
-      {
-        path: Paths.gateways,
-        comp: Gateways,
+        comp: SkillsPage,
         exact: true,
       },
     ]
@@ -416,6 +442,23 @@ export const administrationRoutes: IRoute<AdminPathValues>[] = [
   },
 ];
 
+/** Agentic administration (Models, Providers); see `agenticRoutes`. */
+export const agenticAdministrationRoutes: IRoute<AdminPathValues>[] =
+  isAgenticEnabled
+    ? [
+        {
+          comp: ProvidersPage,
+          path: Paths.providers,
+          exact: false,
+        },
+        {
+          comp: ModelsPage,
+          path: Paths.models,
+          exact: false,
+        },
+      ]
+    : [];
+
 export const devtoolRoutes: IRoute<DevtoolPathValues>[] = isDevtoolsEnabled
   ? [
       {
@@ -436,25 +479,27 @@ export const AppRoutes = () => {
       <ErrorBoundary FallbackComponent={ErrorFallback} key={location.pathname}>
         <Switch>
           {[...migrationRoutes, ...agenticRoutes, ...universalRoutes].map(
-            ({ comp, path, exact }, index) => (
+            (route, index) => (
               <RouteWrapper
-                comp={comp}
+                comp={route.comp}
                 key={index}
                 requiredScopes={migrationViewScopes}
-                path={path}
-                exact={exact}
+                path={toRoutePath(route)}
+                exact={route.exact}
               />
             )
           )}
-          {administrationRoutes.map(({ comp, path, exact }, index) => (
-            <RouteWrapper
-              comp={comp}
-              key={index}
-              requiredScopes={adminViewScopes}
-              path={path}
-              exact={exact}
-            />
-          ))}
+          {[...administrationRoutes, ...agenticAdministrationRoutes].map(
+            (route, index) => (
+              <RouteWrapper
+                comp={route.comp}
+                key={index}
+                requiredScopes={adminViewScopes}
+                path={toRoutePath(route)}
+                exact={route.exact}
+              />
+            )
+          )}
           {devtoolRoutes.map(({ comp, path, exact }, index) => (
             <RouteWrapper
               comp={comp}
@@ -464,7 +509,10 @@ export const AppRoutes = () => {
               exact={exact}
             />
           ))}
-          <Redirect from="*" to="/applications" />
+          <Redirect
+            from="*"
+            to={{ pathname: "/applications", search: location.search }}
+          />
         </Switch>
       </ErrorBoundary>
     </Suspense>

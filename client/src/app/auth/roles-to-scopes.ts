@@ -217,11 +217,12 @@ export const adminScopes: string[] = [
 
 /** tackle-architect has all admin scopes except admin-only write scopes. */
 const architectAdminOnlyScopes = new Set([
-  // Agents and gateways are get-only for the architect (tackle2-hub#1119).
-  "agentic.agents:delete",
-  "agentic.agents:patch",
-  "agentic.agents:post",
-  "agentic.agents:put",
+  // Gateways are get-only for the architect (tackle2-hub#1119).
+  //
+  // PROTOTYPE (target product change): the agentic design lets Enterprise
+  // Architects create and edit Agents, so agentic.agents write scopes are NOT
+  // removed here. The current Hub seed (tackle2-hub#1119) grants architects
+  // agentic.agents:get only; reconcile with the Hub before production.
   "agentic.gateways:delete",
   "agentic.gateways:patch",
   "agentic.gateways:post",
@@ -251,19 +252,15 @@ export const architectScopes: string[] = adminScopes.filter(
   (s) => !architectAdminOnlyScopes.has(s)
 );
 
+// PROTOTYPE (target product change): migrators execute curated Plans
+// (agentic.workflowruns) but do not start standalone Agent runs, so they get
+// read-only agentic.agentruns scopes. The current Hub seed grants migrators
+// full agentic.agentruns access; reconcile with the Hub before production.
 export const migratorScopes: string[] = [
   "addons:get",
   "adoptionplans:post",
-  "agentic.agentruns:delete",
   "agentic.agentruns:get",
-  "agentic.agentruns:patch",
-  "agentic.agentruns:post",
-  "agentic.agentruns:put",
-  "agentic.agentruns.acp:delete",
   "agentic.agentruns.acp:get",
-  "agentic.agentruns.acp:patch",
-  "agentic.agentruns.acp:post",
-  "agentic.agentruns.acp:put",
   "agentic.agents:get",
   "agentic.gateways:get",
   "agentic.skillcollections:get",
