@@ -1136,31 +1136,6 @@
     }
   },
   "agentic": {
-    "agentRuns": {
-      "seededCount_one": "Seeded {{count}} resource",
-      "seededCount_other": "Seeded {{count}} resources",
-      "alreadyExisted": "({{count}} already existed)"
-    },
-    "createRun": {
-      "applicationsFromHub_one": "{{count}} application from Konveyor Hub",
-      "applicationsFromHub_other": "{{count}} applications from Konveyor Hub",
-      "hubUnavailable": "Hub unavailable — showing offline stub",
-      "applicationInventory": "Application inventory"
-    },
-    "agents": {
-      "paramName": "Param name",
-      "paramType": "Param type",
-      "removeParameter": "Remove parameter"
-    },
-    "workflowRuns": {
-      "hubApplicationCount_one": "{{count}} application from Konveyor Hub",
-      "hubApplicationCount_other": "{{count}} applications from Konveyor Hub",
-      "paramNotDeclared_one": "not declared by stage {{stages}} — cannot be set on a workflow run (params forward to every stage)",
-      "paramNotDeclared_other": "not declared by stages {{stages}} — cannot be set on a workflow run (params forward to every stage)"
-    },
-    "skills": {
-      "sourceGitDefinition": "git source"
-    },
     "prototype": {
       "persona": "Persona",
       "personas": {
