@@ -214,7 +214,7 @@ export const deleteSkillCollection = (name: string): Promise<void> =>
     .delete(`${SKILL_COLLECTIONS}/${encodeURIComponent(name)}`)
     .then(() => undefined);
 
-// ------------------------------------------------------------ Gateways (read)
+// ------------------------------------------------------------ Gateways (CRUD)
 
 export const getGateways = (): Promise<Gateway[]> =>
   axios.get<Gateway[]>(GATEWAYS).then(({ data }) => data);
@@ -223,6 +223,28 @@ export const getGateway = (name: string): Promise<Gateway> =>
   axios
     .get<Gateway>(`${GATEWAYS}/${encodeURIComponent(name)}`)
     .then(({ data }) => data);
+
+export const createGateway = (
+  name: string,
+  spec: Gateway["spec"]
+): Promise<Gateway> =>
+  axios
+    .post<Gateway>(GATEWAYS, { metadata: { name }, spec })
+    .then(({ data }) => data);
+
+export const updateGateway = (
+  name: string,
+  spec: Gateway["spec"]
+): Promise<void> =>
+  axios
+    .put(`${GATEWAYS}/${encodeURIComponent(name)}`, {
+      metadata: { name },
+      spec,
+    })
+    .then(() => undefined);
+
+export const deleteGateway = (name: string): Promise<void> =>
+  axios.delete(`${GATEWAYS}/${encodeURIComponent(name)}`).then(() => undefined);
 
 // --------------------------------------------------------- Workflows (CRUD)
 
@@ -268,16 +290,11 @@ export const getWorkflowRun = (name: string): Promise<AgentWorkflowRun> =>
     .get<AgentWorkflowRun>(`${WORKFLOW_RUNS}/${encodeURIComponent(name)}`)
     .then(({ data }) => data);
 
-// AgentWorkflowRun["spec"] in contract.ts has neither `targetBranch` nor
-// `instructions` (only workflowRef/gateway/params/env/envFrom) — per the
-// Step 2 rule both CreateWorkflowRunInput fields are dropped here, not just
-// targetBranch. Neither reaches spec.env either; per design D3 that env
-// injection (including target branch) is the hub's job, not the client's.
-// No current caller populates `instructions` on this input (grep confirms
-// useStartAgentWorkflowRuns.ts sets only workflowRef/applicationRef/
-// targetBranch/params), so dropping it is a no-op today and a correctness
-// fix against the real hub's CRD schema, which would reject unknown spec
-// fields.
+// The workflow run carries the application the same way as an AgentRun: the
+// `konveyor.io/application` label plus APP_ID / TARGET_BRANCH in spec.env
+// (the creating client owns those; the Hub only adds HUB_BASE_URL and the
+// token Secret). `instructions` has no AgentWorkflowRun spec field and is not
+// sent: the Hub decodes request bodies strictly and would reject it.
 export const createWorkflowRun = (
   input: CreateWorkflowRunInput
 ): Promise<AgentWorkflowRun> =>

@@ -29,7 +29,7 @@ export const ScopeGate = ({
 };
 
 // ---------------------------------------------------------------------------
-// Scope constant groups — imported by pages and components that need to gate
+// Scope constant groups imported by pages and components that need to gate
 // specific actions. Use with ScopeGate or useHasSomeScopes / useHasAllScopes.
 // ---------------------------------------------------------------------------
 
@@ -71,6 +71,51 @@ export const archetypesWriteScopes = [
   "archetypes:post",
   "archetypes:delete",
 ];
+
+export const agenticConfigurationReadScopes = [
+  "agentic.workflows:get",
+  "agentic.agents:get",
+  "agentic.skills:get",
+];
+
+export const modelsWriteScopes = [
+  "agentic.gateways:post",
+  "agentic.gateways:put",
+  "agentic.gateways:delete",
+];
+
+/**
+ * Provider connections are part of the Gateway (Model) configuration: the hub
+ * has no separate provider resource, so they share the gateway scopes.
+ */
+export const providersWriteScopes = modelsWriteScopes;
+
+export const agentsWriteScopes = [
+  "agentic.agents:post",
+  "agentic.agents:put",
+  "agentic.agents:delete",
+];
+
+export const plansWriteScopes = [
+  "agentic.workflows:post",
+  "agentic.workflows:put",
+  "agentic.workflows:delete",
+];
+
+export const skillsWriteScopes = [
+  "agentic.skills:post",
+  "agentic.skills:put",
+  "agentic.skills:delete",
+];
+
+export const skillCollectionsWriteScopes = [
+  "agentic.skillcollections:post",
+  "agentic.skillcollections:put",
+  "agentic.skillcollections:delete",
+];
+
+export const agenticWorkflowRunsWriteScopes = ["agentic.workflowruns:post"];
+export const agenticAgentRunsWriteScopes = ["agentic.agentruns:post"];
 
 export const analysisProfileWriteScopes = [
   "analysis.profiles:put",

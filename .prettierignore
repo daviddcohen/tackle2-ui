@@ -1,2 +1,4 @@
 .vscode/
 client/public/mockServiceWorker.js
+# Verbatim copies of agentic-controller CRs (adapter test fixtures)
+client/src/app/agentic/adapters/__fixtures__/
