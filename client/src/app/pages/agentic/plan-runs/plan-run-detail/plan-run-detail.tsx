@@ -100,7 +100,7 @@ const PlanRunDetail: React.FC = () => {
 
   const { breadcrumbs, linkCrumbs: runChildCrumbs } = useEntityBreadcrumbs(
     planRun?.name ?? t("agentic.entity.planRun"),
-    [{ title: t("agentic.planRun.title"), path: DevPaths.planRuns }]
+    [{ title: t("sidebar.planRuns"), path: DevPaths.planRuns }]
   );
 
   const { startMigrations, isStarting } = useStartMigrations(

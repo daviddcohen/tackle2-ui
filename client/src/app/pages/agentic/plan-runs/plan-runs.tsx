@@ -35,7 +35,7 @@ import { RunStatusLabel } from "../components/run-status-label";
 
 const PlanRunsPage: React.FC = () => {
   const { t } = useTranslation();
-  const { to } = useBreadcrumbs(t("agentic.planRun.title"), []);
+  const { to } = useBreadcrumbs(t("sidebar.planRuns"), []);
 
   const { planRuns, isFetching, isLoading, fetchError } = useFetchPlanRuns();
 

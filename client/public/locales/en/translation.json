@@ -1395,7 +1395,6 @@
       "noAgent": "No Agent",
       "notFoundBody": "This migration plan may have been deleted, or the link is out of date.",
       "notFoundTitle": "Migration plan not found",
-      "plansBreadcrumb": "Migration Plans",
       "plansDescription": "Define reusable migration workflows and associate them with the application paths they support.",
       "plansTitle": "Migration Plans",
       "namePlaceholder": "For example, Java EE to Quarkus",

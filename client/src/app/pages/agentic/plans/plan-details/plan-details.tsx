@@ -264,7 +264,7 @@ const PlanDetailsPage: React.FC = () => {
     migrationPlan?.name ?? t("agentic.entity.migrationPlan"),
     [
       {
-        title: t("agentic.plan.plansBreadcrumb"),
+        title: t("sidebar.plans"),
         path: DevPaths.migrationPlans,
       },
     ]

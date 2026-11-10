@@ -37,8 +37,8 @@ const LinkToArchetypeApplications: React.FC<{
     (candidate) => String(candidate.id) === selectedId
   );
   const { to } = useBreadcrumbs(
-    selected?.name ?? t("terms.archetypes"),
-    selected ? [{ title: t("terms.archetypes"), path: Paths.archetypes }] : []
+    selected?.name ?? t("sidebar.archetypes"),
+    selected ? [{ title: t("sidebar.archetypes"), path: Paths.archetypes }] : []
   );
 
   const hasApplications = (archetype?.applications?.length ?? 0) > 0;

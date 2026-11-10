@@ -152,7 +152,7 @@ const SkillDetail: React.FC = () => {
 
   const { breadcrumbs, linkCrumbs: childLinkCrumbs } = useEntityBreadcrumbs(
     skill?.name ?? t("agentic.entity.skill"),
-    [{ title: t("agentic.skill.title"), path: DevPaths.skills }]
+    [{ title: t("sidebar.skills"), path: DevPaths.skills }]
   );
 
   const scopeLabel = (scope: SkillAssociationScope): string =>

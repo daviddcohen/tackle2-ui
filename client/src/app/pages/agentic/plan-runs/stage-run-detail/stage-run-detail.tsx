@@ -78,7 +78,7 @@ const StageRunDetail: React.FC = () => {
   const { breadcrumbs, linkCrumbs: stageChildCrumbs } = useEntityBreadcrumbs(
     stage?.name ?? t("agentic.entity.stage"),
     [
-      { title: t("agentic.planRun.title"), path: DevPaths.planRuns },
+      { title: t("sidebar.planRuns"), path: DevPaths.planRuns },
       ...(planRun
         ? [
             {

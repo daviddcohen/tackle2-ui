@@ -88,7 +88,7 @@ const SkillCollectionDetail: React.FC = () => {
   const { breadcrumbs, linkCrumbs: collectionChildCrumbs } =
     useEntityBreadcrumbs(
       skillCollection?.name ?? t("agentic.entity.skillCollection"),
-      [{ title: t("agentic.skill.title"), path: DevPaths.skills }]
+      [{ title: t("sidebar.skills"), path: DevPaths.skills }]
     );
 
   if (skillCollection == null) {
