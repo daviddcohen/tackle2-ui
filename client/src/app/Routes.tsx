@@ -95,6 +95,17 @@ const AssetGenerators = lazy(
 );
 
 // Agentic migration pages
+const MigrationPlans = lazy(() => import("./pages/agentic/plans/plans"));
+const MigrationPlanDetails = lazy(
+  () => import("./pages/agentic/plans/plan-details/plan-details")
+);
+const PlanRunsPage = lazy(() => import("./pages/agentic/plan-runs/plan-runs"));
+const PlanRunDetail = lazy(
+  () => import("./pages/agentic/plan-runs/plan-run-detail/plan-run-detail")
+);
+const StageRunDetail = lazy(
+  () => import("./pages/agentic/plan-runs/stage-run-detail/stage-run-detail")
+);
 const AgentsPage = lazy(() => import("./pages/agentic/agents/agents"));
 const AgentDetail = lazy(
   () => import("./pages/agentic/agents/agent-detail/agent-detail")
@@ -316,6 +327,31 @@ export const migrationRoutes: IRoute<DevPathValues>[] = [
  */
 export const agenticRoutes: IRoute<DevPathValues>[] = isAgenticEnabled
   ? [
+      {
+        path: Paths.stageRunDetails,
+        comp: StageRunDetail,
+        exact: true,
+      },
+      {
+        path: Paths.planRunDetails,
+        comp: PlanRunDetail,
+        exact: true,
+      },
+      {
+        path: Paths.planRuns,
+        comp: PlanRunsPage,
+        exact: true,
+      },
+      {
+        path: Paths.migrationPlanDetails,
+        comp: MigrationPlanDetails,
+        exact: true,
+      },
+      {
+        path: Paths.migrationPlans,
+        comp: MigrationPlans,
+        exact: true,
+      },
       {
         path: Paths.agentDetails,
         comp: AgentDetail,

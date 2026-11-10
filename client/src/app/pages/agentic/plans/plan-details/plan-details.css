@@ -1,0 +1,124 @@
+.plan-details-header {
+  border-bottom: var(--pf-t--global--border--width--regular) solid
+    var(--pf-t--global--border--color--default);
+}
+
+.plan-heading {
+  margin-top: var(--pf-t--global--spacer--md);
+}
+
+/* Migration path — natural language sentence */
+.plan-migration-path-line {
+  font-size: var(--pf-t--global--font--size--body--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.plan-migration-path-line a {
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+/* Stage cards */
+.plan-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.plan-stage-card {
+  background: var(--pf-t--global--background--color--primary--default);
+  border: var(--pf-t--global--border--width--regular) solid
+    var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  overflow: hidden;
+}
+
+.plan-stage-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border-bottom: var(--pf-t--global--border--width--regular) solid
+    var(--pf-t--global--background--color--secondary--default);
+}
+
+.plan-stage-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.plan-stage-number {
+  width: var(--pf-t--global--spacer--lg);
+  height: var(--pf-t--global--spacer--lg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--pf-t--global--font--size--xs);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  flex-shrink: 0;
+}
+
+.plan-stage-number--auto {
+  background: var(--pf-t--global--color--brand--default);
+  color: var(--pf-t--global--text--color--on-brand--default);
+}
+
+.plan-stage-number--approval {
+  background: var(--pf-t--global--icon--color--status--warning--default);
+  color: var(--pf-t--global--text--color--on-brand--default);
+}
+
+.plan-stage-card-body {
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+}
+
+/* Stage metadata — description list grid */
+.plan-stage-meta-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--md);
+  font-size: var(--pf-t--global--font--size--body--default);
+  align-items: baseline;
+}
+
+.plan-stage-meta-grid dt {
+  font-size: var(--pf-t--global--font--size--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.plan-stage-meta-grid dd {
+  margin: 0;
+}
+
+/* Stage instructions */
+.plan-stage-instructions {
+  margin: var(--pf-t--global--spacer--sm) 0 0;
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-size: var(--pf-t--global--font--size--sm);
+  line-height: 1.5;
+  border-left: 3px solid var(--pf-t--global--border--color--default);
+}
+
+.plan-stage-instructions--approval {
+  border-left-color: var(--pf-t--global--icon--color--status--warning--default);
+}
+
+/* Effective skills help text */
+.plan-effective-skills-help {
+  font-size: var(--pf-t--global--font--size--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  margin-bottom: var(--pf-t--global--spacer--md);
+}
+
+@media (max-width: 768px) {
+  .plan-heading,
+  .plan-heading > .pf-v6-c-flex__item,
+  .plan-heading .pf-v6-c-flex {
+    width: 100%;
+  }
+}
