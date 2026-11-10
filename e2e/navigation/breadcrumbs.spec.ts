@@ -254,3 +254,24 @@ test("a not-found detail keeps the trail it was reached from", async ({
     .poll(() => breadcrumbTitles(page))
     .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Stage"]);
 });
+
+test("run and stage pages name their nouns in the trail while the run loads", async ({
+  page,
+}) => {
+  // The loading scenario delays every response by 10 s.
+  await page.goto(protoUrl("/plan-runs/1", { scenario: "loading" }));
+  await expect
+    .poll(() => breadcrumbTitles(page))
+    .toEqual(["Plan runs", "Plan run"]);
+
+  await page.goto(protoUrl("/plan-runs/1/stages/2", { scenario: "loading" }));
+  await expect
+    .poll(() => breadcrumbTitles(page))
+    .toEqual(["Plan runs", "Plan run", "Stage"]);
+  await expect(
+    breadcrumb(page).getByRole("link", { name: "Plan run", exact: true })
+  ).toHaveAttribute("href", "/plan-runs/1");
+  await expect
+    .poll(() => breadcrumbTitles(page), { timeout: 20_000 })
+    .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"]);
+});

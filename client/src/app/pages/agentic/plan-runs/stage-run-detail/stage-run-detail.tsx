@@ -79,10 +79,11 @@ const StageRunDetail: React.FC = () => {
     stage?.name ?? t("agentic.entity.stage"),
     [
       { title: t("sidebar.planRuns"), path: DevPaths.planRuns },
-      ...(planRun
+      // While the run loads, its crumb is the noun (guide 3.5 rule 2).
+      ...(planRun != null || isLoading
         ? [
             {
-              title: planRun.name,
+              title: planRun?.name ?? t("agentic.entity.planRun"),
               path: generatePath(DevPaths.planRunDetails, { runId }),
             },
           ]
