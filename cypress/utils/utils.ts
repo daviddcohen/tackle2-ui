@@ -239,8 +239,11 @@ export function login(
           cy.log("AUTH is disabled, just look for applications page");
         }
 
-        // Should be past any auth steps needed, so wait for the url to become "/applications
-        cy.url({ timeout: 1 * MIN }).should("eq", Application.fullUrl);
+        // Prototype controls add query parameters, so validate the destination path.
+        cy.location("pathname", { timeout: 1 * MIN }).should(
+          "eq",
+          new URL(Application.fullUrl).pathname
+        );
       });
     },
     {

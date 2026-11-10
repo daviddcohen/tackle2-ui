@@ -120,6 +120,9 @@ const SkillCollectionDetail = lazy(
       "./pages/agentic/skills/skill-collection-detail/skill-collection-detail"
     )
 );
+const ApplicationDetail = lazy(
+  () => import("./pages/applications/application-detail/application-detail")
+);
 const ModelsPage = lazy(() => import("./pages/agentic/models/models"));
 const ProvidersPage = lazy(
   () => import("./pages/administration/providers/providers")
@@ -215,6 +218,13 @@ export const migrationRoutes: IRoute<DevPathValues>[] = [
     path: Paths.archetypeAssessmentSummary,
     comp: AssessmentSummary,
     exact: false,
+  },
+  // applicationDetails must come before applications (exact: false) to avoid being shadowed
+  {
+    path: Paths.applicationDetails,
+    comp: ApplicationDetail,
+    exact: true,
+    numericIds: true,
   },
   {
     path: Paths.applications,
