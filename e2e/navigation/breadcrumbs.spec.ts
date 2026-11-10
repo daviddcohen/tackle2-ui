@@ -249,12 +249,8 @@ test("a not-found detail keeps the trail it was reached from", async ({
       })
     );
   });
-  await expect(page.getByText("Stage run not found").first()).toBeVisible();
+  await expect(page.getByText("Stage not found").first()).toBeVisible();
   await expect
     .poll(() => breadcrumbTitles(page))
-    .toEqual([
-      "Plan Runs",
-      "Run #1 — Java EE to Quarkus",
-      "Stage run not found",
-    ]);
+    .toEqual(["Plan Runs", "Run #1 — Java EE to Quarkus", "Stage"]);
 });

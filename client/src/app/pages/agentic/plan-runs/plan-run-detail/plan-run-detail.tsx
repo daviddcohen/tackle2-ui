@@ -3,8 +3,6 @@ import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import {
-  Alert,
-  AlertVariant,
   Button,
   ButtonVariant,
   Card,
@@ -34,12 +32,13 @@ import {
   getStageDefinition,
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
-import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
-import { StateError } from "@app/components/StateError";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import {
+  EntityDetailLoading,
+  EntityDetailUnavailable,
+} from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { MigrationPreflightModal } from "@app/pages/applications/components/agentic-migration/migration-preflight-modal";
 import { useStartMigrations } from "@app/pages/applications/components/agentic-migration/use-start-migrations";
@@ -100,11 +99,7 @@ const PlanRunDetail: React.FC = () => {
     );
 
   const { breadcrumbs, linkCrumbs: runChildCrumbs } = useEntityBreadcrumbs(
-    // On an API error the run may exist: name it by id rather than "not found".
-    planRun?.name ??
-      (fetchError != null && !isNotFound
-        ? runId
-        : t("agentic.planRun.notFound")),
+    planRun?.name ?? t("agentic.entity.planRun"),
     [{ title: t("agentic.planRun.title"), path: DevPaths.planRuns }]
   );
 
@@ -113,25 +108,19 @@ const PlanRunDetail: React.FC = () => {
     () => setIsNewRunOpen(false)
   );
 
-  if (isLoading) {
-    return <AppPlaceholder />;
-  }
-
   if (!planRun) {
+    if (isLoading) {
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
+    }
     return (
-      <PageSection hasBodyWrapper={false}>
-        <BreadCrumbPath breadcrumbs={breadcrumbs} />
-        {fetchError != null && !isNotFound ? (
-          <StateError />
-        ) : (
-          <Alert
-            variant={AlertVariant.warning}
-            title={t("agentic.planRun.notFound")}
-          >
-            {t("agentic.planRun.notFoundDescription")}
-          </Alert>
-        )}
-      </PageSection>
+      <EntityDetailUnavailable
+        breadcrumbs={breadcrumbs}
+        isNotFound={isNotFound || fetchError == null}
+        notFoundTitle={t("agentic.planRun.notFoundTitle")}
+        notFoundBody={t("agentic.planRun.notFoundBody")}
+        backLabel={t("agentic.planRun.backToPlanRuns")}
+        backPath={DevPaths.planRuns}
+      />
     );
   }
 

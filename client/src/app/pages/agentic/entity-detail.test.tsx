@@ -1,8 +1,14 @@
 import userEvent from "@testing-library/user-event";
+import { createMemoryHistory } from "history";
+import { Router } from "react-router-dom";
 
 import { render, screen } from "@app/test-config/test-utils";
 
-import { EntityDetailActions } from "./entity-detail";
+import {
+  EntityDetailActions,
+  EntityDetailLoading,
+  EntityDetailUnavailable,
+} from "./entity-detail";
 
 const openMenu = async () => {
   const user = userEvent.setup();
@@ -73,5 +79,60 @@ describe("EntityDetailActions", () => {
     expect(deleteItem.closest("li")).not.toHaveClass("pf-m-danger");
     await user.click(deleteItem);
     expect(onDelete).not.toHaveBeenCalled();
+  });
+});
+
+const trail = [{ title: "Agents", path: "/agents" }, { title: "Agent" }];
+
+describe("EntityDetailLoading", () => {
+  it("keeps the trail with the noun leaf and shows a title skeleton", () => {
+    render(
+      <Router history={createMemoryHistory()}>
+        <EntityDetailLoading breadcrumbs={trail} />
+      </Router>
+    );
+    expect(screen.getByRole("link", { name: "Agents" })).toBeInTheDocument();
+    expect(screen.getByText("Agent")).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByText("terms.loading").length).toBeGreaterThan(0);
+  });
+});
+
+describe("EntityDetailUnavailable", () => {
+  const props = {
+    breadcrumbs: trail,
+    notFoundTitle: "Agent not found",
+    notFoundBody:
+      "This agent may have been deleted, or the link is out of date.",
+    backLabel: "Back to agents",
+    backPath: "/agents",
+  };
+
+  it("offers the way back to the list when the entity is not found", async () => {
+    const history = createMemoryHistory({ initialEntries: ["/agents/99"] });
+    render(
+      <Router history={history}>
+        <EntityDetailUnavailable {...props} isNotFound />
+      </Router>
+    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Agent not found" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(props.notFoundBody)).toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Back to agents" }));
+    expect(history.location.pathname).toBe("/agents");
+  });
+
+  it("reports an API failure as an error, not as not found", () => {
+    render(
+      <Router history={createMemoryHistory()}>
+        <EntityDetailUnavailable {...props} isNotFound={false} />
+      </Router>
+    );
+    expect(screen.queryByText("Agent not found")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Back to agents" })
+    ).not.toBeInTheDocument();
   });
 });
