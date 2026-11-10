@@ -49,7 +49,11 @@ exports[`BreadCrumbPath Renders without crashing 1`] = `
             >
               <test-file-stub />
             </span>
-            thrid
+            <span
+              aria-current="page"
+            >
+              thrid
+            </span>
           </li>
         </ol>
       </nav>
@@ -100,7 +104,11 @@ exports[`BreadCrumbPath Renders without crashing 1`] = `
           >
             <test-file-stub />
           </span>
-          thrid
+          <span
+            aria-current="page"
+          >
+            thrid
+          </span>
         </li>
       </ol>
     </nav>

@@ -40,7 +40,11 @@ exports[`PageHeader Renders without crashing 1`] = `
                 >
                   <test-file-stub />
                 </span>
-                Company details
+                <span
+                  aria-current="page"
+                >
+                  Company details
+                </span>
               </li>
             </ol>
           </nav>
@@ -196,7 +200,11 @@ exports[`PageHeader Renders without crashing 1`] = `
               >
                 <test-file-stub />
               </span>
-              Company details
+              <span
+                aria-current="page"
+              >
+                Company details
+              </span>
             </li>
           </ol>
         </nav>

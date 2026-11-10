@@ -52,10 +52,25 @@ export const DevPaths = {
 
   dependencies: "/dependencies",
   migrationTargets: "/migration-targets",
+
+  // Agentic migration
+  migrationPlans: "/migration-plans",
+  migrationPlanDetails: "/migration-plans/:planId",
+  planRuns: "/plan-runs",
+  planRunDetails: "/plan-runs/:runId",
+  stageRunDetails: "/plan-runs/:runId/stages/:stageId",
+  agents: "/agents",
+  agentDetails: "/agents/:agentId",
+  applicationDetails: "/applications/:applicationId",
+  skills: "/skills",
+  skillDetails: "/skills/:skillId",
+  skillCollections: "/skills/collections",
+  skillCollectionDetails: "/skills/collections/:collectionId",
+
+  // Legacy dev-preview console. These stay until the console pages are
+  // removed, so every intermediate commit still compiles.
   agentRuns: "/agent-runs",
   agentRunDetails: "/agent-runs/:runName",
-  agents: "/agents",
-  skills: "/skills",
   workflows: "/workflows",
   workflowRuns: "/workflow-runs",
   workflowRunDetails: "/workflow-runs/:runName",
@@ -77,6 +92,8 @@ export type UniversalPathValues =
 export const AdminPaths = {
   // Administrator perspective
   general: "/general",
+  providers: "/providers",
+  models: "/models",
   identities: "/identities",
   repositories: "/repositories",
   repositoriesGit: "/repositories/git",
@@ -149,6 +166,32 @@ export interface ArchetypeTargetProfilesRoute {
   archetypeId: string;
 }
 
+export interface PlanRunDetailsRoute {
+  runId: string;
+}
+
+export interface StageRunDetailsRoute {
+  runId: string;
+  stageId: string;
+}
+
+export interface AgentDetailsRoute {
+  agentId: string;
+}
+
+export interface SkillDetailsRoute {
+  skillId: string;
+}
+
+export interface SkillCollectionDetailsRoute {
+  collectionId: string;
+}
+
+export interface ApplicationDetailsRoute {
+  applicationId: string;
+}
+
+/** Legacy dev-preview console routes, removed with the console pages. */
 export interface AgentRunDetailsRoute {
   runName: string;
 }

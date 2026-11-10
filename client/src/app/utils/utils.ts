@@ -297,3 +297,12 @@ export function wrapAsEvent(value: unknown, name: string = "wrapped-as-event") {
 export function isNotEmptyString(value: string | undefined | null): boolean {
   return value !== undefined && value !== null && value.trim() !== "";
 }
+
+export const openModalAfterMenuClose = (openModal: () => void) => {
+  window.setTimeout(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    openModal();
+  }, 0);
+};

@@ -88,6 +88,7 @@ export const useUrlParams = <
     // We prefix the params object here so the serialize function doesn't have to care about the keyPrefix.
     const newPrefixedSerializedParams = withPrefixes(serialize(newParams));
     history.replace({
+      ...history.location,
       pathname,
       search: trimAndStringifyUrlParams({
         existingSearchParams,

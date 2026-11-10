@@ -14,6 +14,8 @@ export interface IActiveItemDerivedStateArgs<TItem> {
    * The current page of API data items after filtering/sorting/pagination
    */
   currentPageItems: TItem[];
+  /** Optional full local dataset for deep links to a drawer outside the current page. */
+  activeItemItems?: TItem[];
   /**
    * The string key/name of a property on the API data item objects that can be used as a unique identifier (string or number)
    */
@@ -59,11 +61,14 @@ export interface IActiveItemDerivedState<TItem> {
  */
 export const getActiveItemDerivedState = <TItem>({
   currentPageItems,
+  activeItemItems,
   idProperty,
   activeItemState: { activeItemId, setActiveItemId },
 }: IActiveItemDerivedStateArgs<TItem>): IActiveItemDerivedState<TItem> => ({
   activeItem:
-    currentPageItems.find((item) => item[idProperty] === activeItemId) || null,
+    (activeItemItems ?? currentPageItems).find(
+      (item) => item[idProperty] === activeItemId
+    ) || null,
   setActiveItem: (item: TItem | null) => {
     const itemId = (item?.[idProperty] ?? null) as string | number | null; // TODO Assertion shouldn't be necessary here but TS isn't fully inferring item[idProperty]?
     setActiveItemId(itemId);
