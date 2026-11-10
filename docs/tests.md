@@ -60,6 +60,11 @@ npm run test -w client -- --watch
 
 For end-to-end testing with Cypress, see [cypress/README.md](/cypress/README.md).
 
+The agentic migration prototype has its own Playwright suite against the
+MSW-mocked backend: `npm run test:e2e:prototype` (starts the dev server with
+`MOCK=stub`). See [e2e/README.md](/e2e/README.md) for what each folder covers,
+how to run a subset or point it at your own server, and its conventions.
+
 E2E tests use page object models: `cypress/e2e/models/{domain}/{feature}.ts` encapsulates interactions. Shared selectors live in `cypress/e2e/views/`. Test specs are in `cypress/e2e/tests/`. Cypress test patterns rely on `data-ouia-component-id` (PatternFly OUIA) for stable selectors.
 
 Scope form inputs to the active dialog. For file uploads, select the file input by its accepted file types rather than relying on PatternFly's internal wrapper classes or sibling order.
