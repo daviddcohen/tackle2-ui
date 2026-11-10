@@ -84,8 +84,9 @@ export * from "./rest/tasks";
 export * from "./rest/tickets";
 export * from "./rest/tokens";
 export * from "./rest/trackers";
-export * from "./rest/agent-runs";
 export * from "./rest/users";
+// Agentic REST functions are imported from "@app/api/rest/agentic" directly:
+// several names collide with the upstream "./rest/agent-runs" client.
 
 /**
  * Provide consistent fetch and processing for server side filtering and sorting with
