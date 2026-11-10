@@ -18,8 +18,13 @@ const openMenu = async () => {
   return user;
 };
 
+const menuEntries = () =>
+  Array.from(screen.getByRole("menu").querySelectorAll(":scope > li")).map(
+    (li) => (li.getAttribute("role") === "separator" ? "---" : li.textContent)
+  );
+
 describe("EntityDetailActions", () => {
-  it("lists the items first, then Edit, a separator and Delete", async () => {
+  it("lists Edit, then the items, a separator and Delete", async () => {
     const onTest = jest.fn();
     render(
       <EntityDetailActions
@@ -30,13 +35,9 @@ describe("EntityDetailActions", () => {
     );
     const user = await openMenu();
 
-    const menu = screen.getByRole("menu");
-    const entries = Array.from(menu.querySelectorAll(":scope > li")).map(
-      (li) => (li.getAttribute("role") === "separator" ? "---" : li.textContent)
-    );
-    expect(entries).toEqual([
-      "Test agent",
+    expect(menuEntries()).toEqual([
       "actions.edit",
+      "Test agent",
       "---",
       "actions.delete",
     ]);
@@ -50,9 +51,29 @@ describe("EntityDetailActions", () => {
     render(<EntityDetailActions onEdit={onEdit} onDelete={jest.fn()} />);
     const user = await openMenu();
 
-    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+    expect(menuEntries()).toEqual(["actions.edit", "---", "actions.delete"]);
     await user.click(screen.getByRole("menuitem", { name: "actions.edit" }));
     expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows only the entries whose handler is passed", async () => {
+    const { unmount } = render(<EntityDetailActions onEdit={jest.fn()} />);
+    await openMenu();
+    expect(menuEntries()).toEqual(["actions.edit"]);
+    unmount();
+
+    render(<EntityDetailActions onDelete={jest.fn()} />);
+    await openMenu();
+    expect(menuEntries()).toEqual(["actions.delete"]);
+  });
+
+  it("renders nothing when no entry remains", () => {
+    render(<EntityDetailActions />);
+    expect(
+      screen.queryByRole("button", {
+        name: "agentic.applicationDetail.actions",
+      })
+    ).not.toBeInTheDocument();
   });
 
   it("marks Delete as danger only when it is enabled", async () => {
@@ -79,6 +100,41 @@ describe("EntityDetailActions", () => {
     expect(deleteItem.closest("li")).not.toHaveClass("pf-m-danger");
     await user.click(deleteItem);
     expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it("disables Edit and Delete with the managed reason, leaving the items", async () => {
+    const onEdit = jest.fn();
+    const onDelete = jest.fn();
+    const onTest = jest.fn();
+    render(
+      <EntityDetailActions
+        items={[{ key: "test", label: "Test agent", onClick: onTest }]}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        deleteDisabledReason="Used by 2 migration plans."
+        managedReason="Managed by Konveyor."
+      />
+    );
+    const user = await openMenu();
+
+    const editItem = screen.getByRole("menuitem", { name: "actions.edit" });
+    const deleteItem = screen.getByRole("menuitem", { name: "actions.delete" });
+    expect(editItem).toHaveAttribute("aria-disabled", "true");
+    expect(deleteItem).toHaveAttribute("aria-disabled", "true");
+    expect(deleteItem.closest("li")).not.toHaveClass("pf-m-danger");
+    await user.click(editItem);
+    await user.click(deleteItem);
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    // The managed reason wins over the in-use reason.
+    await user.hover(deleteItem);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Managed by Konveyor."
+    );
+
+    await user.click(screen.getByRole("menuitem", { name: "Test agent" }));
+    expect(onTest).toHaveBeenCalledTimes(1);
   });
 });
 
