@@ -16,6 +16,8 @@ export interface ObjectMeta {
   annotations?: Record<string, string>;
   uid?: string;
   resourceVersion?: string;
+  /** Incremented by the API server on every spec change. */
+  generation?: number;
   creationTimestamp?: string;
 }
 

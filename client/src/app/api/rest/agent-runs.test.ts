@@ -1,6 +1,12 @@
 import axios from "axios";
 
-import { createAgentRun, createWorkflowRun } from "./agent-runs";
+import {
+  createAgentRun,
+  createGateway,
+  createWorkflowRun,
+  deleteGateway,
+  updateGateway,
+} from "./agent-runs";
 
 jest.mock("axios");
 
@@ -73,5 +79,40 @@ describe("agentic run request serialization", () => {
         ],
       },
     });
+  });
+});
+
+describe("Gateway writes", () => {
+  const spec = {
+    provider: "anthropic",
+    endpoint: "https://api.anthropic.com",
+    credentialRef: { secretName: "anthropic-credentials", key: "api-key" },
+    model: { name: "claude-sonnet-4-6", contextWindow: 200000 },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedAxios.post.mockResolvedValue({ data: { metadata: {}, spec } });
+    mockedAxios.put.mockResolvedValue({ data: "" });
+    mockedAxios.delete.mockResolvedValue({ data: "" });
+  });
+
+  it("creates, replaces and deletes a Gateway by resource name", async () => {
+    await createGateway("claude", spec);
+    expect(mockedAxios.post).toHaveBeenCalledWith("/hub/agentic/gateways", {
+      metadata: { name: "claude" },
+      spec,
+    });
+
+    await expect(updateGateway("claude", spec)).resolves.toBeUndefined();
+    expect(mockedAxios.put).toHaveBeenCalledWith(
+      "/hub/agentic/gateways/claude",
+      { metadata: { name: "claude" }, spec }
+    );
+
+    await expect(deleteGateway("a b")).resolves.toBeUndefined();
+    expect(mockedAxios.delete).toHaveBeenCalledWith(
+      "/hub/agentic/gateways/a%20b"
+    );
   });
 });
