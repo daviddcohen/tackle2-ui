@@ -1,6 +1,6 @@
-# AI Agent Guide for tackle2-ui
+# Agent Guide for tackle2-ui
 
-This document provides structural context and conventions for AI agents working on the tackle2-ui codebase. For setup instructions, see [README.md](README.md). For coding standards and PR process, see [CONTRIBUTING.md](CONTRIBUTING.md).
+This repository is a tackle2-ui-based design workspace for the MTA Hub agentic migration UX. For setup instructions, see [README.md](README.md). For coding standards and PR process, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Repository Structure
 
@@ -44,6 +44,12 @@ tackle2-ui/
 ## Key Patterns
 
 For data flow (API layer, query hooks, table controls), see [ARCHITECTURE.md](ARCHITECTURE.md#data-flow). For component conventions (selects, filters, access control), see [docs/development.md](docs/development.md#component-conventions). For testing patterns and priorities, see [docs/tests.md](docs/tests.md). Environment variable types are defined in `common/src/env-types.ts`; for dev setup, see [README.md](README.md).
+
+## Product context
+
+The agentic migration design covers the configuration plane and the execution plane. Upstream's dev-preview agentic console is a reference, but this design work starts from the product requirements.
+
+Related artifacts include agentic-controller and tackle2-ui PR #3546.
 
 ## Review Guidelines
 

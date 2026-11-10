@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Option 1: Grouped Cards — Skill Associations Tab</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --pf-font: "Inter", "RedHatText", "Helvetica Neue", Arial, sans-serif;
+        --pf-global-bg: #f0f0f0;
+        --pf-page-bg: #ffffff;
+        --pf-border: #d2d2d2;
+        --pf-border-subtle: #e8e8e8;
+        --pf-text-primary: #151515;
+        --pf-text-secondary: #6a6e73;
+        --pf-link: #0066cc;
+        --pf-link-hover: #004d99;
+
+        /* PF6 label colors */
+        --badge-agent-bg: #bee1f4;
+        --badge-agent-text: #00376d;
+        --badge-agent-border: #73bcf7;
+        --badge-archetype-bg: #faeae8;
+        --badge-archetype-text: #7d1007;
+        --badge-archetype-border: #f4b678;
+        --badge-target-bg: #f3faf2;
+        --badge-target-text: #1e4f18;
+        --badge-target-border: #95d58e;
+        --badge-app-bg: #f5f5f5;
+        --badge-app-text: #3d3f42;
+        --badge-app-border: #b8bbbe;
+
+        --tab-active: #0066cc;
+        --section-gap: 32px;
+      }
+
+      body {
+        font-family: var(--pf-font);
+        font-size: 14px;
+        background: var(--pf-global-bg);
+        color: var(--pf-text-primary);
+      }
+
+      /* App shell */
+      .shell {
+        display: flex;
+        min-height: 100vh;
+      }
+      .sidebar {
+        width: 224px;
+        flex-shrink: 0;
+        background: #1b1d21;
+        display: flex;
+        flex-direction: column;
+        padding: 16px 0;
+      }
+      .sidebar-logo {
+        padding: 8px 16px 24px;
+        font-size: 18px;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: -0.3px;
+      }
+      .sidebar-logo span {
+        color: #73bcf7;
+      }
+      .sidebar-nav {
+        list-style: none;
+      }
+      .sidebar-nav li a {
+        display: block;
+        padding: 8px 16px;
+        color: #c7c7c7;
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .sidebar-nav li a:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .sidebar-nav li.active a {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+        border-left: 3px solid #73bcf7;
+        padding-left: 13px;
+      }
+
+      .main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .topbar {
+        background: #fff;
+        border-bottom: 1px solid var(--pf-border);
+        padding: 0 24px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--pf-text-secondary);
+      }
+      .breadcrumb a {
+        color: var(--pf-link);
+        text-decoration: none;
+      }
+      .breadcrumb-sep {
+        color: #b8bbbe;
+      }
+
+      .page {
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      /* Page header */
+      .page-header {
+        background: #fff;
+        border-bottom: 1px solid var(--pf-border);
+        padding: 20px 24px 0;
+      }
+      .page-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--pf-text-primary);
+        margin-bottom: 16px;
+        line-height: 1.2;
+      }
+
+      /* Tabs */
+      .tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--pf-border);
+        margin-top: 0;
+      }
+      .tab-btn {
+        padding: 10px 16px;
+        background: none;
+        border: none;
+        font-family: var(--pf-font);
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--pf-text-secondary);
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -1px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tab-btn.active {
+        color: var(--tab-active);
+        font-weight: 500;
+        border-bottom-color: var(--tab-active);
+      }
+      .tab-badge {
+        background: var(--tab-active);
+        color: #fff;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 1px 7px;
+        line-height: 16px;
+      }
+
+      /* Tab content */
+      .tab-content {
+        padding: 28px 24px;
+        max-width: 960px;
+      }
+
+      /* Section */
+      .section {
+        margin-bottom: var(--section-gap);
+      }
+      .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--pf-text-primary);
+        margin-bottom: 4px;
+      }
+      .section-help {
+        font-size: 13px;
+        color: var(--pf-text-secondary);
+        margin-bottom: 16px;
+        line-height: 1.5;
+      }
+      .section-divider {
+        border: none;
+        border-top: 1px solid var(--pf-border-subtle);
+        margin: var(--section-gap) 0;
+      }
+
+      /* Grouped cards layout for Section A */
+      .groups {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .group-card {
+        border: 1px solid var(--pf-border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .group-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        background: #fafafa;
+        border-bottom: 1px solid var(--pf-border);
+      }
+      .group-count {
+        font-size: 12px;
+        color: var(--pf-text-secondary);
+        margin-left: auto;
+      }
+      .group-items {
+        display: flex;
+        flex-direction: column;
+      }
+      .group-item {
+        padding: 9px 16px 9px 42px;
+        border-bottom: 1px solid var(--pf-border-subtle);
+        font-size: 13px;
+      }
+      .group-item:last-child {
+        border-bottom: none;
+      }
+      .group-item a {
+        color: var(--pf-link);
+        text-decoration: none;
+      }
+      .group-item a:hover {
+        text-decoration: underline;
+        color: var(--pf-link-hover);
+      }
+
+      /* Type badge (label) */
+      .label {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 2px 10px;
+        line-height: 18px;
+        border: 1px solid;
+        white-space: nowrap;
+      }
+      .label-agent {
+        background: var(--badge-agent-bg);
+        color: var(--badge-agent-text);
+        border-color: var(--badge-agent-border);
+      }
+      .label-archetype {
+        background: var(--badge-archetype-bg);
+        color: var(--badge-archetype-text);
+        border-color: var(--badge-archetype-border);
+      }
+      .label-target {
+        background: var(--badge-target-bg);
+        color: var(--badge-target-text);
+        border-color: var(--badge-target-border);
+      }
+      .label-app {
+        background: var(--badge-app-bg);
+        color: var(--badge-app-text);
+        border-color: var(--badge-app-border);
+      }
+
+      /* Section B: Plans table */
+      .plans-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .plans-table th {
+        text-align: left;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--pf-text-secondary);
+        border-bottom: 2px solid var(--pf-border);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .plans-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--pf-border-subtle);
+        vertical-align: top;
+      }
+      .plans-table tr:last-child td {
+        border-bottom: none;
+      }
+      .plans-table .col-name {
+        width: 40%;
+      }
+      .plans-table .col-from {
+        width: 60%;
+      }
+      .plans-table a {
+        color: var(--pf-link);
+        text-decoration: none;
+      }
+      .plans-table a:hover {
+        text-decoration: underline;
+      }
+      .source-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .source-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+      .source-name {
+        color: var(--pf-text-primary);
+      }
+
+      /* Section C: Collections table */
+      .collections-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .collections-table th {
+        text-align: left;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--pf-text-secondary);
+        border-bottom: 2px solid var(--pf-border);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .collections-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--pf-border-subtle);
+      }
+      .collections-table a {
+        color: var(--pf-link);
+        text-decoration: none;
+      }
+      .collections-table a:hover {
+        text-decoration: underline;
+      }
+      .skill-count-badge {
+        display: inline-block;
+        background: #f0f0f0;
+        border: 1px solid #d2d2d2;
+        border-radius: 12px;
+        padding: 1px 8px;
+        font-size: 11px;
+        color: var(--pf-text-secondary);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="sidebar">
+        <div class="sidebar-logo">kon<span>veyor</span></div>
+        <ul class="sidebar-nav">
+          <li><a href="#">Application inventory</a></li>
+          <li><a href="#">Archetypes</a></li>
+          <li><a href="#">Migration waves</a></li>
+          <li class="active"><a href="#">Skills</a></li>
+          <li><a href="#">Agents</a></li>
+          <li><a href="#">Migration plans</a></li>
+        </ul>
+      </nav>
+
+      <div class="main">
+        <div class="topbar">
+          <div class="breadcrumb">
+            <a href="#">Skills</a>
+            <span class="breadcrumb-sep">›</span>
+            <span>API compatibility checklist</span>
+          </div>
+        </div>
+
+        <div class="page">
+          <div class="page-header">
+            <div class="page-title">API compatibility checklist</div>
+            <div class="tabs">
+              <button class="tab-btn">Details</button>
+              <button class="tab-btn active">
+                Associations
+                <span class="tab-badge">6</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tab-content">
+            <!-- Section A: Directly associated with -->
+            <div class="section">
+              <div class="section-title">Directly associated with</div>
+              <div class="groups">
+                <!-- Agents group -->
+                <div class="group-card">
+                  <div class="group-header">
+                    <span class="label label-agent">Agent</span>
+                    <span class="group-count">2</span>
+                  </div>
+                  <div class="group-items">
+                    <div class="group-item">
+                      <a href="#">Migration Proposal Agent</a>
+                    </div>
+                    <div class="group-item">
+                      <a href="#">Security Review Agent</a>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Archetypes group -->
+                <div class="group-card">
+                  <div class="group-header">
+                    <span class="label label-archetype">Archetype</span>
+                    <span class="group-count">1</span>
+                  </div>
+                  <div class="group-items">
+                    <div class="group-item">
+                      <a href="#">Spring Boot Application</a>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Target profiles group -->
+                <div class="group-card">
+                  <div class="group-header">
+                    <span class="label label-target">Target profile</span>
+                    <span class="group-count">1</span>
+                  </div>
+                  <div class="group-items">
+                    <div class="group-item"><a href="#">Quarkus 3.x</a></div>
+                  </div>
+                </div>
+
+                <!-- Applications group -->
+                <div class="group-card">
+                  <div class="group-header">
+                    <span class="label label-app">Application</span>
+                    <span class="group-count">2</span>
+                  </div>
+                  <div class="group-items">
+                    <div class="group-item">
+                      <a href="#">Partner Events API</a>
+                    </div>
+                    <div class="group-item">
+                      <a href="#">Payment Gateway</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="section-divider" />
+
+            <!-- Section B: Active in migration plans -->
+            <div class="section">
+              <div class="section-title">Active in migration plans</div>
+              <div class="section-help">
+                Plans where this skill is active at runtime. The "Resolved from"
+                column shows which entity brought it into scope.
+              </div>
+              <table class="plans-table">
+                <thead>
+                  <tr>
+                    <th class="col-name">Plan</th>
+                    <th class="col-from">Resolved from</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><a href="#">Java EE to Quarkus</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><a href="#">Spring Boot to Quarkus</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                        <div class="source-row">
+                          <span class="label label-archetype">Archetype</span
+                          ><span class="source-name"
+                            >Spring Boot Application</span
+                          >
+                        </div>
+                        <div class="source-row">
+                          <span class="label label-target">Target profile</span
+                          ><span class="source-name">Quarkus 3.x</span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><a href="#">Java EE lift and shift</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Security Review Agent</span
+                          >
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><a href="#">Spring Boot 3 modernization</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                        <div class="source-row">
+                          <span class="label label-archetype">Archetype</span
+                          ><span class="source-name"
+                            >Spring Boot Application</span
+                          >
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><a href="#">Legacy Java runtime modernization</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><a href="#">.NET Framework to .NET 8</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><a href="#">.NET lift and shift</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Security Review Agent</span
+                          >
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><a href="#">Node.js runtime modernization</a></td>
+                    <td>
+                      <div class="source-stack">
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Migration Proposal Agent</span
+                          >
+                        </div>
+                        <div class="source-row">
+                          <span class="label label-agent">Agent</span
+                          ><span class="source-name"
+                            >Security Review Agent</span
+                          >
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <hr class="section-divider" />
+
+            <!-- Section C: In skill collections -->
+            <div class="section">
+              <div class="section-title">In skill collections</div>
+              <div class="section-help">
+                Collections are organizational groupings only — they do not
+                affect which plans this skill is active in.
+              </div>
+              <table class="collections-table">
+                <thead>
+                  <tr>
+                    <th>Collection</th>
+                    <th>Skills</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><a href="#">Java modernization foundation</a></td>
+                    <td><span class="skill-count-badge">5 skills</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

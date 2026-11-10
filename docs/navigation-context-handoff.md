@@ -28,20 +28,55 @@ Resolved Skill provenance currently provides scope names without stable source-r
 
 ## Verification
 
-`e2e/navigation/navigation-context.spec.ts` discovers entity data through the running MSW transport. It visits the available list/detail/tab/drawer surfaces, clicks each unique rendered internal entity destination, checks its name and breadcrumb context, and returns through the breadcrumb to the exact source URL. Additional cases exercise long journeys, cycles, refresh, Back/Forward, list filters, tabs, scenario changes, fresh tabs, loading/error/missing entities, and keyboard navigation at desktop, tablet, and mobile widths. Screenshots are attached to the responsive cases.
+`e2e/navigation-context.spec.ts` discovers entity data through the running MSW transport. It visits the available list/detail/tab/drawer surfaces, clicks each unique rendered internal entity destination, checks its name and breadcrumb context, and returns through the breadcrumb to the exact source URL. Additional cases exercise long journeys, cycles, refresh, Back/Forward, list filters, tabs, scenario changes, fresh tabs, loading/error/missing entities, and keyboard navigation at desktop, tablet, and mobile widths. Screenshots are attached to the responsive cases.
 
 Responsive cases check mouse actionability for every breadcrumb link, including the Archetype drawer and selected target profile. Visibility and bounding boxes alone do not detect a drawer covering a link.
 
 The focused Jest suite verifies ancestor truncation, drawer identity, target profile fragments, malformed history entries, flat trail storage, URL state preservation, canonical fixture labels, and existing breadcrumb rendering.
 
-### Repeatable checks
+### Results
 
-The navigation suite runs with the rest of the Playwright suite:
+Verified on `http://localhost:9001` using the prototype's MSW transport:
+
+- The complete Playwright Chromium suite passed all 180 cases on the final code. Independent navigation cases run in isolated browser contexts in parallel.
+- All 24 navigation cases passed, including 870 entity-link and breadcrumb-return checks across 184 views. Each return checks the exact originating URL.
+- All 563 enabled client Jest tests passed across 50 suites, with 21 snapshots. Two existing suites and three tests remain skipped.
+- TypeScript and the production client build passed. The build retains existing CSS-order, bundle-size, and Browserslist warnings.
+- Scoped ESLint passed with zero warnings. Prettier and `git diff --check` passed.
+- Desktop (1440 × 900), tablet (768 × 1024), and mobile (375 × 812) screenshots were visually inspected. Every breadcrumb link was checked for mouse actionability; keyboard Enter restores the originating Associations tab.
+
+| Surface group                  | Views | Links and returns |
+| ------------------------------ | ----: | ----------------: |
+| Lists                          |     5 |                80 |
+| Skills                         |    32 |               108 |
+| Collections                    |     4 |                11 |
+| Agents                         |    16 |                92 |
+| Plans                          |    16 |               104 |
+| Runs and stages                |    31 |               229 |
+| Applications                   |    51 |                85 |
+| Archetypes and target profiles |    29 |               161 |
+| Total                          |   184 |               870 |
+
+Repeatable checks:
 
 ```sh
 npm run test -w client -- --runInBand
 npm run build -w client
-npm run test:e2e:prototype
+playwright test --workers=4
 ```
 
-The suite reads IDs and relationships from the running mock API instead of maintaining a separate navigation fixture.
+The Playwright executable and module resolution follow the repository's existing local Playwright configuration. The new graph suite reads IDs and relationships from the running API instead of maintaining a separate navigation fixture.
+
+Screenshots are saved in [verification/navigation-context](verification/navigation-context):
+
+| View                    | Desktop                                                                         | Tablet                                                                         | Mobile                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Deep Plan trail         | [Image](verification/navigation-context/desktop-deep-breadcrumbs.png)           | [Image](verification/navigation-context/tablet-deep-breadcrumbs.png)           | [Image](verification/navigation-context/mobile-deep-breadcrumbs.png)           |
+| Archetype drawer        | [Image](verification/navigation-context/desktop-archetype-breadcrumbs.png)      | [Image](verification/navigation-context/tablet-archetype-breadcrumbs.png)      | [Image](verification/navigation-context/mobile-archetype-breadcrumbs.png)      |
+| Selected target profile | [Image](verification/navigation-context/desktop-target-profile-breadcrumbs.png) | [Image](verification/navigation-context/tablet-target-profile-breadcrumbs.png) | [Image](verification/navigation-context/mobile-target-profile-breadcrumbs.png) |
+
+## Integration verification
+
+The merged prototype integration passed the complete 180-case Chromium suite against its final optimized, packaged runtime on port 9010. The 563 client unit tests and 21 snapshots also passed. The merged server retained its fixture behavior.
+
+The unavailable-Application case now first loads a successful item, then forces a failed request with the item still cached. The page shows the error while preserving the existing details and breadcrumb return to the exact originating Skill Associations URL. The [cached Application error screenshot](verification/navigation-context/cached-application-error.png) was visually inspected.
