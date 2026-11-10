@@ -1,6 +1,6 @@
 import { expect, expectNoBrokenText, main, protoUrl, test } from "../support";
 
-test.describe("Plan Runs list", () => {
+test.describe("Plan runs list", () => {
   test("lists every run with a known status, sorted by start time", async ({
     page,
     pageErrors,
@@ -131,7 +131,7 @@ test.describe("Status consistency across surfaces", () => {
       );
       await page
         .getByRole("navigation", { name: "Breadcrumb" })
-        .getByRole("link", { name: "Plan Runs" })
+        .getByRole("link", { name: "Plan runs" })
         .click();
       await expect(
         page

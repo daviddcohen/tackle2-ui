@@ -16,7 +16,7 @@ import {
 const PAGES: { path: string; heading: string | RegExp; adminOnly?: boolean }[] =
   [
     { path: "/models", heading: "Models", adminOnly: true },
-    { path: "/providers", heading: "Providers", adminOnly: true },
+    { path: "/providers", heading: "Model providers", adminOnly: true },
     { path: "/agents", heading: "Agents" },
     { path: "/agents/1", heading: "Migration Proposal Agent" },
     { path: "/agents/3?tab=runs", heading: "Build Validator" },
