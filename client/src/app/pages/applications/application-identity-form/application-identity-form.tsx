@@ -303,7 +303,6 @@ export const ApplicationIdentityForm: React.FC<
         <Button
           type="submit"
           id="submit"
-          aria-label="submit"
           variant={ButtonVariant.primary}
           isDisabled={!isValid || isSubmitting || isValidating || !isDirty}
         >
@@ -312,7 +311,6 @@ export const ApplicationIdentityForm: React.FC<
         <Button
           id="cancel"
           type="button"
-          aria-label="cancel"
           variant={ButtonVariant.link}
           onClick={onClose}
         >

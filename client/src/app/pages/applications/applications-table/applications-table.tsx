@@ -3,14 +3,19 @@ import { AxiosError } from "axios";
 import { Trans, useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import {
+  Alert,
   Button,
   ButtonVariant,
   Content,
   Divider,
   DividerVariant,
+  Dropdown,
   DropdownItem,
+  DropdownList,
   FormSelect,
   FormSelectOption,
+  MenuToggle,
+  MenuToggleElement,
   Modal,
   ModalBody,
   ModalFooter,
@@ -27,8 +32,13 @@ import {
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
-import { isAgenticEnabled } from "@app/Constants";
-import { Paths } from "@app/Paths";
+import { DEFAULT_REFETCH_INTERVAL, isAgenticEnabled } from "@app/Constants";
+import { DevPaths, Paths } from "@app/Paths";
+import {
+  ApplicationMigrationDisplayStatus,
+  UNCONFIGURED_MIGRATION,
+  getMigrationDisplayStatus,
+} from "@app/agentic";
 import { Assessment, Ref, TaskState } from "@app/api/models";
 import { getArchetypeById, getTasksByIds } from "@app/api/rest";
 import { useHasSomeScopes } from "@app/auth";
@@ -56,8 +66,8 @@ import { DiscoverImportWizard } from "@app/components/discover-import-wizard";
 import { OverflowActionMenu } from "@app/components/overflow-action-menu";
 import { useBulkSelection } from "@app/hooks/selection/useBulkSelection";
 import { useLocalTableControls } from "@app/hooks/table-controls";
-import { CreateWorkflowRunModal } from "@app/pages/workflow-runs/components/CreateWorkflowRunModal";
-import { workflowRunsPath } from "@app/pages/workflow-runs/runs-page-links";
+import { BreadcrumbState, useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
+import { useFetchApplicationMigrations } from "@app/queries/agentic";
 import {
   useBulkDeleteApplicationMutation,
   useFetchApplications,
@@ -73,7 +83,7 @@ import {
 } from "@app/queries/tasks";
 import {
   ScopeGate,
-  agenticWorkflowRunsCreateScopes,
+  agenticWorkflowRunsWriteScopes,
   analysesReadScopes,
   applicationsWriteScopes,
   assessmentWriteScopes,
@@ -95,11 +105,11 @@ import {
   universalComparator,
 } from "@app/utils/utils";
 
-import { BulkAgentRunModal } from "../agent-run-modal";
 import { AnalysisWizard } from "../analysis-wizard/analysis-wizard";
-import { ApplicationDetailDrawer } from "../application-detail-drawer/application-detail-drawer";
 import { ApplicationFormModal } from "../application-form";
 import { ApplicationIdentityModal } from "../application-identity-form/application-identity-modal";
+import { MigrationPreflightModal } from "../components/agentic-migration/migration-preflight-modal";
+import { useStartMigrations } from "../components/agentic-migration/use-start-migrations";
 import { ImportApplicationsForm } from "../components/import-applications-form";
 import { GenerateAssetsWizard } from "../generate-assets-wizard";
 import { RetrieveConfigWizard } from "../retrieve-config-wizard";
@@ -108,6 +118,7 @@ import {
   useDecoratedApplications,
 } from "../useDecoratedApplications";
 
+import { ColumnAgenticMigration } from "./components/column-agentic-migration";
 import {
   ColumnAnalysisStatus,
   mapAnalysisStateToLabel,
@@ -116,12 +127,30 @@ import { ColumnApplicationName } from "./components/column-application-name";
 import { ColumnAssessmentStatus } from "./components/column-assessment-status";
 import { ColumnReviewStatus } from "./components/column-review-status";
 import { ManageColumnsToolbar } from "./components/manage-columns-toolbar";
+import { MigrationAttentionModal } from "./components/migration-attention-modal";
+import { MigrationPortfolioOverview } from "./components/migration-portfolio-overview";
+
+const agenticMigrationStatuses: ApplicationMigrationDisplayStatus[] = [
+  "notConfigured",
+  "preflightReady",
+  "preflightBlocked",
+  "reviewRequired",
+  "pending",
+  "running",
+  "actionRequired",
+  "succeeded",
+  "failed",
+];
 
 export const ApplicationsTable: FC = () => {
   const { t } = useTranslation();
+  const { to, linkCrumbs } = useBreadcrumbs(
+    t("sidebar.applicationInventory"),
+    []
+  );
   const { pushNotification } = useContext(NotificationsContext);
 
-  const history = useHistory();
+  const history = useHistory<BreadcrumbState>();
 
   // ----- State for the modals
   const [saveApplicationModalState, setSaveApplicationModalState] = useState<
@@ -148,6 +177,7 @@ export const ApplicationsTable: FC = () => {
     useState<DecoratedApplication | null>(null);
 
   const [isAnalyzeModalOpen, setAnalyzeModalOpen] = useState(false);
+  const [isActionsDropdownOpen, setIsActionsDropdownOpen] = useState(false);
   const [retrieveConfigApplications, setRetrieveConfigApplications] = useState<
     DecoratedApplication[] | null
   >(null);
@@ -156,20 +186,16 @@ export const ApplicationsTable: FC = () => {
     DecoratedApplication[] | null
   >(null);
 
-  const [bulkRunApplications, setBulkRunApplications] = useState<
-    DecoratedApplication[] | null
-  >(null);
-
-  const [runForApplication, setRunForApplication] =
-    useState<DecoratedApplication | null>(null);
-
   const [applicationDependenciesToManage, setApplicationDependenciesToManage] =
     useState<DecoratedApplication | null>(null);
 
   const isDependenciesModalOpen = applicationDependenciesToManage !== null;
 
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-
+  const [migrationRowsToStart, setMigrationRowsToStart] = useState<
+    DecoratedApplication[] | null
+  >(null);
+  const [isAttentionModalOpen, setIsAttentionModalOpen] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string>("json");
 
   const [assessmentToEdit, setAssessmentToEdit] = useState<Assessment | null>(
@@ -316,52 +342,49 @@ export const ApplicationsTable: FC = () => {
   };
 
   // TODO: Perf concerns for this query: https://github.com/konveyor/tackle2-ui/issues/2350
+  // Stop polling while the application list cannot be read: a refetch of a
+  // query that never had data resets it to loading, so the error state would
+  // keep flipping back to the loading placeholder.
+  const [isApplicationsPollingStopped, setIsApplicationsPollingStopped] =
+    useState(false);
   const {
     data: baseApplications,
     isFetching: isFetchingApplications,
     error: applicationsFetchError,
-  } = useFetchApplications();
+  } = useFetchApplications(
+    isApplicationsPollingStopped ? false : DEFAULT_REFETCH_INTERVAL
+  );
+  if (
+    applicationsFetchError != null &&
+    baseApplications.length === 0 &&
+    !isApplicationsPollingStopped
+  ) {
+    setIsApplicationsPollingStopped(true);
+  }
 
   const {
-    applications,
+    applications: decoratedApplications,
     applicationNames,
     referencedArchetypeRefs,
     referencedBusinessServiceRefs,
     referencedPlatformRefs,
   } = useDecoratedApplications(baseApplications, tasks);
-
-  const onDeleteApplicationSuccess = (appIDCount: number) => {
-    if (applicationsToDelete.length == 1)
-      pushNotification({
-        title: t("toastr.success.applicationDeleted", {
-          appName: applicationsToDelete[0].name,
-        }),
-        variant: "success",
-      });
-    else
-      pushNotification({
-        title: t("toastr.success.applicationsDeleted", {
-          appIDCount: appIDCount,
-        }),
-        variant: "success",
-      });
-    clearActiveItem();
-    setApplicationsToDelete([]);
-  };
-
-  const onDeleteApplicationError = (error: AxiosError) => {
-    pushNotification({
-      title: getAxiosErrorMessage(error),
-      variant: "danger",
-    });
-    setApplicationsToDelete([]);
-  };
-
-  const { mutate: bulkDeleteApplication } = useBulkDeleteApplicationMutation(
-    onDeleteApplicationSuccess,
-    onDeleteApplicationError
-  );
-
+  const applications = decoratedApplications;
+  const applicationIds = applications
+    .map((application) => application.id)
+    .filter((id): id is number => id != null);
+  // Without the agentic API the query is disabled (no application ids).
+  const {
+    migrations,
+    isLoading: isLoadingMigrations,
+    fetchError: migrationsFetchError,
+  } = useFetchApplicationMigrations(isAgenticEnabled ? applicationIds : []);
+  const areMigrationsAvailable =
+    !isLoadingMigrations && migrationsFetchError == null;
+  const getMigration = (application: DecoratedApplication) =>
+    application.id != null
+      ? (migrations[application.id] ?? UNCONFIGURED_MIGRATION)
+      : UNCONFIGURED_MIGRATION;
   const { mutate: deleteReview } = useDeleteReviewMutation(
     (name) => {
       pushNotification({
@@ -424,24 +447,36 @@ export const ApplicationsTable: FC = () => {
       assessment: "Assessment",
       review: "Review",
       analysis: "Analysis",
+      agenticMigration: t("agentic.execution.columnTitle"),
       tags: "Tags",
       effort: "Effort",
     },
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    isActiveItemEnabled: true,
     persistTo: {
-      activeItem: "urlParams",
       filter: "urlParams",
       pagination: "sessionStorage",
       sort: "sessionStorage",
     },
     isLoading: isFetchingApplications,
-    sortableColumns: ["name", "businessService", "tags", "effort", "analysis"],
+    sortableColumns: [
+      "name",
+      "businessService",
+      "tags",
+      "effort",
+      "analysis",
+      "agenticMigration",
+    ],
     initialSort: { columnKey: "name", direction: "asc" },
     initialColumns: {
       name: { isIdentity: true },
+      businessService: { isVisible: false },
+      assessment: { isVisible: false },
+      review: { isVisible: false },
+      tags: { isVisible: false },
+      effort: { isVisible: false },
+      agenticMigration: { isVisible: isAgenticEnabled },
     },
     getSortValues: (app) => ({
       name: app.name,
@@ -452,6 +487,7 @@ export const ApplicationsTable: FC = () => {
         (app.tasks.currentAnalyzer?.state as TaskState) || "No task",
         t
       ),
+      agenticMigration: getMigrationDisplayStatus(getMigration(app)),
     }),
     filterCategories: [
       {
@@ -640,6 +676,46 @@ export const ApplicationsTable: FC = () => {
           .sort((a, b) => universalComparator(a.label, b.label)),
         getItemValue: (item) => item.tasks.currentAnalyzer?.state || "No task",
       },
+      ...(isAgenticEnabled
+        ? [
+            {
+              categoryKey: "agenticMigration",
+              title: t("agentic.execution.columnTitle"),
+              type: FilterType.multiselect,
+              placeholderText:
+                t("actions.filterBy", {
+                  what: t("agentic.execution.columnTitle").toLowerCase(),
+                }) + "...",
+              selectOptions: agenticMigrationStatuses.map((status) => ({
+                value: status,
+                label: t(`agentic.execution.displayStatus.${status}`),
+              })),
+              getItemValue: (item: DecoratedApplication) =>
+                getMigrationDisplayStatus(getMigration(item)),
+            },
+            {
+              categoryKey: "migrationPlan",
+              title: t("agentic.execution.planFilter"),
+              type: FilterType.multiselect,
+              placeholderText:
+                t("actions.filterBy", {
+                  what: t("agentic.execution.planFilter").toLowerCase(),
+                }) + "...",
+              selectOptions: Object.values(migrations)
+                .flatMap((migration) =>
+                  migration.plan ? [migration.plan] : []
+                )
+                .filter(
+                  (plan, index, plans) =>
+                    plans.findIndex(({ id }) => id === plan.id) === index
+                )
+                .map((plan) => ({ value: plan.id, label: plan.name }))
+                .sort((a, b) => universalComparator(a.label, b.label)),
+              getItemValue: (item: DecoratedApplication) =>
+                getMigration(item).plan?.id ?? "",
+            },
+          ]
+        : []),
     ],
 
     initialItemsPerPage: 10,
@@ -662,9 +738,46 @@ export const ApplicationsTable: FC = () => {
       getTdProps,
       getColumnVisibility,
     },
-    activeItemDerivedState: { activeItem, clearActiveItem },
     columnState,
   } = tableControls;
+  const showMigrationColumn =
+    isAgenticEnabled && getColumnVisibility("agenticMigration");
+  // Without the agentic API the Migration column is not offered at all.
+  const manageableColumns = (columns: typeof columnState.columns) =>
+    isAgenticEnabled
+      ? columns
+      : columns.filter(({ id }) => id !== "agenticMigration");
+
+  const onDeleteApplicationSuccess = (appIDCount: number) => {
+    if (applicationsToDelete.length == 1)
+      pushNotification({
+        title: t("toastr.success.applicationDeleted", {
+          appName: applicationsToDelete[0].name,
+        }),
+        variant: "success",
+      });
+    else
+      pushNotification({
+        title: t("toastr.success.applicationsDeleted", {
+          appIDCount: appIDCount,
+        }),
+        variant: "success",
+      });
+    setApplicationsToDelete([]);
+  };
+
+  const onDeleteApplicationError = (error: AxiosError) => {
+    pushNotification({
+      title: getAxiosErrorMessage(error),
+      variant: "danger",
+    });
+    setApplicationsToDelete([]);
+  };
+
+  const { mutate: bulkDeleteApplication } = useBulkDeleteApplicationMutation(
+    onDeleteApplicationSuccess,
+    onDeleteApplicationError
+  );
 
   const {
     selectedItems: selectedRows,
@@ -675,6 +788,11 @@ export const ApplicationsTable: FC = () => {
     // items: applications,
     filteredItems,
     currentPageItems,
+  });
+
+  const { startMigrations, isStarting } = useStartMigrations(linkCrumbs, () => {
+    toolbarBulkSelectorProps.onSelectNone();
+    setMigrationRowsToStart(null);
   });
 
   const clearFilters = () => {
@@ -708,13 +826,11 @@ export const ApplicationsTable: FC = () => {
   const analysesReadAccess = useHasSomeScopes(analysesReadScopes);
   const tasksReadAccess = useHasSomeScopes(tasksReadScopes);
   const tasksWriteAccess = useHasSomeScopes(tasksWriteScopes);
-  const reviewsWriteAccess = useHasSomeScopes(reviewsWriteScopes);
-  // Launching agent workflow runs is its own hub scope (tackle2-hub#1119):
-  // a migrator has it without application write access, a project manager
-  // has neither.
-  const agentWorkflowRunAccess = useHasSomeScopes(
-    agenticWorkflowRunsCreateScopes
+  const agenticWorkflowRunWriteAccess = useHasSomeScopes(
+    agenticWorkflowRunsWriteScopes
   );
+  const canStartMigrations = isAgenticEnabled && agenticWorkflowRunWriteAccess;
+  const reviewsWriteAccess = useHasSomeScopes(reviewsWriteScopes);
 
   const toolbarKebabItems = filterAndAddSeparator(
     (index) => (
@@ -817,22 +933,6 @@ export const ApplicationsTable: FC = () => {
             {t("actions.retrieveConfigurations")}
           </DropdownItem>
         ),
-        // Only offered where an agentic backend is configured — see
-        // AGENTIC_ENABLED. The harness clones from each application's Hub
-        // record, so every selected application must be a valid target
-        // (have a repository) for the bulk run to be enabled.
-        isAgenticEnabled && agentWorkflowRunAccess && (
-          <DropdownItem
-            key="run-agent-workflow-bulk"
-            isDisabled={
-              selectedRows.length < 1 ||
-              !selectedRows.every((app) => app.repository?.url)
-            }
-            onClick={() => setBulkRunApplications(selectedRows)}
-          >
-            {t("actions.runAgentWorkflow")}
-          </DropdownItem>
-        ),
         // TODO: Add this back when we can handle the generate operation in bulk
         // applicationWriteAccess && tasksWriteAccess && (
         //   <DropdownItem
@@ -889,7 +989,7 @@ export const ApplicationsTable: FC = () => {
   );
 
   const handleNavToAssessment = (application: DecoratedApplication) => {
-    if (application?.id) {
+    if (application?.id != null) {
       history.push(
         formatPath(Paths.applicationAssessmentActions, {
           applicationId: application?.id,
@@ -899,7 +999,7 @@ export const ApplicationsTable: FC = () => {
   };
 
   const handleNavToViewArchetypes = (application: DecoratedApplication) => {
-    if (application?.id && archetypeRefsToOverride?.length) {
+    if (application?.id != null && archetypeRefsToOverride?.length) {
       history.push(
         formatPath(Paths.viewArchetypes, {
           applicationId: application?.id,
@@ -979,9 +1079,15 @@ export const ApplicationsTable: FC = () => {
   return (
     <ConditionalRender
       when={
-        !!isFetchingApplications && !(applications || applicationsFetchError)
+        isFetchingApplications &&
+        baseApplications.length === 0 &&
+        !applicationsFetchError
       }
-      then={<AppPlaceholder />}
+      then={
+        <div style={{ minHeight: "36rem" }}>
+          <AppPlaceholder />
+        </div>
+      }
     >
       <div
         style={{
@@ -989,6 +1095,25 @@ export const ApplicationsTable: FC = () => {
             "var(--pf-t--global--background--color--primary--default)",
         }}
       >
+        {isAgenticEnabled && !agenticWorkflowRunWriteAccess && (
+          <Alert
+            isInline
+            variant="info"
+            title={t("agentic.execution.readOnlyTitle")}
+          >
+            {t("agentic.execution.readOnlyDescription")}
+          </Alert>
+        )}
+        {isAgenticEnabled &&
+          areMigrationsAvailable &&
+          applications.length > 0 && (
+            <div style={{ paddingBottom: "var(--pf-t--global--spacer--lg)" }}>
+              <MigrationPortfolioOverview
+                migrations={applications.map(getMigration)}
+                onReviewAttention={() => setIsAttentionModalOpen(true)}
+              />
+            </div>
+          )}
         <Toolbar {...toolbarProps} clearAllFilters={clearFilters}>
           <ToolbarContent>
             <ToolbarBulkSelector {...toolbarBulkSelectorProps} />
@@ -1001,7 +1126,7 @@ export const ApplicationsTable: FC = () => {
                   <Button
                     type="button"
                     id="create-application"
-                    aria-label="Create Application"
+                    aria-label={t("actions.createNew")}
                     variant={ButtonVariant.primary}
                     onClick={() => {
                       setSaveApplicationModalState("create");
@@ -1041,6 +1166,36 @@ export const ApplicationsTable: FC = () => {
                   </ToolbarItem>
                 </ScopeGate>
               </ToolbarItem>
+              {canStartMigrations && selectedRows.length > 0 && (
+                <ToolbarItem>
+                  <Dropdown
+                    isOpen={isActionsDropdownOpen}
+                    onOpenChange={setIsActionsDropdownOpen}
+                    toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
+                      <MenuToggle
+                        ref={toggleRef}
+                        variant="secondary"
+                        onClick={() => setIsActionsDropdownOpen((o) => !o)}
+                        isExpanded={isActionsDropdownOpen}
+                      >
+                        {t("agentic.applicationDetail.actions")}
+                      </MenuToggle>
+                    )}
+                  >
+                    <DropdownList>
+                      <DropdownItem
+                        key="run-migration-plan"
+                        onClick={() => {
+                          setIsActionsDropdownOpen(false);
+                          setMigrationRowsToStart(selectedRows);
+                        }}
+                      >
+                        {t("agentic.execution.startMigration")}
+                      </DropdownItem>
+                    </DropdownList>
+                  </Dropdown>
+                </ToolbarItem>
+              )}
             </ToolbarGroup>
             <ToolbarGroup variant="action-group-plain">
               {toolbarKebabItems.length ? (
@@ -1054,9 +1209,9 @@ export const ApplicationsTable: FC = () => {
                 <></>
               )}
               <ManageColumnsToolbar
-                columns={columnState.columns}
+                columns={manageableColumns(columnState.columns)}
                 setColumns={columnState.setColumns}
-                defaultColumns={columnState.defaultColumns}
+                defaultColumns={manageableColumns(columnState.defaultColumns)}
               />
             </ToolbarGroup>
 
@@ -1074,7 +1229,7 @@ export const ApplicationsTable: FC = () => {
             <Tr>
               <TableHeaderContentWithControls {...tableControls}>
                 {getColumnVisibility("name") && (
-                  <Th {...getThProps({ columnKey: "name" })} width={10} />
+                  <Th {...getThProps({ columnKey: "name" })} width={30} />
                 )}
                 {getColumnVisibility("businessService") && (
                   <Th
@@ -1089,7 +1244,13 @@ export const ApplicationsTable: FC = () => {
                   <Th {...getThProps({ columnKey: "review" })} width={15} />
                 )}
                 {getColumnVisibility("analysis") && (
-                  <Th {...getThProps({ columnKey: "analysis" })} width={15} />
+                  <Th {...getThProps({ columnKey: "analysis" })} width={20} />
+                )}
+                {showMigrationColumn && (
+                  <Th
+                    {...getThProps({ columnKey: "agenticMigration" })}
+                    width={35}
+                  />
                 )}
                 {getColumnVisibility("tags") && (
                   <Th {...getThProps({ columnKey: "tags" })} width={10} />
@@ -1107,6 +1268,9 @@ export const ApplicationsTable: FC = () => {
               </TableHeaderContentWithControls>
             </Tr>
           </Thead>
+          {/* The agentic migrations query never blocks the inventory: while it
+              loads or if it fails, rows render and only the Migration column
+              degrades. */}
           <ConditionalTableBody
             isError={!!applicationsFetchError}
             isNoData={currentPageItems.length === 0}
@@ -1134,11 +1298,22 @@ export const ApplicationsTable: FC = () => {
                   >
                     {getColumnVisibility("name") && (
                       <Td
-                        width={10}
+                        width={30}
                         {...getTdProps({ columnKey: "name" })}
                         modifier="truncate"
                       >
-                        <ColumnApplicationName application={application} />
+                        <ColumnApplicationName
+                          application={application}
+                          linkTo={
+                            application.id != null
+                              ? to(
+                                  formatPath(DevPaths.applicationDetails, {
+                                    applicationId: application.id,
+                                  })
+                                )
+                              : undefined
+                          }
+                        />
                       </Td>
                     )}
                     {getColumnVisibility("businessService") && (
@@ -1180,7 +1355,7 @@ export const ApplicationsTable: FC = () => {
                     )}
                     {getColumnVisibility("analysis") && (
                       <Td
-                        width={15}
+                        width={20}
                         modifier="truncate"
                         {...getTdProps({ columnKey: "analysis" })}
                       >
@@ -1190,6 +1365,31 @@ export const ApplicationsTable: FC = () => {
                             "No task"
                           }
                         />
+                      </Td>
+                    )}
+                    {showMigrationColumn && (
+                      <Td
+                        width={35}
+                        {...getTdProps({ columnKey: "agenticMigration" })}
+                      >
+                        {application.id != null && (
+                          <ColumnAgenticMigration
+                            migration={
+                              areMigrationsAvailable
+                                ? getMigration(application)
+                                : undefined
+                            }
+                            isLoading={isLoadingMigrations}
+                            applicationId={application.id}
+                            archetypeId={application.archetypes?.[0]?.id}
+                            linkTo={to}
+                            onStart={
+                              canStartMigrations
+                                ? () => setMigrationRowsToStart([application])
+                                : undefined
+                            }
+                          />
+                        )}
                       </Td>
                     )}
                     {getColumnVisibility("tags") && (
@@ -1242,6 +1442,17 @@ export const ApplicationsTable: FC = () => {
                               },
                             ],
                             [
+                              canStartMigrations && {
+                                title: t("agentic.execution.startMigration"),
+                                itemKey: "startAgenticMigration",
+                                onClick: () =>
+                                  setMigrationRowsToStart([application]),
+                                isDisabled:
+                                  getMigration(application).preflight !==
+                                  "ready",
+                              },
+                            ],
+                            [
                               assessmentWriteAccess && {
                                 title: t("actions.assess"),
                                 itemKey: "assess",
@@ -1284,18 +1495,6 @@ export const ApplicationsTable: FC = () => {
                                     setSaveApplicationsCredentialsModalState([
                                       application,
                                     ]),
-                                },
-                              // Hidden without the agentic feature or run
-                              // access; shown-but-disabled when the application
-                              // has no repository (the harness clones from the
-                              // Hub record, so there is nothing to run against).
-                              isAgenticEnabled &&
-                                agentWorkflowRunAccess && {
-                                  title: t("actions.runAgentWorkflow"),
-                                  itemKey: "runAgentWorkflow",
-                                  onClick: () =>
-                                    setRunForApplication(application),
-                                  isDisabled: !application.repository?.url,
                                 },
                             ],
                             [
@@ -1371,12 +1570,34 @@ export const ApplicationsTable: FC = () => {
           isTop={false}
           paginationProps={paginationProps}
         />
-        <ApplicationDetailDrawer
-          application={activeItem}
-          onCloseClick={clearActiveItem}
-          onEditClick={() => setSaveApplicationModalState(activeItem)}
-        />
       </div>
+
+      {canStartMigrations && migrationRowsToStart != null && (
+        <MigrationPreflightModal
+          applications={migrationRowsToStart.flatMap((application) =>
+            application.id != null
+              ? [{ id: application.id, name: application.name }]
+              : []
+          )}
+          // While the inventory's query is loading or failed, the dialog
+          // fetches (and reports errors) itself.
+          migrations={areMigrationsAvailable ? migrations : undefined}
+          isStarting={isStarting}
+          linkTo={to}
+          onClose={() => setMigrationRowsToStart(null)}
+          onStartReady={startMigrations}
+        />
+      )}
+
+      {isAgenticEnabled && (
+        <MigrationAttentionModal
+          applications={applications}
+          migrations={migrations}
+          isOpen={isAttentionModalOpen}
+          onClose={() => setIsAttentionModalOpen(false)}
+          linkTo={to}
+        />
+      )}
 
       {isAnalyzeModalOpen && (
         <AnalysisWizard
@@ -1384,60 +1605,6 @@ export const ApplicationsTable: FC = () => {
           isOpen={true}
           onClose={() => {
             setAnalyzeModalOpen(false);
-          }}
-        />
-      )}
-      {runForApplication && (
-        <CreateWorkflowRunModal
-          application={runForApplication}
-          onClose={() => setRunForApplication(null)}
-          onCreated={() => {
-            // Land on the runs list pre-filtered to this application rather
-            // than the run detail page — the run object may not be readable
-            // yet at this point, so a direct detail push can 404 (mirrors the
-            // bulk onStarted approach).
-            const launchedRunsPath = workflowRunsPath({
-              application: [runForApplication.name],
-            });
-            setRunForApplication(null);
-            history.push(launchedRunsPath);
-          }}
-        />
-      )}
-      {bulkRunApplications && (
-        <BulkAgentRunModal
-          applications={bulkRunApplications}
-          onClose={() => setBulkRunApplications(null)}
-          onStarted={({ workflowRef, success, failure }) => {
-            setBulkRunApplications(null);
-            // The canonical post-launch landing: the runs page pre-filtered
-            // to what was just launched. The toast repeats the link so the
-            // view stays reachable after navigating away.
-            const launchedRunsPath = workflowRunsPath({
-              application: success.map(({ application }) => application.name),
-              workflow: [workflowRef],
-            });
-            if (success.length > 0) history.push(launchedRunsPath);
-            pushNotification({
-              title:
-                failure.length === 0
-                  ? t("agentic.bulkRun.started", { count: success.length })
-                  : t("agentic.bulkRun.startedWithFailures", {
-                      succeeded: success.length,
-                      total: success.length + failure.length,
-                      failed: failure.length,
-                    }),
-              variant: failure.length === 0 ? "success" : "warning",
-              message: (
-                <Button
-                  variant="link"
-                  isInline
-                  onClick={() => history.push(launchedRunsPath)}
-                >
-                  {t("agentic.bulkRun.viewRuns")}
-                </Button>
-              ),
-            });
           }}
         />
       )}
