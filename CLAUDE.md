@@ -32,3 +32,20 @@ npm run test           # Unit tests (Jest)
 npm run lint           # ESLint
 npm run format:check   # Prettier check
 ```
+
+## Agentic migration prototype (this branch)
+
+This branch adds the agentic migration UX prototype on top of tackle2-ui. The agentic API is mocked with MSW; run it with `MOCK=stub AUTH_REQUIRED=false npm run start:dev`. The agentic UI is gated by `AGENTIC_ENABLED` (defaults on when `MOCK` stubs the agentic endpoints) and the persona/scenario switcher runs only in development bundles with that mock.
+
+- `docs/agentic-handoff.md` -- backend hand-off: mocks, data layer, endpoint inventory, CRD field mapping, wiring checklist (adapters in `client/src/app/agentic/adapters/`)
+- `docs/prototype-architecture.md` -- prototype boundaries: switcher state, mock transport, what production code may import
+- `docs/navigation-context-handoff.md` -- breadcrumb / navigation context contract
+- `docs/demo-script.md` -- demo walkthrough (`Dockerfile.prototype` and `build:prototype` build the demo image)
+
+Prototype end-to-end specs: `npm run test:e2e:prototype` (Playwright, `e2e/`).
+
+Context:
+
+- Scope: a configuration plane (agents, skills, models, workflows) and an execution plane (migration runs)
+- Upstream ships a dev-preview agentic console from [konveyor/tackle2-ui#3546](https://github.com/konveyor/tackle2-ui/pull/3546); this design work starts from scratch. On this branch the prototype replaces that dev-preview console; its real-backend client is kept in `client/src/app/api/agentic/` and `client/src/app/api/rest/agent-runs.ts` as the wiring reference.
+- Related repos: [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller) (backend controller), [yuvalgalanti/MTA-Agentic-Migration-](https://github.com/yuvalgalanti/MTA-Agentic-Migration-) (concept prototype)
