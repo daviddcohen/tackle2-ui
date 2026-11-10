@@ -16,7 +16,7 @@ export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
 }) => {
   const { t } = useTranslation();
   const { to } = useEntityBreadcrumbs(archetype.name, [
-    { title: t("terms.archetypes"), path: DevPaths.archetypes },
+    { title: t("sidebar.archetypes"), path: DevPaths.archetypes },
   ]);
   const { skills, isLoading } = useFetchSkills();
   if (isLoading) {

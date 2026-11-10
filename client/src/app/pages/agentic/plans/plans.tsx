@@ -56,7 +56,7 @@ import { PlanWizard } from "./plan-wizard/plan-wizard";
 
 const MigrationPlansPage: React.FC = () => {
   const { t } = useTranslation();
-  const { to } = useBreadcrumbs(t("agentic.plan.plansBreadcrumb"), []);
+  const { to } = useBreadcrumbs(t("sidebar.plans"), []);
   const hasManagePlansScope = useHasSomeScopes(plansWriteScopes);
   const canManagePlans = hasManagePlansScope;
   const { pushNotification } = React.useContext(NotificationsContext);

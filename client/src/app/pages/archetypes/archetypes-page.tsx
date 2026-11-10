@@ -190,8 +190,10 @@ const Archetypes: React.FC = () => {
   } = tableControls;
 
   const { breadcrumbs, to } = useEntityBreadcrumbs(
-    activeItem?.name ?? t("terms.archetypes"),
-    activeItem ? [{ title: t("terms.archetypes"), path: Paths.archetypes }] : []
+    activeItem?.name ?? t("sidebar.archetypes"),
+    activeItem
+      ? [{ title: t("sidebar.archetypes"), path: Paths.archetypes }]
+      : []
   );
 
   const [archetypeToAssess, setArchetypeToAssess] =

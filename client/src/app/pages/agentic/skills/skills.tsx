@@ -77,7 +77,7 @@ type SkillOrCollection =
 
 const SkillsPage: React.FC = () => {
   const { t } = useTranslation();
-  const { to } = useBreadcrumbs(t("agentic.skill.title"), []);
+  const { to } = useBreadcrumbs(t("sidebar.skills"), []);
   const history = useHistory();
   const hasManageSkillsScope = useHasSomeScopes(skillsWriteScopes);
   const canManageSkills = hasManageSkillsScope;
