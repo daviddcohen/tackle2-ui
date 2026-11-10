@@ -28,6 +28,7 @@ import {
 } from "@app/components/BreadCrumbPath";
 import { StateError } from "@app/components/StateError";
 import { tabPanelId } from "@app/hooks/useUrlTab";
+import { disabledActionProps } from "@app/utils/agentic";
 
 /**
  * Shared pieces of the agentic detail and run pages (agent, migration plan,
@@ -158,29 +159,44 @@ export interface EntityDetailAction {
 }
 
 export interface EntityDetailActionsProps {
-  /** Entity verbs listed before Edit, for example "Test agent". */
+  /** Entity verbs listed after Edit, for example "Test agent". */
   items?: EntityDetailAction[];
-  onEdit: () => void;
-  onDelete: () => void;
-  /** When set, Delete stays visible but is aria-disabled with this tooltip. */
+  /** Pass only with the entity's update scope; Edit is omitted without it. */
+  onEdit?: () => void;
+  /** Pass only with the entity's delete scope; Delete is omitted without it. */
+  onDelete?: () => void;
+  /** When set (for example in use), Delete stays visible but is aria-disabled with this tooltip. */
   deleteDisabledReason?: string;
+  /**
+   * Operator-managed entity: Edit and Delete are aria-disabled with this
+   * tooltip (`disabledActionProps`); it wins over `deleteDisabledReason`.
+   */
+  managedReason?: string;
 }
 
 /**
- * Header "Actions" menu: the entity verbs from `items`, Edit, a separator and
- * Delete, in the same order as the list row menu. Render it only for users
- * with the entity's write scopes, the same check the list page uses for its
- * row actions.
+ * Header "Actions" menu: Edit, the entity verbs from `items`, a separator and
+ * Delete, in the same order as the list row menu (guide 4.1). Each entry is
+ * shown only when its handler is passed, and the menu renders nothing when no
+ * entry remains.
  */
 export const EntityDetailActions: React.FC<EntityDetailActionsProps> = ({
   items = [],
   onEdit,
   onDelete,
   deleteDisabledReason,
+  managedReason,
 }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(false);
-  const isDeleteDisabled = deleteDisabledReason != null;
+
+  if (onEdit == null && onDelete == null && items.length === 0) {
+    return null;
+  }
+
+  // A managed entity cannot be deleted at all, so its reason wins over in-use.
+  const deleteBlockedReason = managedReason ?? deleteDisabledReason;
+  const hasEntryBeforeDelete = onEdit != null || items.length > 0;
 
   return (
     <Dropdown
@@ -199,26 +215,33 @@ export const EntityDetailActions: React.FC<EntityDetailActionsProps> = ({
       )}
     >
       <DropdownList>
+        {onEdit != null && (
+          <DropdownItem
+            key="edit"
+            onClick={onEdit}
+            {...disabledActionProps(managedReason)}
+          >
+            {t("actions.edit")}
+          </DropdownItem>
+        )}
         {items.map((item) => (
           <DropdownItem key={item.key} onClick={item.onClick}>
             {item.label}
           </DropdownItem>
         ))}
-        <DropdownItem key="edit" onClick={onEdit}>
-          {t("actions.edit")}
-        </DropdownItem>
-        <Divider component="li" key="separator" />
-        <DropdownItem
-          key="delete"
-          isDanger={!isDeleteDisabled}
-          isAriaDisabled={isDeleteDisabled}
-          tooltipProps={
-            isDeleteDisabled ? { content: deleteDisabledReason } : undefined
-          }
-          onClick={onDelete}
-        >
-          {t("actions.delete")}
-        </DropdownItem>
+        {onDelete != null && hasEntryBeforeDelete && (
+          <Divider component="li" key="separator" />
+        )}
+        {onDelete != null && (
+          <DropdownItem
+            key="delete"
+            isDanger={deleteBlockedReason == null}
+            {...disabledActionProps(deleteBlockedReason)}
+            onClick={onDelete}
+          >
+            {t("actions.delete")}
+          </DropdownItem>
+        )}
       </DropdownList>
     </Dropdown>
   );
