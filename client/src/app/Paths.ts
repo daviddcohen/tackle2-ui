@@ -66,15 +66,6 @@ export const DevPaths = {
   skillDetails: "/skills/:skillId",
   skillCollections: "/skills/collections",
   skillCollectionDetails: "/skills/collections/:collectionId",
-
-  // Legacy dev-preview console. These stay until the console pages are
-  // removed, so every intermediate commit still compiles.
-  agentRuns: "/agent-runs",
-  agentRunDetails: "/agent-runs/:runName",
-  workflows: "/workflows",
-  workflowRuns: "/workflow-runs",
-  workflowRunDetails: "/workflow-runs/:runName",
-  gateways: "/gateways",
 } as const;
 
 export type DevPathValues = (typeof DevPaths)[keyof typeof DevPaths];
@@ -189,13 +180,4 @@ export interface SkillCollectionDetailsRoute {
 
 export interface ApplicationDetailsRoute {
   applicationId: string;
-}
-
-/** Legacy dev-preview console routes, removed with the console pages. */
-export interface AgentRunDetailsRoute {
-  runName: string;
-}
-
-export interface WorkflowRunDetailsRoute {
-  runName: string;
 }

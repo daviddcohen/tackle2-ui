@@ -20,7 +20,7 @@ tackle2-ui is the frontend for [Konveyor](https://konveyor.io), an application m
 
 When `AUTH_REQUIRED` is enabled, the Hub's built-in OIDC provider handles authentication. Access control is scope-based, using OAuth2 resource:verb pairs (e.g., `applications:get`). The legacy Keycloak SSO integration has been removed.
 
-When `AGENTIC_ENABLED` is `true`, the UI also renders the agentic console, which launches and observes [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller) runs through the Hub's `/agentic/*` API. It is off by default and only useful against a Hub that serves that API. See [Agentic Console](#agentic-console).
+When `AGENTIC_ENABLED` is `true`, the UI also renders the agentic migration UI (configuration of Skills, Models, Agents and Plans, and plan runs started from the application inventory) for [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller). In this prototype it runs against a mocked API. See [Agentic Console](#agentic-console).
 
 ## Monorepo Structure
 
@@ -44,7 +44,7 @@ The application uses `react-router-dom` with three route groups gated by scopes,
 - **Developer perspective** (`DevPaths`) -- Analysis profiles, applications, archetypes, assessments, analysis, migration waves, issues, insights, dependencies, reports, migration targets. Accessible with standard read scopes.
 - **Administrator perspective** (`AdminPaths`) -- General settings, identities, repositories (Git/SVN/Maven), proxies, assessment/questionnaire management, Jira integration, source platforms, asset generators. Requires admin-level scopes.
 - **Universal paths** (`UniversalPaths`) -- Tasks. Accessible to all authenticated users.
-- **Agentic console** (`agenticRoutes`, paths under `DevPaths`) -- Agent runs, agents, skills, workflows, workflow runs. The list is built at module load from `AGENTIC_ENABLED` and is empty when the flag is off, so a deployment without an agentic backend gets no routes and no sidebar group rather than pages that fail on load. See [Agentic Console](#agentic-console).
+- **Agentic migration UI** (`client/src/app/Routes.tsx`, `pages/agentic/**`) -- Skills, Models, Providers, Agents, Plans, plan runs. The routes and the sidebar group exist only when `AGENTIC_ENABLED` is on. See [Agentic Console](#agentic-console).
 
 Pages are lazy-loaded with `React.lazy()` and wrapped in `ErrorBoundary` + `Suspense`.
 
@@ -58,7 +58,7 @@ Pages are lazy-loaded with `React.lazy()` and wrapped in `ErrorBoundary` + `Susp
 
 ## Data Flow
 
-Requests flow from page components through TanStack Query hooks to the Hub API. The Express server proxies `/hub`, `/oidc`, and `/kai` requests to the Hub. The `/hub` proxy is also WebSocket-capable: `server/src/index.js` upgrades connections under `/hub/agentic/` so the agentic console can hold a live ACP session per run (see [Agentic Console](#agentic-console)); other upgrade traffic, such as webpack HMR in development, is left alone.
+Requests flow from page components through TanStack Query hooks to the Hub API. The Express server proxies `/hub`, `/oidc`, and `/kai` requests to the Hub. The `/hub` proxy is also WebSocket-capable: `server/src/index.js` upgrades connections under `/hub/agentic/` so a client can hold a live ACP session per agent run (see [Agentic Console](#agentic-console)); other upgrade traffic, such as dev-server HMR, is left alone.
 
 ### API Layer
 
@@ -79,27 +79,25 @@ The UI supports build-time branding via the `BRANDING` environment variable. The
 
 ## Agentic Console
 
-A feature-flagged section of the UI for launching and watching [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller) runs through the Hub: agent runs and workflow runs (lists, launch from the application inventory, a live session panel), and catalog pages for agents, skills, and workflows. It is a dev preview and is dark by default.
+Upstream ships a dev-preview agentic console (agent runs, agents, skills, workflows, a live ACP session panel). **This prototype replaces it with the agentic migration UI**: the pages under `client/src/app/pages/agentic/` plus agentic parts of the inventory, application detail, archetypes and Administration (Providers, Models). Its API is mocked; [docs/agentic-handoff.md](docs/agentic-handoff.md) is the guide for wiring it to the Hub's `/agentic/*` API, and [docs/prototype-architecture.md](docs/prototype-architecture.md) describes the prototype boundaries.
 
 ### Feature flags
 
-Both flags are read from the server's environment in `server/src/serverConfig.js`, serialized into `window._env` with the rest of `ClientEnv` (`common/src/env-types.ts`), and exposed to the client as `isAgenticEnabled` / `isAgenticSteerEnabled` in `client/src/app/Constants.ts`. They are evaluated once, at page load.
+Both flags are read from the server's environment in `server/src/serverConfig.js` (and `client/config/rspack.dev.mts` for the dev server), serialized into `window._env` with the rest of `ClientEnv` (`common/src/env-types.ts`), and exposed to the client as `isAgenticEnabled` / `isAgenticSteerEnabled` in `client/src/app/Constants.ts`. They are evaluated once, at page load. An explicit value always wins.
 
-| Variable                | Production default | Dev server default | Gates                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------- | ------------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AGENTIC_ENABLED`       | `false`            | `true`             | The console itself: the `agenticRoutes` route group, the **Agentic** sidebar group, the **Run agent workflow** actions in the application inventory (bulk and per-row; shown with application write access, for applications that have a repository), and the **Workflow runs** link in the application detail drawer. Off means none of that exists -- no routes, no navigation, no requests to `/hub/agentic/*`.                       |
-| `AGENTIC_STEER_ENABLED` | `false`            | `true`             | Intervention in a live run from the chat panel: the message bar that injects free-text instructions into the agent's current turn, and **Stop the agent's turn**. Off leaves the panel read-only -- the transcript streams, and the agent's own questions (ACP permission requests and `elicitation/create` asks) stay answerable, because an unanswered ask blocks the agent's turn. No effect unless `AGENTIC_ENABLED` is also `true`. |
+| Variable                | Default                                                                      | Gates                                                                                                                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTIC_ENABLED`       | `true` when `MOCK` stubs the `agentic` endpoints (`MOCK=stub`), else `false` | Every agentic route, the agentic sidebar group, Administration > Providers / Models, and the agentic parts of the inventory, application detail, archetype drawer and target profiles page. There is no flag per capability. |
+| `AGENTIC_STEER_ENABLED` | `false`                                                                      | Nothing in this prototype (upstream: steering a live run from its chat panel, which this prototype does not include).                                                                                                        |
 
-Enabling the console is a deployment decision. Its pages talk to the Hub's `/agentic/*` API -- REST through the `/hub` proxy, plus one ACP WebSocket per live run at `/hub/agentic/agentruns/{name}/acp`, authorized by the Hub's one-time-nonce handshake -- which exists only on a Hub built with the agentic endpoints ([konveyor/tackle2-hub#1119](https://github.com/konveyor/tackle2-hub/pull/1119)) and backed by an agentic-controller in the cluster. Against any other Hub every page in the section fails on load, so leave the flag off. The server side is unconditional -- the `/hub` proxy always accepts WebSocket upgrades under `/hub/agentic/` -- the flags only shape what the browser renders and requests.
-
-Set the flags on the UI container's environment. On an operator-managed install, set them through the Tackle CR instead: the [Konveyor operator](https://github.com/konveyor/operator) exposes both as `spec.agentic_enabled` and `spec.agentic_steer_enabled` (both default `false`, [konveyor/operator#596](https://github.com/konveyor/operator/pull/596)) and renders them into the UI Deployment's environment, so an edit made directly on the Deployment is reconciled away. The dev server (`npm run start:dev`, defaults in `client/config/webpack.dev.ts`) turns both on so the console and its steering path are exercisable locally; `AGENTIC_ENABLED=false npm run start:dev` hides the console to work on the rest of the UI against a Hub without the agentic API.
+The pages call `/hub/prototype/agentic/*` (`client/src/app/api/rest/agentic.ts`), which only the development mock (MSW, `client/src/mocks/stub-new-work/agentic/`) serves; MSW is not part of production bundles. Keep `AGENTIC_ENABLED` off in production until the API is wired. On an operator-managed install the [Konveyor operator](https://github.com/konveyor/operator) exposes both flags as `spec.agentic_enabled` and `spec.agentic_steer_enabled` (both default `false`, [konveyor/operator#596](https://github.com/konveyor/operator/pull/596)).
 
 ### Code map
 
-- `api/agentic/contract.ts` -- Browser-safe types and helpers for the `konveyor.io/v1alpha1` agent surface (`AgentRun`, `AgentResource`, `AgentWorkflow`, `AgentWorkflowRun`, `Gateway`, `SkillCard`), mirrored from the agentic-controller's `api/v1alpha1/*.go`.
-- `api/agentic/acp.ts` -- The ACP (Agent Client Protocol) session over WebSocket: JSON-RPC 2.0 frames with requests in both directions (`session/prompt`, `session/update`, `session/request_permission`, `elicitation/create`) plus goose's steer extension.
-- `api/rest/agent-runs.ts` and `queries/{agent-runs,agents,skills,workflows,workflow-runs,agentic-catalog}.ts` -- REST wrappers and TanStack Query hooks in the usual per-entity pattern.
-- `pages/{agent-runs,agents,skills,workflows,workflow-runs}/` -- The console pages. `pages/agent-runs/components/ChatPanel.tsx` is the live session panel and the only consumer of `AGENTIC_STEER_ENABLED`.
+- `agentic/` -- UI domain types, presentation helpers, and `adapters/` (CRD <-> domain mappers for the real backend).
+- `api/rest/agentic.ts` and `queries/agentic.ts` -- REST functions (prototype API) and TanStack Query hooks. `api/rest/agentic-hub.ts` is a Hub-backed reference implementation, not imported by app code.
+- Kept from upstream as the real-backend reference: `api/agentic/contract.ts` (`konveyor.io/v1alpha1` CRD types), `api/agentic/acp.ts` (ACP session over WebSocket), `api/rest/agent-runs.ts` (REST client for `/hub/agentic/*`), `utils/agentic.ts`, `utils/skills.ts`.
+- `prototype/agentic/` and `layout/PrototypeShell/` -- the persona and scenario switcher, mounted only in development bundles with the agentic mock.
 
 ## Dependencies
 

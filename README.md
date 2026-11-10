@@ -8,6 +8,18 @@ tackle2-ui is the web-based user interface for [Konveyor](https://konveyor.io), 
 
 Key capabilities include application inventory management, assessment questionnaires, static code analysis, migration wave planning, dependency tracking, and issue/insight visualization.
 
+## Agentic migration UI (prototype)
+
+This prototype adds the agentic migration UI on top of tackle2-ui. Run the mock-backed review environment with:
+
+```sh
+MOCK=stub AUTH_REQUIRED=false npm run start:dev
+```
+
+The prototype controls Persona and Scenario. They configure development scopes and mock API responses without replacing normal Konveyor navigation. They run only in development bundles with `MOCK` stubbing the agentic endpoints; the agentic UI itself is gated by `AGENTIC_ENABLED`, which defaults on in that mode and off otherwise.
+
+Start with [docs/prototype-architecture.md](docs/prototype-architecture.md). To connect the agentic UI to the real Konveyor backend, follow [docs/agentic-handoff.md](docs/agentic-handoff.md). The prototype's Playwright specs run with `npm run test:e2e:prototype`.
+
 # Build and Test Status
 
 | branch       | last merge CI                                                                                                                                                                                                                                      | last merge image build                                                                                                                                                                                                                                                         | nightly CI                                                                                                                                                                                                                                   |
@@ -63,8 +75,8 @@ Your development server should start up and serve the locally running UI from:
 http://localhost:9000
 ```
 
-The dev server enables the agentic console by default. Against a Hub without the agentic API its
-pages fail on load; hide it with `AGENTIC_ENABLED=false npm run start:dev` (see
+The agentic migration UI is off unless `MOCK` stubs the agentic endpoints (for example
+`MOCK=stub AUTH_REQUIRED=false npm run start:dev`) or `AGENTIC_ENABLED=true` is set (see
 [Understanding the local development environment](#understanding-the-local-development-environment)).
 
 ## Konveyor environment setup
@@ -114,16 +126,19 @@ The React and Patternfly based UI is composed of web pages served by an http ser
     is not defined, the URL `http://localhost:9002` is used by default.
   - `/oidc` &rarr; Proxied to the Hub's built-in OIDC provider (same target as `/hub`).
 
-- The agentic console (agent runs, agents, skills, workflows) is feature-flagged and off by
-  default. The server passes two variables to the browser with the rest of the environment:
-  - `AGENTIC_ENABLED` &rarr; `true` shows the console. It needs a Hub that serves the
-    `/agentic/*` API with an agentic-controller behind it; against any other Hub leave it off.
-  - `AGENTIC_STEER_ENABLED` &rarr; `true` additionally lets you send free-text instructions to a
-    live run and stop its turn from the chat panel. Off keeps the panel read-only (the agent's
-    own questions can still be answered).
+- The agentic migration UI is feature-flagged. The server passes two variables to the browser
+  with the rest of the environment:
+  - `AGENTIC_ENABLED` &rarr; `true` shows the agentic pages, Administration &gt; Providers and
+    Models, and the agentic parts of the inventory, application detail and archetypes. In this
+    prototype those pages call the prototype API (`/hub/prototype/agentic/*`), which only the
+    development mock serves; [docs/agentic-handoff.md](docs/agentic-handoff.md) covers wiring
+    the real Hub.
+  - `AGENTIC_STEER_ENABLED` &rarr; upstream's switch for steering a live run from its chat panel.
+    This prototype has no chat panel, so the flag has no effect.
 
-  Both default to `false` in production and to `true` under `npm run start:dev`. See
-  [ARCHITECTURE.md](ARCHITECTURE.md#agentic-console) for what each flag gates.
+  An explicit value always wins. Otherwise `AGENTIC_ENABLED` is `true` only when `MOCK` stubs the
+  agentic endpoints (`server/src/serverConfig.js`, `client/config/rspack.dev.mts`), and
+  `AGENTIC_STEER_ENABLED` is `false`. See [ARCHITECTURE.md](ARCHITECTURE.md#agentic-console).
   See [Agentic run parameters and supervision](docs/agentic-run-parameters.md)
   for parameter YAML examples, runtime delivery, and Approval mode safety.
 
