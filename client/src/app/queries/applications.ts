@@ -48,7 +48,6 @@ export const useFetchApplications = (
         queryKey: [assessmentsByItemIdQueryKey],
       });
     },
-    onError: (error: AxiosError) => console.log(error),
     refetchInterval,
   });
   return {
@@ -71,7 +70,6 @@ export const useFetchApplicationById = (
     queryKey: [ApplicationQueryKey, id],
     queryFn: () =>
       id === undefined ? Promise.resolve(undefined) : getApplicationById(id),
-    onError: (error: AxiosError) => console.log("error, ", error),
     enabled: id !== undefined,
     refetchInterval,
   });
