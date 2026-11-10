@@ -1,5 +1,6 @@
 import * as React from "react";
 import dayjs from "dayjs";
+import { LocationDescriptor } from "history";
 import { Link } from "react-router-dom";
 import { Icon, Popover, PopoverProps, Tooltip } from "@patternfly/react-core";
 import {
@@ -104,7 +105,8 @@ const linkToDetails = (task: TaskDashboard) => {
 
 export const ColumnApplicationName: React.FC<{
   application: DecoratedApplication;
-}> = ({ application }) => {
+  linkTo?: LocationDescriptor;
+}> = ({ application, linkTo }) => {
   const status = statusMap[application.tasksStatus];
   const StatusIcon = status.icon;
 
@@ -161,7 +163,16 @@ export const ColumnApplicationName: React.FC<{
         </Link>
       }
     >
-      <IconWithLabel icon={<StatusIcon />} label={application.name} />
+      <IconWithLabel
+        icon={<StatusIcon />}
+        label={
+          linkTo ? (
+            <Link to={linkTo}>{application.name}</Link>
+          ) : (
+            application.name
+          )
+        }
+      />
     </Popover>
   );
 };

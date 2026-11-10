@@ -17,10 +17,10 @@ import {
   ToolbarGroup,
   ToolbarItem,
 } from "@patternfly/react-core";
-import { CubesIcon, PencilAltIcon, PlayIcon } from "@patternfly/react-icons";
+import { CubesIcon, PencilAltIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
-import { TablePersistenceKeyPrefix, isAgenticEnabled } from "@app/Constants";
+import { TablePersistenceKeyPrefix } from "@app/Constants";
 import { Paths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
@@ -29,7 +29,7 @@ import { ConditionalRender } from "@app/components/ConditionalRender";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { IconedStatus } from "@app/components/Icons";
-import { NotificationsContext } from "@app/components/NotificationsContext";
+import { PageHeader } from "@app/components/PageHeader";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -41,10 +41,9 @@ import {
   deserializeFilterUrlParams,
   useLocalTableControls,
 } from "@app/hooks/table-controls";
-import { workflowRunsPath } from "@app/pages/workflow-runs/runs-page-links";
+import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchArchetypes } from "@app/queries/archetypes";
 import {
-  agenticWorkflowRunsCreateScopes,
   archetypesWriteScopes,
   assessmentWriteScopes,
   reviewsWriteScopes,
@@ -52,7 +51,6 @@ import {
 import { addSeparatorForOverflow } from "@app/utils/grouping";
 import { formatPath } from "@app/utils/utils";
 
-import { ArchetypeAgentRunModal } from "./components/archetype-agent-run-modal";
 import ArchetypeDetailDrawer from "./components/archetype-detail-drawer";
 import { ArchetypeForm } from "./components/archetype-form";
 import ArchetypeMaintainersColumn from "./components/archetype-maintainers-column";
@@ -63,15 +61,9 @@ import { useArchetypeMutations } from "./hooks/useArchetypeMutations";
 const Archetypes: React.FC = () => {
   const { t } = useTranslation();
   const history = useHistory();
-  const { pushNotification } = React.useContext(NotificationsContext);
 
   const [openCreateArchetype, setOpenCreateArchetype] =
     useState<boolean>(false);
-
-  // Archetype-scoped agentic workflow run (client-side fan-out over members).
-  const [runForArchetype, setRunForArchetype] = useState<Archetype | null>(
-    null
-  );
 
   const [archetypeToEdit, setArchetypeToEdit] = useState<Archetype | null>(
     null
@@ -107,6 +99,7 @@ const Archetypes: React.FC = () => {
     idProperty: "id",
     dataNameProperty: "name",
     items: archetypes,
+    activeItemItems: archetypes,
     isLoading: isFetching,
     hasActionsColumn: true,
 
@@ -196,6 +189,11 @@ const Archetypes: React.FC = () => {
     activeItemDerivedState: { activeItem, clearActiveItem },
   } = tableControls;
 
+  const { breadcrumbs, to } = useEntityBreadcrumbs(
+    activeItem?.name ?? t("terms.archetypes"),
+    activeItem ? [{ title: t("terms.archetypes"), path: Paths.archetypes }] : []
+  );
+
   const [archetypeToAssess, setArchetypeToAssess] =
     React.useState<Archetype | null>(null);
 
@@ -205,7 +203,7 @@ const Archetypes: React.FC = () => {
     if (matchingAssessment) {
       setArchetypeToAssess(archetype);
     } else {
-      if (archetype?.id) {
+      if (archetype?.id != null) {
         history.push(
           formatPath(Paths.archetypeAssessmentActions, {
             archetypeId: archetype.id,
@@ -231,9 +229,6 @@ const Archetypes: React.FC = () => {
   const archetypeWriteAccess = useHasSomeScopes(archetypesWriteScopes);
   const assessmentWriteAccess = useHasSomeScopes(assessmentWriteScopes);
   const reviewsWriteAccess = useHasSomeScopes(reviewsWriteScopes);
-  const agentWorkflowRunAccess = useHasSomeScopes(
-    agenticWorkflowRunsCreateScopes
-  );
 
   const clearFilters = () => {
     const currentPath = history.location.pathname;
@@ -246,9 +241,10 @@ const Archetypes: React.FC = () => {
   return (
     <>
       <PageSection hasBodyWrapper={false}>
-        <Content>
-          <Content component="h1">{t("terms.archetypes")}</Content>
-        </Content>
+        <PageHeader
+          title={t("terms.archetypes")}
+          breadcrumbs={!activeItem && breadcrumbs.length > 1 ? breadcrumbs : []}
+        />
       </PageSection>
       <PageSection hasBodyWrapper={false}>
         <ConditionalRender
@@ -422,29 +418,18 @@ const Archetypes: React.FC = () => {
                                     },
                                   ],
                                   [
-                                    // Offered only where an agentic backend is
-                                    // configured and the user can create runs —
-                                    // mirrors the Applications table gating.
-                                    isAgenticEnabled &&
-                                      agentWorkflowRunAccess && {
-                                        title: t("agentic.archetypeRun.action"),
-                                        itemKey: "run-agent-workflow",
-                                        icon: <PlayIcon />,
-                                        onClick: () =>
-                                          setRunForArchetype(archetype),
-                                      },
-                                  ],
-                                  [
                                     archetypeWriteAccess && {
                                       title: t("actions.manageTargetProfiles"),
                                       itemKey: "manageTargetProfiles",
                                       onClick: () =>
                                         history.push(
-                                          formatPath(
-                                            Paths.archetypeTargetProfiles,
-                                            {
-                                              archetypeId: archetype.id,
-                                            }
+                                          to(
+                                            formatPath(
+                                              Paths.archetypeTargetProfiles,
+                                              {
+                                                archetypeId: archetype.id,
+                                              }
+                                            )
                                           )
                                         ),
                                     },
@@ -511,6 +496,7 @@ const Archetypes: React.FC = () => {
       </PageSection>
 
       <ArchetypeDetailDrawer
+        breadcrumbs={breadcrumbs}
         archetype={activeItem}
         onCloseClick={clearActiveItem}
       />
@@ -545,35 +531,6 @@ const Archetypes: React.FC = () => {
           />
         </ModalBody>
       </Modal>
-
-      {runForArchetype && (
-        <ArchetypeAgentRunModal
-          archetype={runForArchetype}
-          onClose={() => setRunForArchetype(null)}
-          onStarted={({ workflowRef, success, failure }) => {
-            setRunForArchetype(null);
-            // Mirror the Applications bulk landing: go to the runs page filtered
-            // to what was just launched; the run objects may not be readable
-            // immediately so a detail push can 404.
-            const launchedRunsPath = workflowRunsPath({
-              application: success.map(({ application }) => application.name),
-              workflow: [workflowRef],
-            });
-            if (success.length > 0) history.push(launchedRunsPath);
-            pushNotification({
-              title:
-                failure.length === 0
-                  ? t("agentic.bulkRun.started", { count: success.length })
-                  : t("agentic.bulkRun.startedWithFailures", {
-                      succeeded: success.length,
-                      total: success.length + failure.length,
-                      failed: failure.length,
-                    }),
-              variant: failure.length === 0 ? "success" : "warning",
-            });
-          }}
-        />
-      )}
 
       {/* Duplicate modal */}
       <Modal

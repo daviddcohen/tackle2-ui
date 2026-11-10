@@ -34,9 +34,10 @@ export const ManageColumnsToolbar = <TColumnKey extends string>({
             <OverflowMenuItem isPersistent>
               <Button
                 variant="plain"
+                aria-label={t("dialog.title.manageColumns")}
                 onClick={() => setIsOpen(true)}
                 icon={<ColumnsIcon />}
-              ></Button>
+              />
             </OverflowMenuItem>
           </OverflowMenuGroup>
         </OverflowMenu>
