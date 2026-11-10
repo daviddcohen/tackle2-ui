@@ -1,4 +1,5 @@
 import { AxiosError } from "axios";
+import type { TooltipProps } from "@patternfly/react-core";
 
 import type {
   AgentResource,
@@ -27,17 +28,55 @@ export function isOperatorManaged(resource: {
   );
 }
 
+export interface DisabledActionProps {
+  isAriaDisabled?: boolean;
+  tooltipProps?: { content: string; position?: TooltipProps["position"] };
+}
+
 /**
- * Spread into an edit/delete row action: disables it, with `tooltip` saying
- * why, when the operator owns `resource`.
+ * Spread into a row kebab or detail Actions menu item: aria-disabled with
+ * `reason` as its tooltip when a reason is given, enabled otherwise. A row
+ * kebab's Delete passes `position: "left"` so the tooltip does not cover
+ * Edit (guide 4.1, addenda X12).
  */
-export function operatorManagedActionProps(
-  resource: Parameters<typeof isOperatorManaged>[0],
-  tooltip: string
-): { isAriaDisabled?: boolean; tooltipProps?: { content: string } } {
-  return isOperatorManaged(resource)
-    ? { isAriaDisabled: true, tooltipProps: { content: tooltip } }
+export function disabledActionProps(
+  reason?: string,
+  position?: TooltipProps["position"]
+): DisabledActionProps {
+  return reason != null
+    ? {
+        isAriaDisabled: true,
+        tooltipProps:
+          position != null
+            ? { content: reason, position }
+            : { content: reason },
+      }
     : {};
+}
+
+/**
+ * Spread into a row kebab's Delete: disabled with `reason` as its tooltip on
+ * the left (addenda X12), and danger only while it is enabled. Callers pass
+ * the managed reason first, then the usage blocker
+ * (`managedReason ?? usageReason`).
+ */
+export function deleteActionProps(
+  reason?: string
+): DisabledActionProps & { isDanger: boolean } {
+  return { isDanger: reason == null, ...disabledActionProps(reason, "left") };
+}
+
+/**
+ * `disabledActionProps` for an Edit or Delete action of an operator-managed
+ * object: disabled with `tooltip` saying why. Domain objects pass their
+ * `operatorManaged` flag (addenda X4).
+ */
+export function managedActionProps(
+  isManaged: boolean | undefined,
+  tooltip: string,
+  position?: TooltipProps["position"]
+): DisabledActionProps {
+  return disabledActionProps(isManaged ? tooltip : undefined, position);
 }
 
 /** kubectl-style compact age: 45s, 12m, 3h, 2d. */
