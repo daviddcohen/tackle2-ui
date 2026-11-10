@@ -35,7 +35,6 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { DevPaths, SkillDetailsRoute } from "@app/Paths";
 import { SkillAssociationScope, SkillSourceType } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
@@ -45,6 +44,7 @@ import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
   DetailTabPanel,
   EntityDetailActions,
+  EntityDetailLoading,
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { skillAssociationPath } from "@app/pages/agentic/entity-paths";
@@ -151,7 +151,7 @@ const SkillDetail: React.FC = () => {
   );
 
   const { breadcrumbs, linkCrumbs: childLinkCrumbs } = useEntityBreadcrumbs(
-    skill?.name ?? skillId,
+    skill?.name ?? t("agentic.entity.skill"),
     [{ title: t("agentic.skill.title"), path: DevPaths.skills }]
   );
 
@@ -160,7 +160,7 @@ const SkillDetail: React.FC = () => {
 
   if (skill == null) {
     if (isLoading) {
-      return <AppPlaceholder />;
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
     }
     return (
       <EntityDetailUnavailable

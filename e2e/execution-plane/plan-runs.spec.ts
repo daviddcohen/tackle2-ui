@@ -93,7 +93,7 @@ test.describe("Plan run detail", () => {
     await page.goto(
       protoUrl("/plan-runs/2/stages/999", { scenario: "configured" })
     );
-    await expect(page.getByText("Stage run not found").first()).toBeVisible({
+    await expect(page.getByText("Stage not found").first()).toBeVisible({
       timeout: 20000,
     });
   });

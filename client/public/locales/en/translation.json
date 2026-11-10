@@ -1272,8 +1272,8 @@
       "testTaskRequired": "A task description is required.",
       "testTitle": "Test {{agent}}",
       "notFoundTitle": "Agent not found",
-      "notFoundBody": "The Agent may have been deleted or the URL is no longer valid.",
-      "backToAgents": "Back to Agents",
+      "notFoundBody": "This agent may have been deleted, or the link is out of date.",
+      "backToAgents": "Back to agents",
       "modelOption": "{{model}} ({{provider}})",
       "testRunNotice": "A test run executes this Agent against a single application. Results are informational and do not affect the application repository."
     },
@@ -1340,7 +1340,7 @@
       "assignmentSaved": "Plan association saved",
       "associated": "Associated",
       "associatedPlan": "Associated Plan",
-      "backToPlans": "Back to Plans",
+      "backToPlans": "Back to migration plans",
       "created": "Plan \"{{plan}}\" created",
       "createTitle": "Create Plan",
       "closeWizard": "Close Plan wizard",
@@ -1393,8 +1393,8 @@
       "notAssigned": "Not assigned",
       "notConfigured": "Not configured",
       "noAgent": "No Agent",
-      "notFoundBody": "The Plan may have been deleted or the URL is no longer valid.",
-      "notFoundTitle": "Plan not found",
+      "notFoundBody": "This migration plan may have been deleted, or the link is out of date.",
+      "notFoundTitle": "Migration plan not found",
       "plansBreadcrumb": "Migration Plans",
       "plansDescription": "Define reusable migration workflows and associate them with the application paths they support.",
       "plansTitle": "Migration Plans",
@@ -1536,8 +1536,8 @@
       "createCollectionFromSelected": "Create collection ({{count}} selected)",
       "selectAll": "Select all skills on this page",
       "notFoundTitle": "Skill not found",
-      "notFoundBody": "The Skill may have been deleted or the URL is no longer valid.",
-      "backToSkills": "Back to Skills",
+      "notFoundBody": "This skill may have been deleted, or the link is out of date.",
+      "backToSkills": "Back to skills",
       "deleteInCollection": "Remove this Skill from its Skill collections before deleting it.",
       "targetProfileOption": "{{profile}} ({{archetype}})"
     },
@@ -1693,7 +1693,7 @@
       "title": "Skill collections",
       "updated": "Skill collection updated",
       "notFoundTitle": "Skill collection not found",
-      "notFoundBody": "The Skill collection may have been deleted or the URL is no longer valid.",
+      "notFoundBody": "This skill collection may have been deleted, or the link is out of date.",
       "validation": {
         "nameDuplicate": "A Skill collection with this name already exists.",
         "nameMaximum": "Name must be at most 120 characters.",
@@ -1706,6 +1706,14 @@
       "succeeded": "Succeeded",
       "failed": "Failed",
       "awaitingApproval": "Awaiting approval"
+    },
+    "entity": {
+      "agent": "Agent",
+      "migrationPlan": "Migration plan",
+      "planRun": "Plan run",
+      "stage": "Stage",
+      "skill": "Skill",
+      "skillCollection": "Skill collection"
     },
     "planRun": {
       "title": "Plan Runs",
@@ -1736,8 +1744,9 @@
       "approve": "Approve and continue",
       "saveLessonsLearned": "Save as lessons learned",
       "saveLessonsLearnedTooltip": "Knowledge Base capture is coming soon.",
-      "notFound": "Plan run not found",
-      "notFoundDescription": "This plan run could not be found. It may have been deleted.",
+      "notFoundTitle": "Plan run not found",
+      "notFoundBody": "This plan run may have been deleted, or the link is out of date.",
+      "backToPlanRuns": "Back to plan runs",
       "stageApproved": "Stage \"{{stage}}\" approved",
       "resolvedSkillsTable": "Resolved skills table"
     },
@@ -1749,8 +1758,9 @@
       "applications": "Applications",
       "approvedAt": "Approved",
       "output": "Output",
-      "notFound": "Stage run not found",
-      "notFoundDescription": "This stage run could not be found.",
+      "notFoundTitle": "Stage not found",
+      "notFoundBody": "This stage may have been deleted, or the link is out of date.",
+      "backToRun": "Back to plan run",
       "title": "{{stage}}: {{run}}"
     },
     "agentDetail": {

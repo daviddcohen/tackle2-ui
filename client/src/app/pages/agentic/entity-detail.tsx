@@ -14,10 +14,14 @@ import {
   MenuToggle,
   MenuToggleElement,
   PageSection,
+  Skeleton,
+  Stack,
+  StackItem,
   TabContent,
 } from "@patternfly/react-core";
 import { SearchIcon } from "@patternfly/react-icons";
 
+import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import {
   BreadCrumbPath,
   BreadCrumbPathProps,
@@ -26,10 +30,10 @@ import { StateError } from "@app/components/StateError";
 import { tabPanelId } from "@app/hooks/useUrlTab";
 
 /**
- * Shared pieces of the configuration-plane detail pages (Agent, Skill, Skill
- * collection): the page shown when the entity cannot be displayed, the header
- * "Actions" menu with the same scope and in-use rules as the list pages, and
- * URL-backed tabs.
+ * Shared pieces of the agentic detail and run pages (agent, migration plan,
+ * plan run, stage, skill, skill collection): the loading page, the page shown
+ * when the entity cannot be displayed, the header "Actions" menu with the
+ * same scope and in-use rules as the list pages, and URL-backed tabs.
  */
 
 export interface DetailTabPanelProps {
@@ -63,6 +67,40 @@ export const DetailTabPanel: React.FC<DetailTabPanelProps> = ({
           TabContent renders nothing at all without children. */}
       {isActive ? children : <React.Fragment />}
     </TabContent>
+  );
+};
+
+export interface EntityDetailLoadingProps {
+  /** The trail with the entity noun as its leaf ("Agent"), since the name is not known yet. */
+  breadcrumbs: BreadCrumbPathProps["breadcrumbs"];
+}
+
+/**
+ * Detail or run page while its entity loads: the breadcrumb and a title
+ * skeleton keep the page anchored, then the app spinner.
+ */
+export const EntityDetailLoading: React.FC<EntityDetailLoadingProps> = ({
+  breadcrumbs,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <>
+      <PageSection hasBodyWrapper={false}>
+        <Stack hasGutter>
+          <StackItem>
+            <BreadCrumbPath breadcrumbs={breadcrumbs} />
+          </StackItem>
+          <StackItem>
+            <Skeleton
+              fontSize="2xl"
+              width="30%"
+              screenreaderText={t("terms.loading")}
+            />
+          </StackItem>
+        </Stack>
+      </PageSection>
+      <AppPlaceholder />
+    </>
   );
 };
 

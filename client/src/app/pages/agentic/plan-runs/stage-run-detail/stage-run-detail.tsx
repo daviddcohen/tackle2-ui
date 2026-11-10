@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
   Alert,
-  AlertVariant,
   Button,
   ButtonVariant,
   Card,
@@ -26,12 +25,13 @@ import {
 import { DevPaths, StageRunDetailsRoute } from "@app/Paths";
 import { getStageDefinition } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
-import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
-import { StateError } from "@app/components/StateError";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import {
+  EntityDetailLoading,
+  EntityDetailUnavailable,
+} from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
   useApproveStageMutation,
@@ -76,10 +76,7 @@ const StageRunDetail: React.FC = () => {
     );
 
   const { breadcrumbs, linkCrumbs: stageChildCrumbs } = useEntityBreadcrumbs(
-    stage?.name ??
-      (fetchError != null && !isNotFound
-        ? stageId
-        : t("agentic.stageRun.notFound")),
+    stage?.name ?? t("agentic.entity.stage"),
     [
       { title: t("agentic.planRun.title"), path: DevPaths.planRuns },
       ...(planRun
@@ -93,25 +90,28 @@ const StageRunDetail: React.FC = () => {
     ]
   );
 
-  if (isLoading) {
-    return <AppPlaceholder />;
-  }
-
   if (!planRun || !stageRun || !stage) {
+    if (planRun == null && isLoading) {
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
+    }
+    // A stage of a known run goes back to that run; otherwise to the list.
     return (
-      <PageSection hasBodyWrapper={false}>
-        <BreadCrumbPath breadcrumbs={breadcrumbs} />
-        {fetchError != null && !isNotFound ? (
-          <StateError />
-        ) : (
-          <Alert
-            variant={AlertVariant.warning}
-            title={t("agentic.stageRun.notFound")}
-          >
-            {t("agentic.stageRun.notFoundDescription")}
-          </Alert>
-        )}
-      </PageSection>
+      <EntityDetailUnavailable
+        breadcrumbs={breadcrumbs}
+        isNotFound={planRun != null || isNotFound || fetchError == null}
+        notFoundTitle={t("agentic.stageRun.notFoundTitle")}
+        notFoundBody={t("agentic.stageRun.notFoundBody")}
+        backLabel={
+          planRun
+            ? t("agentic.stageRun.backToRun")
+            : t("agentic.planRun.backToPlanRuns")
+        }
+        backPath={
+          planRun
+            ? generatePath(DevPaths.planRunDetails, { runId })
+            : DevPaths.planRuns
+        }
+      />
     );
   }
 

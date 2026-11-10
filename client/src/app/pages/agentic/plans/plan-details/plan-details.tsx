@@ -24,7 +24,6 @@ import {
   ExclamationTriangleIcon,
   LockIcon,
   MinusCircleIcon,
-  SearchIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
@@ -42,7 +41,11 @@ import { StateError } from "@app/components/StateError";
 import { serializeFilterUrlParams } from "@app/hooks/table-controls";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
-import { DetailTabPanel } from "@app/pages/agentic/entity-detail";
+import {
+  DetailTabPanel,
+  EntityDetailLoading,
+  EntityDetailUnavailable,
+} from "@app/pages/agentic/entity-detail";
 import {
   archetypePath,
   targetProfilePath,
@@ -258,10 +261,7 @@ const PlanDetailsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useUrlTab(PLAN_DETAIL_TABS, "overview");
 
   const { breadcrumbs, linkCrumbs: planChildCrumbs } = useEntityBreadcrumbs(
-    migrationPlan?.name ??
-      (fetchError != null && !isNotFound
-        ? planId
-        : t("agentic.plan.notFoundTitle")),
+    migrationPlan?.name ?? t("agentic.entity.migrationPlan"),
     [
       {
         title: t("agentic.plan.plansBreadcrumb"),
@@ -270,32 +270,19 @@ const PlanDetailsPage: React.FC = () => {
     ]
   );
 
-  if (isLoading) {
-    return <AppPlaceholder />;
-  }
-
   if (!migrationPlan) {
+    if (isLoading) {
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
+    }
     return (
-      <PageSection hasBodyWrapper={false}>
-        <BreadCrumbPath breadcrumbs={breadcrumbs} />
-        {fetchError != null && !isNotFound ? (
-          <StateError />
-        ) : (
-          <EmptyState
-            headingLevel="h1"
-            icon={SearchIcon}
-            titleText={t("agentic.plan.notFoundTitle")}
-          >
-            <EmptyStateBody>{t("agentic.plan.notFoundBody")}</EmptyStateBody>
-            <Button
-              variant="primary"
-              onClick={() => history.push(DevPaths.migrationPlans)}
-            >
-              {t("agentic.plan.backToPlans")}
-            </Button>
-          </EmptyState>
-        )}
-      </PageSection>
+      <EntityDetailUnavailable
+        breadcrumbs={breadcrumbs}
+        isNotFound={isNotFound || fetchError == null}
+        notFoundTitle={t("agentic.plan.notFoundTitle")}
+        notFoundBody={t("agentic.plan.notFoundBody")}
+        backLabel={t("agentic.plan.backToPlans")}
+        backPath={DevPaths.migrationPlans}
+      />
     );
   }
 
