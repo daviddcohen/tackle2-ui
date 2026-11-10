@@ -1,0 +1,30 @@
+FROM registry.access.redhat.com/ubi10/nodejs-22:1783398850 AS builder
+
+USER 1001
+COPY --chown=1001 . .
+
+ENV NODE_OPTIONS=--max-old-space-size=2048
+RUN npm ci --ignore-scripts --no-audit \
+    && npm run build -w common \
+    && npm run test -w client -- --runInBand \
+    && npm run build:prototype -w client -- --progress \
+    && npm run build -w server \
+    && npm run dist
+
+FROM registry.access.redhat.com/ubi10/nodejs-22-minimal:1783341337
+
+USER 0
+RUN microdnf -y install tar procps-ng && microdnf clean all
+
+USER 1001
+COPY --from=builder /opt/app-root/src/dist /opt/app-root/dist/
+WORKDIR /opt/app-root/dist
+
+ENV NODE_ENV=production \
+    MOCK=stub \
+    AUTH_REQUIRED=false \
+    PORT=8080 \
+    NODE_EXTRA_CA_CERTS=/tmp/ca.crt
+
+EXPOSE 8080
+ENTRYPOINT ["./entrypoint.sh"]

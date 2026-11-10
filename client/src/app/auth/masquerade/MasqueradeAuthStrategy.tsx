@@ -8,6 +8,7 @@ import {
 } from "react";
 import * as React from "react";
 
+import { isPrototypeEnabled } from "@app/Constants";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 
 import { AuthProviderProps, AuthStateContext } from "../AuthProvider";
@@ -70,7 +71,8 @@ export const MasqueradeAuthStrategy: React.FC<AuthProviderProps> = ({
       signIn: () => undefined,
       signOut: () => undefined,
       manageAccount: undefined,
-      ToolbarContent: MasqueradeDevPanel,
+      // The agentic prototype switcher drives the masquerade persona itself.
+      ToolbarContent: isPrototypeEnabled ? null : MasqueradeDevPanel,
     };
   }, [preset]);
 

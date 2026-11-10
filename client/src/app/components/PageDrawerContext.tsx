@@ -139,7 +139,8 @@ export const PageDrawerContent: React.FC<IPageDrawerContentProps> = ({
   // Lift the value of isExpanded out to the context, but derive it from local state such as a selected table row.
   // This is the ONLY place where `setIsDrawerExpanded` should be called.
   // To expand/collapse the drawer, use the `isExpanded` prop when rendering PageDrawerContent.
-  React.useEffect(() => {
+  // Clear the previous drawer before a destination page is painted.
+  React.useLayoutEffect(() => {
     setIsDrawerExpanded(isExpanded);
     return () => {
       setIsDrawerExpanded(false);

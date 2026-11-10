@@ -20,6 +20,7 @@ import { TimesIcon } from "@patternfly/react-icons";
 import { FilterSelectOptionProps } from "../FilterToolbar";
 
 import {
+  claimEscapeForOpenMenu,
   getDisplayValue,
   getDisplayValueForChip,
   getStableIndex,
@@ -180,6 +181,13 @@ export const MultiSelect: FC<MultiSelectProps> = ({
     resetActiveAndFocusedItem();
   };
 
+  const onMenuKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (claimEscapeForOpenMenu(event, isFilterDropdownOpen)) {
+      closeMenu();
+      setInputToSelected();
+    }
+  };
+
   const onClearButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -253,6 +261,9 @@ export const MultiSelect: FC<MultiSelectProps> = ({
                 <Label
                   variant="outline"
                   key={value}
+                  closeBtnAriaLabel={t("terms.removeSelection", {
+                    name: getDisplayValue(value, options),
+                  })}
                   /**
                    * for testing purposes, we cannot rely on text inside the chip as
                    * it can be truncated
@@ -317,7 +328,11 @@ export const MultiSelect: FC<MultiSelectProps> = ({
       isOpen={isFilterDropdownOpen}
       variant="typeahead"
     >
-      <SelectList id={`${toggleId}-listbox`}>
+      <SelectList
+        id={`${toggleId}-listbox`}
+        // focus can sit on an option (checkbox) while the menu is open
+        onKeyDownCapture={onMenuKeyDown}
+      >
         {filteredOptions.map(
           ({ groupLabel, label, value, optionProps = {} }, index) => (
             <SelectOption

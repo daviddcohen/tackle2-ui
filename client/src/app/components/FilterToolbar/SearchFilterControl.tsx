@@ -54,6 +54,8 @@ export const SearchFilterControl = <TItem, TFilterCategoryKey extends string>({
       <InputGroup>
         <InputGroupItem isFill>
           <TextInput
+            id={`search-for-${category.categoryKey}-input`}
+            name={`search-for-${category.categoryKey}`}
             ouiaId={`search-for-${category.categoryKey}-input`}
             type={isNumeric ? "number" : "search"}
             onChange={(_, value) => setInputValue(value)}

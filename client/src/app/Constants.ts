@@ -7,6 +7,7 @@ import {
   t_color_black as black,
 } from "@patternfly/react-tokens";
 
+import { isMockStubEnabled } from "@konveyor-ui/common";
 import { EffortEstimate, ProposedAction, Risk } from "@app/api/models";
 
 import { ENV } from "./env";
@@ -18,6 +19,23 @@ export const uploadLimit = ENV.UI_INGRESS_PROXY_BODY_SIZE || "500m";
 export const isRWXSupported = ENV.RWX_SUPPORTED === "true";
 export const isAgenticEnabled = ENV.AGENTIC_ENABLED === "true";
 export const isAgenticSteerEnabled = ENV.AGENTIC_STEER_ENABLED === "true";
+
+/**
+ * The agentic prototype controls (persona / scenario switcher and its
+ * URL-backed state) run only where the agentic API is mocked: a development
+ * bundle (`start:dev`, or the hosted demo's `build:prototype`) using the
+ * masquerade auth strategy, with `MOCK` stubbing the agentic endpoints. A
+ * production build, an OIDC session, or a real hub never mounts them.
+ *
+ * Keep the `process.env.NODE_ENV === "development"` check inline at each
+ * dynamic `import()` of prototype code as well, so the production bundle
+ * drops those chunks at build time.
+ */
+export const isPrototypeEnabled =
+  process.env.NODE_ENV === "development" &&
+  !isAuthRequired &&
+  isAgenticEnabled &&
+  isMockStubEnabled(ENV.MOCK, "agentic");
 
 export const isDevtoolsEnabled = ENV.DEVTOOLS === "on";
 

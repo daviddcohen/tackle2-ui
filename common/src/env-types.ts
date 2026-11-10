@@ -23,9 +23,11 @@ export type ClientEnv = {
   AUTH_REQUIRED: "true" | "false";
 
   /**
-   * Show the agentic console (agent runs, agents, skills, workflows). Off
-   * by default; a deployment opts in when its hub serves the agentic
-   * endpoints, since the console is unusable without them.
+   * Show the agentic migration UI (Agents, Plans, Plan runs, Skills, admin
+   * Models and Providers, and the inventory Migration column). Off by
+   * default; a deployment opts in when its hub serves the agentic endpoints,
+   * since the UI is unusable without them. Defaults on when `MOCK` stubs the
+   * agentic endpoints (`MOCK=stub`), which is how the prototype runs.
    */
   AGENTIC_ENABLED: "true" | "false";
 

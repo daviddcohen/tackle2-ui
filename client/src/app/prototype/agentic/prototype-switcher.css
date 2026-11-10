@@ -1,0 +1,82 @@
+.prototype-scope-switcher {
+  position: relative;
+  z-index: 10000;
+  display: flex;
+  min-height: 28px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.2rem 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+  background-color: #1b1d21;
+  color: #fff;
+  font-family: "Red Hat Text", "Roboto", "Helvetica", "Arial", sans-serif;
+  font-size: 0.6875rem;
+}
+
+.prototype-scope-switcher__label,
+.prototype-scope-switcher label {
+  color: rgb(255 255 255 / 70%);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.prototype-scope-switcher__scenario-desc {
+  max-width: 22rem;
+  overflow: hidden;
+  color: rgb(255 255 255 / 50%);
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prototype-scope-switcher select,
+.prototype-scope-switcher button {
+  min-height: 22px;
+  border: 1px solid rgb(255 255 255 / 40%);
+  border-radius: 3px;
+  background-color: #2b2d31;
+  color: #fff;
+  font: inherit;
+}
+
+.prototype-scope-switcher select {
+  max-width: 13rem;
+  padding: 0.1rem 1.5rem 0.1rem 0.375rem;
+}
+
+.prototype-scope-switcher button {
+  margin-left: auto;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
+.prototype-scope-switcher a {
+  color: #90caf9;
+  text-underline-offset: 2px;
+}
+
+.prototype-scope-switcher select:focus-visible,
+.prototype-scope-switcher button:focus-visible,
+.prototype-scope-switcher a:focus-visible {
+  outline: 2px solid #73bcf7;
+  outline-offset: 1px;
+}
+
+@media (max-width: 768px) {
+  .prototype-scope-switcher {
+    flex-wrap: wrap;
+    gap: 0.375rem 0.5rem;
+    padding-block: 0.5rem;
+  }
+
+  .prototype-scope-switcher select {
+    max-width: calc(100vw - 7rem);
+    flex: 1 1 10rem;
+  }
+
+  .prototype-scope-switcher button {
+    margin-left: 0;
+  }
+}

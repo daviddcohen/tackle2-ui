@@ -28,7 +28,7 @@ export const MASQUERADE_PRESETS = {
   admin: {
     label: "Admin",
     scopes: adminScopes,
-    allScopesGranted: false,
+    allScopesGranted: true,
   },
   architect: {
     label: "Architect",

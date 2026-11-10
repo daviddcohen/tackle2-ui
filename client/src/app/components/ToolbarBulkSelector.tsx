@@ -106,6 +106,7 @@ export const ToolbarBulkSelector = ({
         onOpenChange={(flag) => setIsOpen(flag)}
         toggle={(toggleRef) => (
           <MenuToggle
+            aria-label={t("actions.selectionOptions")}
             isDisabled={totalItems === 0}
             ref={toggleRef}
             onClick={() => setIsOpen(!isOpen)}

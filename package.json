@@ -22,6 +22,8 @@
     "start": "npm run build -w common -w client && npm run start -w server",
     "test": "npm run test -ws --if-present --",
     "test:e2e": "npm run test:e2e -ws --if-present --",
+    "test:e2e:prototype": "playwright test --config playwright.config.cjs",
+    "test:e2e:prototype:typecheck": "tsc -p e2e/tsconfig.json",
     "format": "scripts/prettier-w.sh --ignore-unknown --write . && npm run format -ws --if-present",
     "format:check": "scripts/prettier-w.sh --ignore-unknown --check . && npm run format:check -ws --if-present",
     "lint": "scripts/eslint-w.sh . && npm run lint -ws --if-present",
@@ -42,6 +44,7 @@
     "npm": "^9.5.0 || ^10.5.2 || >=11"
   },
   "devDependencies": {
+    "@playwright/test": "~1.56.1",
     "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",

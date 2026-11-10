@@ -55,7 +55,7 @@ export const MasqueradeDevPanel: React.FC = () => {
             ref={toggleRef}
             id="masquerade-toggle"
             onClick={() => setIsOpen((o) => !o)}
-            aria-label="Masquerade dev panel"
+            aria-label={`${activePreset.label}, open masquerade developer panel`}
             icon={<UserIcon />}
           >
             {activePreset.label}

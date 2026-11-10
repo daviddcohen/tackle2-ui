@@ -24,16 +24,30 @@ export const SimplePagination: React.FC<SimplePaginationProps> = ({
   noMargin = false,
   idPrefix = "",
 }) => {
+  const generatedId = React.useId().replaceAll(":", "");
+  const paginationId = `${
+    idPrefix || `pagination-${generatedId}`
+  }-pagination-${isTop ? "top" : "bottom"}`;
+
+  React.useEffect(() => {
+    const currentPageInput = document
+      .getElementById(paginationId)
+      ?.querySelector<HTMLInputElement>('input[type="number"]');
+
+    if (currentPageInput) {
+      currentPageInput.id = `${paginationId}-current-page`;
+      currentPageInput.name = `${paginationId}-current-page`;
+    }
+  }, [paginationId]);
+
   return (
     <Pagination
-      id={`${idPrefix ? `${idPrefix}-` : ""}pagination-${
-        isTop ? "top" : "bottom"
-      }`}
+      id={paginationId}
       variant={isTop ? PaginationVariant.top : PaginationVariant.bottom}
       className={isTop || noMargin ? "" : spacing.mtMd}
       isCompact={isCompact}
       {...paginationProps}
-      widgetId="pagination-id"
+      widgetId={paginationId}
     />
   );
 };
