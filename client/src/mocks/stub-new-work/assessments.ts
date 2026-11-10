@@ -199,7 +199,7 @@ const mockAssessmentArray: Assessment[] = [
 
 const handlers = [
   rest.get(hub`/questionnaires`, (req, res, ctx) => {
-    return res(ctx.json(questionnaireData));
+    return res(ctx.json(Object.values(questionnaireData)));
   }),
 
   rest.get(hub`/assessments`, (req, res, ctx) => {
