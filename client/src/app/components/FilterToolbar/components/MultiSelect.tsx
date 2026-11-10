@@ -81,9 +81,11 @@ export const MultiSelect: FC<MultiSelectProps> = ({
   const selectedDisplayValue = showSelectedInToggle
     ? getDisplayValue(values?.[0] ?? "", options)
     : "";
-  const [inputValue, setInputValue] = useState<string>(
-    showSelectedInToggle ? selectedDisplayValue : ""
-  );
+  // What the user typed; `undefined` while not editing, so a selected value
+  // whose options load later still shows its label.
+  const [typedValue, setTypedValue] = useState<string>();
+  const inputValue =
+    typedValue ?? (showSelectedInToggle ? selectedDisplayValue : "");
 
   // extend "empty" search state: show all options if a value is selected
   const showAllOptions =
@@ -106,7 +108,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
 
     onSelectCallback(value);
     if (showSelectedInToggle) {
-      setInputValue(getDisplayValue(value, options));
+      setTypedValue(undefined);
     }
     if (closeMenuOnSelect) {
       closeMenu();
@@ -121,7 +123,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
 
   const setInputToSelected = () => {
     if (showSelectedInToggle) {
-      setInputValue(selectedDisplayValue);
+      setTypedValue(undefined);
     }
   };
 
@@ -192,7 +194,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
     event.preventDefault();
     event.stopPropagation();
     onClear();
-    setInputValue("");
+    setTypedValue(undefined);
     resetActiveAndFocusedItem();
     textInputRef?.current?.focus();
   };
@@ -201,7 +203,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
     _event: React.FormEvent<HTMLInputElement>,
     newInputValue: string
   ) => {
-    setInputValue(newInputValue);
+    setTypedValue(newInputValue);
     if (!isFilterDropdownOpen) {
       setIsFilterDropdownOpen(true);
     }
