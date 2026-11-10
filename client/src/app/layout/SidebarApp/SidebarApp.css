@@ -6,6 +6,10 @@
   padding-top: 0;
 }
 
+.pf-v6-c-page__sidebar[aria-hidden="true"] > * {
+  visibility: hidden;
+}
+
 .pf-v6-c-nav__item:first-child {
   border-top: 1px solid var(--pf-v6-c-nav__link--BorderColor);
 }
