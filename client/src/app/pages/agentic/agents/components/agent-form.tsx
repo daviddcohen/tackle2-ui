@@ -7,17 +7,21 @@ import { array, mixed, object, string } from "yup";
 import {
   Button,
   ButtonVariant,
-  Divider,
   Form,
+  FormFieldGroupHeader,
+  FormGroup,
+  FormSection,
   FormSelect,
   FormSelectOption,
+  Grid,
+  GridItem,
   ModalBody,
   ModalFooter,
-  Stack,
-  StackItem,
 } from "@patternfly/react-core";
+import { MinusCircleIcon } from "@patternfly/react-icons";
 
 import { Agent, AgentRequest, EntityId } from "@app/agentic";
+import { ControlledFormFieldGroupExpandable } from "@app/components/ControlledFormFieldGroupExpandable";
 import { FilterSelectOptionProps } from "@app/components/FilterToolbar/FilterToolbar";
 import { MultiSelect } from "@app/components/FilterToolbar/components/MultiSelect";
 import TypeaheadSelect from "@app/components/FilterToolbar/components/TypeaheadSelect";
@@ -264,6 +268,10 @@ export const AgentForm: React.FC<AgentFormProps> = ({
     append: appendParameter,
     remove: removeParameter,
   } = useFieldArray({ control, name: "parameters" });
+  // Collapsed when the agent has no parameters; adding one opens it (A10).
+  const [isParametersExpanded, setIsParametersExpanded] = React.useState(
+    (agent?.parameters.length ?? 0) > 0
+  );
 
   const onSubmit = (formValues: FormValues) => {
     const payload: AgentRequest = {
@@ -321,126 +329,176 @@ export const AgentForm: React.FC<AgentFormProps> = ({
       <ModalBody>
         {notice}
         <Form id="agent-form" onSubmit={handleSubmit(onSubmit)}>
-          <HookFormPFTextInput
-            control={control}
-            name="name"
-            label={t("terms.name")}
-            fieldId="agent-name"
-            isRequired
-          />
-          <HookFormPFTextArea
-            control={control}
-            name="description"
-            label={t("terms.description")}
-            fieldId="agent-description"
-          />
-          <HookFormPFGroupController
-            control={control}
-            name="model"
-            label={t("agentic.agent.model")}
-            fieldId="agent-gateways"
-            isRequired
-            helperText={t("agentic.agent.modelHelp")}
-            renderInput={() => (
-              <TypeaheadSelect
-                toggleId="gateway-select-toggle"
-                toggleAriaLabel={t("agentic.agent.modelSelect")}
-                ariaLabel={t("agentic.agent.model")}
-                value={selectedModel}
-                options={gatewayOptions}
-                onSelect={(value) =>
-                  setValue("model", value || "", {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
+          <FormSection
+            title={t("agentic.agent.sectionGeneral")}
+            titleElement="h2"
+          >
+            <HookFormPFTextInput
+              control={control}
+              name="name"
+              label={t("terms.name")}
+              fieldId="agent-name"
+              isRequired
+            />
+            <HookFormPFTextArea
+              control={control}
+              name="description"
+              label={t("terms.description")}
+              fieldId="agent-description"
+              rows={2}
+              resizeOrientation="vertical"
+            />
+          </FormSection>
+          <FormSection
+            title={t("agentic.agent.sectionModelAndSkills")}
+            titleElement="h2"
+          >
+            <HookFormPFGroupController
+              control={control}
+              name="model"
+              label={t("agentic.agent.model")}
+              fieldId="agent-gateways"
+              isRequired
+              helperText={t("agentic.agent.modelHelp")}
+              renderInput={() => (
+                <TypeaheadSelect
+                  toggleId="gateway-select-toggle"
+                  toggleAriaLabel={t("agentic.agent.modelSelect")}
+                  ariaLabel={t("agentic.agent.model")}
+                  value={selectedModel}
+                  options={gatewayOptions}
+                  onSelect={(value) =>
+                    setValue("model", value || "", {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  placeholderText={t("agentic.agent.selectModel")}
+                />
+              )}
+            />
+            <HookFormPFGroupController
+              control={control}
+              name="skills"
+              label={t("agentic.agent.skills")}
+              fieldId="agent-skills"
+              renderInput={() => (
+                <MultiSelect
+                  toggleId="skills-select-toggle"
+                  toggleAriaLabel={t("agentic.agent.skillsSelect")}
+                  ariaLabel={t("agentic.agent.skills")}
+                  values={selectedSkills}
+                  options={skillOptions}
+                  hasCheckbox
+                  hasBadge
+                  hasChips
+                  onSelect={(selection) => handleSkillToggle(selection)}
+                  onClear={() =>
+                    setValue("skills", [], {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  placeholderText={t("agentic.agent.selectSkills")}
+                />
+              )}
+            />
+            <HookFormPFGroupController
+              control={control}
+              name="skillCollections"
+              label={t("agentic.agent.skillCollections")}
+              fieldId="agent-skill-collections"
+              helperText={t("agentic.agent.skillCollectionsHelp")}
+              renderInput={() => (
+                <MultiSelect
+                  toggleId="skill-collections-select-toggle"
+                  toggleAriaLabel={t("agentic.agent.skillCollectionsSelect")}
+                  ariaLabel={t("agentic.agent.skillCollections")}
+                  values={selectedSkillCollections}
+                  options={skillCollectionOptions}
+                  hasCheckbox
+                  hasBadge
+                  hasChips
+                  onSelect={(selection) =>
+                    handleSkillCollectionToggle(selection)
+                  }
+                  onClear={() =>
+                    setValue("skillCollections", [], {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  placeholderText={t("agentic.agent.selectSkillCollections")}
+                />
+              )}
+            />
+          </FormSection>
+          <FormSection
+            title={t("agentic.agent.sectionBehavior")}
+            titleElement="h2"
+          >
+            <HookFormPFTextArea
+              control={control}
+              name="prompt"
+              label={t("agentic.agent.personaPrompt")}
+              fieldId="agent-prompt"
+              helperText={t("agentic.agent.personaPromptHelp")}
+              rows={5}
+              resizeOrientation="vertical"
+            />
+            <HookFormPFTextArea
+              control={control}
+              name="capabilities"
+              label={t("agentic.agent.capabilities")}
+              fieldId="agent-capabilities"
+              helperText={t("agentic.agent.capabilitiesHelp")}
+              rows={3}
+              resizeOrientation="vertical"
+            />
+          </FormSection>
+          <ControlledFormFieldGroupExpandable
+            isExpanded={isParametersExpanded}
+            onToggle={() => setIsParametersExpanded((expanded) => !expanded)}
+            toggleAriaLabel={t("agentic.agent.parameters")}
+            header={
+              <FormFieldGroupHeader
+                titleText={{
+                  text: t("agentic.agent.parameters"),
+                  id: "agent-parameters",
+                }}
+                titleDescription={t("agentic.agent.parametersHelp")}
+                actions={
+                  <Button
+                    type="button"
+                    variant={ButtonVariant.secondary}
+                    onClick={() => {
+                      appendParameter({
+                        name: "",
+                        type: "string",
+                        description: "",
+                        defaultValue: "",
+                      });
+                      setIsParametersExpanded(true);
+                    }}
+                  >
+                    {t("agentic.agent.addParameter")}
+                  </Button>
                 }
-                placeholderText={t("agentic.agent.selectModel")}
               />
-            )}
-          />
-          <HookFormPFGroupController
-            control={control}
-            name="skills"
-            label={t("agentic.skill.title")}
-            fieldId="agent-skills"
-            renderInput={() => (
-              <MultiSelect
-                toggleId="skills-select-toggle"
-                toggleAriaLabel={t("agentic.agent.skillsSelect")}
-                ariaLabel={t("agentic.skill.title")}
-                values={selectedSkills}
-                options={skillOptions}
-                hasCheckbox
-                hasBadge
-                hasChips
-                onSelect={(selection) => handleSkillToggle(selection)}
-                onClear={() =>
-                  setValue("skills", [], {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-                placeholderText={t("agentic.agent.addSkill")}
-              />
-            )}
-          />
-          <HookFormPFGroupController
-            control={control}
-            name="skillCollections"
-            label={t("agentic.skillCollection.title")}
-            fieldId="agent-skill-collections"
-            helperText={t("agentic.agent.skillCollectionsHelp")}
-            renderInput={() => (
-              <MultiSelect
-                toggleId="skill-collections-select-toggle"
-                toggleAriaLabel={t("agentic.agent.skillCollectionsSelect")}
-                ariaLabel={t("agentic.skillCollection.title")}
-                values={selectedSkillCollections}
-                options={skillCollectionOptions}
-                hasCheckbox
-                hasBadge
-                hasChips
-                onSelect={(selection) => handleSkillCollectionToggle(selection)}
-                onClear={() =>
-                  setValue("skillCollections", [], {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-                placeholderText={t("agentic.agent.addSkillCollection")}
-              />
-            )}
-          />
-          <HookFormPFTextArea
-            control={control}
-            name="prompt"
-            label={t("agentic.agent.personaPrompt")}
-            fieldId="agent-prompt"
-            helperText={t("agentic.agent.personaPromptHelp")}
-          />
-          <HookFormPFTextArea
-            control={control}
-            name="capabilities"
-            label={t("agentic.agent.capabilities")}
-            fieldId="agent-capabilities"
-            helperText={t("agentic.agent.capabilitiesHelp")}
-            rows={4}
-          />
-          <Stack hasGutter>
-            <StackItem>
-              <strong>{t("agentic.agent.parameters")}</strong>
-              <div>{t("agentic.agent.parametersHelp")}</div>
-            </StackItem>
+            }
+          >
             {parameterFields.map((field, index) => (
-              <StackItem key={field.id}>
-                <Stack hasGutter>
+              <Grid hasGutter key={field.id}>
+                <GridItem span={3}>
                   <HookFormPFTextInput
                     control={control}
                     name={`parameters.${index}.name`}
-                    label={t("terms.name")}
+                    label={t("agentic.agent.parameterName")}
                     fieldId={`agent-parameter-${index}-name`}
                     isRequired
                   />
+                </GridItem>
+                <GridItem span={2}>
                   <HookFormPFGroupController
                     control={control}
                     name={`parameters.${index}.type`}
@@ -462,46 +520,39 @@ export const AgentForm: React.FC<AgentFormProps> = ({
                       </FormSelect>
                     )}
                   />
-                  <HookFormPFTextInput
-                    control={control}
-                    name={`parameters.${index}.description`}
-                    label={t("terms.description")}
-                    fieldId={`agent-parameter-${index}-description`}
-                  />
+                </GridItem>
+                <GridItem span={3}>
                   <HookFormPFTextInput
                     control={control}
                     name={`parameters.${index}.defaultValue`}
                     label={t("agentic.agent.parameterDefault")}
                     fieldId={`agent-parameter-${index}-default`}
                   />
-                  <Button
-                    type="button"
-                    variant={ButtonVariant.link}
-                    onClick={() => removeParameter(index)}
-                  >
-                    {t("agentic.agent.removeParameter")}
-                  </Button>
-                  <Divider />
-                </Stack>
-              </StackItem>
+                </GridItem>
+                <GridItem span={3}>
+                  <HookFormPFTextInput
+                    control={control}
+                    name={`parameters.${index}.description`}
+                    label={t("terms.description")}
+                    fieldId={`agent-parameter-${index}-description`}
+                  />
+                </GridItem>
+                <GridItem span={1}>
+                  {/* A blank label keeps the icon level with the inputs, also
+                      when a field of the row shows its error below it. */}
+                  <FormGroup label={"\u00A0"}>
+                    <Button
+                      type="button"
+                      variant={ButtonVariant.plain}
+                      icon={<MinusCircleIcon />}
+                      aria-label={t("agentic.agent.removeParameter")}
+                      onClick={() => removeParameter(index)}
+                    />
+                  </FormGroup>
+                </GridItem>
+              </Grid>
             ))}
-            <StackItem>
-              <Button
-                type="button"
-                variant={ButtonVariant.link}
-                onClick={() =>
-                  appendParameter({
-                    name: "",
-                    type: "string",
-                    description: "",
-                    defaultValue: "",
-                  })
-                }
-              >
-                {t("agentic.agent.addParameter")}
-              </Button>
-            </StackItem>
-          </Stack>
+          </ControlledFormFieldGroupExpandable>
         </Form>
       </ModalBody>
       <ModalFooter>
