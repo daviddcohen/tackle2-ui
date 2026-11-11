@@ -233,9 +233,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                 id={sectionIds.resolve}
                 tabIndex={-1}
                 isInline
-                variant={
-                  migration.preflight === "blocked" ? "danger" : "warning"
-                }
+                variant="warning"
                 title={t(`agentic.execution.preflight.${migration.preflight}`)}
               >
                 {migration.preflightReason}
