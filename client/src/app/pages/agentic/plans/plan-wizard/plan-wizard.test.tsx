@@ -236,6 +236,22 @@ describe("PlanWizard", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps unsaved edits when the plan refetches while the wizard is open", async () => {
+    const { rerender } = render(
+      <PlanWizard isOpen plan={plan} onClose={jest.fn()} />
+    );
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+    const user = userEvent.setup();
+    await user.clear(nameInput());
+    await user.type(nameInput(), "Renamed plan");
+    rerender(<PlanWizard isOpen plan={{ ...plan }} onClose={jest.fn()} />);
+    expect(nameInput()).toHaveValue("Renamed plan");
+
+    rerender(<PlanWizard isOpen={false} plan={plan} onClose={jest.fn()} />);
+    rerender(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+  });
+
   it("says when the path applies, by whether the edited plan is assigned", async () => {
     const user = userEvent.setup();
     const { unmount } = render(
