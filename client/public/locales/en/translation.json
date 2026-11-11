@@ -1618,7 +1618,6 @@
       "effectiveSkillsDescription": "Skills resolved from the Agent, archetype, target profile, and application.",
       "effectiveSkillsTitle": "Resolved skills",
       "gitResults": "Git results",
-      "nextAction": "Next action",
       "planContext": "Plan context",
       "planOverride": "Migration plan to run",
       "planOverridePlaceholder": "Select a migration plan",
@@ -1632,15 +1631,6 @@
       "targetBranch": "Target branch",
       "targetBranchDescription": "The Git branch the agents commit their changes to.",
       "targetBranchRequired": "A target branch is required.",
-      "nextActions": {
-        "configure": "Configure migration path",
-        "start": "Start migration",
-        "resolve": "Resolve blockers",
-        "review": "Review pending request",
-        "correct": "Review failure and retry",
-        "reviewResults": "Review migration results",
-        "monitor": "Monitor progress"
-      },
       "latestPlanRun": "Latest plan run",
       "planFilter": "Migration plan",
       "statusFilter": "Migration status",

@@ -55,20 +55,8 @@ import {
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { MigrationNextAction } from "../../components/agentic-migration/migration-next-action";
-import {
-  MigrationNextActionKey,
-  getMigrationNextAction,
-} from "../../components/agentic-migration/next-action";
 import { planRunPath } from "../../components/agentic-migration/paths";
 import { DecoratedApplication } from "../../useDecoratedApplications";
-
-/** Section ids the next action moves focus to when it is on this tab. */
-const sectionIds: Partial<Record<MigrationNextActionKey, string>> = {
-  resolve: "application-migration-preflight",
-  review: "application-migration-attention",
-  correct: "application-migration-attention",
-};
 
 interface MigrationTabProps {
   application: DecoratedApplication;
@@ -78,7 +66,7 @@ interface MigrationTabProps {
 }
 
 /**
- * The application's agentic migration: status and next action, preflight
+ * The application's agentic migration: status, preflight
  * blockers, the pending decision (approve or reject), stage progress, failure
  * evidence with a new run, and the Git results of a finished run.
  */
@@ -156,19 +144,12 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
     );
   }
 
-  const nextAction = getMigrationNextAction(migration);
   const failedStage = migration.stages.find(
     (stage) => stage.phase === "Failed"
   );
   // The alert shows the failure's summary, so the Stages table leaves it out.
   const alertShowsFailure =
     planRun != null && getStageAttention(planRun)?.kind === "failed";
-  const focusSection = () => {
-    const id = sectionIds[nextAction.key];
-    const section = id != null ? document.getElementById(id) : null;
-    section?.scrollIntoView({ block: "center" });
-    section?.focus({ preventScroll: true });
-  };
 
   return (
     <DrawerTabContent>
@@ -196,13 +177,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                 : undefined
             }
             planRunTo={linkTo(planRunPath(planRun.id))}
-            wrapper={(alert) => (
-              // The next action ("Review pending request", "Review failure
-              // and retry") moves focus here.
-              <StackItem id={sectionIds.review} tabIndex={-1}>
-                {alert}
-              </StackItem>
-            )}
+            wrapper={(alert) => <StackItem>{alert}</StackItem>}
           />
         )}
         <StackItem>
@@ -214,21 +189,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
               <DescriptionListDescription>
                 <MigrationStatus
                   status={getMigrationDisplayStatus(migration)}
-                />
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>
-                {t("agentic.execution.nextAction")}
-              </DescriptionListTerm>
-              <DescriptionListDescription>
-                <MigrationNextAction
-                  migration={migration}
-                  applicationId={applicationId}
-                  archetypeId={application.archetypes?.[0]?.id}
-                  linkTo={linkTo}
-                  onStart={runMigrationPlan.open}
-                  onOpenMigrationTab={focusSection}
                 />
               </DescriptionListDescription>
             </DescriptionListGroup>
@@ -252,8 +212,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           migration.preflightReason && (
             <StackItem>
               <Alert
-                id={sectionIds.resolve}
-                tabIndex={-1}
                 isInline
                 variant="warning"
                 title={t(`agentic.execution.preflight.${migration.preflight}`)}
