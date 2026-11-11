@@ -38,7 +38,6 @@ import {
   TableRowContentWithControls,
 } from "@app/components/TableControls";
 import { OverflowActionMenu } from "@app/components/overflow-action-menu";
-import { useBulkSelection } from "@app/hooks/selection";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
@@ -96,9 +95,6 @@ const SkillsPage: React.FC = () => {
     setCreateCollectionModalState,
     collectionFormKey,
   ] = useFormModalState<"create">();
-  const [collectionInitialSkills, setCollectionInitialSkills] = React.useState<
-    string[]
-  >([]);
 
   const onDeleteSkillSuccess = () => {
     pushNotification({
@@ -249,55 +245,10 @@ const SkillsPage: React.FC = () => {
       getTdProps,
     },
     expansionDerivedState: { isCellExpanded },
-    filteredItems,
   } = tableControls;
-
-  // Bulk selection — skills only (collections cannot be bundled into another collection)
-  const skillOnlyItems = React.useMemo(
-    () =>
-      unifiedItems.filter(
-        (item): item is SkillOrCollection & { kind: "skill" } =>
-          item.kind === "skill"
-      ),
-    [unifiedItems]
-  );
-  const currentPageSkillItems = React.useMemo(
-    () =>
-      currentPageItems.filter(
-        (item): item is SkillOrCollection & { kind: "skill" } =>
-          item.kind === "skill"
-      ),
-    [currentPageItems]
-  );
-  const filteredSkillItems = React.useMemo(
-    () =>
-      (filteredItems ?? []).filter(
-        (item): item is SkillOrCollection & { kind: "skill" } =>
-          item.kind === "skill"
-      ),
-    [filteredItems]
-  );
-
-  const {
-    selectedItems: selectedSkillRows,
-    propHelpers: { getSelectCheckboxTdProps },
-  } = useBulkSelection({
-    isEqual: (a, b) => a.key === b.key,
-    items: skillOnlyItems,
-    filteredItems: filteredSkillItems,
-    currentPageItems: currentPageSkillItems,
-  });
-
-  const hasSkillSelection = selectedSkillRows.length > 0;
-
-  const openCreateCollectionFromSelection = () => {
-    setCollectionInitialSkills(selectedSkillRows.map((row) => row.item.id));
-    setCreateCollectionModalState("create");
-  };
 
   const closeCreateCollectionModal = () => {
     setCreateCollectionModalState(null);
-    setCollectionInitialSkills([]);
     refetchCollections();
   };
 
@@ -338,9 +289,6 @@ const SkillsPage: React.FC = () => {
     setCreateUpdateModalState(null);
     refetch();
   };
-
-  // +1 for the checkbox column
-  const numColumnsWithCheckbox = numRenderedColumns + 1;
 
   return (
     <>
@@ -386,14 +334,9 @@ const SkillsPage: React.FC = () => {
                         type="button"
                         id="create-skill-collection"
                         variant={ButtonVariant.secondary}
-                        isDisabled={!hasSkillSelection}
-                        onClick={openCreateCollectionFromSelection}
+                        onClick={() => setCreateCollectionModalState("create")}
                       >
-                        {hasSkillSelection
-                          ? t("agentic.skill.createCollectionFromSelected", {
-                              count: selectedSkillRows.length,
-                            })
-                          : t("agentic.skill.createCollection")}
+                        {t("agentic.skill.createCollection")}
                       </Button>
                     </ToolbarItem>
                   )}
@@ -422,11 +365,6 @@ const SkillsPage: React.FC = () => {
             <Table {...tableProps} aria-label={t("agentic.skill.tableLabel")}>
               <Thead>
                 <Tr>
-                  {/* Checkbox header — empty cell aligns with row checkboxes */}
-                  <Th
-                    aria-label={t("agentic.skill.selectAll")}
-                    screenReaderText={t("agentic.skill.selectAll")}
-                  />
                   <TableHeaderContentWithControls {...tableControls}>
                     <Th {...getThProps({ columnKey: "name" })} />
                     <Th {...getThProps({ columnKey: "type" })} />
@@ -460,22 +398,11 @@ const SkillsPage: React.FC = () => {
                     </EmptyState>
                   )
                 }
-                numRenderedColumns={numColumnsWithCheckbox}
+                numRenderedColumns={numRenderedColumns}
               >
                 {currentPageItems?.map((row, rowIndex) => (
                   <Tbody key={row.key} isExpanded={isCellExpanded(row)}>
                     <Tr {...getTrProps({ item: row })}>
-                      {/* Checkbox cell — only rendered for skill rows */}
-                      {row.kind === "skill" ? (
-                        <Td
-                          {...getSelectCheckboxTdProps({
-                            item: row,
-                            rowIndex,
-                          })}
-                        />
-                      ) : (
-                        <Td />
-                      )}
                       <TableRowContentWithControls
                         {...tableControls}
                         item={row}
@@ -680,7 +607,7 @@ const SkillsPage: React.FC = () => {
         onClose={() => setIsImportModalOpen(false)}
       />
 
-      {/* Create collection (from selection) */}
+      {/* Create collection */}
       <Modal
         id="create-skill-collection-modal"
         variant="medium"
@@ -692,7 +619,6 @@ const SkillsPage: React.FC = () => {
           <SkillCollectionForm
             key={collectionFormKey}
             collection={null}
-            initialSkillIds={collectionInitialSkills}
             onClose={closeCreateCollectionModal}
           />
         </ModalBody>

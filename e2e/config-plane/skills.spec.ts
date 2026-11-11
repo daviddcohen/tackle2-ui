@@ -1,6 +1,6 @@
 /**
  * Skills list, skill form (inline/git/oci), import modal, skill detail,
- * skill collections (create from selection, detail), cross-entity effects.
+ * skill collections (create, detail), cross-entity effects.
  */
 import type { Page } from "@playwright/test";
 
@@ -85,10 +85,11 @@ test.describe("Skills list", () => {
   test("collection content count is pluralized", async ({ page }) => {
     await filterByName(page, "zzz");
     await createInlineSkill(page, "Single Member");
-    await filterByName(page, "Single Member");
-    await dataRows(page).first().getByRole("checkbox").check();
     await page.getByRole("button", { name: /^Create collection/ }).click();
     await field(dialog(page), "Name").fill("Single Pack");
+    await pickMulti(page, "skill-collection-skills-select", ["Single Member"]);
+    // Close the skills menu so it does not cover the footer buttons.
+    await field(dialog(page), "Name").click();
     await field(dialog(page), "Description").fill("One skill");
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill collection created")).toBeVisible();
@@ -328,12 +329,13 @@ test.describe("Skill collections", () => {
   // Regression guard: skill-collection-form.tsx has no duplicateNameCheck or max length
   test("duplicate collection names are rejected", async ({ page }) => {
     await openSkills(page);
-    await dataRows(page)
-      .filter({ hasText: "Corporate coding standards" })
-      .getByRole("checkbox")
-      .check();
     await page.getByRole("button", { name: /^Create collection/ }).click();
     await field(dialog(page), "Name").fill("Security and compliance");
+    await pickMulti(page, "skill-collection-skills-select", [
+      "Corporate coding standards",
+    ]);
+    // Close the skills menu so it does not cover the footer buttons.
+    await field(dialog(page), "Name").click();
     await field(dialog(page), "Description").fill("dup");
     await expect(
       dialog(page).getByRole("button", { name: "Create" })
@@ -364,10 +366,11 @@ test.describe("Skill cross-entity consistency", () => {
   }) => {
     await openSkills(page);
     await createInlineSkill(page, "Orphan Skill");
-    await filterByName(page, "Orphan Skill");
-    await dataRows(page).first().getByRole("checkbox").check();
     await page.getByRole("button", { name: /^Create collection/ }).click();
     await field(dialog(page), "Name").fill("Orphan Collection");
+    await pickMulti(page, "skill-collection-skills-select", ["Orphan Skill"]);
+    // Close the skills menu so it does not cover the footer buttons.
+    await field(dialog(page), "Name").click();
     await field(dialog(page), "Description").fill("Holds one skill");
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill collection created")).toBeVisible();

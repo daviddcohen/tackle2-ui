@@ -11,11 +11,7 @@ import {
   Form,
 } from "@patternfly/react-core";
 
-import {
-  EntityId,
-  SkillCollection,
-  SkillCollectionRequest,
-} from "@app/agentic";
+import { SkillCollection, SkillCollectionRequest } from "@app/agentic";
 import { FilterSelectOptionProps } from "@app/components/FilterToolbar/FilterToolbar";
 import { MultiSelect } from "@app/components/FilterToolbar/components/MultiSelect";
 import {
@@ -40,14 +36,11 @@ interface FormValues {
 
 export interface SkillCollectionFormProps {
   collection: SkillCollection | null;
-  /** Pre-selected skill ids for the "create from selection" flow. */
-  initialSkillIds?: EntityId[];
   onClose: () => void;
 }
 
 export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
   collection,
-  initialSkillIds,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -89,7 +82,7 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
     defaultValues: {
       name: collection?.name ?? "",
       description: collection?.description ?? "",
-      skills: collection?.skills.map((s) => s.id) ?? initialSkillIds ?? [],
+      skills: collection?.skills.map((s) => s.id) ?? [],
     },
     mode: "all",
     resolver: yupResolver(schema),

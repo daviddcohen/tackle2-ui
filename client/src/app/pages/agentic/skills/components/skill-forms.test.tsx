@@ -124,13 +124,11 @@ describe("SkillCollectionForm", () => {
 
   it("rejects a duplicate name and an over-long name", async () => {
     const user = userEvent.setup();
-    render(
-      <SkillCollectionForm
-        collection={null}
-        initialSkillIds={["2"]}
-        onClose={jest.fn()}
-      />
-    );
+    render(<SkillCollectionForm collection={null} onClose={jest.fn()} />);
+    // A valid skill selection, so only the name keeps Create disabled.
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByText("Quarkus"));
+    await user.keyboard("{Escape}");
     await user.type(nameInput(), "security AND compliance");
     await user.type(descriptionInput(), "dup");
     // duplicateNameCheck is case-sensitive (upstream behaviour): exact match only
