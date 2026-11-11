@@ -4,15 +4,19 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import * as yup from "yup";
 import {
-  ActionGroup,
+  Bullseye,
   Button,
   Form,
+  FormGroupLabelHelp,
   Modal,
   ModalBody,
+  ModalFooter,
   ModalHeader,
+  Popover,
   Spinner,
 } from "@patternfly/react-core";
 
+import { isAgenticEnabled } from "@app/Constants";
 import type {
   AnalysisProfile,
   Archetype,
@@ -52,7 +56,51 @@ interface TargetProfileFormPropsInner extends TargetProfileFormProps {
   findProfileById: (id: number | undefined) => AnalysisProfile | undefined;
 }
 
-const TargetProfileForm: React.FC<TargetProfileFormProps> = (props) => {
+const FORM_ID = "target-profile-form";
+const TITLE_ID = "target-profile-modal-title";
+
+/** The modal shell: header, body and footer are the same while loading. */
+const TargetProfileModal: React.FC<{
+  profile?: TargetProfile | null;
+  onCancel: () => void;
+  body: React.ReactNode;
+  footer?: React.ReactNode;
+}> = ({ profile, onCancel, body, footer }) => {
+  const { t } = useTranslation();
+  return (
+    <Modal
+      variant="medium"
+      isOpen
+      onClose={onCancel}
+      aria-labelledby={TITLE_ID}
+      id="target-profile-modal"
+    >
+      <ModalHeader
+        labelId={TITLE_ID}
+        title={
+          profile
+            ? t("dialog.title.updateTargetProfile")
+            : t("dialog.title.newTargetProfile")
+        }
+        description={
+          // The next step only makes sense before the profile exists.
+          !profile && isAgenticEnabled
+            ? t("agentic.archetype.targetProfileFormDescription")
+            : t("agentic.archetype.targetProfilesDescriptionWithoutPlans")
+        }
+      />
+      <ModalBody>{body}</ModalBody>
+      {footer && <ModalFooter>{footer}</ModalFooter>}
+    </Modal>
+  );
+};
+
+const TargetProfileForm: React.FC<TargetProfileFormProps> = (props) =>
+  // Nothing is rendered or fetched while the form is closed (AR2).
+  props.isOpen ? <TargetProfileFormLoader {...props} /> : null;
+
+const TargetProfileFormLoader: React.FC<TargetProfileFormProps> = (props) => {
+  const { t } = useTranslation();
   const { generators, isLoading: isGeneratorsLoading } = useFetchGenerators();
   const {
     analysisProfileOptions,
@@ -61,7 +109,17 @@ const TargetProfileForm: React.FC<TargetProfileFormProps> = (props) => {
   } = useAnalysisProfileOptions();
 
   if (isGeneratorsLoading || isAnalysisProfilesLoading) {
-    return <Spinner aria-label="Loading generators and analysis profiles" />;
+    return (
+      <TargetProfileModal
+        profile={props.profile}
+        onCancel={props.onCancel}
+        body={
+          <Bullseye>
+            <Spinner aria-label={t("terms.loading")} />
+          </Bullseye>
+        }
+      />
+    );
   }
 
   return (
@@ -75,7 +133,6 @@ const TargetProfileForm: React.FC<TargetProfileFormProps> = (props) => {
 };
 
 const TargetProfileFormInner: React.FC<TargetProfileFormPropsInner> = ({
-  isOpen,
   onCancel,
   onSave,
   archetype,
@@ -111,7 +168,7 @@ const TargetProfileFormInner: React.FC<TargetProfileFormPropsInner> = ({
   const {
     handleSubmit,
     control,
-    formState: { isValid },
+    formState: { isValid, isDirty },
   } = useForm<TargetProfileFormValues>({
     defaultValues: {
       name: profile?.name ?? "",
@@ -136,21 +193,11 @@ const TargetProfileFormInner: React.FC<TargetProfileFormPropsInner> = ({
   };
 
   return (
-    <Modal
-      variant="medium"
-      isOpen={isOpen}
-      onClose={onCancel}
-      onEscapePress={onCancel}
-    >
-      <ModalHeader
-        title={
-          profile
-            ? t("dialog.title.updateTargetProfile")
-            : t("dialog.title.newTargetProfile")
-        }
-      />
-      <ModalBody>
-        <Form onSubmit={handleSubmit(submitToOnSave)}>
+    <TargetProfileModal
+      profile={profile}
+      onCancel={onCancel}
+      body={
+        <Form id={FORM_ID} onSubmit={handleSubmit(submitToOnSave)}>
           <HookFormPFTextInput
             control={control}
             name="name"
@@ -163,6 +210,13 @@ const TargetProfileFormInner: React.FC<TargetProfileFormPropsInner> = ({
             control={control}
             name="generators"
             label={t("terms.generators")}
+            labelIcon={
+              <Popover bodyContent={t("agentic.archetype.generatorsHelp")}>
+                <FormGroupLabelHelp
+                  aria-label={t("agentic.archetype.generatorsHelpLabel")}
+                />
+              </Popover>
+            }
             fieldId="target-profile-generators"
             renderInput={({ field: { value: chosenGenerators, onChange } }) => (
               <DualListSelector
@@ -183,15 +237,22 @@ const TargetProfileFormInner: React.FC<TargetProfileFormPropsInner> = ({
             control={control}
             name="analysisProfile"
             label={t("terms.analysisProfile")}
+            labelIcon={
+              <Popover bodyContent={t("agentic.archetype.analysisProfileHelp")}>
+                <FormGroupLabelHelp
+                  aria-label={t("agentic.archetype.analysisProfileHelpLabel")}
+                />
+              </Popover>
+            }
             fieldId="target-profile-analysis-profile"
             renderInput={({ field: { value, onChange } }) => (
               <TypeaheadSelect
                 toggleId="analysis-profile-select-toggle"
-                placeholderText={t("composed.selectOne", {
-                  what: t("terms.analysisProfile").toLowerCase(),
-                })}
-                toggleAriaLabel="Analysis profile select"
-                ariaLabel="Select analysis profile"
+                placeholderText={t(
+                  "agentic.archetype.analysisProfilePlaceholder"
+                )}
+                toggleAriaLabel={t("terms.analysisProfile")}
+                ariaLabel={t("terms.analysisProfile")}
                 value={value ? value?.id.toString() : undefined}
                 options={analysisProfileOptions}
                 onSelect={(selectedId) =>
@@ -204,24 +265,25 @@ const TargetProfileFormInner: React.FC<TargetProfileFormPropsInner> = ({
               />
             )}
           />
-
-          <ActionGroup>
-            <Button
-              type="button"
-              id="submit"
-              variant="primary"
-              isDisabled={!isValid}
-              onClick={handleSubmit(submitToOnSave)}
-            >
-              {profile ? t("actions.save") : t("actions.create")}
-            </Button>
-            <Button variant="link" onClick={onCancel}>
-              {t("actions.cancel")}
-            </Button>
-          </ActionGroup>
         </Form>
-      </ModalBody>
-    </Modal>
+      }
+      footer={
+        <>
+          <Button
+            type="submit"
+            form={FORM_ID}
+            id="submit"
+            variant="primary"
+            isDisabled={!isValid || !isDirty}
+          >
+            {profile ? t("actions.save") : t("actions.create")}
+          </Button>
+          <Button variant="link" onClick={onCancel}>
+            {t("actions.cancel")}
+          </Button>
+        </>
+      }
+    />
   );
 };
 
