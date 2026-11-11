@@ -276,5 +276,17 @@ export const stageStatus = (page: Page, stage: string) =>
     .last()
     .locator(AGENTIC_STATUS);
 
+/** The decision button in the page's attention alert (not the confirm dialog's). */
 export const approveButton = (page: Page) =>
-  page.getByRole("button", { name: "Approve and continue", exact: true });
+  main(page).getByRole("button", { name: "Approve and continue", exact: true });
+
+/** Approves from the attention alert: Approve always opens a confirm first (guide 4.3). */
+export const approveStage = async (page: Page) => {
+  await approveButton(page).click();
+  const confirm = page.getByRole("dialog");
+  await expect(confirm).toContainText("This decision applies to");
+  await confirm
+    .getByRole("button", { name: "Approve and continue", exact: true })
+    .click();
+  await expect(confirm).toHaveCount(0);
+};

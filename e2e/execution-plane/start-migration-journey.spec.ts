@@ -3,6 +3,8 @@
  */
 import {
   AGENTIC_STATUS,
+  approveButton,
+  approveStage,
   expect,
   migrationCell,
   openBulkRunMigration,
@@ -159,7 +161,7 @@ test.describe("Start migration journey", () => {
       .click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     const status = page.getByRole("main").locator(AGENTIC_STATUS).first();
-    const approve = page.getByRole("button", { name: "Approve and continue" });
+    const approve = approveButton(page);
     let approvals = 0;
     for (let i = 0; i < 4; i++) {
       await expect
@@ -172,7 +174,7 @@ test.describe("Start migration journey", () => {
         )
         .toMatch(/approve|Succeeded/);
       if ((await approve.count()) === 0) break;
-      await approve.first().click();
+      await approveStage(page);
       approvals++;
       await expect(approve).toHaveCount(0);
     }
