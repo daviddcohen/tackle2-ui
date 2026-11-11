@@ -32,6 +32,10 @@ export interface AgentDetailsTabProps {
   agent: Agent;
   /** The agent's model record, once the models query has it. */
   gateway?: Gateway;
+  /** The models query failed, so the model's provider and status are unknown. */
+  isGatewayUnavailable?: boolean;
+  /** The models query is still loading. */
+  isGatewayLoading?: boolean;
   /** Plans with a stage assigned to the agent; read only once the plans query succeeded. */
   plansUsingAgent: MigrationPlan[];
   isLoadingPlans: boolean;
@@ -47,6 +51,8 @@ export interface AgentDetailsTabProps {
 export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
   agent,
   gateway,
+  isGatewayUnavailable,
+  isGatewayLoading,
   plansUsingAgent,
   isLoadingPlans,
   plansError,
@@ -89,7 +95,14 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
   const facts: [string, React.ReactNode][] = [
     [
       t("agentic.agent.model"),
-      <AgentModel key="model" model={agent.model} gateway={gateway} isInline />,
+      <AgentModel
+        key="model"
+        model={agent.model}
+        gateway={gateway}
+        isGatewayUnavailable={isGatewayUnavailable}
+        isGatewayLoading={isGatewayLoading}
+        isInline
+      />,
     ],
     [
       t("agentic.agent.skills"),

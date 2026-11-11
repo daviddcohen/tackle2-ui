@@ -204,7 +204,12 @@ export const AgentsPage: React.FC = () => {
     isLoading: isLoadingPlans,
     isSuccess: hasPlans,
   } = useFetchMigrationPlans();
-  const { gateways } = useFetchGateways();
+  const {
+    gateways,
+    isLoading: isLoadingGateways,
+    fetchError: gatewaysError,
+  } = useFetchGateways();
+  const isGatewayUnavailable = gatewaysError != null && gateways.length === 0;
 
   const deleteBlockedReason = useAgentDeleteBlockedReason();
   const hasRowActions = canManageAgents || canTestAgents;
@@ -465,6 +470,8 @@ export const AgentsPage: React.FC = () => {
                             gateway={gateways.find(
                               (gateway) => gateway.id === agent.model.id
                             )}
+                            isGatewayUnavailable={isGatewayUnavailable}
+                            isGatewayLoading={isLoadingGateways}
                           />
                         </Td>
                         <Td {...getTdProps({ columnKey: "skills" })}>

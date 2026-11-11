@@ -191,6 +191,43 @@ describe("AgentsPage", () => {
     expect(within(row("Code Migrator")).queryByText("None")).toBeNull();
   });
 
+  it("does not look verified when the models fail to load (X6)", async () => {
+    useEndpoints({ plans: plansOk([]) });
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
+        res(ctx.status(500))
+      )
+    );
+    renderPage();
+    await screen.findByRole("link", { name: "Code Migrator" });
+    expect(
+      await within(row("Code Migrator")).findByText(
+        "Provider and status unavailable",
+        undefined,
+        { timeout: 5000 }
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("holds the provider's place while the models load (X6)", async () => {
+    useEndpoints({ plans: plansOk([]) });
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
+        res(ctx.delay("infinite"))
+      )
+    );
+    renderPage();
+    await screen.findByRole("link", { name: "Code Migrator" });
+    const codeMigrator = row("Code Migrator");
+    await within(codeMigrator).findAllByText("None");
+    expect(within(codeMigrator).getByText("Claude 3.7 Sonnet")).toBeVisible();
+    expect(within(codeMigrator).getByText("Loading")).toBeInTheDocument();
+    expect(within(codeMigrator).queryByText("Anthropic Production")).toBeNull();
+    expect(
+      within(codeMigrator).queryByText("Provider and status unavailable")
+    ).toBeNull();
+  });
+
   it("offers Create agent in the empty state", async () => {
     useEndpoints({ list: [], plans: plansOk([]) });
     renderPage();

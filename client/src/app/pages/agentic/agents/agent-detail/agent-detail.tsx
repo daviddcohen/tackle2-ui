@@ -68,7 +68,11 @@ const AgentDetail: React.FC = () => {
     isLoading: isLoadingPlans,
     fetchError: plansError,
   } = useFetchMigrationPlans();
-  const { gateways } = useFetchGateways();
+  const {
+    gateways,
+    isLoading: isLoadingGateways,
+    fetchError: gatewaysError,
+  } = useFetchGateways();
   const {
     planRuns,
     isLoading: isLoadingPlanRuns,
@@ -201,6 +205,10 @@ const AgentDetail: React.FC = () => {
           <AgentDetailsTab
             agent={agent}
             gateway={gateways.find((gateway) => gateway.id === agent.model.id)}
+            isGatewayUnavailable={
+              gatewaysError != null && gateways.length === 0
+            }
+            isGatewayLoading={isLoadingGateways}
             plansUsingAgent={plansUsingAgent}
             isLoadingPlans={isLoadingPlans}
             plansError={hasPlans ? null : plansError}
