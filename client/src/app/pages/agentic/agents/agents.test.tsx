@@ -254,6 +254,21 @@ describe("AgentsPage", () => {
       ).not.toHaveAttribute("aria-disabled", "true");
     });
 
+    it("confirms a delete by naming the agent and the consequence", async () => {
+      useEndpoints({ plans: plansOk([]) });
+      renderPage();
+      await within(await waitFor(() => row("Test Runner"))).findByText("None");
+      const user = await openMenu("Test Runner");
+      await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+      const confirm = await screen.findByRole("dialog");
+      expect(
+        within(confirm).getByRole("heading", { name: "Delete agent?" })
+      ).toBeInTheDocument();
+      expect(confirm).toHaveTextContent(
+        "Test Runner will be deleted. It can no longer be assigned to migration plan stages. This action cannot be undone."
+      );
+    });
+
     it("blocks Delete when usage could not be checked (X6)", async () => {
       useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(500)) });
       renderPage();

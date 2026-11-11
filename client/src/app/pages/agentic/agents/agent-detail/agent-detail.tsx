@@ -588,9 +588,10 @@ const AgentDetail: React.FC = () => {
 
       {isDeleteOpen && (
         <ConfirmDialog
-          title={t("agentic.agent.deleteTitle", { agent: agent.name })}
-          titleIconVariant="warning"
-          message={t("agentic.agent.deleteDescription")}
+          title={t("agentic.agent.deleteTitle")}
+          message={t("agentic.agent.deleteDescription", {
+            agent: agent.name,
+          })}
           isOpen
           confirmBtnVariant={ButtonVariant.danger}
           confirmBtnLabel={t("actions.delete")}

@@ -79,7 +79,10 @@ test.describe("Agents list", () => {
   test("unused agent can be deleted after confirmation", async ({ page }) => {
     await openRowActions(page, "Test Runner");
     await page.getByRole("menuitem", { name: "Delete" }).click();
-    await expect(dialog(page)).toContainText('Delete Agent "Test Runner"?');
+    await expect(dialog(page)).toContainText("Delete agent?");
+    await expect(dialog(page)).toContainText(
+      "Test Runner will be deleted. It can no longer be assigned to migration plan stages. This action cannot be undone."
+    );
     await dialog(page).getByRole("button", { name: "Delete" }).click();
     await expect(toast(page, "Agent deleted")).toBeVisible();
     await expect(dataRows(page)).toHaveCount(7);
