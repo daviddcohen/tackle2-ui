@@ -1971,7 +1971,6 @@
       "edit": "Edit provider",
       "providerType": "Provider type",
       "endpoint": "API endpoint",
-      "lastVerified": "Last verified",
       "emptyTitle": "No providers configured",
       "emptyDescription": "Add a provider to connect to an LLM API. Models are configured from verified providers.",
       "filterByStatus": "Filter by status",

@@ -98,7 +98,6 @@ const ProvidersPage: React.FC = () => {
       providerType: t("agentic.provider.providerType"),
       endpoint: t("agentic.provider.endpoint"),
       status: t("agentic.provider.verificationStatus"),
-      lastVerified: t("agentic.provider.lastVerified"),
     },
     isFilterEnabled: true,
     isSortEnabled: true,
@@ -220,7 +219,6 @@ const ProvidersPage: React.FC = () => {
                     <Th {...getThProps({ columnKey: "providerType" })} />
                     <Th {...getThProps({ columnKey: "endpoint" })} />
                     <Th {...getThProps({ columnKey: "status" })} />
-                    <Th {...getThProps({ columnKey: "lastVerified" })} />
                     <Th screenReaderText={t("actions.rowActions")} />
                   </TableHeaderContentWithControls>
                 </Tr>
@@ -285,14 +283,6 @@ const ProvidersPage: React.FC = () => {
                             status={provider.verificationStatus}
                             supportingText={provider.statusReason}
                           />
-                        </Td>
-                        <Td
-                          width={15}
-                          {...getTdProps({ columnKey: "lastVerified" })}
-                        >
-                          {provider.lastVerified
-                            ? new Date(provider.lastVerified).toLocaleString()
-                            : "—"}
                         </Td>
                         <Td isActionCell>
                           {canManageProviders && (
