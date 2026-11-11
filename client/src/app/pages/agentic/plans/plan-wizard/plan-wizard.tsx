@@ -280,7 +280,19 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     []
   );
 
+  // The plan the form was last filled from while open: a refetch hands a new
+  // object for the same plan and must not discard unsaved edits.
+  const filledFromRef = React.useRef<string>();
   React.useEffect(() => {
+    if (!isOpen) {
+      filledFromRef.current = undefined;
+      return;
+    }
+    const filledFrom = plan?.id ?? "";
+    if (filledFromRef.current === filledFrom) {
+      return;
+    }
+    filledFromRef.current = filledFrom;
     setInvalidStepId(undefined);
     if (plan) {
       reset({
