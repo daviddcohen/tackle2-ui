@@ -52,15 +52,54 @@ test.describe("Models list", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Models" })
     ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Models are the LLMs agents run on. Only verified models can be used by agents."
+      )
+    ).toBeVisible();
+    await expect(page.getByRole("columnheader")).toContainText([
+      "Name",
+      "Provider",
+      "Model ID",
+      "Status",
+      "Used by",
+    ]);
     const claude = rowByText(page, "Claude 3.7 Sonnet");
-    await expect(claude).toContainText("Default Model");
+    await expect(claude).toContainText("Default");
     await expect(claude).toContainText("Verified");
-    await expect(claude).toContainText("3 Agents");
-    await expect(rowByText(page, "Granite Code 20B")).toContainText(
-      "Unreachable"
+    await expect(claude).toContainText("3 agents");
+    const granite = rowByText(page, "Granite Code 20B");
+    await expect(granite).toContainText("Unreachable");
+    await expect(granite).toContainText(
+      "The configured endpoint did not respond within 30 seconds. Check the API endpoint and credential."
     );
-    await expect(rowByText(page, "Gemini 2.5 Pro")).toContainText("Pending");
+    await expect(granite).toContainText("Not used");
+    const gemini = rowByText(page, "Gemini 2.5 Pro");
+    await expect(gemini).toContainText("Pending");
+    await expect(gemini).toContainText(
+      "Verification has not been run for this Model. Agents cannot use it until it is verified."
+    );
     expectHealthy(diagnostics);
+  });
+
+  test("the Default label explains itself on hover and on keyboard focus", async ({
+    page,
+  }) => {
+    const label = rowByText(page, "Claude 3.7 Sonnet").locator(
+      '[tabindex="0"]',
+      { hasText: /^Default$/ }
+    );
+    await expectTooltipOnHover(
+      page,
+      label,
+      "New agents start with this model selected."
+    );
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await label.focus();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "New agents start with this model selected."
+    );
   });
 
   test("default model cannot be deleted or re-set as default", async ({
@@ -93,9 +132,9 @@ test.describe("Models list", () => {
     await openRowActions(page, "GPT-4o");
     await page.getByRole("menuitem", { name: "Set as Default" }).click();
     await expect(toast(page, /default/i)).toBeVisible();
-    await expect(rowByText(page, "GPT-4o")).toContainText("Default Model");
+    await expect(rowByText(page, "GPT-4o")).toContainText("Default");
     await expect(rowByText(page, "Claude 3.7 Sonnet")).not.toContainText(
-      "Default Model"
+      "Default"
     );
   });
 

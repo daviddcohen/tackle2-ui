@@ -7,19 +7,21 @@ import {
   Content,
   EmptyState,
   EmptyStateBody,
+  Flex,
+  FlexItem,
   Label,
   Modal,
   ModalBody,
   ModalHeader,
   PageSection,
-  Stack,
-  StackItem,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem,
+  Tooltip,
 } from "@patternfly/react-core";
 import { CubesIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
   Table,
@@ -35,9 +37,11 @@ import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { PageHeader } from "@app/components/PageHeader";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -65,7 +69,8 @@ const ModelsPage: React.FC = () => {
   const { t } = useTranslation();
   const canManageModels = useHasSomeScopes(modelsWriteScopes);
   const { pushNotification } = React.useContext(NotificationsContext);
-  const { gateways, isLoading, fetchError, refetch } = useFetchGateways();
+  const { gateways, isFetching, isLoading, fetchError, refetch } =
+    useFetchGateways();
   const { agents } = useFetchAgents();
   const [modalState, setModalState, formKey] = useFormModalState<
     "create" | ModelProjection
@@ -101,7 +106,7 @@ const ModelsPage: React.FC = () => {
       name: t("terms.name"),
       provider: t("agentic.model.provider"),
       model: t("agentic.model.modelId"),
-      connection: t("agentic.model.connection"),
+      status: t("agentic.model.status"),
       usage: t("agentic.model.usage"),
     },
     isFilterEnabled: true,
@@ -147,17 +152,33 @@ const ModelsPage: React.FC = () => {
   const getUsageCount = (model: ModelProjection) =>
     agents.filter((agent) => agent.model.id === model.id).length;
 
+  /** The server's reason, then what it means for agents or what to check (guide 5.3). */
+  const getStatusText = (model: ModelProjection) => {
+    const effect =
+      model.verificationStatus === "pending"
+        ? t("agentic.model.pendingEffect")
+        : model.verificationStatus === "unreachable"
+          ? t("agentic.model.unreachableEffect")
+          : undefined;
+    return [model.statusReason, effect].filter(Boolean).join(" ");
+  };
+
   return (
     <>
       <PageSection hasBodyWrapper={false}>
-        <Content>
-          <Content component="h1">{t("agentic.model.title")}</Content>
-          <Content component="p">{t("agentic.model.description")}</Content>
-          <Content component="small">{t("agentic.model.defaultHelp")}</Content>
-        </Content>
+        <PageHeader
+          title={t("agentic.model.title")}
+          description={
+            <Content component="p">{t("agentic.model.description")}</Content>
+          }
+          breadcrumbs={[]}
+        />
       </PageSection>
       <PageSection hasBodyWrapper={false}>
-        <ConditionalRender when={isLoading} then={<AppPlaceholder />}>
+        <ConditionalRender
+          when={isFetching && !(gateways || fetchError)}
+          then={<AppPlaceholder />}
+        >
           <div
             style={{
               backgroundColor:
@@ -193,10 +214,16 @@ const ModelsPage: React.FC = () => {
                 <Tr>
                   <TableHeaderContentWithControls {...tableControls}>
                     <Th {...getThProps({ columnKey: "name" })} />
-                    <Th {...getThProps({ columnKey: "provider" })} />
+                    <Th
+                      {...getThProps({ columnKey: "provider" })}
+                      modifier="wrap"
+                    />
                     <Th {...getThProps({ columnKey: "model" })} />
-                    <Th {...getThProps({ columnKey: "connection" })} />
-                    <Th {...getThProps({ columnKey: "usage" })} />
+                    <Th {...getThProps({ columnKey: "status" })} width={30} />
+                    <Th
+                      {...getThProps({ columnKey: "usage" })}
+                      modifier="fitContent"
+                    />
                     <Th screenReaderText={t("actions.rowActions")} />
                   </TableHeaderContentWithControls>
                 </Tr>
@@ -236,46 +263,66 @@ const ModelsPage: React.FC = () => {
                           item={model}
                           rowIndex={rowIndex}
                         >
-                          <Td width={25} {...getTdProps({ columnKey: "name" })}>
-                            <Stack hasGutter>
-                              <StackItem>{model.name}</StackItem>
-                              {model.isOrganizationDefault && (
-                                <StackItem>
-                                  <Label color="blue" isCompact>
-                                    {t("agentic.model.defaultModel")}
-                                  </Label>
-                                </StackItem>
-                              )}
-                            </Stack>
-                          </Td>
                           <Td
-                            width={20}
-                            {...getTdProps({ columnKey: "provider" })}
+                            modifier="nowrap"
+                            {...getTdProps({ columnKey: "name" })}
                           >
+                            {model.isOrganizationDefault ? (
+                              <Flex
+                                spaceItems={{ default: "spaceItemsSm" }}
+                                alignItems={{ default: "alignItemsCenter" }}
+                                flexWrap={{ default: "nowrap" }}
+                              >
+                                <FlexItem>{model.name}</FlexItem>
+                                <FlexItem>
+                                  {/* focusable so keyboard users reach the tooltip */}
+                                  <Tooltip
+                                    content={t("agentic.model.defaultTooltip")}
+                                  >
+                                    <Label
+                                      variant="outline"
+                                      isCompact
+                                      tabIndex={0}
+                                    >
+                                      {t("agentic.model.defaultLabel")}
+                                    </Label>
+                                  </Tooltip>
+                                </FlexItem>
+                              </Flex>
+                            ) : (
+                              model.name
+                            )}
+                          </Td>
+                          <Td {...getTdProps({ columnKey: "provider" })}>
                             {model.provider.name}
                           </Td>
                           <Td
-                            width={20}
+                            modifier="nowrap"
                             {...getTdProps({ columnKey: "model" })}
                           >
-                            {model.model}
+                            <span className={textStyles.fontFamilyMonospace}>
+                              {model.model}
+                            </span>
                           </Td>
-                          <Td
-                            width={20}
-                            {...getTdProps({ columnKey: "connection" })}
-                          >
+                          <Td {...getTdProps({ columnKey: "status" })}>
                             <VerificationStatusText
                               status={model.verificationStatus}
-                              supportingText={model.statusReason}
+                              supportingText={getStatusText(model)}
                             />
                           </Td>
                           <Td
-                            width={15}
+                            modifier="nowrap"
                             {...getTdProps({ columnKey: "usage" })}
                           >
-                            {t("agentic.model.agentUsage", {
-                              count: usageCount,
-                            })}
+                            {usageCount > 0 ? (
+                              t("agentic.model.usedByAgents", {
+                                count: usageCount,
+                              })
+                            ) : (
+                              <EmptyTextMessage
+                                message={t("agentic.model.notUsed")}
+                              />
+                            )}
                           </Td>
                           <Td isActionCell>
                             {canManageModels && (
