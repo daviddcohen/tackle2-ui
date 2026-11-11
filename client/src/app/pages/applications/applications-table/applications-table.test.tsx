@@ -5,6 +5,7 @@ import { createMemoryHistory } from "history";
 import { Router } from "react-router-dom";
 
 import { ApplicationMigrationView } from "@app/agentic";
+import { Application } from "@app/api/models";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { render, screen, within } from "@app/test-config/test-utils";
 
@@ -54,13 +55,18 @@ jest.mock("@app/auth", () => ({
       : true,
 }));
 
-const mockApplication = {
+const mockApplicationBase: Application = {
   id: 1,
   name: "Customer Management",
   migrationWave: null,
   tags: [],
   archetypes: [],
   assessments: [],
+};
+
+const mockApplication: DecoratedApplication = {
+  ...mockApplicationBase,
+  _: mockApplicationBase,
   tasks: {
     exist: false,
     latestHasCanceled: false,
@@ -73,9 +79,15 @@ const mockApplication = {
   },
   tasksByKind: {},
   tasksStatus: "None",
-  assessmentStatus: "notStarted",
+  assessmentStatus: {
+    isDirectlyAssessed: false,
+    directStatus: "none",
+    inheritedStatus: "none",
+  },
+  isReadyForRetrieveConfigurations: false,
+  isReadyForGenerateAssets: false,
   direct: {},
-} as unknown as DecoratedApplication;
+};
 
 jest.mock("@app/queries/applications", () => ({
   ...jest.requireActual("@app/queries/applications"),
