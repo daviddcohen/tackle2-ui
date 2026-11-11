@@ -273,39 +273,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           </DescriptionList>
         </StackItem>
 
-        {migration.effectiveSkills?.length ? (
-          <StackItem>
-            <Card isCompact>
-              <CardTitle>
-                {t("agentic.execution.effectiveSkillsTitle")}
-              </CardTitle>
-              <CardBody>
-                <Content component="p">
-                  {t("agentic.execution.effectiveSkillsDescription")}
-                </Content>
-                <Content component="ul">
-                  {migration.effectiveSkills.map((association) => (
-                    <Content
-                      component="li"
-                      key={`${association.skill.id}-${association.scope}-${association.scopeName}`}
-                    >
-                      {association.skill.name}{" "}
-                      <Content component="small">
-                        {t("agentic.execution.skillProvenance", {
-                          scope: t(
-                            `agentic.skillsTable.scope.${association.scope}`
-                          ),
-                          name: association.scopeName,
-                        })}
-                      </Content>
-                    </Content>
-                  ))}
-                </Content>
-              </CardBody>
-            </Card>
-          </StackItem>
-        ) : null}
-
         {migration.stages.length > 0 && (
           <StackItem>
             <Title headingLevel="h3" size="md">
