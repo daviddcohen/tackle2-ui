@@ -62,7 +62,7 @@ import {
   useSetDefaultModelMutation,
 } from "@app/queries/agentic";
 import { modelsWriteScopes } from "@app/scopes";
-import { disabledActionProps } from "@app/utils/agentic";
+import { deleteActionProps, disabledActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
@@ -275,7 +275,7 @@ const ModelsPage: React.FC = () => {
           >
             <Toolbar {...toolbarProps}>
               <ToolbarContent>
-                <FilterToolbar {...filterToolbarProps} />
+                <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
                 {canManageModels && (
                   <ToolbarGroup variant="action-group">
                     <ToolbarItem>
@@ -466,11 +466,7 @@ const ModelsPage: React.FC = () => {
                                       openModalAfterMenuClose(() =>
                                         setModelToDelete(model)
                                       ),
-                                    isDanger: deleteBlocker == null,
-                                    ...disabledActionProps(
-                                      deleteBlocker,
-                                      "left"
-                                    ),
+                                    ...deleteActionProps(deleteBlocker),
                                   },
                                 ]}
                               />
