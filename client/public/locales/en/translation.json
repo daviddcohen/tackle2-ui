@@ -1669,7 +1669,10 @@
       "skillCollection": "Skill collection"
     },
     "common": {
-      "actions": "Actions"
+      "actions": "Actions",
+      "unavailable": "Unavailable",
+      "usageUnchecked": "Usage could not be checked. Try again later.",
+      "managedByKonveyor": "Managed by Konveyor. Changes are reverted automatically."
     },
     "skillsTable": {
       "label": "Skills",

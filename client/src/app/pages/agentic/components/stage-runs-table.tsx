@@ -49,6 +49,10 @@ export type StageRunsTableProps = PlanRunStagesProps | ApplicationStagesProps;
 export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
   const { t } = useTranslation();
   const notStarted = <EmptyTextMessage message={t("terms.notStarted")} />;
+  // A value that cannot be derived is unknown, never "Not available" (4.11).
+  const unavailable = (
+    <EmptyTextMessage message={t("agentic.common.unavailable")} />
+  );
   const columns = {
     order: t("agentic.stageRunsTable.order"),
     stage: t("agentic.entity.stage"),
@@ -99,7 +103,7 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
                     message={t("agentic.stageRunsTable.notFinished")}
                   />
                 ) : (
-                  <EmptyTextMessage />
+                  unavailable
                 )}
               </Td>
             </Tr>
@@ -163,13 +167,11 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
                     : notStarted}
                 </Td>
                 <Td dataLabel={columns.duration} modifier="nowrap">
-                  {duration != null ? (
-                    formatDuration(duration)
-                  ) : stageRun.status === "Pending" ? (
-                    notStarted
-                  ) : (
-                    <EmptyTextMessage />
-                  )}
+                  {duration != null
+                    ? formatDuration(duration)
+                    : stageRun.status === "Pending"
+                      ? notStarted
+                      : unavailable}
                 </Td>
               </Tr>
             );

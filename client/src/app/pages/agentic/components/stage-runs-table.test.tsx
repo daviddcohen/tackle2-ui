@@ -85,6 +85,37 @@ describe("StageRunsTable on a plan run", () => {
   });
 });
 
+describe("StageRunsTable, values that cannot be derived", () => {
+  it("reads Unavailable, never Not available", () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <StageRunsTable
+          runId="1"
+          linkTo={(pathname) => pathname}
+          stageRuns={[
+            stageRun({
+              order: 1,
+              status: "AwaitingApproval",
+              startedAt: "2026-11-10T10:06:00Z",
+            }),
+          ]}
+        />
+      </MemoryRouter>
+    );
+    expect(rows()[0][5]).toBe("Unavailable");
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <StageRunsTable
+          stages={[{ stageName: "Migrate", phase: "Succeeded" }]}
+        />
+      </MemoryRouter>
+    );
+    expect(rows()[0][3]).toBe("Unavailable");
+  });
+});
+
 describe("StageRunsTable on an application", () => {
   it("shows plain stage names, the summary line and completion", () => {
     render(
