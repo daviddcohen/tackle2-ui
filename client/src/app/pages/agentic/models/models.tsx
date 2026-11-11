@@ -6,8 +6,6 @@ import {
   Button,
   ButtonVariant,
   Content,
-  EmptyState,
-  EmptyStateBody,
   Flex,
   FlexItem,
   Label,
@@ -25,7 +23,6 @@ import {
   ToolbarItem,
   Tooltip,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
@@ -37,7 +34,7 @@ import {
   Tr,
 } from "@patternfly/react-table";
 
-import { DevPaths } from "@app/Paths";
+import { AdminPaths, DevPaths } from "@app/Paths";
 import { Agent, ModelProjection } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
@@ -57,11 +54,13 @@ import {
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { VerificationStatusText } from "@app/pages/agentic/components/agentic-status";
 import {
   useDeleteGatewayMutation,
   useFetchAgents,
   useFetchGateways,
+  useFetchProviders,
   useSetDefaultModelMutation,
 } from "@app/queries/agentic";
 import { modelsWriteScopes } from "@app/scopes";
@@ -85,6 +84,17 @@ const ModelsPage: React.FC = () => {
     isSuccess: isAgentsLoaded,
     fetchError: agentsError,
   } = useFetchAgents();
+  // Every model needs a provider: only a loaded, empty list says so (X6).
+  const {
+    providers,
+    isLoading: isLoadingProviders,
+    fetchError: providersError,
+  } = useFetchProviders();
+  const hasNoProviders =
+    !isLoadingProviders && !providersError && providers.length === 0;
+  // An empty model list offers its next step only once that count is known.
+  const isEmptyStateWaiting = gateways.length === 0 && isLoadingProviders;
+  const providersLink = useLinkComponent(AdminPaths.providers);
   // Agent links from the Used by popover return here (AD7).
   const { to } = useBreadcrumbs(t("sidebar.models"), []);
   const [modalState, setModalState, formKey] = useFormModalState<
@@ -130,7 +140,8 @@ const ModelsPage: React.FC = () => {
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    hasActionsColumn: true,
+    // No actions column at all for a user who has no actions (guide 4.1).
+    hasActionsColumn: canManageModels,
     filterCategories: [
       {
         categoryKey: "name",
@@ -266,12 +277,25 @@ const ModelsPage: React.FC = () => {
                 {canManageModels && (
                   <ToolbarGroup variant="action-group">
                     <ToolbarItem>
-                      <Button
-                        variant={ButtonVariant.primary}
-                        onClick={() => setModalState("create")}
-                      >
-                        {t("agentic.model.create")}
-                      </Button>
+                      {hasNoProviders ? (
+                        <Tooltip
+                          content={t("agentic.model.createProviderFirst")}
+                        >
+                          <Button
+                            variant={ButtonVariant.primary}
+                            isAriaDisabled
+                          >
+                            {t("agentic.model.create")}
+                          </Button>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          variant={ButtonVariant.primary}
+                          onClick={() => setModalState("create")}
+                        >
+                          {t("agentic.model.create")}
+                        </Button>
+                      )}
                     </ToolbarItem>
                   </ToolbarGroup>
                 )}
@@ -299,12 +323,14 @@ const ModelsPage: React.FC = () => {
                       {...getThProps({ columnKey: "usage" })}
                       modifier="fitContent"
                     />
-                    <Th screenReaderText={t("actions.rowActions")} />
+                    {canManageModels && (
+                      <Th screenReaderText={t("actions.rowActions")} />
+                    )}
                   </TableHeaderContentWithControls>
                 </Tr>
               </Thead>
               <ConditionalTableBody
-                isLoading={isLoading}
+                isLoading={isLoading || isEmptyStateWaiting}
                 isError={!!fetchError}
                 isNoData={currentPageItems.length === 0}
                 noDataEmptyState={
@@ -313,17 +339,34 @@ const ModelsPage: React.FC = () => {
                       title={t("message.noResultsFoundTitle")}
                       description={t("message.noResultsFoundBody")}
                     />
+                  ) : !canManageModels ? (
+                    <NoDataEmptyState
+                      title={t("agentic.model.emptyTitle")}
+                      description={t("agentic.model.emptyReadOnly")}
+                    />
+                  ) : hasNoProviders ? (
+                    <NoDataEmptyState
+                      title={t("agentic.model.emptyTitle")}
+                      description={t("agentic.model.emptyNoProviders")}
+                      actions={
+                        <Button variant="primary" component={providersLink}>
+                          {t("agentic.model.goToProviders")}
+                        </Button>
+                      }
+                    />
                   ) : (
-                    <EmptyState
-                      headingLevel="h2"
-                      icon={CubesIcon}
-                      titleText={t("agentic.model.emptyTitle")}
-                      variant="sm"
-                    >
-                      <EmptyStateBody>
-                        {t("agentic.model.emptyDescription")}
-                      </EmptyStateBody>
-                    </EmptyState>
+                    <NoDataEmptyState
+                      title={t("agentic.model.emptyTitle")}
+                      description={t("agentic.model.emptyDescription")}
+                      actions={
+                        <Button
+                          variant="primary"
+                          onClick={() => setModalState("create")}
+                        >
+                          {t("agentic.model.create")}
+                        </Button>
+                      }
+                    />
                   )
                 }
                 numRenderedColumns={numRenderedColumns}
@@ -392,8 +435,8 @@ const ModelsPage: React.FC = () => {
                           >
                             {renderUsedBy(users)}
                           </Td>
-                          <Td isActionCell>
-                            {canManageModels && (
+                          {canManageModels && (
+                            <Td isActionCell>
                               <ActionsColumn
                                 items={[
                                   {
@@ -429,8 +472,8 @@ const ModelsPage: React.FC = () => {
                                   },
                                 ]}
                               />
-                            )}
-                          </Td>
+                            </Td>
+                          )}
                         </TableRowContentWithControls>
                       </Tr>
                     </Tbody>

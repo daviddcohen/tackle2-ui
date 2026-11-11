@@ -353,9 +353,19 @@ test.describe("Models scenarios and access", () => {
       persona: "platformEngineer",
       scenario: "initial",
     });
-    await expect(page.getByText("No Models configured")).toBeVisible();
+    await expect(page.getByText("No models yet")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Create model" })
+      page.getByText(
+        "Every model connects through a model provider. Create a model provider first, then create models here."
+      )
+    ).toBeVisible();
+    // without a model provider there is nothing to create a model from
+    const create = page.getByRole("button", { name: "Create model" });
+    await expect(create).toHaveAttribute("aria-disabled", "true");
+    await expectTooltipOnHover(page, create, "Create a model provider first.");
+    await page.getByRole("link", { name: "Go to model providers" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Model providers" })
     ).toBeVisible();
   });
 
@@ -383,7 +393,7 @@ test.describe("Models scenarios and access", () => {
     await expect(page.getByText("Unable to connect")).toBeVisible({
       timeout: 20000,
     });
-    await expect(page.getByText("No Models configured")).toHaveCount(0);
+    await expect(page.getByText("No models yet")).toHaveCount(0);
   });
 
   test("model rename is reflected on the Agents list", async ({ page }) => {
