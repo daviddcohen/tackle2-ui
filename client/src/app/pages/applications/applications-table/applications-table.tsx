@@ -811,6 +811,21 @@ export const ApplicationsTable: FC = () => {
           : []
       )
     );
+  // A row that cannot start says why (guide 4.12): the server's reason, or
+  // its status. While the statuses load or after they failed, the dialog
+  // reads them and reports that itself.
+  const startRowProps = (application: DecoratedApplication) => {
+    const migration = getMigration(application);
+    if (!areMigrationsAvailable || migration.preflight === "ready") return {};
+    // The server's reason, else why the action is off (guide 4.12), never a
+    // bare status word.
+    const reason =
+      migration.preflightReason || t("agentic.execution.readyOnly");
+    return {
+      isAriaDisabled: true,
+      tooltipProps: { content: reason, position: "left" as const },
+    };
+  };
 
   const clearFilters = () => {
     const currentPath = history.location.pathname;
@@ -1449,9 +1464,7 @@ export const ApplicationsTable: FC = () => {
                                 itemKey: "startAgenticMigration",
                                 onClick: () =>
                                   startMigrationsFor([application]),
-                                isDisabled:
-                                  getMigration(application).preflight !==
-                                  "ready",
+                                ...startRowProps(application),
                               },
                             ],
                             [

@@ -178,4 +178,36 @@ describe("ApplicationsTable agentic actions", () => {
     expect(screen.getAllByRole("menuitem").length).toBeGreaterThan(0);
     expect(runItem()).not.toBeInTheDocument();
   });
+
+  it("disables the row action of an application that cannot start", async () => {
+    mockState.migration = {
+      ...mockState.migration,
+      preflight: "blocked",
+      preflightReason: "A source control credential reference is missing.",
+    };
+    const user = userEvent.setup();
+    renderTable();
+    await openRowActions(user);
+    expect(runItem()).toHaveAttribute("aria-disabled", "true");
+    await user.hover(runItem() as HTMLElement);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "A source control credential reference is missing."
+    );
+  });
+
+  it("says only ready applications start when the server gives no reason", async () => {
+    mockState.migration = {
+      ...mockState.migration,
+      preflight: "blocked",
+      preflightReason: undefined,
+    };
+    const user = userEvent.setup();
+    renderTable();
+    await openRowActions(user);
+    expect(runItem()).toHaveAttribute("aria-disabled", "true");
+    await user.hover(runItem() as HTMLElement);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "agentic.execution.readyOnly"
+    );
+  });
 });
