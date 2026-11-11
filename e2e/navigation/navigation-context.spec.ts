@@ -44,10 +44,11 @@ test("deep application, run, skill and association journeys retain tabs, survive
   const skillURL = page.url();
   await expect(crumbItems(page)).toHaveCount(4);
   const skillTitles = await crumbTitles(page);
+  // The archetype drawer's title is the leaf: its trail lists ancestors only.
   await page.locator('main a[href^="/archetypes?"]').first().click();
-  await expect(crumbItems(page)).toHaveCount(5);
+  await expect(crumbItems(page)).toHaveCount(4);
   await page.reload();
-  await expect(crumbItems(page)).toHaveCount(5);
+  await expect(crumbItems(page)).toHaveCount(4);
   await breadcrumb(page)
     .getByRole("link", { name: skillTitles.at(-1), exact: true })
     .click();
@@ -187,10 +188,12 @@ test("selected Archetype drawers survive pagination and filtering without losing
       "/archetypes?ar:activeItem=1&ar:itemsPerPage=2&ar:pageNumber=1&from=skill-2"
     )
   );
-  await expect(currentCrumb(page)).toHaveText("Java EE Application");
   const drawerHeading = page
     .locator("#page-drawer-content")
     .getByRole("heading", { name: "Java EE Application", exact: true });
+  // The drawer title is the leaf; the trail above it ends at the skill.
+  await expect(drawerHeading).toBeVisible();
+  await expect(currentCrumb(page)).toHaveCount(0);
   const nextPage = page
     .getByRole("button", { name: "Go to next page", exact: true })
     .first();
@@ -393,16 +396,22 @@ for (const [name, viewport] of [
       "true"
     );
     await expect(crumbItems(page)).toHaveCount(4);
-    for (const selector of [
-      'main a[href^="/archetypes?"]',
-      'main a[href*="/target-profiles"]',
-    ]) {
+    // The drawer trail lists ancestors only. Both trails end at the skill.
+    for (const [selector, crumbs] of [
+      ['main a[href^="/archetypes?"]', 4],
+      ['main a[href*="/target-profiles"]', 5],
+    ] as const) {
       await page.locator(selector).first().click();
-      await expect(crumbItems(page)).toHaveCount(5);
+      await expect(crumbItems(page)).toHaveCount(crumbs);
       await expectInViewport();
       if (selector.includes("target-profiles"))
         await expect(page.locator("tr:focus")).toBeVisible();
-      await breadcrumb(page).getByRole("link").last().click();
+      await breadcrumb(page)
+        .getByRole("link", {
+          name: "Jakarta EE namespace migration",
+          exact: true,
+        })
+        .click();
       await expect(associationsTab(page)).toHaveAttribute(
         "aria-selected",
         "true"
