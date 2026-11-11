@@ -36,12 +36,12 @@ test.describe("Plan impact and lifecycle", () => {
     const checks = page.getByRole("grid", { name: "Configuration checks" });
     const models = checks
       .getByRole("row")
-      .filter({ hasText: "Approved Models" });
+      .filter({ hasText: "Models verified" });
     await expect(models.getByRole("gridcell").first()).toHaveText(
-      "Approved Models"
+      "Models verified"
     );
     await expect(models.getByRole("gridcell").nth(1)).toHaveText(
-      /^Issue\s*\d+ Stage Agent assignments? ha(s|ve) no connected Model option\.$/
+      /^Issue\s*(A stage uses|\d+ stages use) a model that is not verified$/
     );
     await expect(
       checks
@@ -56,7 +56,7 @@ test.describe("Plan impact and lifecycle", () => {
       page
         .getByRole("grid", { name: "Configuration checks" })
         .getByRole("row")
-        .filter({ hasText: "Approved Models" })
+        .filter({ hasText: "Models verified" })
         .getByRole("gridcell")
         .nth(1)
     ).toHaveText("Passed");

@@ -1341,28 +1341,28 @@
       "closeWizard": "Close Plan wizard",
       "configurationCheck": {
         "models": {
-          "available": "All referenced Agents have at least one connected Model option.",
-          "label": "Approved Models",
-          "notEvaluated": "Model availability has not been evaluated: Agents or Models could not be loaded yet.",
-          "unavailable_one": "{{count}} Stage Agent assignment has no connected Model option.",
-          "unavailable_other": "{{count}} Stage Agent assignments have no connected Model option."
+          "available": "Every stage uses a verified model.",
+          "label": "Models verified",
+          "notEvaluated": "Model verification could not be checked.",
+          "unavailable_one": "A stage uses a model that is not verified",
+          "unavailable_other": "{{count}} stages use a model that is not verified"
         },
         "path": {
           "assigned": "{{archetype}} to {{target}}",
-          "label": "Migration path",
-          "unassigned": "Assign an archetype and target profile."
+          "label": "Migration path set",
+          "unassigned": "No migration path assigned"
         },
         "skills": {
-          "label": "Skill references",
-          "notEvaluated": "Skill inheritance has not been evaluated.",
-          "resolved_one": "{{count}} effective Skill reference resolves.",
-          "resolved_other": "{{count}} effective Skill references resolve."
+          "label": "Skills found",
+          "notEvaluated": "Skills for this plan are not known yet.",
+          "resolved_one": "{{count}} skill found.",
+          "resolved_other": "{{count}} skills found."
         },
         "stages": {
-          "assigned_one": "{{count}} ordered Stage has an Agent assignment.",
-          "assigned_other": "{{count}} ordered Stages have Agent assignments.",
-          "empty": "Add at least one Stage and Agent.",
-          "label": "Stage sequence"
+          "assigned_one": "{{count}} stage has an agent.",
+          "assigned_other": "{{count}} stages have an agent.",
+          "empty": "This plan has no stages",
+          "label": "Stages have agents"
         }
       },
       "changePlan": "Change Plan",
