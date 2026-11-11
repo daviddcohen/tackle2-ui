@@ -84,6 +84,29 @@ export const skillAssociationSources = (
     }))
   );
 
+/**
+ * Where one skill comes from, as the Source cell shows it: one plain-text
+ * line "{Scope}: {name}" per source, stacked. Exported for tables that list
+ * sources under another first column (the skill page's migration plans).
+ */
+export const SkillSources: React.FC<{ sources: SkillSource[] }> = ({
+  sources,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <List isPlain>
+      {sources.map((source) => (
+        <ListItem key={`${source.scope}-${source.name}`}>
+          {t("agentic.skillsTable.source", {
+            scope: t(`agentic.skillsTable.scope.${source.scope}`),
+            name: source.name,
+          })}
+        </ListItem>
+      ))}
+    </List>
+  );
+};
+
 export interface SkillsTableProps {
   /** Rows from `groupSkillSources`; the caller's section heading counts them. */
   rows: SkillsTableRow[];
@@ -121,16 +144,7 @@ export const SkillsTable: React.FC<SkillsTableProps> = ({ rows, linkTo }) => {
               </Link>
             </Td>
             <Td dataLabel={sourceColumn}>
-              <List isPlain>
-                {sources.map((source) => (
-                  <ListItem key={`${source.scope}-${source.name}`}>
-                    {t("agentic.skillsTable.source", {
-                      scope: t(`agentic.skillsTable.scope.${source.scope}`),
-                      name: source.name,
-                    })}
-                  </ListItem>
-                ))}
-              </List>
+              <SkillSources sources={sources} />
             </Td>
           </Tr>
         ))}
