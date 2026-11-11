@@ -255,4 +255,116 @@ describe("AgentDetail", () => {
       screen.getByRole("menuitem", { name: "actions.delete" })
     ).toHaveAttribute("aria-disabled", "true");
   });
+
+  describe("Details tab", () => {
+    const sparse: Agent = {
+      ...agent,
+      prompt: "",
+      parameters: [],
+      capabilities: [],
+    };
+
+    it("says None and shows the section empty states for a sparse agent (A11)", async () => {
+      useEndpoints({ detail: (_req, res, ctx) => res(ctx.json(sparse)) });
+      renderAt("7");
+      await screen.findByRole("heading", { name: "Code Migrator" });
+      // Skills, Skill collections, Capabilities; created and updated are unknown.
+      expect(screen.getAllByText("terms.none")).toHaveLength(3);
+      expect(screen.getAllByText("agentic.common.unavailable")).toHaveLength(2);
+      expect(
+        screen.queryByText("agentic.agent.skillCollectionsHelp")
+      ).toBeNull();
+      expect(
+        screen.getByText("agentic.agentDetail.noPersonaPrompt")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("agentic.agentDetail.noParameters")
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByText("agentic.agentDetail.notUsedInPlans")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "agentic.agentDetail.usedInPlans" })
+      ).toBeInTheDocument();
+    });
+
+    it("lists the skills, collections, parameters and plans using the agent", async () => {
+      useEndpoints({
+        detail: (_req, res, ctx) =>
+          res(
+            ctx.json({
+              ...agent,
+              skills: [{ id: "3", name: "Skill A" }],
+              skillCollections: [{ id: "4", name: "Collection B" }],
+              capabilities: ["Code transformation"],
+              parameters: [
+                {
+                  name: "instructions",
+                  type: "string",
+                  description: "Optional.",
+                },
+              ],
+            })
+          ),
+        plans: [planUsingAgent],
+      });
+      renderAt("7");
+      await screen.findByRole("heading", { name: "Code Migrator" });
+      expect(screen.getByRole("link", { name: "Skill A" })).toHaveAttribute(
+        "href",
+        expect.stringMatching(/^\/skills\/3\?from=agent-7/)
+      );
+      expect(
+        screen.getByRole("link", { name: "Collection B" })
+      ).toHaveAttribute(
+        "href",
+        expect.stringMatching(/^\/skills\/collections\/4\?from=agent-7/)
+      );
+      expect(
+        screen.getByText("agentic.agent.skillCollectionsHelp")
+      ).toBeInTheDocument();
+      expect(screen.getByText("Code transformation")).toBeInTheDocument();
+      expect(screen.getByText("instructions")).toBeInTheDocument();
+      expect(
+        await screen.findByRole("heading", {
+          name: "agentic.agentDetail.usedInPlansCount",
+        })
+      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Plan A" })).toHaveAttribute(
+        "href",
+        expect.stringMatching(/^\/migration-plans\/1\?from=agent-7/)
+      );
+      expect(screen.getByText("Stage 1")).toBeInTheDocument();
+    });
+
+    it("never says the agent is unused when the plans fail to load (X6)", async () => {
+      server.use(
+        rest.get(`${AGENTIC_ENDPOINTS.agents}/:id`, (_req, res, ctx) =>
+          res(ctx.json(sparse))
+        ),
+        rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
+          res(ctx.status(500))
+        ),
+        rest.get(AGENTIC_ENDPOINTS.planRuns, (_req, res, ctx) =>
+          res(ctx.json([]))
+        ),
+        rest.get(AGENTIC_ENDPOINTS.agentRuns, (_req, res, ctx) =>
+          res(ctx.json([]))
+        ),
+        rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
+          res(ctx.json([]))
+        )
+      );
+      renderAt("7");
+      await screen.findByRole("heading", { name: "Code Migrator" });
+      expect(
+        await screen.findByText("message.unableToConnect", undefined, {
+          timeout: 5000,
+        })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("agentic.agentDetail.notUsedInPlans")
+      ).toBeNull();
+    });
+  });
 });

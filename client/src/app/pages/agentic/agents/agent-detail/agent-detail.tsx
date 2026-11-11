@@ -4,22 +4,11 @@ import { useTranslation } from "react-i18next";
 import { Link, generatePath, useHistory, useParams } from "react-router-dom";
 import {
   ButtonVariant,
-  Card,
-  CardBody,
   Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
   EmptyState,
   EmptyStateBody,
-  Flex,
-  FlexItem,
   Label,
-  LabelGroup,
   PageSection,
-  Stack,
-  StackItem,
   Tab,
   TabTitleText,
   Tabs,
@@ -47,6 +36,7 @@ import {
   useDeleteAgentMutation,
   useFetchAgentById,
   useFetchAgentTestRuns,
+  useFetchGateways,
   useFetchMigrationPlans,
   useFetchPlanRuns,
 } from "@app/queries/agentic";
@@ -60,6 +50,8 @@ import {
 } from "../agent-usage";
 import { AgentFormModal } from "../components/agent-form-modal";
 import { AgentTestModal } from "../components/agent-test-modal";
+
+import { AgentDetailsTab } from "./agent-details-tab";
 
 const AGENT_DETAIL_TABS = ["details", "runs"] as const;
 type AgentDetailTab = (typeof AGENT_DETAIL_TABS)[number];
@@ -77,7 +69,13 @@ const AgentDetail: React.FC = () => {
 
   const { agent, isLoading, fetchError, isNotFound, refetch } =
     useFetchAgentById(agentId);
-  const { migrationPlans, isSuccess: hasPlans } = useFetchMigrationPlans();
+  const {
+    migrationPlans,
+    isSuccess: hasPlans,
+    isLoading: isLoadingPlans,
+    fetchError: plansError,
+  } = useFetchMigrationPlans();
+  const { gateways } = useFetchGateways();
   const { planRuns } = useFetchPlanRuns();
   const { agentTestRuns } = useFetchAgentTestRuns(agentId);
 
@@ -237,226 +235,14 @@ const AgentDetail: React.FC = () => {
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          <Stack hasGutter>
-            <StackItem>
-              <Card>
-                <CardBody>
-                  <DescriptionList isHorizontal>
-                    <DescriptionListGroup>
-                      <DescriptionListTerm>
-                        {t("agentic.agentDetail.personaPrompt")}
-                      </DescriptionListTerm>
-                      <DescriptionListDescription>
-                        <Content
-                          component="pre"
-                          style={{
-                            whiteSpace: "pre-wrap",
-                            maxHeight: "200px",
-                            overflowY: "auto",
-                          }}
-                        >
-                          {agent.prompt || "—"}
-                        </Content>
-                      </DescriptionListDescription>
-                    </DescriptionListGroup>
-
-                    <DescriptionListGroup>
-                      <DescriptionListTerm>
-                        {t("agentic.agentDetail.model")}
-                      </DescriptionListTerm>
-                      <DescriptionListDescription>
-                        {agent.model.name}
-                      </DescriptionListDescription>
-                    </DescriptionListGroup>
-
-                    {agent.skills.length > 0 && (
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>
-                          {t("agentic.agentDetail.skills")}
-                        </DescriptionListTerm>
-                        <DescriptionListDescription>
-                          <LabelGroup>
-                            {agent.skills.map((s) => (
-                              <Label
-                                key={s.id}
-                                variant="outline"
-                                render={({ className, content }) => (
-                                  <Link
-                                    className={className}
-                                    to={breadcrumbTo(
-                                      generatePath(DevPaths.skillDetails, {
-                                        skillId: String(s.id),
-                                      }),
-                                      `?from=agent-${agent.id}`,
-                                      agentChildCrumbs
-                                    )}
-                                  >
-                                    {content}
-                                  </Link>
-                                )}
-                              >
-                                {s.name}
-                              </Label>
-                            ))}
-                          </LabelGroup>
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
-                    )}
-
-                    {(agent.skillCollections?.length ?? 0) > 0 && (
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>
-                          {t("agentic.agentDetail.skillCollections")}
-                        </DescriptionListTerm>
-                        <DescriptionListDescription>
-                          <LabelGroup>
-                            {(agent.skillCollections ?? []).map((c) => (
-                              <Label
-                                key={c.id}
-                                color="teal"
-                                render={({ className, content }) => (
-                                  <Link
-                                    className={className}
-                                    to={breadcrumbTo(
-                                      generatePath(
-                                        DevPaths.skillCollectionDetails,
-                                        {
-                                          collectionId: String(c.id),
-                                        }
-                                      ),
-                                      `?from=agent-${agent.id}`,
-                                      agentChildCrumbs
-                                    )}
-                                  >
-                                    {content}
-                                  </Link>
-                                )}
-                              >
-                                {c.name}
-                              </Label>
-                            ))}
-                          </LabelGroup>
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
-                    )}
-
-                    {agent.capabilities.length > 0 && (
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>
-                          {t("agentic.agentDetail.capabilities")}
-                        </DescriptionListTerm>
-                        <DescriptionListDescription>
-                          <ul style={{ margin: 0, paddingLeft: "1.1em" }}>
-                            {agent.capabilities.map((cap, i) => (
-                              <li key={i}>{cap}</li>
-                            ))}
-                          </ul>
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
-                    )}
-
-                    {agent.parameters.length > 0 && (
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>
-                          {t("agentic.agentDetail.parameters")}
-                        </DescriptionListTerm>
-                        <DescriptionListDescription>
-                          <Flex direction={{ default: "column" }}>
-                            {agent.parameters.map((p, index) => (
-                              <FlexItem key={index}>
-                                <Label isCompact color="grey">
-                                  {p.type}
-                                </Label>{" "}
-                                <strong>{p.name}</strong>
-                                {p.description ? ` — ${p.description}` : ""}
-                                {p.defaultValue
-                                  ? ` ${t("agentic.agentDetail.parameterDefault", { value: p.defaultValue })}`
-                                  : ""}
-                              </FlexItem>
-                            ))}
-                          </Flex>
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
-                    )}
-
-                    {agent.createTime && (
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>
-                          {t("agentic.agentDetail.createdAt")}
-                        </DescriptionListTerm>
-                        <DescriptionListDescription>
-                          {new Date(agent.createTime).toLocaleString()}
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
-                    )}
-                  </DescriptionList>
-                </CardBody>
-              </Card>
-            </StackItem>
-
-            {/* Used in migration plans */}
-            <StackItem>
-              <Content component="h3">
-                {t("agentic.agentDetail.usedInPlans")}
-              </Content>
-              {plansUsingAgent.length === 0 ? (
-                <Content
-                  component="p"
-                  style={{
-                    color: "var(--pf-t--global--text--color--subtle)",
-                  }}
-                >
-                  {t("agentic.agentDetail.notUsedInPlans")}
-                </Content>
-              ) : (
-                <Table
-                  aria-label={t("agentic.agentDetail.usedInPlans")}
-                  variant="compact"
-                >
-                  <Thead>
-                    <Tr>
-                      <Th>{t("terms.name")}</Th>
-                      <Th>{t("agentic.agentDetail.stagesLabel")}</Th>
-                      <Th>{t("terms.description")}</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {plansUsingAgent.map((plan) => {
-                      const stageNames = plan.stages
-                        .filter((s) => s.agent.id === agent.id)
-                        .map((s) => s.name);
-                      return (
-                        <Tr key={plan.id}>
-                          <Td>
-                            <Link
-                              to={breadcrumbTo(
-                                generatePath(DevPaths.migrationPlanDetails, {
-                                  planId: String(plan.id),
-                                }),
-                                `?from=agent-${agent.id}`,
-                                agentChildCrumbs
-                              )}
-                            >
-                              {plan.name}
-                            </Link>
-                          </Td>
-                          <Td>
-                            {stageNames.map((name, i) => (
-                              <React.Fragment key={i}>
-                                {i > 0 && ", "}
-                                {name}
-                              </React.Fragment>
-                            ))}
-                          </Td>
-                          <Td>{plan.description || "—"}</Td>
-                        </Tr>
-                      );
-                    })}
-                  </Tbody>
-                </Table>
-              )}
-            </StackItem>
-          </Stack>
+          <AgentDetailsTab
+            agent={agent}
+            gateway={gateways.find((gateway) => gateway.id === agent.model.id)}
+            plansUsingAgent={plansUsingAgent}
+            isLoadingPlans={isLoadingPlans}
+            plansError={hasPlans ? null : plansError}
+            linkCrumbs={agentChildCrumbs}
+          />
         </PageSection>
       </DetailTabPanel>
 

@@ -202,9 +202,7 @@ test.describe("Agent form", () => {
       page.getByRole("link", { name: "Security and compliance" })
     ).toBeVisible();
     await expect(
-      page.getByText(
-        "This agent is not assigned to any migration plan stage yet."
-      )
+      page.getByText("This agent is not used in any migration plan yet.")
     ).toBeVisible();
     expectHealthy(diagnostics);
   });
