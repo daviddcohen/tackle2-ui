@@ -89,28 +89,28 @@ test.describe("Plan impact and lifecycle", () => {
   // Plan used by a run flips the run to Pending and its Plan link to "Plan not found".
   test("a Plan used by a plan run cannot be deleted", async ({ page }) => {
     await page.goto(protoUrl("/migration-plans", { scenario: "configured" }));
-    await page.getByRole("button", { name: "Create migration plan" }).click();
+    await page
+      .getByRole("main")
+      .getByRole("button", { name: "Create migration plan" })
+      .click();
     const dialog = page.getByRole("dialog");
     await dialog
       .getByRole("textbox", { name: /^Name/ })
       .fill("Plan in use by a run");
-    await dialog.getByRole("button", { name: "Select an archetype" }).click();
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
+    await dialog.getByRole("button", { name: /^Archetype/ }).click();
     await pickMenuOption(page, "Node.js Service");
-    await dialog
-      .getByRole("button", { name: "Select target profiles" })
-      .click();
+    await dialog.locator("#plan-target-profiles-input").click();
     await pickMenuOption(page, "Node.js 22 on OpenShift");
-    await dialog
-      .getByRole("button", { name: "1 target profile selected" })
-      .click();
-    await dialog.getByRole("button", { name: "Next" }).click();
+    await dialog.getByText(/^Applications in this archetype/).click();
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await dialog
       .getByRole("textbox", { name: "Stage name" })
       .fill("Only stage");
-    await dialog.getByRole("button", { name: "Select an Agent" }).click();
+    await dialog.getByRole("button", { name: /^Agent/ }).click();
     await pickMenuOption(page, "Code Migrator");
-    await dialog.getByRole("button", { name: "Next" }).click();
-    await dialog.getByRole("button", { name: "Create migration plan" }).click();
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
+    await dialog.getByRole("button", { name: "Create", exact: true }).click();
     await expect(dialog).toBeHidden();
 
     await page.getByRole("link", { name: "Application inventory" }).click();

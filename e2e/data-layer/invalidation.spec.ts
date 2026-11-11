@@ -72,7 +72,8 @@ test("editing a plan keeps its stage ids, so its runs keep their stage runs", as
   const wizard = dialog(page);
   await wizard.getByRole("button", { name: "Next" }).click();
   await wizard.getByRole("button", { name: "Next" }).click();
-  await wizard.getByRole("button", { name: "Save Changes" }).click();
+  await wizard.getByRole("button", { name: "Next" }).click();
+  await wizard.getByRole("button", { name: "Save", exact: true }).click();
   await expect(wizard).toHaveCount(0);
 
   const after = await agenticGet<PlanWithSkills>(page, "/plans/2");
