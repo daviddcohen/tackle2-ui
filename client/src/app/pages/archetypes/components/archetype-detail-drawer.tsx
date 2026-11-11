@@ -1,4 +1,3 @@
-import "./archetype-detail-drawer.css";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
