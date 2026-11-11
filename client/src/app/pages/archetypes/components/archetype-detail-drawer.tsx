@@ -83,7 +83,9 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
                 {t("titles.archetypeDrawer")}
               </Content>
               <Title headingLevel="h2" size="lg" className={spacing.mtXs}>
-                {archetype ? archetype.name : "No archetype selected"}
+                {archetype
+                  ? archetype.name
+                  : t("agentic.archetype.noneSelected")}
               </Title>
             </Content>
           </StackItem>
