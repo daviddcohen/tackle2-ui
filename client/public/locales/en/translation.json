@@ -1337,7 +1337,7 @@
       "associatedPlan": "Associated Plan",
       "backToPlans": "Back to migration plans",
       "created": "Plan \"{{plan}}\" created",
-      "createTitle": "Create Plan",
+      "createTitle": "Create migration plan",
       "closeWizard": "Close Plan wizard",
       "configurationCheck": {
         "models": {
@@ -1371,9 +1371,9 @@
       "deleteProfilePlanAssociated": "Remove the Plan association before deleting this target profile.",
       "deleteTitle": "Delete migration plan?",
       "editPlan": "Edit migration plan",
-      "emptyDescription": "Create a Plan to define a multi-Stage migration workflow.",
-      "emptyTitle": "No Plans yet",
-      "filterByName": "Filter by name...",
+      "emptyDescription": "Create a migration plan to define the stages that migrate applications of one archetype and target profile.",
+      "emptyTitle": "No migration plans yet",
+      "filterByName": "Filter by name",
       "descriptionPlaceholder": "Describe the goal of this Plan...",
       "detailsStep": "Plan details",
       "model": "Model",
@@ -1388,7 +1388,7 @@
       "noAgent": "No Agent",
       "notFoundBody": "This migration plan may have been deleted, or the link is out of date.",
       "notFoundTitle": "Migration plan not found",
-      "plansDescription": "Define reusable migration workflows and associate them with the application paths they support.",
+      "plansDescription": "A migration plan is an ordered set of stages for applications of one archetype and target profile.",
       "plansTitle": "Migration plans",
       "namePlaceholder": "For example, Java EE to Quarkus",
       "reviewStep": "Review",
@@ -1414,8 +1414,7 @@
       "targetProfile": "Target profiles",
       "targetProfilesSelected_one": "{{count}} target profile selected",
       "targetProfilesSelected_other": "{{count}} target profiles selected",
-      "target": "Target",
-      "tableLabel": "Plans table",
+      "tableLabel": "Migration plans",
       "untitledStage": "Untitled Stage",
       "updated": "Plan \"{{plan}}\" updated",
       "validation": {
@@ -1451,7 +1450,10 @@
       "configuration": "Configuration",
       "stageOrderColumn": "#",
       "stageExpansion": "Row expansion",
-      "modelNotVerified": "{{model}} is not verified. Agents can use a model only after it is verified."
+      "modelNotVerified": "{{model}} is not verified. Agents can use a model only after it is verified.",
+      "emptyDescriptionReadOnly": "Migration plans appear here once they are created.",
+      "targetProfileCount_one": "{{count}} target profile",
+      "targetProfileCount_other": "{{count}} target profiles"
     },
     "skill": {
       "agentAssociationsNotPermitted": "Associating this Skill with Agents requires permission to edit Agents.",

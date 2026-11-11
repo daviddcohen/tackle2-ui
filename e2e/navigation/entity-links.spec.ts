@@ -209,10 +209,16 @@ for (const group of GROUPS) {
               /^\d+ (skills?|collections?|migration plans?)(, \d+ collections?)?$/.test(
                 label
               ) && /^\/agents\/\d+$/.test(destination.pathname);
+            // So does a plan's runs count ("2 runs"), which opens its Runs tab.
+            const isPlanRunsCountLink =
+              /^\d+ runs?$/.test(label) &&
+              /^\/migration-plans\/\d+$/.test(destination.pathname) &&
+              destination.searchParams.get("tab") === "runs";
             if (
               !/\/stages\//.test(href) &&
               !isRunCountLink &&
-              !isAgentCountLink
+              !isAgentCountLink &&
+              !isPlanRunsCountLink
             )
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected
