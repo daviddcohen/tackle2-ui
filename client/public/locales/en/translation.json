@@ -1895,8 +1895,6 @@
       "tabPlatform": "Platform",
       "tabPlanRuns": "Plan runs",
       "tabSkills": "Skills",
-      "skillsEmptyTitle": "No skills associated",
-      "skillsEmptyDescription": "No skills are directly associated with this application or its archetypes.",
       "actions": "Actions",
       "loadError": "Error loading application",
       "notFound": "Application not found",
@@ -1909,7 +1907,9 @@
       "skillsAssociatedDescription": "Skills associated with this application and its archetypes.",
       "planRunsTitle": "Plan runs ({{count}})",
       "planRunsDescription": "Plan runs that include this application.",
-      "planRunsEmpty": "This application has not been in a plan run yet."
+      "planRunsEmpty": "This application has not been in a plan run yet.",
+      "skillsEmpty": "No skills apply to this application yet. Associate skills with its archetype, target profile or agents.",
+      "goToSkills": "Go to skills"
     },
     "archetype": {
       "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
