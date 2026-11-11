@@ -34,7 +34,6 @@ import { Ref } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { NotificationsContext } from "@app/components/NotificationsContext";
-import { DrawerTabContent } from "@app/components/detail-drawer";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { MigrationStatus } from "@app/pages/agentic/components/agentic-status";
@@ -111,24 +110,18 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   });
 
   if (isLoading) {
-    return (
-      <DrawerTabContent>
-        <AppPlaceholder />
-      </DrawerTabContent>
-    );
+    return <AppPlaceholder />;
   }
 
   if (fetchError != null) {
     return (
-      <DrawerTabContent>
-        <Alert
-          isInline
-          variant="danger"
-          title={t("agentic.execution.unavailableTitle")}
-        >
-          {t("agentic.execution.unavailableDescription")}
-        </Alert>
-      </DrawerTabContent>
+      <Alert
+        isInline
+        variant="danger"
+        title={t("agentic.execution.unavailableTitle")}
+      >
+        {t("agentic.execution.unavailableDescription")}
+      </Alert>
     );
   }
 
@@ -149,7 +142,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
     planRun != null && getStageAttention(planRun)?.kind === "failed";
 
   return (
-    <DrawerTabContent>
+    <>
       <Stack hasGutter>
         {planRun != null && (
           <StageAttentionAlert
@@ -346,7 +339,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
       </Stack>
 
       {runMigrationPlan.modal}
-    </DrawerTabContent>
+    </>
   );
 };
 
