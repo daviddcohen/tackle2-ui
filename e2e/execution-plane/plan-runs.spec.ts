@@ -4,6 +4,7 @@ import {
   expectNoBrokenText,
   main,
   protoUrl,
+  stageLinks,
   test,
 } from "../support";
 
@@ -84,7 +85,7 @@ test.describe("Plan run detail", () => {
     await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
     const summary = page.getByRole("main").locator("dl").first();
     await expect(summary.getByRole("link")).toHaveCount(4); // plan + 3 applications
-    await page.getByRole("link", { name: "View run" }).first().click();
+    await stageLinks(page).first().click();
     await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/1\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Prepare proposal: Run #1 — Java EE to Quarkus"

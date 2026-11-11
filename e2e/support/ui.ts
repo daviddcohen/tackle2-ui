@@ -267,13 +267,19 @@ export const openBulkRunMigration = async (
 
 // ── Plan runs ────────────────────────────────────────────────────────────────
 
-/** Status label in a plan-run stage section header. */
+/** The Stages table of a plan run page. */
+export const stagesTable = (page: Page) =>
+  main(page).getByRole("grid", { name: "Stages", exact: true });
+
+/** The links to the stage pages, in stage order. */
+export const stageLinks = (page: Page) =>
+  stagesTable(page).locator('a[href*="/stages/"]');
+
+/** The status of a stage in the Stages table, by stage name. */
 export const stageStatus = (page: Page, stage: string) =>
-  main(page)
-    .locator(".pf-v6-l-flex", {
-      has: page.locator("strong").getByText(stage, { exact: true }),
-    })
-    .last()
+  stagesTable(page)
+    .getByRole("row")
+    .filter({ has: page.getByRole("link", { name: stage, exact: true }) })
     .locator(AGENTIC_STATUS);
 
 /** The decision button in the page's attention alert (not the confirm dialog's). */

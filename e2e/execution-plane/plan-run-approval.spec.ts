@@ -7,6 +7,7 @@ import {
   approveStage,
   expect,
   protoUrl,
+  stageLinks,
   stageStatus,
   test,
 } from "../support";
@@ -42,13 +43,13 @@ test.describe("Plan run approval", () => {
     await expect(page).toHaveURL(/protoScenario=actionRequired&protoStage=1/);
   });
 
-  test("view run opens the stage run detail with matching status", async ({
+  test("a stage link opens the stage run detail with matching status", async ({
     page,
   }) => {
     await page.goto(
       protoUrl("/plan-runs/2", { scenario: "actionRequired", stage: 1 })
     );
-    await page.getByRole("link", { name: "View run" }).first().click();
+    await stageLinks(page).first().click();
     await expect(page).toHaveURL(/\/plan-runs\/2\/stages\/4\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Analyze: Run #2 — Spring Boot to Quarkus"
@@ -64,11 +65,11 @@ test.describe("Plan run approval", () => {
     await expect(page).toHaveURL(/\/plan-runs\/2\?/);
   });
 
-  // Regression guard: StageRunSection initialises isExpanded with useState() once. A stage first rendered
-  // as Pending stays collapsed when it later becomes AwaitingApproval, hiding the Approve button.
+  // Regression guard: a stage first rendered as Pending that later becomes AwaitingApproval on the
+  // same, already-mounted page must bring back the Approve button.
   // Run #4 (Java EE lift and shift) has a second approval gate on its last stage ("Review
   // security"); with the interactive policy the server stops there after ~12 s.
-  test("a stage that transitions to awaiting approval is expanded", async ({
+  test("a stage that transitions to awaiting approval gets the approval alert", async ({
     page,
   }) => {
     test.setTimeout(60000);
@@ -119,12 +120,9 @@ test.describe("Plan run approval", () => {
     await page.goto(
       protoUrl("/plan-runs/2", { scenario: "actionRequired", stage: 2 })
     );
-    // A stage awaiting approval opens on its own.
-    await expect(
-      page.getByRole("button", { name: /Migrate/ }).first()
-    ).toHaveAttribute("aria-expanded", "true");
+    await expect(stageStatus(page, "Migrate")).toHaveText("Action required");
     await expect(approveButton(page)).toBeVisible();
-    await page.getByRole("link", { name: "View run" }).nth(1).click();
+    await stageLinks(page).nth(1).click();
     await expect(page).toHaveURL(/\/stages\/5\?/);
     await expect(approveButton(page)).toBeVisible();
   });

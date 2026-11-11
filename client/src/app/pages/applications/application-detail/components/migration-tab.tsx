@@ -13,8 +13,6 @@ import {
   DescriptionListGroup,
   DescriptionListTerm,
   Divider,
-  ProgressStep,
-  ProgressStepper,
   Stack,
   StackItem,
   Title,
@@ -22,7 +20,6 @@ import {
 
 import { DevPaths } from "@app/Paths";
 import {
-  ControllerRunPhase,
   UNCONFIGURED_MIGRATION,
   getMigrationDisplayStatus,
 } from "@app/agentic";
@@ -34,13 +31,13 @@ import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import {
   MigrationStatus,
   RunStatus,
-  statusPresentation,
 } from "@app/pages/agentic/components/agentic-status";
 import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
 import {
   StageAttentionAlert,
   getStageAttention,
 } from "@app/pages/agentic/components/stage-attention-alert";
+import { StageRunsTable } from "@app/pages/agentic/components/stage-runs-table";
 import {
   useFetchApplicationMigrations,
   useFetchPlanRun,
@@ -56,23 +53,6 @@ import {
 } from "../../components/agentic-migration/next-action";
 import { planRunPath } from "../../components/agentic-migration/paths";
 import { DecoratedApplication } from "../../useDecoratedApplications";
-
-const phaseVariant = (
-  phase: ControllerRunPhase
-): "success" | "info" | "pending" | "danger" | "warning" => {
-  switch (phase) {
-    case "Succeeded":
-      return "success";
-    case "Running":
-      return "info";
-    case "Failed":
-      return "danger";
-    case "AwaitingApproval":
-      return "warning";
-    default:
-      return "pending";
-  }
-};
 
 /** Section ids the next action moves focus to when it is on this tab. */
 const sectionIds: Partial<Record<MigrationNextActionKey, string>> = {
@@ -160,6 +140,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   const failedStage = migration.stages.find(
     (stage) => stage.phase === "Failed"
   );
+  const showsAttention = planRun != null && getStageAttention(planRun) != null;
   const focusSection = () => {
     const id = sectionIds[nextAction.key];
     const section = id != null ? document.getElementById(id) : null;
@@ -170,7 +151,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   return (
     <DrawerTabContent>
       <Stack hasGutter>
-        {planRun != null && getStageAttention(planRun) && (
+        {showsAttention && planRun != null && (
           <StackItem>
             <StageAttentionAlert
               surface="application"
@@ -339,27 +320,18 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
             <Title headingLevel="h3" size="md">
               {t("agentic.execution.stageProgress")}
             </Title>
-            <ProgressStepper
-              isVertical
-              aria-label={t("agentic.execution.stageProgress")}
-            >
-              {migration.stages.map((stage, index) => (
-                <ProgressStep
-                  key={`${stage.stageName}-${index}`}
-                  id={`migration-stage-${applicationId}-${index}`}
-                  titleId={`migration-stage-title-${applicationId}-${index}`}
-                  variant={phaseVariant(stage.phase)}
-                  isCurrent={stage.stageName === migration.currentStage}
-                  aria-label={t("agentic.execution.stagePhase", {
-                    stage: stage.stageName,
-                    phase: t(statusPresentation.run[stage.phase].labelKey),
-                  })}
-                  description={t(statusPresentation.run[stage.phase].labelKey)}
-                >
-                  {stage.stageName}
-                </ProgressStep>
-              ))}
-            </ProgressStepper>
+            <StageRunsTable
+              stages={
+                showsAttention && failedStage != null
+                  ? // The alert already shows the failure's summary.
+                    migration.stages.map((stage) =>
+                      stage === failedStage
+                        ? { ...stage, summary: undefined }
+                        : stage
+                    )
+                  : migration.stages
+              }
+            />
           </StackItem>
         )}
 

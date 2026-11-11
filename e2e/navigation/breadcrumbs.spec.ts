@@ -7,6 +7,7 @@ import {
   main,
   mainHeading,
   protoUrl,
+  stageLinks,
   test,
 } from "../support";
 
@@ -65,7 +66,7 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
   visits.push(await visit(page));
 
   // plan run -> stage run
-  await main(page).getByRole("link", { name: "View run" }).nth(1).click();
+  await stageLinks(page).nth(1).click();
   await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/2/);
   visits.push(await visit(page));
 
