@@ -82,7 +82,7 @@ describe("AgentForm", () => {
     render(<AgentForm agent={agent} onClose={jest.fn()} />);
 
     await screen.findByLabelText("agentic.agent.skillsSelect");
-    const combobox = screen.getByPlaceholderText("agentic.agent.addSkill");
+    const combobox = screen.getByPlaceholderText("agentic.agent.selectSkills");
     const control = combobox.closest<HTMLElement>(".pf-v6-c-menu-toggle");
     expect(control).not.toBeNull();
 
@@ -117,6 +117,45 @@ describe("AgentForm", () => {
 
     await user.type(combobox, "Second{ArrowDown}{Enter}");
     expect(within(control!).getByLabelText("Second Skill")).toBeVisible();
+  });
+
+  it("opens the parameters group when the agent has parameters or one is added (A10)", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <AgentForm
+        agent={{
+          ...agent,
+          parameters: [
+            { name: "instructions", type: "string", description: "" },
+          ],
+        }}
+        onClose={jest.fn()}
+      />
+    );
+    await screen.findByLabelText("agentic.agent.skillsSelect");
+    expect(
+      screen.getByRole("button", { name: /agentic\.agent\.parameters/ })
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelector("#agent-parameter-0-name")).toHaveValue(
+      "instructions"
+    );
+    unmount();
+
+    render(<AgentForm agent={agent} onClose={jest.fn()} />);
+    await screen.findByLabelText("agentic.agent.skillsSelect");
+    const toggle = screen.getByRole("button", {
+      name: /agentic\.agent\.parameters/,
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(
+      screen.getByRole("button", { name: "agentic.agent.addParameter" })
+    );
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelector("#agent-parameter-0-name")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "agentic.agent.removeParameter" })
+    );
+    expect(document.querySelector("#agent-parameter-0-name")).toBeNull();
   });
 
   it("rejects duplicate parameter names and defaults that do not match the type", async () => {

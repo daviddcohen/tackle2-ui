@@ -125,7 +125,7 @@ test.describe("Agent form", () => {
     );
     await field(dialog(page), "Name").fill("Code Migrator");
     await expect(dialog(page)).toContainText(
-      "An Agent with this name already exists."
+      "An agent with this name already exists."
     );
     await field(dialog(page), "Name").fill("QA Agent");
     await field(dialog(page), "Description").fill("d".repeat(501));
