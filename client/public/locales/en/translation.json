@@ -1826,11 +1826,8 @@
     "planDetail": {
       "tabOverview": "Overview",
       "tabRuns": "Runs",
-      "tabKnowledgeBase": "Knowledge Base",
       "runsEmptyTitle": "No runs for this plan",
       "runsEmptyDescription": "Select applications in Application Inventory and run this plan to see results here.",
-      "knowledgeBaseEmptyTitle": "No lessons learned yet",
-      "knowledgeBaseEmptyDescription": "Lessons learned from plan runs will appear here. This feature is coming soon.",
       "tabsLabel": "Plan details",
       "skillsTitle": "Skills ({{count}})",
       "skillsTitleEmpty": "Skills",

@@ -142,13 +142,12 @@ const PlanStageCard: React.FC<{
   );
 };
 
-const PLAN_DETAIL_TABS = ["overview", "runs", "knowledge-base"] as const;
+const PLAN_DETAIL_TABS = ["overview", "runs"] as const;
 type PlanDetailTab = (typeof PLAN_DETAIL_TABS)[number];
 
 const tabTitleKeys: Record<PlanDetailTab, string> = {
   overview: "agentic.planDetail.tabOverview",
   runs: "agentic.planDetail.tabRuns",
-  "knowledge-base": "agentic.planDetail.tabKnowledgeBase",
 };
 
 const PANEL_PREFIX = "plan-detail";
@@ -466,26 +465,6 @@ const PlanDetailsPage: React.FC = () => {
               origin={`?from=plan-${migrationPlan.id}`}
             />
           )}
-        </PageSection>
-      </DetailTabPanel>
-
-      {/* Tab: Knowledge Base */}
-      <DetailTabPanel
-        prefix={PANEL_PREFIX}
-        eventKey="knowledge-base"
-        activeKey={activeTab}
-      >
-        <PageSection hasBodyWrapper={false}>
-          <EmptyState
-            headingLevel="h2"
-            icon={BookOpenIcon}
-            titleText={t("agentic.planDetail.knowledgeBaseEmptyTitle")}
-            variant="sm"
-          >
-            <EmptyStateBody>
-              {t("agentic.planDetail.knowledgeBaseEmptyDescription")}
-            </EmptyStateBody>
-          </EmptyState>
         </PageSection>
       </DetailTabPanel>
 
