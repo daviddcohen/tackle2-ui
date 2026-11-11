@@ -1698,6 +1698,15 @@
       "applicationAssociatedDescription": "Skills associated with this application and its archetypes.",
       "archetypeDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
     },
+    "planRunsTable": {
+      "label": "Plan runs",
+      "run": "Run",
+      "duration": "Duration",
+      "approvalNeeded": "Approval needed: {{stage}}",
+      "stagePosition": "Stage {{position}} of {{total}}: {{stage}}",
+      "applicationCount_one": "{{count}} application",
+      "applicationCount_other": "{{count}} applications"
+    },
     "planRun": {
       "title": "Plan runs",
       "description": "History of all migration plan runs across your application portfolio.",
