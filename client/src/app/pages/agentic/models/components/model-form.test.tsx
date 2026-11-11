@@ -233,6 +233,22 @@ describe("ModelForm", () => {
     expect(screen.queryByText("agentic.model.unreachableTitle")).toBeNull();
   });
 
+  it("never looks unused while the agents load or after they fail (X6)", async () => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
+        res(ctx.status(500))
+      )
+    );
+    renderForm({ model, onClose: jest.fn() });
+    expect(await screen.findByText("terms.loading")).toBeInTheDocument();
+    expect(
+      await screen.findByText("agentic.model.editUsageUnchecked", undefined, {
+        timeout: 5000,
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("terms.loading")).toBeNull();
+  });
+
   it("shows an unreachable model's status, with the in-use sentence in the same alert", async () => {
     agents = [agentUsing("a1", "m1")];
     renderForm({
