@@ -1895,8 +1895,6 @@
       "tabPlatform": "Platform",
       "tabPlanRuns": "Plan runs",
       "tabSkills": "Skills",
-      "planRunsEmptyTitle": "No migration plan runs yet",
-      "planRunsEmptyDescription": "Start a new migration plan run for this application to see its progress and commits here.",
       "skillsEmptyTitle": "No skills associated",
       "skillsEmptyDescription": "No skills are directly associated with this application or its archetypes.",
       "actions": "Actions",
@@ -1908,7 +1906,10 @@
       "taskCancelFailed": "Task cancelation failed",
       "skillsTitle": "Skills ({{count}})",
       "skillsDescription": "Skills the agents use when migrating this application, and where each one comes from.",
-      "skillsAssociatedDescription": "Skills associated with this application and its archetypes."
+      "skillsAssociatedDescription": "Skills associated with this application and its archetypes.",
+      "planRunsTitle": "Plan runs ({{count}})",
+      "planRunsDescription": "Plan runs that include this application.",
+      "planRunsEmpty": "This application has not been in a plan run yet."
     },
     "archetype": {
       "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."

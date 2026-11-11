@@ -516,6 +516,7 @@ const ApplicationDetail: React.FC = () => {
                 <PlanRunsTab
                   linkCrumbs={linkCrumbs}
                   applicationId={applicationId}
+                  applicationName={application.name}
                 />
               )}
               {activeTab === "skills" && (
