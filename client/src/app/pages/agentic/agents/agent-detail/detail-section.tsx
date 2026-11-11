@@ -1,5 +1,12 @@
 import * as React from "react";
-import { Content, Flex, FlexItem, Title } from "@patternfly/react-core";
+import {
+  Content,
+  EmptyState,
+  EmptyStateBody,
+  Flex,
+  FlexItem,
+  Title,
+} from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
@@ -54,4 +61,11 @@ export const DetailSections: React.FC<{ children: React.ReactNode }> = ({
         <FlexItem key={index}>{child}</FlexItem>
       ))}
   </Flex>
+);
+
+/** A section's empty state (kit-tables): one sentence, no icon, no "(0)" heading (C4). */
+export const SectionEmpty: React.FC<{ children: string }> = ({ children }) => (
+  <EmptyState variant="xs">
+    <EmptyStateBody>{children}</EmptyStateBody>
+  </EmptyState>
 );
