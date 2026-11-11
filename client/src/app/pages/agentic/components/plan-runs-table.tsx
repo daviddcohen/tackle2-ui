@@ -2,12 +2,7 @@ import * as React from "react";
 import { LocationDescriptor } from "history";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
-import {
-  Button,
-  Toolbar,
-  ToolbarContent,
-  ToolbarItem,
-} from "@patternfly/react-core";
+import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
@@ -23,7 +18,6 @@ import {
   TableRowContentWithControls,
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
-import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
   formatDuration,
   getCurrentStage,
@@ -32,6 +26,7 @@ import {
 import { formatTableDate } from "@app/utils/utils";
 
 import { RunStatus } from "./agentic-status";
+import { CountLink } from "./count-link";
 
 const PlanRunStatus: React.FC<{ run: PlanRun }> = ({ run }) => {
   const { t } = useTranslation();
@@ -57,25 +52,6 @@ const PlanRunStatus: React.FC<{ run: PlanRun }> = ({ run }) => {
               : undefined
       }
     />
-  );
-};
-
-/** "{n} applications", opening the run, whose page lists them (addenda X14). */
-const ApplicationCountLink: React.FC<{
-  to: LocationDescriptor;
-  count: number;
-}> = ({ to, count }) => {
-  const { t } = useTranslation();
-  const link = useLinkComponent(to);
-  return (
-    <Button
-      variant="link"
-      isInline
-      className="pf-v6-u-text-nowrap"
-      component={link}
-    >
-      {t("agentic.planRunsTable.applicationCount", { count })}
-    </Button>
   );
 };
 
@@ -309,15 +285,20 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
                           {run.applications[0].name}
                         </Link>
                       ) : run.applications.length > 1 ? (
-                        <ApplicationCountLink
+                        // "{n} applications" opens the run, whose page
+                        // lists them (addenda X14).
+                        <CountLink
                           to={linkTo(
                             generatePath(DevPaths.planRunDetails, {
                               runId: run.id,
                             }),
                             origin
                           )}
-                          count={run.applications.length}
-                        />
+                        >
+                          {t("agentic.planRunsTable.applicationCount", {
+                            count: run.applications.length,
+                          })}
+                        </CountLink>
                       ) : (
                         <EmptyTextMessage message={t("terms.none")} />
                       )}
