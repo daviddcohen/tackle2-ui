@@ -238,17 +238,28 @@ export const waitForInventory = async (page: Page) => {
   ).toBeVisible();
 };
 
-/** Migration activity overview counts, e.g. { Running: 3, Failed: 0, ... }. */
-export const portfolioCounts = async (page: Page) => {
-  const text = await main(page).innerText();
-  const counts: Record<string, number> = {};
-  for (const match of text.matchAll(
-    /(Succeeded|Pending|Running|Failed|Action required): (\d+)/g
-  ))
-    counts[match[1]] = Number(match[2]);
-  const review = text.match(/Review (\d+) request/i);
-  if (review) counts["Action required"] = Number(review[1]);
-  return counts;
+/**
+ * How many applications of the whole inventory have a migration status: the
+ * Migration status filter's result count. The filter is cleared afterwards.
+ */
+export const countWithMigrationStatus = async (page: Page, status: string) => {
+  await main(page).locator('[data-ouia-component-id="filtered-by"]').click();
+  await page
+    .getByRole("menuitem", { name: "Migration status", exact: true })
+    .click();
+  await page.locator("#filter-for-agenticMigration-input").click();
+  await page
+    .getByRole("listbox")
+    .getByRole("menuitem", { name: status, exact: true })
+    .click();
+  await page.keyboard.press("Escape");
+  const range = main(page)
+    .getByRole("button", { name: /^\d+ - \d+ of \d+$/ })
+    .first();
+  await expect(range).toBeVisible();
+  const total = Number((await range.innerText()).match(/of (\d+)/)?.[1]);
+  await main(page).getByRole("button", { name: "Clear all filters" }).click();
+  return total;
 };
 
 /** Selects applications and opens the bulk "Run migration plan" preflight. */
