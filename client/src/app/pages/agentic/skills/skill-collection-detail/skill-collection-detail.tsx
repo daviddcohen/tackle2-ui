@@ -11,15 +11,10 @@ import {
 import {
   ButtonVariant,
   Content,
-  EmptyState,
-  EmptyStateBody,
-  Flex,
   FlexItem,
   PageSection,
   Skeleton,
-  Title,
 } from "@patternfly/react-core";
-import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
@@ -48,6 +43,7 @@ import {
 import { skillCollectionsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
+import { Section, Sections, XsEmptyState } from "../components/section";
 import { SkillCollectionModal } from "../components/skill-collection-form";
 import {
   USED_BY_AGENTS_ID,
@@ -57,49 +53,6 @@ import {
 
 /** The Skill collections tab of the Skills page: the list a collection lives on (S8). */
 const COLLECTIONS_LIST_PATH = `${DevPaths.skills}?tab=collections`;
-
-interface SectionProps {
-  id?: string;
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}
-
-/** Title h2 lg, an optional subtle sentence, then the content (guide 4.2). */
-const Section: React.FC<SectionProps> = ({
-  id,
-  title,
-  description,
-  children,
-}) => (
-  <Flex
-    id={id}
-    direction={{ default: "column" }}
-    gap={{ default: "gapMd" }}
-    flexWrap={{ default: "nowrap" }}
-  >
-    <FlexItem>
-      <Title headingLevel="h2" size="lg">
-        {title}
-      </Title>
-      {description && (
-        <Content
-          component="p"
-          className={`${textStyles.textColorSubtle} ${spacing.mtXs}`}
-        >
-          {description}
-        </Content>
-      )}
-    </FlexItem>
-    <FlexItem>{children}</FlexItem>
-  </Flex>
-);
-
-const XsEmptyState: React.FC<{ text: string }> = ({ text }) => (
-  <EmptyState variant="xs">
-    <EmptyStateBody>{text}</EmptyStateBody>
-  </EmptyState>
-);
 
 const SkillCollectionDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -241,11 +194,7 @@ const SkillCollectionDetail: React.FC = () => {
       </PageSection>
 
       <PageSection hasBodyWrapper={false}>
-        <Flex
-          direction={{ default: "column" }}
-          gap={{ default: "gapXl" }}
-          flexWrap={{ default: "nowrap" }}
-        >
+        <Sections>
           <FlexItem>
             <Section
               title={
@@ -391,7 +340,7 @@ const SkillCollectionDetail: React.FC = () => {
               )}
             </Section>
           </FlexItem>
-        </Flex>
+        </Sections>
       </PageSection>
 
       <SkillCollectionModal

@@ -28,7 +28,7 @@ test("skill detail: the plans-resolving-skill table refreshes after its associat
     persona: "platformEngineer",
   });
   const plansTable = page.getByRole("grid", {
-    name: "Migration plans where this skill is active",
+    name: "Used in migration plans",
   });
   await expect(plansTable.locator("tbody tr").first()).toBeVisible();
 
@@ -50,6 +50,9 @@ test("skill detail: the plans-resolving-skill table refreshes after its associat
   ).toEqual([]);
   // ... and the page shows it without a reload.
   await expect(plansTable).toHaveCount(0);
+  await expect(
+    main(page).getByText("No migration plan uses this skill.")
+  ).toBeVisible();
 });
 
 test("editing a plan keeps its stage ids, so its runs keep their stage runs", async ({
