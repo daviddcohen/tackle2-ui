@@ -409,13 +409,13 @@ const PlanDetailsPage: React.FC = () => {
         <PageSection hasBodyWrapper={false}>
           <Title headingLevel="h2" size="xl">
             {skillRows.length > 0
-              ? t("agentic.skillsTable.title", { count: skillRows.length })
-              : t("agentic.skillsTable.titleEmpty")}
+              ? t("agentic.planDetail.skillsTitle", { count: skillRows.length })
+              : t("agentic.planDetail.skillsTitleEmpty")}
           </Title>
           {skillRows.length > 0 ? (
             <>
               <Content component="p">
-                {t("agentic.skillsTable.planDescription")}
+                {t("agentic.planDetail.skillsDescription")}
               </Content>
               <SkillsTable
                 rows={skillRows}

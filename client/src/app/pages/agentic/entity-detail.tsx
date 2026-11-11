@@ -214,7 +214,7 @@ export const EntityDetailActions: React.FC<EntityDetailActionsProps> = ({
           onClick={() => setIsOpen((open) => !open)}
           isExpanded={isOpen}
         >
-          {t("agentic.applicationDetail.actions")}
+          {t("agentic.common.actions")}
         </MenuToggle>
       )}
     >

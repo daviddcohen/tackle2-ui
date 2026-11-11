@@ -123,7 +123,7 @@ describe("AgentDetail", () => {
     renderAt("7");
     await screen.findByRole("heading", { name: "Code Migrator" });
     await user.click(
-      screen.getByRole("button", { name: "agentic.applicationDetail.actions" })
+      screen.getByRole("button", { name: "agentic.common.actions" })
     );
     await waitFor(() =>
       expect(
@@ -146,7 +146,7 @@ describe("AgentDetail", () => {
     const notifications = renderAt("7");
     await screen.findByRole("heading", { name: "Code Migrator" });
     await user.click(
-      screen.getByRole("button", { name: "agentic.applicationDetail.actions" })
+      screen.getByRole("button", { name: "agentic.common.actions" })
     );
     await user.click(screen.getByRole("menuitem", { name: "actions.delete" }));
     await user.click(screen.getByRole("button", { name: "actions.delete" }));
@@ -166,7 +166,7 @@ describe("AgentDetail", () => {
     await screen.findByRole("heading", { name: "Code Migrator" });
     expect(
       screen.queryByRole("button", {
-        name: "agentic.applicationDetail.actions",
+        name: "agentic.common.actions",
       })
     ).toBeNull();
   });

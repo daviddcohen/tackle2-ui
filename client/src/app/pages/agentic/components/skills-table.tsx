@@ -125,9 +125,7 @@ export const SkillsTable: React.FC<SkillsTableProps> = ({ rows, linkTo }) => {
                 {sources.map((source) => (
                   <ListItem key={`${source.scope}-${source.name}`}>
                     {t("agentic.skillsTable.source", {
-                      scope: t(
-                        `agentic.skill.associationScope.${source.scope}`
-                      ),
+                      scope: t(`agentic.skillsTable.scope.${source.scope}`),
                       name: source.name,
                     })}
                   </ListItem>

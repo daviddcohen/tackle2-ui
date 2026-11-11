@@ -161,7 +161,7 @@ describe("status components", () => {
   it("keep a neutral status grey", () => {
     const { container } = render(<MigrationStatus status="preflightBlocked" />);
     expect(
-      screen.getByText("agentic.execution.displayStatus.preflightBlocked")
+      screen.getByText("agentic.migrationStatus.preflightBlocked")
     ).toBeInTheDocument();
     const icon = container.querySelector(".pf-v6-c-icon__content");
     expect(icon).not.toHaveClass("pf-m-danger");

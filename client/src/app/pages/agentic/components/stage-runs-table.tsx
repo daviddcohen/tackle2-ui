@@ -55,7 +55,7 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
     agent: t("agentic.entity.agent"),
     status: t("terms.status"),
     started: t("terms.started"),
-    duration: t("agentic.planRunsTable.duration"),
+    duration: t("agentic.stageRunsTable.duration"),
     completed: t("terms.completed"),
   };
 

@@ -97,12 +97,12 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
     <Stack hasGutter>
       <StackItem>
         <Title headingLevel="h2" size="lg">
-          {t("agentic.skillsTable.title", { count: rows.length })}
+          {t("agentic.applicationDetail.skillsTitle", { count: rows.length })}
         </Title>
         <Content component="p">
           {hasPlan
-            ? t("agentic.skillsTable.applicationDescription")
-            : t("agentic.skillsTable.applicationAssociatedDescription")}
+            ? t("agentic.applicationDetail.skillsDescription")
+            : t("agentic.applicationDetail.skillsAssociatedDescription")}
         </Content>
       </StackItem>
       <StackItem>
