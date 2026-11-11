@@ -17,9 +17,6 @@ import {
   FlexItem,
   Label,
   LabelGroup,
-  Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Stack,
   StackItem,
@@ -58,7 +55,7 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { RunStatus } from "../../components/agentic-status";
 import { getPlansUsingAgent } from "../agent-usage";
-import { AgentForm } from "../components/agent-form";
+import { AgentFormModal } from "../components/agent-form-modal";
 
 const AGENT_DETAIL_TABS = ["details", "runs"] as const;
 type AgentDetailTab = (typeof AGENT_DETAIL_TABS)[number];
@@ -567,24 +564,15 @@ const AgentDetail: React.FC = () => {
         </PageSection>
       </DetailTabPanel>
 
-      <Modal
-        id="edit-agent-modal"
-        variant="medium"
+      <AgentFormModal
+        agent={agent}
         isOpen={isEditOpen}
-        onClose={() => setEditModal(null)}
-      >
-        <ModalHeader title={t("agentic.agent.edit")} />
-        <ModalBody>
-          <AgentForm
-            key={editFormKey}
-            agent={agent}
-            onClose={() => {
-              setEditModal(null);
-              refetch();
-            }}
-          />
-        </ModalBody>
-      </Modal>
+        formKey={editFormKey}
+        onClose={() => {
+          setEditModal(null);
+          refetch();
+        }}
+      />
 
       {isDeleteOpen && (
         <ConfirmDialog

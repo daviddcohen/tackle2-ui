@@ -7,9 +7,6 @@ import {
   Button,
   ButtonVariant,
   Content,
-  Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Skeleton,
   Toolbar,
@@ -65,7 +62,7 @@ import {
 
 import { useAgentSkillsSummary } from "./agent-skills-summary";
 import { getPlansUsingAgent, useAgentDeleteBlockedReason } from "./agent-usage";
-import { AgentForm } from "./components/agent-form";
+import { AgentFormModal } from "./components/agent-form-modal";
 import { AgentModel } from "./components/agent-model";
 import { AgentTestModal } from "./components/agent-test-modal";
 
@@ -502,25 +499,12 @@ export const AgentsPage: React.FC = () => {
         </ConditionalRender>
       </PageSection>
 
-      <Modal
-        id="create-edit-agent-modal"
-        variant="medium"
+      <AgentFormModal
+        agent={agentToUpdate}
         isOpen={isCreateUpdateModalOpen}
+        formKey={formKey}
         onClose={closeCreateUpdateModal}
-      >
-        <ModalHeader
-          title={
-            agentToUpdate ? t("agentic.agent.edit") : t("agentic.agent.create")
-          }
-        />
-        <ModalBody>
-          <AgentForm
-            key={formKey}
-            agent={agentToUpdate}
-            onClose={closeCreateUpdateModal}
-          />
-        </ModalBody>
-      </Modal>
+      />
       <AgentTestModal
         agent={agentToTest}
         onClose={() => setAgentToTest(null)}
