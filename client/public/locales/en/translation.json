@@ -1563,15 +1563,15 @@
       "skillCountColumn": "Skills"
     },
     "skillCollectionDetail": {
-      "memberSkills": "Skills in this collection",
-      "noSkillsTitle": "No Skills",
-      "noSkillsDescription": "This collection has no Skills yet.",
-      "usedByAgents": "Agents using this collection",
-      "noAgents": "No agents currently use this collection.",
-      "skillsTable": "Skills in collection",
-      "agentsTable": "Agents using this collection",
-      "skillCount_one": "{{count}} Skill",
-      "skillCount_other": "{{count}} Skills"
+      "usedByAgents": "Used by agents",
+      "noAgents": "No agent uses this skill collection.",
+      "usedByAgentsTitle_one": "Used by agents ({{count}})",
+      "usedByAgentsTitle_other": "Used by agents ({{count}})",
+      "usedByAgentsDescription": "Agents that use this collection use all of its skills.",
+      "skillsTitle_one": "Skills ({{count}})",
+      "skillsTitle_other": "Skills ({{count}})",
+      "noSkills": "This skill collection has no skills.",
+      "model": "Model"
     },
     "execution": {
       "unavailableDescription": "Migration information could not be loaded. Try again or contact an administrator.",
