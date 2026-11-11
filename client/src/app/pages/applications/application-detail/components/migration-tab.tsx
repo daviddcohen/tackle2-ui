@@ -57,6 +57,8 @@ import { DecoratedApplication } from "../../useDecoratedApplications";
 /** Section ids the next action moves focus to when it is on this tab. */
 const sectionIds: Partial<Record<MigrationNextActionKey, string>> = {
   resolve: "application-migration-preflight",
+  review: "application-migration-attention",
+  correct: "application-migration-attention",
 };
 
 interface MigrationTabProps {
@@ -140,7 +142,9 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   const failedStage = migration.stages.find(
     (stage) => stage.phase === "Failed"
   );
-  const showsAttention = planRun != null && getStageAttention(planRun) != null;
+  // The alert shows the failure's summary, so the Stages table leaves it out.
+  const alertShowsFailure =
+    planRun != null && getStageAttention(planRun)?.kind === "failed";
   const focusSection = () => {
     const id = sectionIds[nextAction.key];
     const section = id != null ? document.getElementById(id) : null;
@@ -151,26 +155,31 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   return (
     <DrawerTabContent>
       <Stack hasGutter>
-        {showsAttention && planRun != null && (
-          <StackItem>
-            <StageAttentionAlert
-              surface="application"
-              planRun={planRun}
-              reviewStageTo={(stageRun) =>
-                linkTo(
-                  generatePath(DevPaths.stageRunDetails, {
-                    runId: planRun.id,
-                    stageId: stageRun.stageId,
-                  })
-                )
-              }
-              onApprove={canManageRun ? decide("approve") : undefined}
-              onReject={canManageRun ? decide("reject") : undefined}
-              isDeciding={resolveRequest.isPending}
-              onRunMigrationPlan={runMigrationPlan.open}
-              failureDetails={failedStage}
-            />
-          </StackItem>
+        {planRun != null && (
+          <StageAttentionAlert
+            surface="application"
+            planRun={planRun}
+            reviewStageTo={(stageRun) =>
+              linkTo(
+                generatePath(DevPaths.stageRunDetails, {
+                  runId: planRun.id,
+                  stageId: stageRun.stageId,
+                })
+              )
+            }
+            onApprove={canManageRun ? decide("approve") : undefined}
+            onReject={canManageRun ? decide("reject") : undefined}
+            isDeciding={resolveRequest.isPending}
+            onRunMigrationPlan={runMigrationPlan.open}
+            failureDetails={failedStage}
+            wrapper={(alert) => (
+              // The next action ("Review pending request", "Review failure
+              // and retry") moves focus here.
+              <StackItem id={sectionIds.review} tabIndex={-1}>
+                {alert}
+              </StackItem>
+            )}
+          />
         )}
         <StackItem>
           <DescriptionList isHorizontal isCompact>
@@ -322,7 +331,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
             </Title>
             <StageRunsTable
               stages={
-                showsAttention && failedStage != null
+                alertShowsFailure && failedStage != null
                   ? // The alert already shows the failure's summary.
                     migration.stages.map((stage) =>
                       stage === failedStage
