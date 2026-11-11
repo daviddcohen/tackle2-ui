@@ -1,5 +1,6 @@
 import * as React from "react";
 import { AxiosError } from "axios";
+import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown, { Components } from "react-markdown";
 import {
@@ -171,7 +172,9 @@ const SkillDetail: React.FC = () => {
       title: t("agentic.skill.deleted"),
       variant: "success",
     });
-    history.push(DevPaths.skills);
+    // Leave before the invalidated queries re-render this page, which would
+    // refetch the deleted skill and log a 404.
+    flushSync(() => history.push(DevPaths.skills));
   };
   const onDeleteError = (error: AxiosError) => {
     pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
