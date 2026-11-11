@@ -27,6 +27,7 @@ import {
   TagIcon,
   WarningTriangleIcon,
 } from "@patternfly/react-icons";
+import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DEFAULT_REFETCH_INTERVAL, isAgenticEnabled } from "@app/Constants";
@@ -93,6 +94,7 @@ import {
   tasksReadScopes,
   tasksWriteScopes,
 } from "@app/scopes";
+import { disabledActionProps } from "@app/utils/agentic";
 import {
   addSeparatorForOverflow,
   filterAndAddSeparator,
@@ -821,10 +823,7 @@ export const ApplicationsTable: FC = () => {
     // bare status word.
     const reason =
       migration.preflightReason || t("agentic.execution.readyOnly");
-    return {
-      isAriaDisabled: true,
-      tooltipProps: { content: reason, position: "left" as const },
-    };
+    return disabledActionProps(reason, "left");
   };
 
   const clearFilters = () => {
@@ -1140,7 +1139,7 @@ export const ApplicationsTable: FC = () => {
           <Alert
             isInline
             variant="warning"
-            className="pf-v6-u-mb-md"
+            className={spacing.mbMd}
             title={t("agentic.execution.statusUnavailable")}
           />
         )}
@@ -1148,7 +1147,7 @@ export const ApplicationsTable: FC = () => {
           <Alert
             isInline
             variant="warning"
-            className="pf-v6-u-mb-md"
+            className={spacing.mbMd}
             title={t("agentic.execution.needAction", {
               count: actionRequiredCount,
             })}
