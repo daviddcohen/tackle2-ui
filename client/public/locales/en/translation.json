@@ -1466,16 +1466,8 @@
       "stagesToReview": "Stages to review"
     },
     "skill": {
-      "agentAssociationsNotPermitted": "Associating this Skill with Agents requires permission to edit Agents.",
-      "agentAssociationsReadOnly": "Associated Agents: {{agents}}. Changing Agent associations requires permission to edit Agents.",
-      "associatedTo": "Associated to",
-      "associationHelp": "Associate this Skill with one or more Agents, archetypes, target profiles, or applications.",
-      "associationSelect": "Skill associations select dropdown",
       "branch": "Branch",
-      "branchPlaceholder": "main",
       "content": "Content",
-      "contentAriaLabel": "Skill content in markdown",
-      "contentPlaceholder": "Write migration knowledge in markdown...",
       "create": "Create skill",
       "created": "Skill created",
       "createFailed": "Skill could not be created",
@@ -1483,7 +1475,7 @@
       "deleteDescription": "{{name}} will be deleted. It cannot be associated or added to a skill collection again. This action cannot be undone.",
       "deleteTitle": "Delete skill?",
       "description": "Skills give agents migration knowledge. Associate a skill with an agent, archetype, target profile or application to use it.",
-      "edit": "Edit Skill",
+      "edit": "Edit skill",
       "emptyDescription": "Create a skill, or import one from a Markdown file.",
       "emptyDescriptionReadOnly": "Skills appear here once they are created.",
       "emptyTitle": "No skills yet",
@@ -1491,16 +1483,11 @@
       "filterBySourceType": "Filter by source",
       "imageReference": "Image reference",
       "image": "Image",
-      "imagePlaceholder": "quay.io/org/skill-name:latest",
       "notUsed": "Not associated",
       "path": "Path",
-      "pathHelp": "Path within the repository to the Skill file or directory.",
-      "pathPlaceholder": "/",
-      "repositoryPlaceholder": "https://github.com/org/repo",
+      "pathHelp": "Path within the repository to the skill file or directory.",
       "repositoryUrl": "Repository URL",
-      "selectAssociations": "Select associations...",
       "sourceType": "Source type",
-      "sourceTypeSelection": "Skill source type selection",
       "sourceTypes": {
         "git": "Git",
         "inline": "Inline",
@@ -1510,14 +1497,14 @@
       "updated": "Skill updated",
       "updateFailed": "Skill could not be updated",
       "validation": {
-        "contentRequired": "Content is required for inline Skills.",
+        "contentRequired": "Content is required for inline skills.",
         "descriptionMaximum": "Description must be at most 500 characters.",
-        "imageRequired": "Image reference is required for OCI Skills.",
-        "nameDuplicate": "A Skill with this name already exists.",
+        "imageRequired": "Image reference is required for OCI image skills.",
+        "nameDuplicate": "A skill with this name already exists.",
         "nameMaximum": "Name must be at most 120 characters.",
         "nameMinimum": "Name must be at least 3 characters.",
         "nameRequired": "Name is required.",
-        "repositoryRequired": "Repository URL is required for Git Skills.",
+        "repositoryRequired": "Repository URL is required for Git skills.",
         "repositoryUrl": "Enter a valid Git repository URL (https, ssh or git)."
       },
       "repository": "Repository",
@@ -1544,7 +1531,41 @@
       "deleteBlockedCollections_one": "This skill is in {{count}} skill collection. Remove it from that skill collection before deleting it.",
       "deleteBlockedCollections_other": "This skill is in {{count}} skill collections. Remove it from them before deleting it.",
       "deleteBlockedBoth": "This skill has {{associations}} and is in {{collections}}. Remove them before deleting it.",
-      "toolbarActions": "Skill actions"
+      "toolbarActions": "Skill actions",
+      "formDescription": "A skill gives agents migration knowledge from inline Markdown, a Git repository or an OCI image.",
+      "sourceTypeHelp": "Inline: write the skill here. Git: load it from a repository path. OCI image: load it from a container image.",
+      "contentHelp": "Markdown. Agents read it as instructions.",
+      "repositoryHelp": "For example, https://github.com/org/repo.",
+      "imageHelp": "For example, quay.io/org/skill-name:latest.",
+      "associationsDescription": "Where this skill is used. Each field says when agents get it.",
+      "associationFields": {
+        "agents": {
+          "label": "Agents",
+          "helper": "These agents use this skill in every stage they run. This also updates each agent's skills.",
+          "placeholder": "Select agents"
+        },
+        "archetypes": {
+          "label": "Archetypes",
+          "helper": "Used when an application in these archetypes is migrated.",
+          "placeholder": "Select archetypes"
+        },
+        "targetProfiles": {
+          "label": "Target profiles",
+          "helper": "Used when a migration plan for these target profiles runs.",
+          "placeholder": "Select target profiles"
+        },
+        "applications": {
+          "label": "Applications",
+          "helper": "Used when these applications are migrated.",
+          "placeholder": "Select applications"
+        }
+      },
+      "agentsReadOnly": "You need permission to edit agents to change this field.",
+      "editWarning": {
+        "both": "This skill has {{associations}} and is in {{collections}}. Changes apply wherever it is used.",
+        "associationsOnly": "This skill has {{associations}}. Changes apply wherever it is used.",
+        "collectionsOnly": "This skill is in {{collections}}. Changes apply wherever it is used."
+      }
     },
     "skillDetail": {
       "tabDetails": "Details",

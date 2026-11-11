@@ -34,7 +34,7 @@ const openSkills = async (
 const createInlineSkill = async (page: Page, name: string) => {
   await page.getByRole("button", { name: "Create skill" }).click();
   await field(dialog(page), "Name").fill(name);
-  await field(dialog(page), "Skill content").fill(`# ${name}\nGuidance.`);
+  await field(dialog(page), "Content").fill(`# ${name}\nGuidance.`);
   await dialog(page).getByRole("button", { name: "Create" }).click();
   await expect(toast(page, "Skill created")).toBeVisible();
 };
@@ -191,11 +191,11 @@ test.describe("Skill form", () => {
 
   test("source type switches conditional required fields", async ({ page }) => {
     const create = dialog(page).getByRole("button", { name: "Create" });
-    await expect(field(dialog(page), "Skill content")).toBeVisible();
+    await expect(field(dialog(page), "Content")).toBeVisible();
     await expect(create).toBeDisabled();
 
     await sourceButton(page, "Git").click();
-    await expect(field(dialog(page), "Skill content")).toHaveCount(0);
+    await expect(field(dialog(page), "Content")).toHaveCount(0);
     await expect(field(dialog(page), "Branch")).toHaveValue("main");
     await expect(field(dialog(page), "Path")).toHaveValue("/");
     await expect(create).toBeDisabled();
@@ -234,15 +234,17 @@ test.describe("Skill form", () => {
   }) => {
     await sourceButton(page, "Git").click();
     await sourceButton(page, "Inline").click();
-    await expect(field(dialog(page), "Skill content")).toBeVisible();
+    await expect(field(dialog(page), "Content")).toBeVisible();
     expectHealthy(diagnostics);
   });
 
   test("created inline skill associated to an agent is offered in the agent form", async ({
     page,
   }) => {
-    await field(dialog(page), "Skill content").fill("# QA Skill\nGuidance.");
-    await pickMulti(page, "skill-association-select", ["Test Runner"]);
+    await field(dialog(page), "Content").fill("# QA Skill\nGuidance.");
+    // The Associations group is collapsed while the skill has none.
+    await dialog(page).getByRole("button", { name: "Associations" }).click();
+    await pickMulti(page, "skill-agents", ["Test Runner"]);
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill created")).toBeVisible();
     await filterByName(page, "QA Skill");

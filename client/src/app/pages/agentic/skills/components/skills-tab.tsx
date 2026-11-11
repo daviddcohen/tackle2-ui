@@ -6,9 +6,6 @@ import {
   Button,
   ButtonVariant,
   DropdownItem,
-  Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Toolbar,
   ToolbarContent,
@@ -61,7 +58,7 @@ import { getSkillDeleteBlockedReason } from "../skill-usage";
 
 import { CountLink } from "./count-link";
 import { ImportSkillModal } from "./import-skill-modal";
-import { SkillForm } from "./skill-form";
+import { SkillModal } from "./skill-form";
 
 const SOURCE_TYPES: SkillSourceType[] = ["inline", "git", "oci"];
 
@@ -84,7 +81,7 @@ export const SkillsTab: React.FC = () => {
       ? undefined
       : skillCollections;
 
-  const [formModalState, setFormModalState, formKey] = useFormModalState<
+  const [formModalState, setFormModalState] = useFormModalState<
     "create" | Skill
   >();
   const skillToUpdate = formModalState !== "create" ? formModalState : null;
@@ -406,25 +403,11 @@ export const SkillsTab: React.FC = () => {
         </div>
       </ConditionalRender>
 
-      <Modal
-        id="create-edit-skill-modal"
-        variant="medium"
+      <SkillModal
         isOpen={formModalState !== null}
+        skill={skillToUpdate}
         onClose={closeFormModal}
-      >
-        <ModalHeader
-          title={
-            skillToUpdate ? t("agentic.skill.edit") : t("agentic.skill.create")
-          }
-        />
-        <ModalBody>
-          <SkillForm
-            key={formKey}
-            skill={skillToUpdate}
-            onClose={closeFormModal}
-          />
-        </ModalBody>
-      </Modal>
+      />
 
       <ImportSkillModal
         isOpen={isImportModalOpen}
