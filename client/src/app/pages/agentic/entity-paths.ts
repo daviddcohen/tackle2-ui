@@ -8,8 +8,14 @@ import { Archetype } from "@app/api/models";
 export const archetypePath = (id: number) =>
   `${DevPaths.archetypes}?${new URLSearchParams({ [`${TablePersistenceKeyPrefix.archetypes}:activeItem`]: String(id) })}`;
 
+/** An archetype's target profiles page, where a migration plan is assigned to a profile. */
+export const targetProfilesPath = (archetypeId: number) =>
+  generatePath(DevPaths.archetypeTargetProfiles, {
+    archetypeId: String(archetypeId),
+  });
+
 export const targetProfilePath = (archetypeId: number, profileId: number) =>
-  `${generatePath(DevPaths.archetypeTargetProfiles, { archetypeId: String(archetypeId) })}#target-profile-${profileId}`;
+  `${targetProfilesPath(archetypeId)}#target-profile-${profileId}`;
 
 /** Target profiles are owned by archetypes, so their route must include that owner. */
 export const skillAssociationPath = (
