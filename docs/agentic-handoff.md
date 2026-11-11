@@ -470,6 +470,7 @@ Not checked yet: approving through ACP needs `agentic.agentruns.acp:post` (`agen
 27. Run names are opaque. Only the fixtures embed the plan name in a run name ("Run #1 — Java EE to Quarkus"); the UI never relies on it and always reads the plan from `planId`/`planName` (guide 7.4).
 28. Stage output is shown verbatim, so mock copy shows through: the `awaitingStage` message in `execution.ts` says "…ready for architect review. Awaiting your approval to continue.", which names a persona and says "your approval" to people who may not be able to approve (guide 6.4). Suggested mock text: "Analysis complete. Migration proposal ready for review." In the failed scenario the stage `output` equals the last activity message, so the same sentence appears in the alert, the Activity table and the output block; real multi-line controller output does not repeat like this (the alert shows only its first line, the block is collapsed). The plan 1 "Migrate" instructions say "previous Stage" with a capital, and are rendered as written.
 29. `StageMessage` has no author: a `role: "user"` message reads "User" in the stage Activity table. A server that names the user would let the UI say who (or "You").
+30. Open question: how is "Review before start" (`preflight: "reviewRequired"`) resolved? The preflight dialog has no confirm action and the domain has no confirm endpoint, so such an application can only be excluded from a start today.
 
 ### Contract drift
 
