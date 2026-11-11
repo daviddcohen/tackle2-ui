@@ -165,11 +165,11 @@ test.describe("Migration next actions", () => {
     ).toBeChecked();
   });
 
-  for (const [scenario, label, title] of [
-    ["actionRequired", "Review pending request", /needs approval$/],
-    ["failed", "Review failure and retry", / failed$/],
+  for (const [scenario, title] of [
+    ["actionRequired", /needs approval$/],
+    ["failed", / failed$/],
   ] as const) {
-    test(`${label} on the Migration tab moves focus to the alert`, async ({
+    test(`${scenario}: the Migration tab leads with the attention alert`, async ({
       page,
     }) => {
       await page.goto(
@@ -178,16 +178,10 @@ test.describe("Migration next actions", () => {
           params: { tab: "migration" },
         })
       );
-      await page
-        .getByRole("main")
-        .getByRole("button", { name: label, exact: true })
-        .click();
-      const focused = page.locator(":focus");
-      await expect(focused).toHaveAttribute(
-        "id",
-        "application-migration-attention"
-      );
-      await expect(focused.getByRole("heading")).toHaveText(title);
+      // What needs the user comes first, so no link has to move focus to it.
+      await expect(
+        page.getByRole("tabpanel").getByRole("heading").first()
+      ).toHaveText(title);
     });
   }
 

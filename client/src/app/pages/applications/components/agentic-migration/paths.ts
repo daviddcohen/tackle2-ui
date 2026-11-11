@@ -14,14 +14,3 @@ export const applicationDetailsPath = (applicationId: number) =>
 
 export const planRunPath = (runId: EntityId) =>
   generatePath(DevPaths.planRunDetails, { runId });
-
-/**
- * Where a migration path is configured: an archetype's target profiles (where
- * a Plan is assigned), or the Plan list for an application without archetype.
- */
-export const migrationPathConfigurationPath = (archetypeId?: number) =>
-  archetypeId != null
-    ? generatePath(DevPaths.archetypeTargetProfiles, {
-        archetypeId: String(archetypeId),
-      })
-    : DevPaths.migrationPlans;

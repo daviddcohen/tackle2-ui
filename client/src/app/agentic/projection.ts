@@ -63,28 +63,6 @@ export const getMigrationDisplayStatus = (
   return "preflightReady";
 };
 
-export const getNextActionKey = (
-  status: ApplicationMigrationDisplayStatus
-): string => {
-  switch (status) {
-    case "notConfigured":
-      return "configure";
-    case "preflightReady":
-      return "start";
-    case "preflightBlocked":
-    case "reviewRequired":
-      return "resolve";
-    case "actionRequired":
-      return "review";
-    case "failed":
-      return "correct";
-    case "succeeded":
-      return "reviewResults";
-    default:
-      return "monitor";
-  }
-};
-
 /** A stage whose agent's model cannot be used yet, with what it resolved to. */
 export interface StageWithUnverifiedModel {
   stage: PlanStage;
