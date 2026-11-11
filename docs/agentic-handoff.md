@@ -78,6 +78,7 @@ Read this first. These four are product, UX or backend decisions, not wiring tas
   - `catalog.ts`: configuration resources (validation, duplicate names, in-use deletes, verification).
   - `execution.ts`: plan runs and the per-application migration view, derived from one run store. Runs progress on read (Pending 2 s, then 4 s per stage). The default execution policy is `interactive`: a started run stops at every stage with `requiresApproval` (status `AwaitingApproval`, application intervention `actionRequired`) until someone approves or rejects it; `PUT /execution-policy` with `unattended` lets new runs pass those gates.
   - Plan resolution (`resolvePlanFor`): an application's archetype + target profile resolve to the Plan whose `migrationPath.isDefault` covers that profile, otherwise the application is not configured. The application's target profile is fixture data (`portfolio.ts` `APPLICATION_TARGET_PROFILE_IDS`; the archetype's first profile otherwise). "Make default" (`PUT /archetypes/:id/target-profiles/:id/plan`) moves the default; the previous default keeps its migration path (its other profiles, or the same profile as a non-default Plan). Create/update return 409 for a second default Plan on a profile and 400 for a Plan without stages or a path without target profiles.
+  - "Assigned" in the UI means exactly that default plan (addenda X11). Archetype surfaces (target profiles page, archetype drawer Target profiles tab, Archetypes list) show only the assigned plan of each profile, through one hook (`pages/archetypes/hooks/useTargetProfilePlans.ts`); plan surfaces list every target profile in the path and say when the plan is not assigned. "Assign migration plan" writes that default through `assignPlanToTargetProfile`.
   - `db.ts`: in-memory state cloned from `fixtures.ts` and `portfolio.ts`. A hard reload resets it.
   - `prototype-state.ts`: reads `protoScenario` and `protoStage` from the URL. Only the mocks read these.
 - The production Express server (`server/`) serves no agentic data. It proxies `/hub/*` (with WebSocket upgrade for `/hub/agentic/`) like upstream.
@@ -407,18 +408,18 @@ Hub role seed (`internal/auth/seed/roles.yaml`): admin has everything. Architect
 
 Scopes the prototype checks (`client/src/app/scopes.ts`):
 
-| Constant                           | Scopes                                                              | Used by                                                                                                                  |
-| ---------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `agenticConfigurationReadScopes`   | `agentic.workflows:get`, `agentic.agents:get`, `agentic.skills:get` | `SidebarApp.tsx`                                                                                                         |
-| `modelsWriteScopes`                | `agentic.gateways:post/put/delete`                                  | `models.tsx`                                                                                                             |
-| `providersWriteScopes`             | same as `modelsWriteScopes` (no Provider resource)                  | `providers.tsx`                                                                                                          |
-| `agentsWriteScopes`                | `agentic.agents:post/put/delete`                                    | `agents.tsx`, `agent-detail.tsx`, Agent associations in `skill-form.tsx` (they write `Agent.spec.skillCards`)            |
-| `plansWriteScopes`                 | `agentic.workflows:post/put/delete`                                 | `plans.tsx`, `plan-details.tsx`, Assign/Change Plan on `target-profiles-page.tsx`; inventory "Configure" link is removed |
-| `archetypesWriteScopes` (upstream) | `archetypes:put/post/delete`                                        | target profile create, edit and delete on `target-profiles-page.tsx`                                                     |
-| `skillsWriteScopes`                | `agentic.skills:post/put/delete`                                    | `skills.tsx`, `skill-detail.tsx`                                                                                         |
-| `skillCollectionsWriteScopes`      | `agentic.skillcollections:post/put/delete`                          | `skills.tsx`, `skill-collection-detail.tsx`                                                                              |
-| `agenticWorkflowRunsWriteScopes`   | `agentic.workflowruns:post`                                         | inventory start, Migration tab, plan run and stage run approval                                                          |
-| `agenticAgentRunsWriteScopes`      | `agentic.agentruns:post`                                            | agent test run (`agents.tsx`; independent of Agent write)                                                                |
+| Constant                           | Scopes                                                              | Used by                                                                                                                      |
+| ---------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `agenticConfigurationReadScopes`   | `agentic.workflows:get`, `agentic.agents:get`, `agentic.skills:get` | `SidebarApp.tsx`                                                                                                             |
+| `modelsWriteScopes`                | `agentic.gateways:post/put/delete`                                  | `models.tsx`                                                                                                                 |
+| `providersWriteScopes`             | same as `modelsWriteScopes` (no Provider resource)                  | `providers.tsx`                                                                                                              |
+| `agentsWriteScopes`                | `agentic.agents:post/put/delete`                                    | `agents.tsx`, `agent-detail.tsx`, Agent associations in `skill-form.tsx` (they write `Agent.spec.skillCards`)                |
+| `plansWriteScopes`                 | `agentic.workflows:post/put/delete`                                 | `plans.tsx`, `plan-details.tsx`, `assign-migration-plan-modal.tsx` on target profiles; inventory "Configure" link is removed |
+| `archetypesWriteScopes` (upstream) | `archetypes:put/post/delete`                                        | target profile create, edit and delete on `target-profiles-page.tsx`                                                         |
+| `skillsWriteScopes`                | `agentic.skills:post/put/delete`                                    | `skills.tsx`, `skill-detail.tsx`                                                                                             |
+| `skillCollectionsWriteScopes`      | `agentic.skillcollections:post/put/delete`                          | `skills.tsx`, `skill-collection-detail.tsx`                                                                                  |
+| `agenticWorkflowRunsWriteScopes`   | `agentic.workflowruns:post`                                         | inventory start, Migration tab, plan run and stage run approval                                                              |
+| `agenticAgentRunsWriteScopes`      | `agentic.agentruns:post`                                            | agent test run (`agents.tsx`; independent of Agent write)                                                                    |
 
 Not checked yet: approving through ACP needs `agentic.agentruns.acp:post` (`agenticAcpScopes`; the Hub mints the WebSocket nonce under it). Approval is gated on `agenticWorkflowRunsWriteScopes` today. The upstream console constants (`agenticAgentsWriteScopes`, `agenticAcpScopes`, ...) duplicate several prototype constants; keep one set when wiring.
 
@@ -500,7 +501,7 @@ Do these in order; each step leaves the app working.
    - application migrations: the inventory Migration column, attention alert and Run migration plan (`applications-table.tsx`), the Migration tab (`migration-tab.tsx`), the start dialog (`migration-preflight-modal.tsx`, `use-start-migrations.tsx`);
    - Providers and available models: Administration > Providers (`providers.tsx`, `provider-form.tsx`) and the Model form (`model-form.tsx`);
    - the organization default Model (`models.tsx`, "make default");
-   - Plan migration paths: Assign/Change Plan on `target-profiles-page.tsx`, the wizard's path step (`plan-wizard.tsx`), path columns and details in `plans.tsx`, `plan-details.tsx`, the Skill form's archetype and profile scopes;
+   - Plan migration paths: Assign/Change migration plan on the target profiles page (`assign-migration-plan-modal.tsx`), the wizard's path step (`plan-wizard.tsx`), path columns and details in `plans.tsx`, `plan-details.tsx`, the Skill form's archetype and profile scopes;
    - approvals (`plan-run-detail.tsx`, `stage-run-detail.tsx`, `migration-tab.tsx`) until step 7.
 
    Options:

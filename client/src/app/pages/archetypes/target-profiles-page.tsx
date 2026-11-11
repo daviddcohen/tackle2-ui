@@ -1,6 +1,6 @@
 import { useState } from "react";
 import * as React from "react";
-import { AxiosError, isAxiosError } from "axios";
+import { isAxiosError } from "axios";
 import { createPath, parsePath } from "history";
 import { useTranslation } from "react-i18next";
 import { useLocation, useParams } from "react-router-dom";
@@ -8,13 +8,6 @@ import {
   Alert,
   Button,
   ButtonVariant,
-  FormGroup,
-  FormSelect,
-  FormSelectOption,
-  Modal,
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
   PageSection,
   Toolbar,
   ToolbarContent,
@@ -38,12 +31,10 @@ import {
   isAgenticEnabled,
 } from "@app/Constants";
 import { ArchetypeTargetProfilesRoute, DevPaths } from "@app/Paths";
-import type { EntityId } from "@app/agentic";
 import type { TargetProfile } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
-import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
 import { ConditionalTableBody } from "@app/components/TableControls";
 import { LabelsFromItems } from "@app/components/labels/labels-from-items/labels-from-items";
@@ -51,18 +42,13 @@ import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { EntityDetailUnavailable } from "@app/pages/agentic/entity-detail";
 import { archetypePath } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import {
-  useAssignPlanToTargetProfileMutation,
-  useFetchSkills,
-} from "@app/queries/agentic";
+import { useFetchSkills } from "@app/queries/agentic";
 import { useFetchArchetypeById } from "@app/queries/archetypes";
 import { archetypesWriteScopes, plansWriteScopes } from "@app/scopes";
 import { disabledActionProps } from "@app/utils/agentic";
-import {
-  getAxiosErrorMessage,
-  openModalAfterMenuClose,
-} from "@app/utils/utils";
+import { openModalAfterMenuClose } from "@app/utils/utils";
 
+import { AssignMigrationPlanModal } from "./components/assign-migration-plan-modal";
 import { AssignedMigrationPlan } from "./components/assigned-migration-plan";
 import TargetProfileForm from "./components/target-profile-form";
 import { TargetProfileSkills } from "./components/target-profile-skills";
@@ -82,7 +68,6 @@ const drawerArchetypeId = (path: string | undefined) => {
 
 const TargetProfilesPage: React.FC = () => {
   const { t } = useTranslation();
-  const { pushNotification } = React.useContext(NotificationsContext);
   const location = useLocation();
   const { archetypeId } = useParams<ArchetypeTargetProfilesRoute>();
   // Target profiles are part of the archetype resource; assigning a plan
@@ -100,7 +85,6 @@ const TargetProfilesPage: React.FC = () => {
   const [profileForPlan, setProfileForPlan] = useState<TargetProfile | null>(
     null
   );
-  const [selectedPlanId, setSelectedPlanId] = useState<EntityId | null>(null);
 
   // Stop polling once the archetype cannot be read: a refetch of a query that
   // never had data resets it to loading and the page would flicker.
@@ -186,41 +170,6 @@ const TargetProfilesPage: React.FC = () => {
           association.resource.id === profile.id
       )
     );
-  const { mutateAsync: assignPlanToProfile, isPending: isAssigningPlan } =
-    useAssignPlanToTargetProfileMutation(
-      () => undefined,
-      (error: AxiosError) =>
-        pushNotification({
-          title: getAxiosErrorMessage(error),
-          variant: "danger",
-        })
-    );
-
-  const openPlanAssignment = (profile: TargetProfile) => {
-    setProfileForPlan(profile);
-    setSelectedPlanId(getAssignedPlan(profile.id)?.id ?? null);
-  };
-
-  const assignPlan = async () => {
-    if (!archetype || !profileForPlan || selectedPlanId == null) return;
-
-    try {
-      await assignPlanToProfile({
-        archetypeId: archetype.id,
-        targetProfileId: profileForPlan.id,
-        planId: selectedPlanId,
-      });
-      pushNotification({
-        title: t("agentic.plan.assignmentSaved"),
-        variant: "success",
-      });
-      setProfileForPlan(null);
-      setSelectedPlanId(null);
-    } catch {
-      return;
-    }
-  };
-
   const onAddProfile = (profile: TargetProfile) => {
     if (!archetype) return;
     addTargetProfile(archetype, profile);
@@ -363,7 +312,7 @@ const TargetProfilesPage: React.FC = () => {
                             : t("agentic.archetype.assignPlan"),
                           onClick: () =>
                             openModalAfterMenuClose(() =>
-                              openPlanAssignment(profile)
+                              setProfileForPlan(profile)
                             ),
                           ...disabledActionProps(
                             isPlansError
@@ -476,59 +425,18 @@ const TargetProfilesPage: React.FC = () => {
             onSave={(profile) => onEditProfile(profile)}
           />
 
-          <Modal
-            variant="small"
-            isOpen={profileForPlan != null}
-            onClose={() => setProfileForPlan(null)}
-          >
-            <ModalHeader
-              title={t("agentic.plan.assignPlan")}
-              description={t("agentic.plan.assignPlanDescription", {
-                archetype: archetype.name,
-                target: profileForPlan?.name,
-              })}
+          {profileForPlan && (
+            <AssignMigrationPlanModal
+              key={profileForPlan.id}
+              archetype={archetype}
+              profile={profileForPlan}
+              assignedPlan={getAssignedPlan(profileForPlan.id)}
+              eligiblePlans={eligibleMigrationPlans}
+              isPlansError={isPlansError}
+              linkTo={(pathname) => to(pathname)}
+              onClose={() => setProfileForPlan(null)}
             />
-            <ModalBody>
-              <FormGroup
-                label={t("agentic.plan.associatedPlan")}
-                fieldId="associated-plan-select"
-                isRequired
-              >
-                <FormSelect
-                  id="associated-plan-select"
-                  value={selectedPlanId ?? ""}
-                  onChange={(_event, value) => setSelectedPlanId(value || null)}
-                  aria-label={t("agentic.plan.associatedPlan")}
-                >
-                  <FormSelectOption
-                    value=""
-                    label={t("agentic.plan.selectPlan")}
-                    isDisabled
-                  />
-                  {eligibleMigrationPlans.map((plan) => (
-                    <FormSelectOption
-                      key={plan.id}
-                      value={plan.id.toString()}
-                      label={plan.name}
-                    />
-                  ))}
-                </FormSelect>
-              </FormGroup>
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                variant="primary"
-                onClick={assignPlan}
-                isDisabled={selectedPlanId == null || isAssigningPlan}
-                isLoading={isAssigningPlan}
-              >
-                {t("agentic.plan.saveAssignment")}
-              </Button>
-              <Button variant="link" onClick={() => setProfileForPlan(null)}>
-                {t("actions.cancel")}
-              </Button>
-            </ModalFooter>
-          </Modal>
+          )}
 
           {/* Delete Confirmation Modal */}
           <ConfirmDialog

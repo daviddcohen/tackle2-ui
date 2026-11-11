@@ -7,10 +7,12 @@ import { DevPaths } from "@app/Paths";
 import { MigrationPlan, Skill } from "@app/agentic";
 import { Archetype } from "@app/api/models";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
+import { NotificationsContext } from "@app/components/NotificationsContext";
 import { ARCHETYPE_QUERY_KEY } from "@app/queries/archetypes";
 import { archetypesWriteScopes, plansWriteScopes } from "@app/scopes";
 import {
   act,
+  createMockNotifications,
   render,
   screen,
   waitFor,
@@ -103,14 +105,27 @@ const serve = ({
     rest.get(AGENTIC_ENDPOINTS.skills, skillsResolver)
   );
 
-const renderPage = (path = "/archetypes/1/target-profiles") =>
+const renderPage = (
+  path = "/archetypes/1/target-profiles",
+  notifications = createMockNotifications()
+) =>
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <Route path={DevPaths.archetypeTargetProfiles}>
-        <TargetProfilesPage />
-      </Route>
-    </MemoryRouter>
+    <NotificationsContext.Provider value={notifications}>
+      <MemoryRouter initialEntries={[path]}>
+        <Route path={DevPaths.archetypeTargetProfiles}>
+          <TargetProfilesPage />
+        </Route>
+      </MemoryRouter>
+    </NotificationsContext.Provider>
   );
+
+const openRowAction = async (profile: string, action: string) => {
+  await userEvent.click(
+    within(await row(profile)).getByRole("button", { name: "Kebab toggle" })
+  );
+  await userEvent.click(await screen.findByRole("menuitem", { name: action }));
+  return screen.findByRole("dialog");
+};
 
 const row = async (name: string) =>
   (await screen.findByRole("cell", { name })).closest("tr") as HTMLElement;
@@ -439,4 +454,86 @@ describe("TargetProfilesPage", () => {
       screen.getByRole("button", { name: "Back to archetypes" })
     ).toBeInTheDocument();
   }, 20000);
+
+  describe("assign migration plan", () => {
+    const otherPlan: MigrationPlan = {
+      ...plans[0],
+      id: "3",
+      name: "Java EE lift and shift",
+      migrationPath: { ...plans[0].migrationPath!, isDefault: false },
+    };
+
+    it("changes the plan with Save, and says so", async () => {
+      const notifications = createMockNotifications();
+      const saved = jest.fn();
+      serve({
+        plansResolver: (_req, res, ctx) => res(ctx.json([...plans, otherPlan])),
+      });
+      server.use(
+        rest.put(
+          `${AGENTIC_ENDPOINTS.archetypes}/1/target-profiles/11/plan`,
+          async (req, res, ctx) => {
+            saved(await req.json());
+            return res(ctx.status(204));
+          }
+        )
+      );
+      renderPage(undefined, notifications);
+
+      const dialog = await openRowAction(
+        "Quarkus 3.x",
+        "Change migration plan"
+      );
+      expect(
+        within(dialog).getByRole("heading", { name: "Change migration plan" })
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(
+          "Applications in Java EE Application that target Quarkus 3.x are migrated with this plan."
+        )
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(
+          "Only plans for Java EE Application are listed."
+        )
+      ).toBeInTheDocument();
+      const save = within(dialog).getByRole("button", { name: "Save" });
+      expect(save).toBeDisabled();
+
+      await userEvent.selectOptions(
+        within(dialog).getByRole("combobox", { name: "Migration plan" }),
+        "3"
+      );
+      await userEvent.click(save);
+
+      await waitFor(() => expect(saved).toHaveBeenCalledWith({ planId: "3" }));
+      await waitFor(() =>
+        expect(notifications.pushNotification).toHaveBeenCalledWith({
+          title: "Migration plan assigned",
+          variant: "success",
+        })
+      );
+    });
+
+    it("offers the way to plans and only Close when none exist", async () => {
+      serve({ plansResolver: (_req, res, ctx) => res(ctx.json([])) });
+      renderPage();
+
+      const dialog = await openRowAction(
+        "Quarkus 3.x",
+        "Assign migration plan"
+      );
+      expect(
+        within(dialog).getByText("No migration plans for Java EE Application")
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByRole("link", { name: "Go to migration plans" })
+      ).toHaveAttribute("href", "/migration-plans");
+      expect(within(dialog).queryByRole("button", { name: "Save" })).toBeNull();
+      // The footer holds one secondary Close (amendment 2).
+      expect(within(dialog).getByText("Close").closest("button")).toHaveClass(
+        "pf-m-secondary"
+      );
+    });
+  });
 });
