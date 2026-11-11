@@ -435,6 +435,13 @@ Not checked yet: approving through ACP needs `agentic.agentruns.acp:post` (`agen
 5. **Organization default Model** (`isOrganizationDefault`, `setDefaultModel`).
 6. **Execution policy** (org-wide unattended / interactive). The controller only has per-stage / per-run `execution.mode`.
 7. **Hub-scope Skill associations** (archetype, target profile, application) and effective-skill provenance.
+   `EffectiveSkillAssociation` carries only `scope` and `scopeName`, no source id (design question Q7), so a
+   source cannot link and two target profiles with the same name read the same: on the skill page, "Target
+   profile: OpenShift lift and shift" appears on two plans for two different profiles. The UI renders
+   `scopeName` verbatim and never looks the archetype up by name; the "Associated with" table, which has
+   `SkillAssociation.resource.id`, names each target profile with its archetype. The skill page's "Used in
+   migration plans" rows come from `MigrationPlan.effectiveSkills` only, without collection skills (Q1); when the
+   plan projection includes them, the rows change by themselves and the section sentence drops "collections and".
 8. **Run results** (`ApplicationMigrationResult`, stage `commits`). Part of this is in ACP plan-entry `_meta` (`konveyor.io/plan`, see `acp.ts` `PlanRungMeta`).
 9. **Descriptions and display names** for Agent, Gateway, AgentWorkflow and SkillCollection (no CRD field; the forms have free-text names such as "Java EE to Quarkus"). Options: slug names (`toResourceName`) plus a display-name annotation, or new spec fields.
 10. **Rename**: `metadata.name` is immutable and the Hub copies only `spec` on PUT, so editing a name is impossible except a SkillCard's `displayName`. The forms allow renaming; the adapters refuse it (`assertNotRenamed`). See [C](#c-names-are-immutable).
