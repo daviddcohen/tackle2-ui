@@ -208,7 +208,7 @@
       "updateStakeholderGroup": "Update stakeholder group",
       "updateTag": "Update tag",
       "updateTagCategory": "Update tag category",
-      "updateTargetProfile": "Update target profile"
+      "updateTargetProfile": "Edit target profile"
     }
   },
   "efforts": {
@@ -262,8 +262,8 @@
     "editArchetypeReviewConfirmation": "This archetype has already been reviewed. Do you want to continue?",
     "errorFetchingGenerators": "Error fetching generators",
     "errorReadingFile": "Error reading file",
-    "generatorsAvailable": "Available Generators",
-    "generatorsChosen": "Chosen Generators",
+    "generatorsAvailable": "Available",
+    "generatorsChosen": "Chosen",
     "importErrorCheckDocumentation": "For status Error imports, check the documentation to ensure your file is structured correctly.",
     "invalidQuestionnaireImported": "Invalid questionnaire error: {{error}}",
     "inheritedAssessmentTooltip_one": "This application is inheriting an assessment from an archetype.",
@@ -1892,6 +1892,9 @@
     "archetype": {
       "agenticDataUnavailableBody": "Assignments shown here may be incomplete. Reload the page to try again.",
       "agenticDataUnavailableTitle": "Migration plans and skills could not be loaded",
+      "analysisProfileHelp": "The analysis profile used when applications are analyzed for this target.",
+      "analysisProfileHelpLabel": "More information about analysis profile",
+      "analysisProfilePlaceholder": "Select an analysis profile",
       "assignPlan": "Assign migration plan",
       "assignPlanDescription": "Applications in {{archetype}} that target {{profile}} are migrated with this plan.",
       "assignPlanHelper": "Only plans for {{archetype}} are listed.",
@@ -1899,6 +1902,8 @@
       "backToArchetypes": "Back to archetypes",
       "changePlan": "Change migration plan",
       "deleteBlocked": "{{plan}} is assigned to this target profile. Edit {{plan}} to use a different target profile before deleting it.",
+      "generatorsHelp": "Assets generated for the target platform, such as container build files and OpenShift manifests.",
+      "generatorsHelpLabel": "More information about generators",
       "goToPlans": "Go to migration plans",
       "goToSkills": "Go to skills",
       "noPlansBody": "Create a migration plan for this archetype, then assign it to {{profile}}.",
@@ -1924,6 +1929,7 @@
       "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications.",
       "targetProfileCount_one": "{{count}} target profile",
       "targetProfileCount_other": "{{count}} target profiles",
+      "targetProfileFormDescription": "A target profile is where applications in this archetype are going. After you create it, assign a migration plan to it.",
       "targetProfilesDescription": "A target profile is where applications in this archetype are going. Assign a migration plan to each profile.",
       "targetProfilesDescriptionWithoutPlans": "A target profile is where applications in this archetype are going.",
       "targetProfilesTabDescription": "Applications in this archetype are migrated with the plan assigned to their target profile."
