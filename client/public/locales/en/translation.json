@@ -1457,7 +1457,6 @@
       "filterBySourceType": "Filter by source",
       "imageReference": "Image reference",
       "image": "Image",
-      "notUsed": "Not associated",
       "path": "Path",
       "pathHelp": "Path within the repository to the skill file or directory.",
       "repositoryUrl": "Repository URL",
