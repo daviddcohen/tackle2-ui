@@ -10,6 +10,7 @@ import {
   currentCrumb,
   expect,
   fixtureGraph,
+  main,
   personaSelect,
   protoUrl,
   scenarioSelect,
@@ -328,16 +329,19 @@ test("Archetype application counts apply their filter when Inventory is an ances
   await expect(breadcrumb(page)).toHaveCount(0);
 });
 
-test("View applications applies the Plan filter when returning to an ancestor inventory", async ({
+test("The applications count applies the Plan filter when returning to an ancestor inventory", async ({
   page,
 }) => {
   await page.goto(view("/applications"));
   await page.locator('main a[href="/applications/1"]').first().click();
   await page.getByRole("tab", { name: "Plan runs", exact: true }).click();
   await page.locator('main a[href^="/migration-plans/1"]').first().click();
-  await page.getByRole("button", { name: /^View \d+ applications$/ }).click();
+  await main(page)
+    .locator("dl")
+    .getByRole("link", { name: /^\d+ applications?$/ })
+    .click();
   // The inventory is filtered to the applications whose migration uses the
-  // Plan, the same set the button counts.
+  // Plan, the same set the link counts.
   await expect(page).toHaveURL(
     (url) =>
       url.pathname === "/applications" &&

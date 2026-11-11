@@ -88,7 +88,7 @@ test.describe("Plan wizard", () => {
     await dialog.getByRole("button", { name: "Add Stage" }).click();
     await fillStage(page, dialog, 2, "Stage C", "Build Validator");
     await dialog
-      .getByRole("checkbox", { name: "Requires approval before proceeding" })
+      .getByRole("checkbox", { name: "Requires approval" })
       .nth(2)
       .check();
 
@@ -103,9 +103,7 @@ test.describe("Plan wizard", () => {
     await dialog.getByRole("button", { name: "Remove Stage A" }).click();
     expect(await stageNames(dialog)).toEqual(["Stage C", "Stage B"]);
     await expect(
-      dialog
-        .getByRole("checkbox", { name: "Requires approval before proceeding" })
-        .first()
+      dialog.getByRole("checkbox", { name: "Requires approval" }).first()
     ).toBeChecked();
     await expect(next).toBeEnabled();
     await next.click();
@@ -161,7 +159,8 @@ test.describe("Plan wizard", () => {
 
   test("edit plan pre-fills every step and saves", async ({ page }) => {
     await page.goto(protoUrl("/migration-plans/2", { scenario: "configured" }));
-    await page.getByRole("button", { name: "Edit Plan" }).click();
+    await page.getByRole("button", { name: "Actions" }).click();
+    await page.getByRole("menuitem", { name: "Edit" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("textbox", { name: /^Name/ })).toHaveValue(
       "Spring Boot to Quarkus"

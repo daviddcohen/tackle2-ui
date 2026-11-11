@@ -1,5 +1,4 @@
 import * as React from "react";
-import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
@@ -30,10 +29,8 @@ import { MigrationPlan } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
-import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
-import { NotificationsContext } from "@app/components/NotificationsContext";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -42,16 +39,15 @@ import {
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
-import {
-  useDeleteMigrationPlanMutation,
-  useFetchMigrationPlans,
-} from "@app/queries/agentic";
+import { useFetchMigrationPlans } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
-import {
-  getAxiosErrorMessage,
-  openModalAfterMenuClose,
-} from "@app/utils/utils";
+import { disabledActionProps } from "@app/utils/agentic";
+import { openModalAfterMenuClose } from "@app/utils/utils";
 
+import {
+  getPlanDeleteBlocker,
+  useDeletePlanDialog,
+} from "./components/plan-delete";
 import { PlanWizard } from "./plan-wizard/plan-wizard";
 
 const MigrationPlansPage: React.FC = () => {
@@ -59,34 +55,12 @@ const MigrationPlansPage: React.FC = () => {
   const { to } = useBreadcrumbs(t("sidebar.plans"), []);
   const hasManagePlansScope = useHasSomeScopes(plansWriteScopes);
   const canManagePlans = hasManagePlansScope;
-  const { pushNotification } = React.useContext(NotificationsContext);
 
-  const [isConfirmDialogOpen, setIsConfirmDialogOpen] =
-    React.useState<boolean>(false);
-  const [planToDelete, setPlanToDelete] = React.useState<MigrationPlan>();
+  const { requestDelete, dialog: deleteDialog } = useDeletePlanDialog();
 
   const [isWizardOpen, setIsWizardOpen] = React.useState(false);
   const [planToEdit, setPlanToEdit] = React.useState<MigrationPlan | null>(
     null
-  );
-
-  const onDeleteSuccess = () => {
-    pushNotification({
-      title: t("agentic.plan.deleted"),
-      variant: "success",
-    });
-  };
-
-  const onDeleteError = (error: AxiosError) => {
-    pushNotification({
-      title: getAxiosErrorMessage(error),
-      variant: "danger",
-    });
-  };
-
-  const { mutate: deletePlan } = useDeleteMigrationPlanMutation(
-    onDeleteSuccess,
-    onDeleteError
   );
 
   const { migrationPlans, isFetching, fetchError, refetch } =
@@ -143,25 +117,6 @@ const MigrationPlansPage: React.FC = () => {
     },
     expansionDerivedState: { isCellExpanded },
   } = tableControls;
-
-  /** Why the Plan cannot be deleted, or undefined when it can. */
-  const getDeleteBlocker = (plan: MigrationPlan) => {
-    if ((plan.runCount ?? 0) > 0) {
-      return t("agentic.plan.deleteUsedByRuns", { count: plan.runCount });
-    }
-    if (
-      (plan.applicationImpact?.matching ?? 0) > 0 ||
-      plan.migrationPath?.isDefault === true
-    ) {
-      return t("agentic.plan.deleteInUse");
-    }
-    return undefined;
-  };
-
-  const deleteRow = (row: MigrationPlan) => {
-    setPlanToDelete(row);
-    setIsConfirmDialogOpen(true);
-  };
 
   const closeWizard = () => {
     setIsWizardOpen(false);
@@ -321,17 +276,14 @@ const MigrationPlansPage: React.FC = () => {
                                   title: t("actions.delete"),
                                   onClick: () =>
                                     openModalAfterMenuClose(() =>
-                                      deleteRow(plan)
+                                      requestDelete(plan)
                                     ),
-                                  isDanger: true,
-                                  isAriaDisabled:
-                                    getDeleteBlocker(plan) != null,
-                                  tooltipProps:
-                                    getDeleteBlocker(plan) != null
-                                      ? {
-                                          content: getDeleteBlocker(plan),
-                                        }
-                                      : undefined,
+                                  isDanger:
+                                    getPlanDeleteBlocker(plan, t) == null,
+                                  ...disabledActionProps(
+                                    getPlanDeleteBlocker(plan, t),
+                                    "left"
+                                  ),
                                 },
                               ]}
                             />
@@ -358,28 +310,7 @@ const MigrationPlansPage: React.FC = () => {
         onClose={closeWizard}
       />
 
-      {isConfirmDialogOpen && (
-        <ConfirmDialog
-          title={t("agentic.plan.deleteTitle", {
-            plan: planToDelete?.name,
-          })}
-          titleIconVariant="warning"
-          message={t("agentic.plan.deleteDescription")}
-          isOpen={true}
-          confirmBtnVariant={ButtonVariant.danger}
-          confirmBtnLabel={t("actions.delete")}
-          cancelBtnLabel={t("actions.cancel")}
-          onCancel={() => setIsConfirmDialogOpen(false)}
-          onClose={() => setIsConfirmDialogOpen(false)}
-          onConfirm={() => {
-            if (planToDelete) {
-              deletePlan(planToDelete.id);
-              setPlanToDelete(undefined);
-            }
-            setIsConfirmDialogOpen(false);
-          }}
-        />
-      )}
+      {deleteDialog}
     </>
   );
 };
