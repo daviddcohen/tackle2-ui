@@ -22,6 +22,9 @@ const config: JestConfigWithTsJest = {
     "@patternfly/react-icons": "<rootDir>/__mocks__/named-components-stub.js",
     "@patternfly/react-icons/dist/esm/icons/":
       "<rootDir>/__mocks__/fileMock.js",
+    // deep imports of PF internals (ControlledFormFieldGroupExpandable): use the CommonJS build
+    "^@patternfly/react-core/dist/esm/(.*)$":
+      "@patternfly/react-core/dist/js/$1",
 
     // other mocks
     "react-i18next": "<rootDir>/__mocks__/react-i18next.js",
