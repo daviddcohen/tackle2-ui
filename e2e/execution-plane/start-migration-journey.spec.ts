@@ -22,9 +22,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
-    await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       /^Run #\d+ — /
@@ -51,9 +49,7 @@ test.describe("Start migration journey", () => {
     await dialog
       .getByRole("textbox", { name: /Target branch/ })
       .fill("feature/e2e-branch");
-    await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("main").locator("dl").first()).toContainText(
       "feature/e2e-branch"
@@ -64,22 +60,22 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
-    await dialog.getByLabel("Override with a specific Plan").check();
-    await dialog.getByRole("button", { name: "Plan override" }).click();
+    await dialog
+      .getByLabel("Use one migration plan for all applications")
+      .check();
+    await dialog.getByRole("button", { name: "Migration plan to run" }).click();
     await pickMenuOption(page, "Node.js runtime modernization");
     await expect(
       dialog.getByRole("row", { name: /Customer Management/ })
     ).toContainText("Node.js runtime modernization");
-    await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "Node.js runtime modernization"
     );
   });
 
-  // Regression guard: with "Use recommended Plan", each app resolves to its own Plan but the mock creates a
+  // Regression guard: with "Use each application's migration plan", each app resolves to its own Plan but the mock creates a
   // single PlanRun for the first Plan whose archetype matches ANY selected app.
   test("recommended Plan run matches the Plan resolved in preflight", async ({
     page,
@@ -90,9 +86,7 @@ test.describe("Start migration journey", () => {
     await expect(
       dialog.getByRole("row", { name: /Customer Management/ })
     ).toContainText("Java EE lift and shift");
-    await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "Java EE lift and shift"
@@ -107,9 +101,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
-    await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await page
       .getByRole("navigation", { name: "Breadcrumb" })
@@ -131,9 +123,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
-    await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Run #/);
     const title = await page.getByRole("heading", { level: 1 }).innerText();
@@ -158,9 +148,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
-    await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     const status = page.getByRole("main").locator(AGENTIC_STATUS).first();
     const approve = approveButton(page);

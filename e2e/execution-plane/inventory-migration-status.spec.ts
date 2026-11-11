@@ -318,7 +318,11 @@ test.describe("Preflight modal", () => {
       "Inventory Service",
     ]);
     await expect(dialog).toContainText(
-      "Review the resolved Plan and readiness for 3 selected applications."
+      "Starts migrating the selected applications. Each application is checked before it starts."
+    );
+    // The readiness table comes first, with its count as the caption.
+    await expect(dialog.locator("caption")).toHaveText(
+      "1 of 3 applications are ready. Only ready applications start."
     );
     await expect(
       dialog.getByRole("row", { name: /Advisor Workbench API/ })
@@ -333,14 +337,13 @@ test.describe("Preflight modal", () => {
       dialog.getByRole("row", { name: /Inventory Service/ })
     ).toContainText("Review before start");
     await expect(
-      dialog.getByText("2 applications will not start")
-    ).toBeVisible();
-    await expect(
-      dialog.getByRole("button", { name: "Start 1 Ready Application" })
+      dialog.getByRole("button", { name: "Run on 1 application" })
     ).toBeEnabled();
   });
 
-  test("all-blocked selection cannot be started", async ({ page }) => {
+  test("all-blocked selection cannot be started: it says why and offers only Close", async ({
+    page,
+  }) => {
     await page.goto(
       protoUrl("/applications", { scenario: "partialConfiguration" })
     );
@@ -350,23 +353,39 @@ test.describe("Preflight modal", () => {
       "Advisor Workbench API",
     ]);
     await expect(
-      dialog.getByRole("button", { name: "Start 0 Ready Applications" })
-    ).toBeDisabled();
+      dialog.getByRole("heading", {
+        name: /None of the selected applications can start/,
+      })
+    ).toBeVisible();
+    await expect(dialog.locator("caption")).toHaveText(
+      "0 of 2 applications are ready."
+    );
+    await expect(dialog.getByRole("button", { name: /^Run on/ })).toHaveCount(
+      0
+    );
+    await expect(dialog.getByRole("radio")).toHaveCount(0);
+    // The footer's only button (the header has its own close icon).
+    const footer = dialog.locator(".pf-v6-c-modal-box__footer");
+    await expect(footer.getByRole("button")).toHaveCount(1);
+    await footer.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).toBeHidden();
   });
 
-  test("form validation: override requires a Plan and the target branch is required", async ({
+  test("form validation: one plan for all requires a plan and the target branch is required", async ({
     page,
   }) => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
     const start = dialog.getByRole("button", {
-      name: "Start 1 Ready Application",
+      name: "Run on 1 application",
     });
     await expect(start).toBeEnabled();
-    await dialog.getByLabel("Override with a specific Plan").check();
+    await dialog
+      .getByLabel("Use one migration plan for all applications")
+      .check();
     await expect(start).toBeDisabled();
-    await dialog.getByLabel("Use recommended Plan").check();
+    await dialog.getByLabel("Use each application's migration plan").check();
     await expect(start).toBeEnabled();
     const branch = dialog.getByRole("textbox", { name: /Target branch/ });
     await branch.fill("   ");
@@ -398,11 +417,14 @@ test.describe("Preflight modal", () => {
     await page.goto(protoUrl("/applications", { scenario: "running" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    const row = dialog.getByRole("row", { name: /Customer Management/ });
+    await expect(row).toContainText("Blocked");
+    // The reason names the run and links to it.
     await expect(
-      dialog.getByRole("row", { name: /Customer Management/ })
-    ).toContainText("Blocked");
-    await expect(
-      dialog.getByRole("button", { name: /Start \d+ Ready/ })
-    ).toBeDisabled();
+      row.getByRole("link", { name: /^Run #\d+ — / })
+    ).toHaveAttribute("href", /\/plan-runs\/\d+/);
+    await expect(dialog.getByRole("button", { name: /^Run on/ })).toHaveCount(
+      0
+    );
   });
 });

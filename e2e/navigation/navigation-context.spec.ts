@@ -228,7 +228,7 @@ test("launching a migration keeps the global scenario when returning to Inventor
     .click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Start 1 Ready Application", exact: true })
+    .getByRole("button", { name: "Run on 1 application", exact: true })
     .click();
   await expect(page).toHaveURL(
     (url) =>
