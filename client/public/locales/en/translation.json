@@ -321,7 +321,6 @@
     "analysisProfileInUseWarning_other": "This analysis profile is referenced by {{count}} archetypes: {{archetypes}}. Deleting it will remove the reference from these archetypes.",
     "noTagsAvailable": "No tags available",
     "noTargetProfilesTitle": "No target profiles have been created",
-    "noTargetProfilesDescription": "Manage target profiles on the archetype to get started.",
     "noTargetProfilesCreate": "Create a new target profile to get started.",
     "unableToConnect": "Unable to connect",
     "noPlatformsCreatedTitle": "No platforms have been created",
@@ -1909,8 +1908,14 @@
       "goToSkills": "Go to skills"
     },
     "archetype": {
+      "noTargetProfilesBody": "Create a target profile for where applications in this archetype are going, then assign a migration plan to it.",
+      "noTargetProfilesBodyReadOnly": "Target profiles appear here once they are created.",
+      "noTargetProfilesBodyWithoutPlans": "Create a target profile for where applications in this archetype are going.",
+      "noTargetProfilesTitle": "No target profiles yet",
       "noneSelected": "No archetype selected",
-      "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
+      "notAssigned": "Not assigned",
+      "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications.",
+      "targetProfilesTabDescription": "Applications in this archetype are migrated with the plan assigned to their target profile."
     },
     "provider": {
       "title": "Model providers",
