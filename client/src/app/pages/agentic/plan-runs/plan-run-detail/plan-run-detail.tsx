@@ -12,26 +12,18 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  Divider,
   Flex,
   FlexItem,
   Label,
   LabelGroup,
   PageSection,
-  ProgressStep,
-  ProgressStepper,
   Stack,
   StackItem,
   Title,
 } from "@patternfly/react-core";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
-import {
-  ControllerRunPhase,
-  StageRun,
-  getOrderedStageRuns,
-  getStageDefinition,
-} from "@app/agentic";
+import { StageRun } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
@@ -49,25 +41,7 @@ import { RunStatus } from "../../components/agentic-status";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 import { StageAttentionAlert } from "../../components/stage-attention-alert";
-
-import { StageRunSection } from "./components/stage-run-section";
-
-const phaseVariant = (
-  phase: ControllerRunPhase
-): "success" | "info" | "pending" | "danger" | "warning" => {
-  switch (phase) {
-    case "Succeeded":
-      return "success";
-    case "Running":
-      return "info";
-    case "Failed":
-      return "danger";
-    case "AwaitingApproval":
-      return "warning";
-    default:
-      return "pending";
-  }
-};
+import { StageRunsTable } from "../../components/stage-runs-table";
 
 const PlanRunDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -77,8 +51,6 @@ const PlanRunDetail: React.FC = () => {
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
-  // Stages render from the run's own snapshot, never from the current Plan.
-  const stageRuns = planRun ? getOrderedStageRuns(planRun) : [];
   // The run's snapshot of skills: render what the server returns, never more.
   const skillRows = groupSkillSources(planRun?.resolvedSkills ?? []);
 
@@ -239,7 +211,6 @@ const PlanRunDetail: React.FC = () => {
         </Card>
       </PageSection>
 
-      {/* Progress and stages */}
       <PageSection hasBodyWrapper={false}>
         <Stack hasGutter>
           <StackItem>
@@ -247,38 +218,16 @@ const PlanRunDetail: React.FC = () => {
               {t("agentic.planRun.stages")}
             </Title>
           </StackItem>
-
-          {stageRuns.length > 0 && (
-            <StackItem>
-              <ProgressStepper aria-label={t("agentic.planRun.stages")}>
-                {stageRuns.map((stageRun) => (
-                  <ProgressStep
-                    key={stageRun.stageId}
-                    variant={phaseVariant(stageRun.status)}
-                    id={`stage-${stageRun.stageId}`}
-                    titleId={`stage-title-${stageRun.stageId}`}
-                  >
-                    {stageRun.name}
-                  </ProgressStep>
-                ))}
-              </ProgressStepper>
-            </StackItem>
-          )}
-
           <StackItem>
-            <Divider />
+            <StageRunsTable
+              stageRuns={planRun.stageRuns}
+              runId={planRun.id}
+              linkTo={(pathname, search = "") =>
+                breadcrumbTo(pathname, search, runChildCrumbs)
+              }
+              origin={`?from=run-${runId}`}
+            />
           </StackItem>
-
-          {stageRuns.map((stageRun) => (
-            <StackItem key={stageRun.stageId}>
-              <StageRunSection
-                stage={getStageDefinition(stageRun)}
-                stageRun={stageRun}
-                runId={planRun.id}
-                runChildCrumbs={runChildCrumbs}
-              />
-            </StackItem>
-          ))}
         </Stack>
       </PageSection>
 

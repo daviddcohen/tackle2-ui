@@ -3,7 +3,7 @@
  * retries on 404, and no failing requests on healthy pages. Polling lives in
  * polling.spec.ts.
  */
-import { expect, mainHeading, protoUrl, test } from "../support";
+import { expect, mainHeading, protoUrl, stageLinks, test } from "../support";
 
 test("plan run detail renders from the run snapshot without failing requests", async ({
   page,
@@ -16,9 +16,7 @@ test("plan run detail renders from the run snapshot without failing requests", a
   });
   await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
   await expect(mainHeading(page)).toHaveText("Run #1 — Java EE to Quarkus");
-  await expect(
-    page.getByRole("link", { name: "View run" }).first()
-  ).toBeVisible();
+  await expect(stageLinks(page).first()).toBeVisible();
   expect(planRequests.filter((url) => /\/plans\/0(\?|$)/.test(url))).toEqual(
     []
   );

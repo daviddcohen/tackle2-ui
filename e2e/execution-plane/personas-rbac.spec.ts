@@ -8,6 +8,7 @@ import {
   expect,
   inventoryRow,
   protoUrl,
+  stageLinks,
   test,
   waitForInventory,
 } from "../support";
@@ -71,7 +72,7 @@ for (const { persona, canEditPlans } of personas) {
         protoUrl("/plan-runs", { scenario: "configured", persona })
       );
       await page.getByRole("link", { name: /Run #1/ }).click();
-      await page.getByRole("link", { name: "View run" }).first().click();
+      await stageLinks(page).first().click();
       await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/\d+\?/);
     });
   });

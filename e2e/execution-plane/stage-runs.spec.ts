@@ -58,7 +58,8 @@ test.describe("Stage run detail", () => {
   test("a running stage streams its first progress message", async ({
     page,
   }) => {
-    await page.goto(protoUrl("/plan-runs/1", { scenario: "running" }));
+    // Activity lives on the stage page; the run page lists the stages.
+    await page.goto(protoUrl("/plan-runs/1/stages/1", { scenario: "running" }));
     await expect(
       page.getByText(/initializing analysis environment/)
     ).toBeVisible();
@@ -94,11 +95,11 @@ test.describe("Plan run stage progression (Run #1, three stages)", () => {
     });
   }
 
-  test("an earlier succeeded stage keeps its commits while collapsed", async ({
+  test("an earlier succeeded stage keeps its commits on its page", async ({
     page,
   }) => {
     await page.goto(
-      protoUrl("/plan-runs/1", { scenario: "running", stage: 2 })
+      protoUrl("/plan-runs/1/stages/1", { scenario: "running", stage: 2 })
     );
     await expect(
       page.getByText(/apply migration changes/).first()
