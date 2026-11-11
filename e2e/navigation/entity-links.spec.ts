@@ -229,16 +229,40 @@ for (const group of GROUPS) {
             const isSkillsCountLink =
               /^\d+ (associations?|skills|agents)$/.test(label) &&
               /^\/skills\//.test(destination.pathname);
+            // A skill's "Associated with" table names each target profile
+            // with its archetype, "{profile} ({archetype})" (skills amendment
+            // 6): profile names repeat across archetypes.
+            const isQualifiedTargetProfile =
+              /^\/skills\/\d+$/.test(new URL(sourceURL).pathname) &&
+              /#target-profile-\d+$/.test(href) &&
+              label.startsWith(`${expected} (`) &&
+              label.endsWith(")");
             if (
               !/\/stages\//.test(href) &&
               !isRunCountLink &&
               !isAgentCountLink &&
               !isPlanRunsCountLink &&
-              !isSkillsCountLink
+              !isSkillsCountLink &&
+              !isQualifiedTargetProfile
             )
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected
               );
+          }
+          if (destination.pathname === new URL(sourceURL).pathname) {
+            // A link to another tab of the same page (the skill's "6
+            // associations" fact opens its Associations tab) switches tabs:
+            // the trail stays the source's, and Back returns to the source.
+            expect(
+              await breadcrumbTitles(page),
+              `${source} -> ${href}: same page trail`
+            ).toEqual(sourceTitles);
+            await page.goBack();
+            await expect(page).toHaveURL(sourceURL);
+            await ready(page);
+            expect(await breadcrumbTitles(page)).toEqual(sourceTitles);
+            checked++;
+            return;
           }
           const ancestor = ancestorPaths.indexOf(destination.pathname);
           if (ancestor >= 0) {

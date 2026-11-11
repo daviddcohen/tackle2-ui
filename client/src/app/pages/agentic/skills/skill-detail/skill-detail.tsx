@@ -1,44 +1,49 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
-import { Link, generatePath, useHistory, useParams } from "react-router-dom";
+import ReactMarkdown, { Components } from "react-markdown";
+import {
+  Link,
+  generatePath,
+  useHistory,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 import {
   ButtonVariant,
-  Card,
-  CardBody,
-  CodeBlock,
-  CodeBlockCode,
+  ClipboardCopy,
   Content,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  Divider,
-  EmptyState,
-  EmptyStateBody,
-  Flex,
   FlexItem,
-  Label,
   Modal,
   ModalBody,
   ModalHeader,
   PageSection,
-  Stack,
-  StackItem,
+  Panel,
+  PanelMain,
+  PanelMainBody,
   Tab,
   TabTitleText,
   Tabs,
+  Title,
+  TitleProps,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths, SkillDetailsRoute } from "@app/Paths";
-import { SkillAssociationScope, SkillSourceType } from "@app/agentic";
+import { Skill } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
+import { ExternalLink } from "@app/components/ExternalLink";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
+import { ConditionalTableBody } from "@app/components/TableControls";
+import { markdownPFComponents } from "@app/components/markdownPFComponents";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
@@ -62,23 +67,80 @@ import {
 } from "@app/queries/agentic";
 import { useFetchArchetypes } from "@app/queries/archetypes";
 import { skillsWriteScopes } from "@app/scopes";
-import { getAxiosErrorMessage } from "@app/utils/utils";
+import { formatDate, getAxiosErrorMessage } from "@app/utils/utils";
 
+import { CountLink } from "../components/count-link";
+import { Section, Sections, XsEmptyState } from "../components/section";
 import { SkillForm } from "../components/skill-form";
 import {
   getCollectionsContainingSkill,
+  getSkillAssociationRows,
   getSkillDeleteBlockedReason,
 } from "../skill-usage";
-
-const sourceTypeColor: Record<SkillSourceType, "blue" | "green" | "orange"> = {
-  inline: "blue",
-  git: "green",
-  oci: "orange",
-};
 
 const SKILL_DETAIL_TABS = ["details", "associations"] as const;
 type SkillDetailTab = (typeof SKILL_DETAIL_TABS)[number];
 const TAB_PREFIX = "skill-detail";
+
+/**
+ * The skill's Markdown headings keep their look but sit below the page
+ * structure: its `# h1` would otherwise be a second page title (h1) next to
+ * the skill name, and its sections would outrank the "Content" section (h2).
+ */
+type HeadingProps = { children?: React.ReactNode };
+const ContentHeading: React.FC<
+  HeadingProps & Pick<TitleProps, "headingLevel" | "size">
+> = ({ headingLevel, size, children }) => (
+  <Title headingLevel={headingLevel} size={size}>
+    {children}
+  </Title>
+);
+const skillContentComponents: Components = {
+  ...markdownPFComponents,
+  h1: ({ children }: HeadingProps) => (
+    <ContentHeading headingLevel="h3" size="2xl">
+      {children}
+    </ContentHeading>
+  ),
+  h2: ({ children }: HeadingProps) => (
+    <ContentHeading headingLevel="h4" size="xl">
+      {children}
+    </ContentHeading>
+  ),
+  h3: ({ children }: HeadingProps) => (
+    <ContentHeading headingLevel="h5" size="lg">
+      {children}
+    </ContentHeading>
+  ),
+  h4: ({ children }: HeadingProps) => (
+    <ContentHeading headingLevel="h6" size="md">
+      {children}
+    </ContentHeading>
+  ),
+  h5: ({ children }: HeadingProps) => (
+    <ContentHeading headingLevel="h6" size="md">
+      {children}
+    </ContentHeading>
+  ),
+  h6: ({ children }: HeadingProps) => (
+    <ContentHeading headingLevel="h6" size="md">
+      {children}
+    </ContentHeading>
+  ),
+};
+
+/** A Git repository opens in a new tab only when it is a web URL (S9). */
+const isWebUrl = (value: string) => /^https?:\/\//i.test(value);
+
+const Fact: React.FC<{ term: string; children: React.ReactNode }> = ({
+  term,
+  children,
+}) => (
+  <DescriptionListGroup>
+    <DescriptionListTerm>{term}</DescriptionListTerm>
+    <DescriptionListDescription>{children}</DescriptionListDescription>
+  </DescriptionListGroup>
+);
 
 const SkillDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -89,13 +151,17 @@ const SkillDetail: React.FC = () => {
 
   const { skill, isLoading, fetchError, isNotFound, refetch } =
     useFetchSkillById(skillId);
-  const { archetypes } = useFetchArchetypes();
+  const { archetypes, isFetching: isLoadingArchetypes } = useFetchArchetypes();
   const {
     skillCollections,
     isLoading: isLoadingCollections,
     fetchError: collectionsError,
   } = useFetchSkillCollections();
-  const { migrationPlans } = useFetchMigrationPlans();
+  const {
+    migrationPlans,
+    isLoading: isLoadingPlans,
+    fetchError: plansError,
+  } = useFetchMigrationPlans();
 
   const [activeTab, setActiveTab] = useUrlTab<SkillDetailTab>(
     SKILL_DETAIL_TABS,
@@ -120,18 +186,21 @@ const SkillDetail: React.FC = () => {
     onDeleteError
   );
 
-  const directAssociations = React.useMemo(
-    () => skill?.associations ?? [],
-    [skill]
-  );
-
-  const directAssociationCount = directAssociations.length;
-
   const collectionsContainingSkill = React.useMemo(
-    () => getCollectionsContainingSkill({ id: skillId }, skillCollections),
+    () =>
+      [
+        ...getCollectionsContainingSkill({ id: skillId }, skillCollections),
+      ].sort((a, b) => a.name.localeCompare(b.name)),
     [skillCollections, skillId]
   );
 
+  // The real adapter leaves `effectiveSkills` undefined: unknown, not empty
+  // (X6), so the section says "Unavailable" instead of "no plan".
+  const isPlanUsageUnknown = migrationPlans.some(
+    (plan) => plan.effectiveSkills === undefined
+  );
+  // Rows come from the plans' `effectiveSkills` only: never add sources here
+  // (guide 2.3, residual Q1).
   const plansResolvingSkill = React.useMemo(
     () =>
       migrationPlans
@@ -140,10 +209,14 @@ const SkillDetail: React.FC = () => {
         )
         .map((plan) => ({
           plan,
-          entries: (plan.effectiveSkills ?? []).filter(
-            (es) => es.skill.id === skillId
-          ),
-        })),
+          sources:
+            groupSkillSources(
+              (plan.effectiveSkills ?? []).filter(
+                (es) => es.skill.id === skillId
+              )
+            )[0]?.sources ?? [],
+        }))
+        .sort((a, b) => a.plan.name.localeCompare(b.plan.name)),
     [migrationPlans, skillId]
   );
 
@@ -151,9 +224,6 @@ const SkillDetail: React.FC = () => {
     skill?.name ?? t("agentic.entity.skill"),
     [{ title: t("sidebar.skills"), path: DevPaths.skills }]
   );
-
-  const scopeLabel = (scope: SkillAssociationScope): string =>
-    t(`agentic.plan.skillScopes.${scope}`);
 
   if (skill == null) {
     if (isLoading) {
@@ -171,13 +241,28 @@ const SkillDetail: React.FC = () => {
     );
   }
 
+  const childLink = (path: string) =>
+    breadcrumbTo(path, `?from=skill-${skillId}`, childLinkCrumbs);
+
+  const arePlansLoaded = !isLoadingPlans && plansError == null;
+  // Undefined until the plans loaded with a known `effectiveSkills` (X6).
+  const planCount =
+    arePlansLoaded && !isPlanUsageUnknown
+      ? plansResolvingSkill.length
+      : undefined;
+
+  const knownCollections =
+    isLoadingCollections || collectionsError != null
+      ? undefined
+      : skillCollections;
   const deleteBlockedReason = getSkillDeleteBlockedReason(
     t,
     skill,
-    isLoadingCollections || collectionsError != null
-      ? undefined
-      : skillCollections
+    knownCollections
   );
+  const managedReason = skill.operatorManaged
+    ? t("agentic.common.managedByKonveyor")
+    : undefined;
   const panelId = (tab: SkillDetailTab) => tabPanelId(TAB_PREFIX, tab);
 
   return (
@@ -185,12 +270,18 @@ const SkillDetail: React.FC = () => {
       <PageSection hasBodyWrapper={false}>
         <PageHeader
           title={skill.name}
+          description={
+            skill.description ? (
+              <Content component="p">{skill.description}</Content>
+            ) : undefined
+          }
           breadcrumbs={breadcrumbs}
           btnActions={
             canManageSkills && (
               <EntityDetailActions
                 onEdit={() => setEditModal(true)}
                 onDelete={() => setIsDeleteOpen(true)}
+                managedReason={managedReason}
                 deleteDisabledReason={deleteBlockedReason}
               />
             )
@@ -214,21 +305,7 @@ const SkillDetail: React.FC = () => {
             tabContentId={panelId("associations")}
             title={
               <TabTitleText>
-                <Flex
-                  spaceItems={{ default: "spaceItemsXs" }}
-                  alignItems={{ default: "alignItemsCenter" }}
-                >
-                  <FlexItem>
-                    {t("agentic.skillDetail.tabAssociations")}
-                  </FlexItem>
-                  {directAssociationCount > 0 && (
-                    <FlexItem>
-                      <Label isCompact color="blue">
-                        {directAssociationCount}
-                      </Label>
-                    </FlexItem>
-                  )}
-                </Flex>
+                {t("agentic.skillDetail.tabAssociations")}
               </TabTitleText>
             }
           />
@@ -241,99 +318,31 @@ const SkillDetail: React.FC = () => {
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          <Card>
-            <CardBody>
-              <DescriptionList isHorizontal>
-                <DescriptionListGroup>
-                  <DescriptionListTerm>
-                    {t("terms.description")}
-                  </DescriptionListTerm>
-                  <DescriptionListDescription>
-                    {skill.description || "—"}
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-
-                <DescriptionListGroup>
-                  <DescriptionListTerm>
-                    {t("agentic.skill.sourceType")}
-                  </DescriptionListTerm>
-                  <DescriptionListDescription>
-                    <Label color={sourceTypeColor[skill.sourceType]}>
-                      {t(`agentic.skill.sourceTypes.${skill.sourceType}`)}
-                    </Label>
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-
-                {skill.sourceType === "git" && (
-                  <>
-                    <DescriptionListGroup>
-                      <DescriptionListTerm>
-                        {t("agentic.skill.repository")}
-                      </DescriptionListTerm>
-                      <DescriptionListDescription>
-                        {skill.repoUrl || "—"}
-                      </DescriptionListDescription>
-                    </DescriptionListGroup>
-                    {skill.repoBranch && (
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>
-                          {t("agentic.skill.branch")}
-                        </DescriptionListTerm>
-                        <DescriptionListDescription>
-                          {skill.repoBranch}
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
-                    )}
-                    {skill.repoPath && skill.repoPath !== "/" && (
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>
-                          {t("agentic.skill.path")}
-                        </DescriptionListTerm>
-                        <DescriptionListDescription>
-                          {skill.repoPath}
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
-                    )}
-                  </>
-                )}
-
-                {skill.sourceType === "oci" && (
-                  <DescriptionListGroup>
-                    <DescriptionListTerm>
-                      {t("agentic.skill.imageReference")}
-                    </DescriptionListTerm>
-                    <DescriptionListDescription>
-                      {skill.imageRef || "—"}
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
-                )}
-
-                {skill.sourceType === "inline" && skill.content && (
-                  <DescriptionListGroup>
-                    <DescriptionListTerm>
-                      {t("agentic.skill.content")}
-                    </DescriptionListTerm>
-                    <DescriptionListDescription>
-                      <CodeBlock>
-                        <CodeBlockCode>{skill.content}</CodeBlockCode>
-                      </CodeBlock>
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
-                )}
-
-                {skill.createTime && (
-                  <DescriptionListGroup>
-                    <DescriptionListTerm>
-                      {t("agentic.skillDetail.createdAt")}
-                    </DescriptionListTerm>
-                    <DescriptionListDescription>
-                      {new Date(skill.createTime).toLocaleString()}
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
-                )}
-              </DescriptionList>
-            </CardBody>
-          </Card>
+          <Sections>
+            <FlexItem>
+              <SkillFacts skill={skill} />
+            </FlexItem>
+            {skill.sourceType === "inline" && skill.content && (
+              <FlexItem>
+                <Section
+                  title={t("agentic.skill.content")}
+                  description={t("agentic.skillDetail.contentDescription")}
+                >
+                  <Panel variant="bordered">
+                    <PanelMain>
+                      <PanelMainBody>
+                        <Content>
+                          <ReactMarkdown components={skillContentComponents}>
+                            {skill.content}
+                          </ReactMarkdown>
+                        </Content>
+                      </PanelMainBody>
+                    </PanelMain>
+                  </Panel>
+                </Section>
+              </FlexItem>
+            )}
+          </Sections>
         </PageSection>
       </DetailTabPanel>
 
@@ -343,220 +352,142 @@ const SkillDetail: React.FC = () => {
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          <Stack hasGutter>
-            {/* Section A: Direct associations */}
-            <StackItem>
-              <Stack hasGutter>
-                <StackItem>
-                  <Content component="h3">
-                    {t("agentic.skillDetail.directAssociations")}
-                  </Content>
-                </StackItem>
-                <StackItem>
-                  {directAssociations.length === 0 ? (
-                    <EmptyState
-                      headingLevel="h4"
-                      icon={CubesIcon}
-                      titleText={t("agentic.skillDetail.noAssociationsTitle")}
-                      variant="xs"
-                    >
-                      <EmptyStateBody>
-                        {t("agentic.skillDetail.noAssociationsDescription")}
-                      </EmptyStateBody>
-                    </EmptyState>
-                  ) : (
-                    <Stack>
-                      {directAssociations.map((assoc, idx) => {
-                        const destination = skillAssociationPath(
-                          assoc,
-                          archetypes
-                        );
-                        return (
-                          <StackItem
-                            key={`${assoc.scope}-${assoc.resource.id}-${idx}`}
-                          >
-                            <Flex
-                              spaceItems={{ default: "spaceItemsSm" }}
-                              alignItems={{ default: "alignItemsCenter" }}
-                              style={{
-                                padding: "var(--pf-t--global--spacer--sm) 0",
-                                borderBottom:
-                                  "1px solid var(--pf-t--global--border--color--subtle)",
-                              }}
-                            >
-                              <FlexItem className={textStyles.textColorSubtle}>
-                                {scopeLabel(assoc.scope)}
-                              </FlexItem>
-                              <FlexItem>
-                                {destination != null ? (
-                                  <Link
-                                    to={breadcrumbTo(
-                                      destination,
-                                      "",
-                                      childLinkCrumbs
-                                    )}
-                                  >
-                                    {assoc.resource.name}
-                                  </Link>
-                                ) : (
-                                  assoc.resource.name
-                                )}
-                              </FlexItem>
-                            </Flex>
-                          </StackItem>
-                        );
-                      })}
-                    </Stack>
-                  )}
-                </StackItem>
-              </Stack>
-            </StackItem>
+          <Sections>
+            <FlexItem>
+              <AssociatedWithSection
+                skill={skill}
+                archetypes={archetypes}
+                isLoadingArchetypes={isLoadingArchetypes}
+                linkTo={(path) => breadcrumbTo(path, "", childLinkCrumbs)}
+              />
+            </FlexItem>
 
-            <StackItem>
-              <Divider />
-            </StackItem>
-
-            {/* Section B: Active in migration plans */}
-            <StackItem>
-              <Stack hasGutter>
-                <StackItem>
-                  <Content component="h3">
-                    {t("agentic.skillDetail.resolvedInPlans")}
-                  </Content>
-                  <Content
-                    component="p"
-                    style={{
-                      color: "var(--pf-t--global--text--color--subtle)",
-                    }}
+            <FlexItem>
+              <Section
+                title={
+                  planCount
+                    ? t("agentic.skillDetail.usedInPlansTitle", {
+                        count: planCount,
+                      })
+                    : t("agentic.skillDetail.usedInPlans")
+                }
+                description={t("agentic.skillDetail.usedInPlansDescription")}
+              >
+                {arePlansLoaded && isPlanUsageUnknown ? (
+                  <EmptyTextMessage message={t("agentic.common.unavailable")} />
+                ) : planCount === 0 ? (
+                  <XsEmptyState text={t("agentic.skillDetail.noPlans")} />
+                ) : (
+                  <Table
+                    aria-label={t("agentic.skillDetail.usedInPlans")}
+                    variant="compact"
                   >
-                    {t("agentic.skillDetail.resolvedInPlansHelp")}
-                  </Content>
-                </StackItem>
-                <StackItem>
-                  {plansResolvingSkill.length === 0 ? (
-                    <Content
-                      component="p"
-                      style={{
-                        color: "var(--pf-t--global--text--color--subtle)",
-                      }}
+                    <Thead>
+                      <Tr>
+                        <Th width={30}>{t("agentic.entity.migrationPlan")}</Th>
+                        <Th>{t("terms.source")}</Th>
+                      </Tr>
+                    </Thead>
+                    <ConditionalTableBody
+                      isLoading={isLoadingPlans}
+                      isError={plansError != null}
+                      numRenderedColumns={2}
                     >
-                      {t("agentic.skillDetail.noPlansResolved")}
-                    </Content>
-                  ) : (
-                    <Table
-                      aria-label={t("agentic.skillDetail.resolvedInPlansTable")}
-                      variant="compact"
-                    >
-                      <Thead>
-                        <Tr>
-                          <Th>{t("terms.name")}</Th>
-                          <Th>{t("agentic.skillDetail.resolvedFromColumn")}</Th>
-                        </Tr>
-                      </Thead>
                       <Tbody>
-                        {plansResolvingSkill.map(({ plan, entries }) => (
+                        {plansResolvingSkill.map(({ plan, sources }) => (
                           <Tr key={plan.id}>
-                            <Td dataLabel={t("terms.name")}>
+                            <Td dataLabel={t("agentic.entity.migrationPlan")}>
                               <Link
-                                to={breadcrumbTo(
+                                to={childLink(
                                   generatePath(DevPaths.migrationPlanDetails, {
                                     planId: String(plan.id),
-                                  }),
-                                  `?from=skill-${skillId}`,
-                                  childLinkCrumbs
+                                  })
                                 )}
                               >
                                 {plan.name}
                               </Link>
                             </Td>
-                            <Td
-                              dataLabel={t(
-                                "agentic.skillDetail.resolvedFromColumn"
-                              )}
-                            >
-                              <SkillSources
-                                sources={
-                                  groupSkillSources(entries)[0]?.sources ?? []
-                                }
-                              />
+                            <Td dataLabel={t("terms.source")}>
+                              <SkillSources sources={sources} />
                             </Td>
                           </Tr>
                         ))}
                       </Tbody>
-                    </Table>
-                  )}
-                </StackItem>
-              </Stack>
-            </StackItem>
+                    </ConditionalTableBody>
+                  </Table>
+                )}
+              </Section>
+            </FlexItem>
 
-            <StackItem>
-              <Divider />
-            </StackItem>
-
-            {/* Section C: In collections */}
-            <StackItem>
-              <Stack hasGutter>
-                <StackItem>
-                  <Content component="h3">
-                    {t("agentic.skillDetail.inCollections")}
-                  </Content>
-                </StackItem>
-                <StackItem>
-                  {collectionsContainingSkill.length === 0 ? (
-                    <Content
-                      component="p"
-                      style={{
-                        color: "var(--pf-t--global--text--color--subtle)",
-                      }}
+            <FlexItem>
+              <Section
+                title={
+                  knownCollections != null &&
+                  collectionsContainingSkill.length > 0
+                    ? t("agentic.skillDetail.inCollectionsTitle", {
+                        count: collectionsContainingSkill.length,
+                      })
+                    : t("agentic.skillDetail.inCollections")
+                }
+                description={t("agentic.skillDetail.inCollectionsDescription")}
+              >
+                {knownCollections != null &&
+                collectionsContainingSkill.length === 0 ? (
+                  <XsEmptyState
+                    text={t("agentic.skillDetail.notInAnyCollection")}
+                  />
+                ) : (
+                  <Table
+                    aria-label={t("agentic.skillDetail.inCollections")}
+                    variant="compact"
+                  >
+                    <Thead>
+                      <Tr>
+                        <Th width={30}>
+                          {t("agentic.entity.skillCollection")}
+                        </Th>
+                        <Th>{t("agentic.skillCollection.members")}</Th>
+                      </Tr>
+                    </Thead>
+                    <ConditionalTableBody
+                      isLoading={isLoadingCollections}
+                      isError={collectionsError != null}
+                      numRenderedColumns={2}
                     >
-                      {t("agentic.skillDetail.notInAnyCollection")}
-                    </Content>
-                  ) : (
-                    <Table
-                      aria-label={t("agentic.skillDetail.inCollectionsTable")}
-                      variant="compact"
-                    >
-                      <Thead>
-                        <Tr>
-                          <Th>{t("terms.name")}</Th>
-                          <Th>{t("agentic.skillDetail.skillCountColumn")}</Th>
-                        </Tr>
-                      </Thead>
                       <Tbody>
                         {collectionsContainingSkill.map((collection) => (
                           <Tr key={collection.id}>
-                            <Td dataLabel={t("terms.name")}>
+                            <Td dataLabel={t("agentic.entity.skillCollection")}>
                               <Link
-                                to={breadcrumbTo(
+                                to={childLink(
                                   generatePath(
                                     DevPaths.skillCollectionDetails,
-                                    {
-                                      collectionId: String(collection.id),
-                                    }
-                                  ),
-                                  `?from=skill-${skillId}`,
-                                  childLinkCrumbs
+                                    { collectionId: String(collection.id) }
+                                  )
                                 )}
                               >
                                 {collection.name}
                               </Link>
                             </Td>
                             <Td
-                              dataLabel={t(
-                                "agentic.skillDetail.skillCountColumn"
-                              )}
+                              dataLabel={t("agentic.skillCollection.members")}
                             >
-                              {collection.skills.length}
+                              {/* One member is this skill: its name (C1). */}
+                              {collection.skills.length === 1
+                                ? collection.skills[0].name
+                                : t("agentic.skillCollection.skillCount", {
+                                    count: collection.skills.length,
+                                  })}
                             </Td>
                           </Tr>
                         ))}
                       </Tbody>
-                    </Table>
-                  )}
-                </StackItem>
-              </Stack>
-            </StackItem>
-          </Stack>
+                    </ConditionalTableBody>
+                  </Table>
+                )}
+              </Section>
+            </FlexItem>
+          </Sections>
         </PageSection>
       </DetailTabPanel>
 
@@ -596,6 +527,192 @@ const SkillDetail: React.FC = () => {
         />
       )}
     </>
+  );
+};
+
+/**
+ * The Associations tab of this page, as a link that keeps the rest of the
+ * query (`?from=`) and the breadcrumb trail in history state (guide 3.5).
+ */
+const useAssociationsTabLink = () => {
+  const { pathname, search, state } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set("tab", "associations");
+  return { pathname, search: `?${params}`, state };
+};
+
+/** The Details tab facts: source, where it loads from, usage, dates. */
+const SkillFacts: React.FC<{ skill: Skill }> = ({ skill }) => {
+  const { t } = useTranslation();
+  const associationCount = skill.associations?.length;
+  const associationsTab = useAssociationsTabLink();
+  const monospace = (value: string) => (
+    <span className={textStyles.fontFamilyMonospace}>{value}</span>
+  );
+
+  return (
+    <DescriptionList
+      isHorizontal
+      isCompact
+      horizontalTermWidthModifier={{ default: "18ch" }}
+    >
+      <Fact term={t("terms.source")}>
+        {t(`agentic.skill.sourceTypes.${skill.sourceType}`)}
+      </Fact>
+
+      {skill.sourceType === "git" && (
+        <>
+          <Fact term={t("agentic.skill.repository")}>
+            {!skill.repoUrl ? (
+              <EmptyTextMessage message={t("terms.none")} />
+            ) : isWebUrl(skill.repoUrl) ? (
+              <ExternalLink href={skill.repoUrl} isInline>
+                {skill.repoUrl}
+              </ExternalLink>
+            ) : (
+              <ClipboardCopy isReadOnly variant="inline-compact">
+                {skill.repoUrl}
+              </ClipboardCopy>
+            )}
+          </Fact>
+          {skill.repoBranch && (
+            <Fact term={t("agentic.skill.branch")}>
+              {monospace(skill.repoBranch)}
+            </Fact>
+          )}
+          {skill.repoPath && skill.repoPath !== "/" && (
+            <Fact term={t("agentic.skill.path")}>
+              {monospace(skill.repoPath)}
+            </Fact>
+          )}
+        </>
+      )}
+
+      {skill.sourceType === "oci" && (
+        <Fact term={t("agentic.skill.image")}>
+          {skill.imageRef ? (
+            <ClipboardCopy isReadOnly variant="inline-compact">
+              {skill.imageRef}
+            </ClipboardCopy>
+          ) : (
+            <EmptyTextMessage message={t("terms.none")} />
+          )}
+        </Fact>
+      )}
+
+      <Fact term={t("agentic.skill.associations")}>
+        {associationCount == null ? (
+          <EmptyTextMessage message={t("agentic.common.unavailable")} />
+        ) : associationCount === 0 ? (
+          <EmptyTextMessage message={t("terms.none")} />
+        ) : (
+          <CountLink to={associationsTab}>
+            {t("agentic.skill.associationCount", { count: associationCount })}
+          </CountLink>
+        )}
+      </Fact>
+
+      {skill.createTime && (
+        <Fact term={t("agentic.skillDetail.createdAt")}>
+          {formatDate(new Date(skill.createTime))}
+        </Fact>
+      )}
+      {skill.updateTime && (
+        <Fact term={t("agentic.skillDetail.updatedAt")}>
+          {formatDate(new Date(skill.updateTime))}
+        </Fact>
+      )}
+    </DescriptionList>
+  );
+};
+
+interface AssociatedWithSectionProps {
+  skill: Skill;
+  archetypes: ReturnType<typeof useFetchArchetypes>["archetypes"];
+  isLoadingArchetypes: boolean;
+  /** Association paths carry their own query or hash, so no `?from=`. */
+  linkTo: (path: string) => ReturnType<typeof breadcrumbTo>;
+}
+
+/**
+ * "Associated with (n)": Type · Name (C12 exception), the skill's own
+ * associations. Target profiles need the archetypes for their name and link,
+ * so the rows wait for that query when a target profile is present (X6); if
+ * it fails, they show the bare name without a link.
+ */
+const AssociatedWithSection: React.FC<AssociatedWithSectionProps> = ({
+  skill,
+  archetypes,
+  isLoadingArchetypes,
+  linkTo,
+}) => {
+  const { t } = useTranslation();
+  const associations = skill.associations;
+  const count = associations?.length ?? 0;
+  const rows = getSkillAssociationRows(t, associations ?? [], archetypes);
+  const needsArchetypes = rows.some(
+    (row) => row.association.scope === "targetProfile"
+  );
+
+  let content: React.ReactNode;
+  if (associations == null) {
+    content = <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+  } else if (count === 0) {
+    content = <XsEmptyState text={t("agentic.skillDetail.noAssociations")} />;
+  } else {
+    content = (
+      <Table
+        aria-label={t("agentic.skillDetail.associatedWith")}
+        variant="compact"
+      >
+        <Thead>
+          <Tr>
+            <Th width={30}>{t("terms.type")}</Th>
+            <Th>{t("terms.name")}</Th>
+          </Tr>
+        </Thead>
+        <ConditionalTableBody
+          isLoading={needsArchetypes && isLoadingArchetypes}
+          numRenderedColumns={2}
+        >
+          <Tbody>
+            {rows.map(({ association, name }, index) => {
+              // A target profile without its archetype has no page to open.
+              const destination = skillAssociationPath(association, archetypes);
+              return (
+                <Tr
+                  key={`${association.scope}-${association.resource.id}-${index}`}
+                >
+                  <Td dataLabel={t("terms.type")}>
+                    {t(`agentic.skillsTable.scope.${association.scope}`)}
+                  </Td>
+                  <Td dataLabel={t("terms.name")}>
+                    {destination != null ? (
+                      <Link to={linkTo(destination)}>{name}</Link>
+                    ) : (
+                      name
+                    )}
+                  </Td>
+                </Tr>
+              );
+            })}
+          </Tbody>
+        </ConditionalTableBody>
+      </Table>
+    );
+  }
+
+  return (
+    <Section
+      title={
+        count > 0
+          ? t("agentic.skillDetail.associatedWithTitle", { count })
+          : t("agentic.skillDetail.associatedWith")
+      }
+      description={t("agentic.skillDetail.associatedWithDescription")}
+    >
+      {content}
+    </Section>
   );
 };
 

@@ -329,15 +329,46 @@ test.describe("Skill detail", () => {
         name: "Spring Boot to Quarkus migration",
       })
     ).toBeVisible();
-    await page.getByRole("tab", { name: /Associations/ }).click();
+    await expect(main(page).getByText("Inline", { exact: true })).toBeVisible();
+    await expect(
+      main(page).getByRole("heading", { level: 2, name: "Content" })
+    ).toBeVisible();
+    // The skill's own "# Spring Boot to Quarkus Migration" is not a second page title.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    // The Associations fact opens the Associations tab.
+    await main(page).getByRole("link", { name: "3 associations" }).click();
     await expect(page).toHaveURL(/tab=associations/);
     await expect(
+      page.getByRole("tab", { name: "Associations", selected: true })
+    ).toBeVisible();
+    await expect(
       page.getByRole("link", { name: "Code Migrator" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Quarkus 3.x (Spring Boot Application)" })
     ).toBeVisible();
     await expect(
       page.getByRole("grid", { name: /collections/i })
     ).toContainText("Java modernization foundation");
     expectHealthy(diagnostics);
+  });
+
+  test("target profiles with the same name are told apart by archetype", async ({
+    page,
+  }) => {
+    await gotoProto(page, "/skills/7?tab=associations", { persona: ARCHITECT });
+    const grid = page.getByRole("grid", { name: "Associated with" });
+    await expect(grid.getByRole("row")).toHaveCount(8);
+    await expect(
+      grid.getByRole("link", {
+        name: "OpenShift lift and shift (.NET Framework Application)",
+      })
+    ).toBeVisible();
+    await expect(
+      grid.getByRole("link", {
+        name: "OpenShift lift and shift (Java EE Application)",
+      })
+    ).toBeVisible();
   });
 
   // Regression guard: skill-detail.tsx renders Actions without a skillsWriteScopes check

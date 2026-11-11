@@ -10,11 +10,13 @@ test("skill associations list direct associations, plans and collections", async
   await page.goto(protoUrl("/skills/3?tab=associations"));
   await expect(mainHeading(page)).toHaveText("Jakarta EE namespace migration");
   for (const section of [
-    "Directly associated with",
-    "Active in migration plans",
-    "In skill collections",
+    /^Associated with \(\d+\)$/,
+    /^Used in migration plans \(\d+\)$/,
+    /^In skill collections \(\d+\)$/,
   ])
-    await expect(main(page).getByText(section)).toBeVisible();
+    await expect(
+      main(page).getByRole("heading", { level: 2, name: section })
+    ).toBeVisible();
   await expect(
     main(page).getByRole("link", { name: "Java EE Application" }).first()
   ).toBeVisible();

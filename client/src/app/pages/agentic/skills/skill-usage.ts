@@ -1,6 +1,66 @@
 import { TFunction } from "i18next";
 
-import { Agent, EntityId, Skill, SkillCollection } from "@app/agentic";
+import {
+  Agent,
+  EntityId,
+  Skill,
+  SkillAssociation,
+  SkillAssociationScope,
+  SkillCollection,
+} from "@app/agentic";
+import { Archetype } from "@app/api/models";
+
+/** "Associated with" row order: agent, archetype, target profile, application. */
+const associationScopeOrder: SkillAssociationScope[] = [
+  "agent",
+  "archetype",
+  "targetProfile",
+  "application",
+];
+
+export interface SkillAssociationRow {
+  association: SkillAssociation;
+  /** The name shown: a target profile adds its archetype to tell profiles apart. */
+  name: string;
+}
+
+/**
+ * The "Associated with" rows of a skill (skills amendment 6): ordered by type,
+ * then by name. A target profile reads "{profile} ({archetype})"; its
+ * archetype is found by profile id, and the name stays bare when the
+ * archetypes are not known.
+ */
+export const getSkillAssociationRows = (
+  t: TFunction,
+  associations: SkillAssociation[],
+  archetypes: Archetype[]
+): SkillAssociationRow[] =>
+  associations
+    .map((association) => {
+      if (association.scope !== "targetProfile") {
+        return { association, name: association.resource.name };
+      }
+      const owner = archetypes.find((archetype) =>
+        archetype.profiles?.some(
+          (profile) => profile.id === association.resource.id
+        )
+      );
+      return {
+        association,
+        name: owner
+          ? t("agentic.skill.targetProfileOption", {
+              profile: association.resource.name,
+              archetype: owner.name,
+            })
+          : association.resource.name,
+      };
+    })
+    .sort(
+      (a, b) =>
+        associationScopeOrder.indexOf(a.association.scope) -
+          associationScopeOrder.indexOf(b.association.scope) ||
+        a.name.localeCompare(b.name)
+    );
 
 export const getCollectionsContainingSkill = (
   skill: Pick<Skill, "id">,
