@@ -60,3 +60,23 @@ describe("TypeaheadSelect with options that load after the value", () => {
     expect(input).toHaveValue("Alpha");
   });
 });
+
+describe("TypeaheadSelect isDisabled", () => {
+  it("disables the text input, not only the toggle styling", async () => {
+    const user = userEvent.setup();
+    const onSelect = jest.fn();
+    render(
+      <TypeaheadSelect
+        toggleId="typeahead"
+        options={options}
+        onSelect={onSelect}
+        isDisabled
+      />
+    );
+    const input = screen.getByRole("combobox");
+    expect(input).toBeDisabled();
+    await user.type(input, "Alp");
+    expect(input).toHaveValue("");
+    expect(screen.queryByRole("option")).toBeNull();
+  });
+});

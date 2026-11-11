@@ -234,7 +234,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
       isDisabled={isDisabled}
       isFullWidth={isFullWidth}
     >
-      <TextInputGroup isPlain>
+      <TextInputGroup isPlain isDisabled={isDisabled}>
         <TextInputGroupMain
           value={inputValue}
           onClick={() => {
