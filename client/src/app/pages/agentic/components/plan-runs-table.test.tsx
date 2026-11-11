@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { PlanRun, StageRun } from "@app/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 
-import { PlanRunsTable, getActiveStage } from "./plan-runs-table";
+import { PlanRunsTable } from "./plan-runs-table";
 
 jest.mock("react-i18next", () =>
   jest.requireActual("@app/test-config/english-i18n")
@@ -79,34 +79,6 @@ const cells = (row: HTMLElement) =>
     .getAllByRole("cell")
     .map((cell) => cell.textContent);
 
-describe("getActiveStage", () => {
-  it("names the stage awaiting approval or running, with its position", () => {
-    expect(getActiveStage(runs[1])).toEqual({
-      stageRun: expect.objectContaining({ name: "Prepare proposal" }),
-      position: 1,
-      count: 3,
-    });
-    expect(
-      getActiveStage(
-        run({
-          id: "2",
-          status: "Running",
-          stageRuns: [
-            stage(1, "Prepare proposal", "Succeeded"),
-            stage(2, "Migrate", "Running"),
-            stage(3, "Validate", "Pending"),
-          ],
-        })
-      )
-    ).toMatchObject({ position: 2, count: 3 });
-  });
-
-  it("has no active stage before or after the run", () => {
-    expect(getActiveStage(runs[0])).toBeUndefined();
-    expect(getActiveStage(runs[2])).toBeUndefined();
-  });
-});
-
 describe("PlanRunsTable", () => {
   it("shows the kit columns, newest first, with verbatim run names", () => {
     renderTable({ origin: "?from=app-1" });
@@ -181,6 +153,22 @@ describe("PlanRunsTable", () => {
       ],
     });
     expect(cells(bodyRows()[0])[2]).toBe("RunningStage 2 of 3: Migrate");
+  });
+
+  it("adds no stage line to a failed run", () => {
+    renderTable({
+      runs: [
+        run({
+          id: "4",
+          status: "Failed",
+          stageRuns: [
+            stage(1, "Prepare proposal", "Succeeded"),
+            stage(2, "Migrate", "Failed"),
+          ],
+        }),
+      ],
+    });
+    expect(cells(bodyRows()[0])[2]).toBe("Failed");
   });
 
   it("hides the Migration plan column on a plan's Runs tab", () => {
