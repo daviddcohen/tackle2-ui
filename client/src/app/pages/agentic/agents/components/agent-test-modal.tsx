@@ -3,9 +3,9 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import { AxiosError } from "axios";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import { generatePath } from "react-router-dom";
 import { object, string } from "yup";
 import {
-  Alert,
   Button,
   Form,
   Modal,
@@ -14,6 +14,7 @@ import {
   ModalHeader,
 } from "@patternfly/react-core";
 
+import { DevPaths } from "@app/Paths";
 import { Agent } from "@app/agentic";
 import { FilterSelectOptionProps } from "@app/components/FilterToolbar/FilterToolbar";
 import TypeaheadSelect from "@app/components/FilterToolbar/components/TypeaheadSelect";
@@ -22,6 +23,7 @@ import {
   HookFormPFTextArea,
 } from "@app/components/HookFormPFFields";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { useStartAgentTestRunMutation } from "@app/queries/agentic";
 import { useFetchApplications } from "@app/queries/applications";
 import { getAxiosErrorMessage } from "@app/utils/utils";
@@ -58,6 +60,9 @@ const AgentTestModalContent: React.FC<{
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const { data: applications = [] } = useFetchApplications();
+  const runsLink = useLinkComponent(
+    `${generatePath(DevPaths.agentDetails, { agentId: agent.id })}?tab=runs`
+  );
   const applicationOptions: FilterSelectOptionProps[] = applications.map(
     (application) => ({
       value: application.id.toString(),
@@ -83,6 +88,12 @@ const AgentTestModalContent: React.FC<{
     () => {
       pushNotification({
         title: t("agentic.agent.testQueued", { agent: agent.name }),
+        // The run is listed on the agent's Runs tab (guide 4.12).
+        message: (
+          <Button variant="link" isInline component={runsLink}>
+            {t("agentic.agent.viewRuns")}
+          </Button>
+        ),
         variant: "success",
       });
       onClose();
@@ -106,16 +117,11 @@ const AgentTestModalContent: React.FC<{
   return (
     <>
       <ModalHeader
-        title={t("agentic.agent.testTitle", { agent: agent.name })}
-        description={t("agentic.agent.testDescription")}
+        title={t("agentic.agent.test")}
+        description={t("agentic.agent.testDescription", { agent: agent.name })}
       />
       <ModalBody>
         <Form id="agent-test-form" onSubmit={handleSubmit(submit)}>
-          <Alert
-            isInline
-            variant="info"
-            title={t("agentic.agent.testRunNotice")}
-          />
           <HookFormPFGroupController
             control={control}
             name="applicationId"
@@ -140,6 +146,8 @@ const AgentTestModalContent: React.FC<{
             label={t("agentic.agent.testTask")}
             fieldId="agent-test-task"
             helperText={t("agentic.agent.testTaskHelp")}
+            rows={4}
+            resizeOrientation="vertical"
             isRequired
           />
         </Form>

@@ -266,7 +266,10 @@ test.describe("Agent test modal", () => {
   }) => {
     await openRowActions(page, "Test Runner");
     await page.getByRole("menuitem", { name: "Test agent" }).click();
-    await expect(dialog(page)).toContainText("Test Test Runner");
+    await expect(dialog(page)).toContainText("Test agent");
+    await expect(dialog(page)).toContainText(
+      "Runs Test Runner once on one application. Results are for review only; the repository is not changed."
+    );
     const start = dialog(page).getByRole("button", { name: "Start test run" });
     await expect(start).toBeDisabled();
     await pickTypeahead(
@@ -274,13 +277,22 @@ test.describe("Agent test modal", () => {
       "agent-test-application-select",
       "Customer Management"
     );
-    await field(dialog(page), "Task description").fill("Run the unit tests");
+    await field(dialog(page), "Task").fill("Run the unit tests");
     await start.click();
     await expect(toast(page, "Test run for Test Runner queued")).toBeVisible();
-    await rowByText(page, "Test Runner")
-      .getByRole("link", { name: "Test Runner" })
+    await page
+      .locator(".pf-v6-c-alert-group")
+      .getByRole("link", { name: "View runs" })
       .click();
-    await page.getByRole("tab", { name: "Agent runs" }).click();
+    // The prototype bar may reorder the query, so check the parts.
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === "/agents/4" && url.searchParams.get("tab") === "runs"
+    );
+    await expect(page.getByRole("tab", { name: "Agent runs" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     const runRow = page.getByRole("row", { name: /Run the unit tests/ });
     await expect(runRow).toContainText("Test");
     await expect(runRow).toContainText("Customer Management");
@@ -297,13 +309,11 @@ test.describe("Agent test modal", () => {
       "agent-test-application-select",
       "Customer Management"
     );
-    await field(dialog(page), "Task description").fill(
-      "Task for build validator"
-    );
+    await field(dialog(page), "Task").fill("Task for build validator");
     await dialog(page).getByRole("button", { name: "Cancel" }).click();
     await openRowActions(page, "Test Runner");
     await page.getByRole("menuitem", { name: "Test agent" }).click();
-    await expect(field(dialog(page), "Task description")).toHaveValue("");
+    await expect(field(dialog(page), "Task")).toHaveValue("");
     await expect(
       page.locator("#agent-test-application-select-input")
     ).toHaveValue("");
