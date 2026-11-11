@@ -184,6 +184,56 @@ describe("SkillCollectionDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("leaves for the list before the deleted collection could be read again", async () => {
+    let isDeleted = false;
+    let readsAfterDelete = 0;
+    useEndpoints({
+      // No agent uses the collection, so Delete is enabled.
+      agents: (_req, res, ctx) => res(ctx.json([])),
+    });
+    server.use(
+      rest.get(
+        `${AGENTIC_ENDPOINTS.skillCollections}/:id`,
+        (_req, res, ctx) => {
+          if (!isDeleted) return res(ctx.json(collection));
+          readsAfterDelete++;
+          return res(ctx.status(404));
+        }
+      ),
+      rest.delete(
+        `${AGENTIC_ENDPOINTS.skillCollections}/:id`,
+        (_req, res, ctx) => {
+          isDeleted = true;
+          return res(ctx.status(204));
+        }
+      )
+    );
+    render(
+      <MemoryRouter initialEntries={["/skills/collections/1"]}>
+        <Route path={DevPaths.skillCollectionDetails}>
+          <SkillCollectionDetail />
+        </Route>
+        <Route exact path={DevPaths.skills}>
+          <p>Skills list</p>
+        </Route>
+      </MemoryRouter>
+    );
+    const user = userEvent.setup();
+
+    await screen.findByRole("heading", { level: 1, name: collection.name });
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" })
+    );
+
+    expect(await screen.findByText("Skills list")).toBeInTheDocument();
+    // The page is gone before the invalidated queries re-render it, so the
+    // detail query never asks for the deleted collection (a 404).
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(readsAfterDelete).toBe(0);
+  });
+
   it("has no Actions menu without the write scope (X9)", async () => {
     mockGrantedScopes.all = false;
     useEndpoints();
