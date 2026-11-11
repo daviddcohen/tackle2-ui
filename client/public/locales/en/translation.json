@@ -1707,6 +1707,11 @@
       "applicationCount_one": "{{count}} application",
       "applicationCount_other": "{{count}} applications"
     },
+    "stageRunsTable": {
+      "label": "Stages",
+      "order": "#",
+      "notFinished": "Not finished"
+    },
     "planRun": {
       "title": "Plan runs",
       "description": "History of all migration plan runs across your application portfolio.",
