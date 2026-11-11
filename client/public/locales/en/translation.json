@@ -1820,7 +1820,6 @@
       "startedAndCompleted": "Started {{started}} · Completed {{completed}}"
     },
     "stageRun": {
-      "agentSkills": "Agent skills",
       "notFoundTitle": "Stage not found",
       "notFoundBody": "This stage may have been deleted, or the link is out of date.",
       "backToRun": "Back to {{run}}",
