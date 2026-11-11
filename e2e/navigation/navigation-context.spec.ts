@@ -35,9 +35,8 @@ test("deep application, run, skill and association journeys retain tabs, survive
   await expect(page).toHaveURL(/\/plan-runs\/\d+/);
   const runURL = page.url();
   await page
-    .getByRole("grid", { name: "Resolved skills table" })
-    .getByRole("link")
-    .first()
+    .getByRole("grid", { name: "Skills", exact: true })
+    .getByRole("link", { name: "Jakarta EE namespace migration" })
     .click();
   await associationsTab(page).click();
   await expect(page).toHaveURL(/tab=associations/);
@@ -292,6 +291,12 @@ test("Archetype application counts apply their filter when Inventory is an ances
   await page.goto(view("/applications"));
   await page.locator('main a[href="/applications/1"]').click();
   await page.getByRole("tab", { name: "Skills", exact: true }).click();
+  // Skill sources are plain text: reach the archetype through the skill.
+  await page
+    .getByRole("grid", { name: "Skills", exact: true })
+    .getByRole("link", { name: "EJB to CDI conversion patterns" })
+    .click();
+  await associationsTab(page).click();
   await page.locator('main a[href^="/archetypes?"]').first().click();
   await page
     .locator("#page-drawer-content")
@@ -351,9 +356,8 @@ for (const [name, viewport] of [
     await page.goto(view("/applications/1?tab=plan-runs"));
     await page.locator('main a[href^="/plan-runs/"]').first().click();
     await page
-      .getByRole("grid", { name: "Resolved skills table" })
-      .getByRole("link")
-      .first()
+      .getByRole("grid", { name: "Skills", exact: true })
+      .getByRole("link", { name: "Jakarta EE namespace migration" })
       .click();
     await associationsTab(page).click();
     await page.locator('main a[href^="/migration-plans/"]').first().click();

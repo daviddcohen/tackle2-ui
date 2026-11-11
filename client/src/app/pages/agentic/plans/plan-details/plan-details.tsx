@@ -22,12 +22,7 @@ import { BookOpenIcon, LockIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
-import {
-  Agent,
-  EffectiveSkillAssociation,
-  MigrationPlan,
-  getPlanConfigurationChecks,
-} from "@app/agentic";
+import { Agent, MigrationPlan, getPlanConfigurationChecks } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
@@ -57,6 +52,7 @@ import {
   ConfigurationStatus,
   RunStatus,
 } from "../../components/agentic-status";
+import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
 interface PlanDetailsRouteParams {
@@ -148,76 +144,6 @@ const PlanStageCard: React.FC<{
   );
 };
 
-const scopeColor = (scope: string): "blue" | "green" | "orange" | "grey" => {
-  switch (scope) {
-    case "agent":
-      return "blue";
-    case "targetProfile":
-      return "green";
-    case "archetype":
-      return "orange";
-    case "application":
-      return "grey";
-    default:
-      return "grey";
-  }
-};
-
-const EffectiveSkillsTable: React.FC<{
-  skills: EffectiveSkillAssociation[];
-  planId: string;
-  planChildCrumbs: BreadcrumbEntry[];
-}> = ({ skills, planId, planChildCrumbs }) => {
-  const { t } = useTranslation();
-
-  if (skills.length === 0) {
-    return <Content component="p">{t("agentic.plan.notConfigured")}</Content>;
-  }
-
-  return (
-    <Table aria-label={t("agentic.plan.effectiveSkills")} variant="compact">
-      <Thead>
-        <Tr>
-          <Th>{t("agentic.plan.skillColumnName")}</Th>
-          <Th>{t("agentic.plan.skillColumnResolvedFrom")}</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {skills.map((association, index) => (
-          <Tr key={`${association.scope}-${association.skill.id}-${index}`}>
-            <Td dataLabel={t("agentic.plan.skillColumnName")}>
-              <Link
-                to={breadcrumbTo(
-                  generatePath(DevPaths.skillDetails, {
-                    skillId: String(association.skill.id),
-                  }),
-                  `?from=plan-${planId}`,
-                  planChildCrumbs
-                )}
-              >
-                {association.skill.name}
-              </Link>
-            </Td>
-            <Td dataLabel={t("agentic.plan.skillColumnResolvedFrom")}>
-              <Flex
-                spaceItems={{ default: "spaceItemsXs" }}
-                alignItems={{ default: "alignItemsCenter" }}
-              >
-                <FlexItem>
-                  <Label color={scopeColor(association.scope)} isCompact>
-                    {t(`agentic.plan.skillScopes.${association.scope}`)}
-                  </Label>
-                </FlexItem>
-                <FlexItem>{association.scopeName}</FlexItem>
-              </Flex>
-            </Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
-  );
-};
-
 const PLAN_DETAIL_TABS = ["overview", "runs", "knowledge-base"] as const;
 type PlanDetailTab = (typeof PLAN_DETAIL_TABS)[number];
 
@@ -285,7 +211,7 @@ const PlanDetailsPage: React.FC = () => {
 
   const path = migrationPlan.migrationPath;
   const impact = migrationPlan.applicationImpact;
-  const effectiveSkills = migrationPlan.effectiveSkills || [];
+  const skillRows = groupSkillSources(migrationPlan.effectiveSkills ?? []);
   const configurationChecks = getPlanConfigurationChecks(
     migrationPlan,
     isLoadingAgents || agentsFetchError != null ? undefined : agents,
@@ -484,16 +410,29 @@ const PlanDetailsPage: React.FC = () => {
         </PageSection>
         <PageSection hasBodyWrapper={false}>
           <Title headingLevel="h2" size="xl">
-            {t("agentic.plan.effectiveSkills")}
+            {skillRows.length > 0
+              ? t("agentic.skillsTable.title", { count: skillRows.length })
+              : t("agentic.skillsTable.titleEmpty")}
           </Title>
-          <Content component="p" className="plan-effective-skills-help">
-            {t("agentic.plan.effectiveSkillsHelp")}
-          </Content>
-          <EffectiveSkillsTable
-            skills={effectiveSkills}
-            planId={planId}
-            planChildCrumbs={planChildCrumbs}
-          />
+          {skillRows.length > 0 ? (
+            <>
+              <Content component="p">
+                {t("agentic.skillsTable.planDescription")}
+              </Content>
+              <SkillsTable
+                rows={skillRows}
+                linkTo={(pathname) =>
+                  breadcrumbTo(
+                    pathname,
+                    `?from=plan-${planId}`,
+                    planChildCrumbs
+                  )
+                }
+              />
+            </>
+          ) : (
+            <Content component="p">{t("agentic.plan.notConfigured")}</Content>
+          )}
         </PageSection>
       </DetailTabPanel>
 

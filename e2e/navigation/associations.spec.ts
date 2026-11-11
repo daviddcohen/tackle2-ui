@@ -32,15 +32,26 @@ test("an application associated with a skill links to the application", async ({
   ).toHaveAttribute("href", /^\/applications\/1\b/);
 });
 
-test("plan detail links its stage agents and skills and shows where each skill resolves from", async ({
+test("plan detail links its stage agents and skills and shows where each skill comes from", async ({
   page,
 }) => {
   await page.goto(protoUrl("/migration-plans/1"));
   await expect(mainHeading(page)).toHaveText("Java EE to Quarkus");
-  await expect(main(page).getByText("Resolved skills").first()).toBeVisible();
   await expect(
-    page.getByRole("columnheader", { name: "Resolved from" })
+    main(page).getByRole("heading", { name: /^Skills \(\d+\)$/ })
   ).toBeVisible();
+  const skills = page.getByRole("grid", { name: "Skills", exact: true });
+  await expect(
+    skills.getByRole("columnheader", { name: "Source" })
+  ).toBeVisible();
+  // One row per skill; every source is a plain-text line in that row.
+  const jakarta = skills.getByRole("row", {
+    name: /Jakarta EE namespace migration/,
+  });
+  await expect(jakarta).toHaveCount(1);
+  await expect(jakarta).toContainText("Archetype: Java EE Application");
+  await expect(jakarta).toContainText("Target profile: Quarkus 3.x");
+  await expect(jakarta.getByRole("link")).toHaveCount(1);
   for (const name of [
     "Migration Proposal Agent",
     "API compatibility checklist",
@@ -62,28 +73,26 @@ test("agent detail lists the plans that use it", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("application skills tab separates direct and archetype skills", async ({
+test("application skills tab lists every skill the agents use with its sources", async ({
   page,
 }) => {
   await page.goto(protoUrl("/applications/1?tab=skills"));
-  await expect(main(page).getByText("Directly associated")).toBeVisible();
+  const skills = page.getByRole("grid", { name: "Skills", exact: true });
   await expect(
-    main(page).getByRole("link", { name: "Corporate coding standards" })
-  ).toBeVisible();
-  await expect(main(page).getByText("From archetype")).toBeVisible();
-  await expect(
-    main(page)
-      .getByRole("link", { name: "EJB to CDI conversion patterns" })
-      .first()
-  ).toBeVisible();
+    skills.getByRole("row", { name: /Corporate coding standards/ })
+  ).toContainText("Application: Customer Management");
+  const ejb = skills.getByRole("row", {
+    name: /EJB to CDI conversion patterns/,
+  });
+  await expect(ejb).toContainText(/Agent: .+ via /);
+  await expect(ejb).toContainText("Archetype: Java EE Application");
+  await expect(ejb.getByRole("link")).toHaveCount(1);
 });
 
-test("plan run detail lists its resolved skills below the stages", async ({
-  page,
-}) => {
+test("plan run detail lists its skills below the stages", async ({ page }) => {
   await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
   const stages = page.getByRole("heading", { name: "Stages" });
-  const resolved = page.getByRole("heading", { name: "Resolved skills" });
+  const resolved = page.getByRole("heading", { name: /^Skills \(\d+\)$/ });
   await expect(stages).toBeVisible();
   await expect(resolved).toBeVisible();
   const [stagesBox, resolvedBox] = await Promise.all([
@@ -93,7 +102,7 @@ test("plan run detail lists its resolved skills below the stages", async ({
   expect(resolvedBox!.y).toBeGreaterThan(stagesBox!.y);
   await expect(
     page
-      .getByRole("grid", { name: "Resolved skills table" })
+      .getByRole("grid", { name: "Skills", exact: true })
       .getByRole("link", { name: "Jakarta EE namespace migration" })
   ).toBeVisible();
 });

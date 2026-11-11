@@ -108,13 +108,6 @@
   border-left-color: var(--pf-t--global--icon--color--status--warning--default);
 }
 
-/* Effective skills help text */
-.plan-effective-skills-help {
-  font-size: var(--pf-t--global--font--size--sm);
-  color: var(--pf-t--global--text--color--subtle);
-  margin-bottom: var(--pf-t--global--spacer--md);
-}
-
 @media (max-width: 768px) {
   .plan-heading,
   .plan-heading > .pf-v6-c-flex__item,
