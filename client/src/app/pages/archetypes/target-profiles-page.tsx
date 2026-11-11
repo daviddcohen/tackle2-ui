@@ -57,6 +57,7 @@ import {
 } from "@app/queries/agentic";
 import { useFetchArchetypeById } from "@app/queries/archetypes";
 import { archetypesWriteScopes, plansWriteScopes } from "@app/scopes";
+import { disabledActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
@@ -342,7 +343,7 @@ const TargetProfilesPage: React.FC = () => {
             <Tbody>
               {profiles.map((profile) => {
                 const assignedPlan = getAssignedPlan(profile.id);
-                const rowActions: IAction[] = [
+                const editActions: IAction[] = [
                   ...(canWriteProfiles
                     ? [
                         {
@@ -358,32 +359,49 @@ const TargetProfilesPage: React.FC = () => {
                     ? [
                         {
                           title: assignedPlan
-                            ? t("agentic.plan.changePlan")
-                            : t("agentic.plan.assignPlan"),
+                            ? t("agentic.archetype.changePlan")
+                            : t("agentic.archetype.assignPlan"),
                           onClick: () =>
                             openModalAfterMenuClose(() =>
                               openPlanAssignment(profile)
                             ),
+                          ...disabledActionProps(
+                            isPlansError
+                              ? t("agentic.archetype.plansNotLoaded")
+                              : undefined,
+                            "left"
+                          ),
                         },
                       ]
                     : []),
+                ];
+                // An assigned plan blocks Delete; without the plans query
+                // that cannot be checked, and without the skills query the
+                // confirm could not say which skills stop applying (X6).
+                const deleteBlocker = !isAgenticEnabled
+                  ? undefined
+                  : isPlansError || isSkillsError
+                    ? t("agentic.common.usageUnchecked")
+                    : assignedPlan
+                      ? t("agentic.archetype.deleteBlocked", {
+                          plan: assignedPlan.name,
+                        })
+                      : undefined;
+                const rowActions: IAction[] = [
+                  ...editActions,
                   ...(canWriteProfiles
                     ? [
+                        ...(editActions.length > 0
+                          ? [{ isSeparator: true }]
+                          : []),
                         {
                           title: t("actions.delete"),
                           onClick: () =>
                             openModalAfterMenuClose(() =>
                               setProfileToDelete(profile)
                             ),
-                          isDanger: true,
-                          isAriaDisabled: assignedPlan != null,
-                          tooltipProps: assignedPlan
-                            ? {
-                                content: t(
-                                  "agentic.plan.deleteProfilePlanAssociated"
-                                ),
-                              }
-                            : undefined,
+                          isDanger: deleteBlocker == null,
+                          ...disabledActionProps(deleteBlocker, "left"),
                         },
                       ]
                     : []),
