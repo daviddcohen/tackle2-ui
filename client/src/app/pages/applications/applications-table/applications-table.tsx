@@ -128,7 +128,6 @@ import { ColumnApplicationName } from "./components/column-application-name";
 import { ColumnAssessmentStatus } from "./components/column-assessment-status";
 import { ColumnReviewStatus } from "./components/column-review-status";
 import { ManageColumnsToolbar } from "./components/manage-columns-toolbar";
-import { MigrationAttentionModal } from "./components/migration-attention-modal";
 
 /** Migration status filter options, in the guide 5.2 order (most urgent first). */
 const agenticMigrationStatuses: ApplicationMigrationDisplayStatus[] = [
@@ -193,7 +192,6 @@ export const ApplicationsTable: FC = () => {
   const isDependenciesModalOpen = applicationDependenciesToManage !== null;
 
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-  const [isAttentionModalOpen, setIsAttentionModalOpen] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string>("json");
 
   const [assessmentToEdit, setAssessmentToEdit] = useState<Assessment | null>(
@@ -1612,16 +1610,6 @@ export const ApplicationsTable: FC = () => {
       </div>
 
       {canStartMigrations && migrationLauncher.modal}
-
-      {isAgenticEnabled && (
-        <MigrationAttentionModal
-          applications={applications}
-          migrations={migrations}
-          isOpen={isAttentionModalOpen}
-          onClose={() => setIsAttentionModalOpen(false)}
-          linkTo={to}
-        />
-      )}
 
       {isAnalyzeModalOpen && (
         <AnalysisWizard

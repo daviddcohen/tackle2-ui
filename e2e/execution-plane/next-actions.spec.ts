@@ -121,20 +121,20 @@ test.describe("Migration next actions", () => {
     await expect(approveButton(page)).toHaveCount(0);
   });
 
-  test("Review N Requests lists each request and opens its Migration tab", async ({
+  test("Show applications lists each request and its status opens the Migration tab", async ({
     page,
   }) => {
     await page.goto(protoUrl("/applications", { scenario: "actionRequired" }));
     await waitForInventory(page);
-    await page.getByRole("button", { name: /Review \d+ Requests?/ }).click();
-    const dialog = page.getByRole("dialog", { name: "Action required" });
-    await expect(dialog).toBeVisible();
-    await expect(dialog).not.toContainText(/contract|prototype/i);
-    await dialog
-      .getByRole("button", { name: "Review Migration Proposal" })
-      .first()
-      .click();
-    await expect(dialog).toBeHidden();
+    await page.getByRole("button", { name: "Show applications" }).click();
+    const statuses = page
+      .locator('td[data-label="Migration"]')
+      .getByRole("link", { name: "Action required", exact: true });
+    await expect(statuses.first()).toBeVisible();
+    await expect(
+      page.locator('td[data-label="Migration"]').getByRole("link")
+    ).toHaveCount(await statuses.count());
+    await statuses.first().click();
     await expect(
       page.getByRole("tab", { name: "Migration", selected: true })
     ).toBeVisible();

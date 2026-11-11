@@ -1617,19 +1617,6 @@
       "startReady_other": "Start {{count}} Ready Applications",
       "stageProgress": "Stage progress",
       "statusLabel": "Status",
-      "attention": {
-        "description_one": "Review {{count}} request that is blocking migration progress.",
-        "description_other": "Review {{count}} requests that are blocking migration progress.",
-        "empty": "No migration requests need attention.",
-        "openApplication": "Open Application",
-        "planStage": "{{plan}}, {{stage}} Stage",
-        "risk": {
-          "high": "High risk",
-          "low": "Low risk",
-          "medium": "Medium risk"
-        },
-        "title": "Action required"
-      },
       "preflight": {
         "blocked": "Blocked",
         "reviewRequired": "Review required"
