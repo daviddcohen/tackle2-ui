@@ -1303,6 +1303,8 @@
       "updated": "Model updated",
       "usage": "Used by",
       "notUsed": "Not used",
+      "usedByTitle_one": "Used by {{count}} agent",
+      "usedByTitle_other": "Used by {{count}} agents",
       "pendingEffect": "Agents cannot use it until it is verified.",
       "unreachableEffect": "Check the API endpoint and credential.",
       "validation": {

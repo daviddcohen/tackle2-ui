@@ -6,6 +6,8 @@
 import type { Page } from "@playwright/test";
 
 import {
+  breadcrumb,
+  breadcrumbTitles,
   dataRows,
   dialog,
   expect,
@@ -13,6 +15,7 @@ import {
   expectTooltipOnHover,
   field,
   gotoProto,
+  mainHeading,
   openRowActions,
   pickTypeahead,
   rowByText,
@@ -102,6 +105,25 @@ test.describe("Models list", () => {
     );
   });
 
+  test("Used by opens a popover of agent links that return to Models", async ({
+    page,
+  }) => {
+    const claude = rowByText(page, "Claude 3.7 Sonnet");
+    await claude.getByRole("button", { name: "3 agents" }).click();
+    const popover = page.getByRole("dialog", { name: "Used by 3 agents" });
+    await expect(popover.getByRole("link")).toHaveText([
+      "Code Migrator",
+      "Migration Proposal Agent",
+      "Security Review Agent",
+    ]);
+    await popover.getByRole("link", { name: "Code Migrator" }).click();
+    await expect(mainHeading(page)).toHaveText("Code Migrator");
+    expect(await breadcrumbTitles(page)).toEqual(["Models", "Code Migrator"]);
+    await breadcrumb(page).getByRole("link", { name: "Models" }).click();
+    await expect(page).toHaveURL(/\/models/);
+    await expect(dataRows(page)).toHaveCount(5);
+  });
+
   test("default model cannot be deleted or re-set as default", async ({
     page,
   }) => {
@@ -118,7 +140,7 @@ test.describe("Models list", () => {
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
   });
 
-  // Regression guard: models.tsx uses isDisabled + tooltipProps; disabled menu items get no pointer events so the tooltip never shows (agents.tsx uses isAriaDisabled correctly)
+  // Regression guard: a disabled menu item must be aria-disabled (disabledActionProps); with isDisabled it gets no pointer events and its tooltip never shows
   test("disabled Delete explains why on hover", async ({ page }) => {
     await openRowActions(page, "Llama 3.3 70B");
     await expectTooltipOnHover(

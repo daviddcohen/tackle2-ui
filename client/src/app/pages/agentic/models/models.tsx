@@ -1,6 +1,7 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
+import { Link, generatePath } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
@@ -10,10 +11,14 @@ import {
   Flex,
   FlexItem,
   Label,
+  List,
+  ListItem,
   Modal,
   ModalBody,
   ModalHeader,
   PageSection,
+  Popover,
+  Skeleton,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
@@ -32,7 +37,8 @@ import {
   Tr,
 } from "@patternfly/react-table";
 
-import { ModelProjection } from "@app/agentic";
+import { DevPaths } from "@app/Paths";
+import { Agent, ModelProjection } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
@@ -49,6 +55,7 @@ import {
   TableRowContentWithControls,
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
+import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
 import { VerificationStatusText } from "@app/pages/agentic/components/agentic-status";
 import {
@@ -58,6 +65,7 @@ import {
   useSetDefaultModelMutation,
 } from "@app/queries/agentic";
 import { modelsWriteScopes } from "@app/scopes";
+import { disabledActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
@@ -71,7 +79,14 @@ const ModelsPage: React.FC = () => {
   const { pushNotification } = React.useContext(NotificationsContext);
   const { gateways, isFetching, isLoading, fetchError, refetch } =
     useFetchGateways();
-  const { agents } = useFetchAgents();
+  // Usage comes from the agents query: never "Not used" or an enabled Delete before it succeeded (X6).
+  const {
+    agents,
+    isSuccess: isAgentsLoaded,
+    fetchError: agentsError,
+  } = useFetchAgents();
+  // Agent links from the Used by popover return here (AD7).
+  const { to } = useBreadcrumbs(t("sidebar.models"), []);
   const [modalState, setModalState, formKey] = useFormModalState<
     "create" | ModelProjection
   >();
@@ -149,8 +164,53 @@ const ModelsPage: React.FC = () => {
     expansionDerivedState: { isCellExpanded },
   } = tableControls;
 
-  const getUsageCount = (model: ModelProjection) =>
-    agents.filter((agent) => agent.model.id === model.id).length;
+  const getUsers = (model: ModelProjection) =>
+    agents
+      .filter((agent) => agent.model.id === model.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+  const renderUsedBy = (users: Agent[]) => {
+    if (agentsError) {
+      return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+    }
+    if (!isAgentsLoaded)
+      return <Skeleton screenreaderText={t("terms.loading")} />;
+    if (users.length === 0) {
+      return <EmptyTextMessage message={t("agentic.model.notUsed")} />;
+    }
+    return (
+      <Popover
+        headerContent={t("agentic.model.usedByTitle", { count: users.length })}
+        bodyContent={
+          <List isPlain>
+            {users.map((agent) => (
+              <ListItem key={agent.id}>
+                <Link
+                  to={to(
+                    generatePath(DevPaths.agentDetails, { agentId: agent.id })
+                  )}
+                >
+                  {agent.name}
+                </Link>
+              </ListItem>
+            ))}
+          </List>
+        }
+      >
+        <Button variant="link" isInline>
+          {t("agentic.model.usedByAgents", { count: users.length })}
+        </Button>
+      </Popover>
+    );
+  };
+
+  /** Why Delete is disabled: the default first, then unknown or actual usage. */
+  const getDeleteBlocker = (model: ModelProjection, users: Agent[]) => {
+    if (model.isOrganizationDefault) return t("agentic.model.deleteDefault");
+    if (!isAgentsLoaded) return t("agentic.common.usageUnchecked");
+    if (users.length > 0) return t("agentic.model.deleteInUse");
+    return undefined;
+  };
 
   /** The server's reason, then what it means for agents or what to check (guide 5.3). */
   const getStatusText = (model: ModelProjection) => {
@@ -254,7 +314,8 @@ const ModelsPage: React.FC = () => {
                 numRenderedColumns={numRenderedColumns}
               >
                 {currentPageItems.map((model, rowIndex) => {
-                  const usageCount = getUsageCount(model);
+                  const users = getUsers(model);
+                  const deleteBlocker = getDeleteBlocker(model, users);
                   return (
                     <Tbody key={model.id} isExpanded={isCellExpanded(model)}>
                       <Tr {...getTrProps({ item: model })}>
@@ -314,15 +375,7 @@ const ModelsPage: React.FC = () => {
                             modifier="nowrap"
                             {...getTdProps({ columnKey: "usage" })}
                           >
-                            {usageCount > 0 ? (
-                              t("agentic.model.usedByAgents", {
-                                count: usageCount,
-                              })
-                            ) : (
-                              <EmptyTextMessage
-                                message={t("agentic.model.notUsed")}
-                              />
-                            )}
+                            {renderUsedBy(users)}
                           </Td>
                           <Td isActionCell>
                             {canManageModels && (
@@ -347,23 +400,11 @@ const ModelsPage: React.FC = () => {
                                       openModalAfterMenuClose(() =>
                                         setModelToDelete(model)
                                       ),
-                                    isDanger: true,
-                                    isAriaDisabled:
-                                      usageCount > 0 ||
-                                      model.isOrganizationDefault,
-                                    tooltipProps: model.isOrganizationDefault
-                                      ? {
-                                          content: t(
-                                            "agentic.model.deleteDefault"
-                                          ),
-                                        }
-                                      : usageCount > 0
-                                        ? {
-                                            content: t(
-                                              "agentic.model.deleteInUse"
-                                            ),
-                                          }
-                                        : undefined,
+                                    isDanger: deleteBlocker == null,
+                                    ...disabledActionProps(
+                                      deleteBlocker,
+                                      "left"
+                                    ),
                                   },
                                 ]}
                               />
