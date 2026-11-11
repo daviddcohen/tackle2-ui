@@ -127,7 +127,9 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
             {isAgenticEnabled && (
               <Tab
                 eventKey={TabKey.Skills}
-                title={<TabTitleText>{t("agentic.skill.title")}</TabTitleText>}
+                title={
+                  <TabTitleText>{t("agentic.archetype.skills")}</TabTitleText>
+                }
               >
                 <TabAssociatedSkills archetype={archetype} />
               </Tab>

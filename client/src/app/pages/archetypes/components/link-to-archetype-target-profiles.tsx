@@ -4,11 +4,12 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
-import { Paths } from "@app/Paths";
 import type { Archetype } from "@app/api/models";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
-import { targetProfilePath } from "@app/pages/agentic/entity-paths";
-import { formatPath } from "@app/utils/utils";
+import {
+  targetProfilePath,
+  targetProfilesPath,
+} from "@app/pages/agentic/entity-paths";
 
 /**
  * The archetype's target profiles as a link, the same element as the
@@ -35,9 +36,7 @@ const LinkToArchetypeTargetProfiles: React.FC<{
   return (
     <Link
       className={textStyles.textNowrap}
-      to={linkTo(
-        formatPath(Paths.archetypeTargetProfiles, { archetypeId: archetype.id })
-      )}
+      to={linkTo(targetProfilesPath(archetype.id))}
     >
       {t("agentic.archetype.targetProfileCount", { count: profiles.length })}
     </Link>

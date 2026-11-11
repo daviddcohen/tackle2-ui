@@ -18,16 +18,18 @@ import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { isAgenticEnabled } from "@app/Constants";
-import { DevPaths, Paths } from "@app/Paths";
+import { DevPaths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { LabelsFromItems } from "@app/components/labels/labels-from-items/labels-from-items";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
-import { targetProfilePath } from "@app/pages/agentic/entity-paths";
+import {
+  targetProfilePath,
+  targetProfilesPath,
+} from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { archetypesWriteScopes } from "@app/scopes";
-import { formatPath } from "@app/utils/utils";
 
 import { useTargetProfilePlans } from "../hooks/useTargetProfilePlans";
 
@@ -50,9 +52,7 @@ export const TabTargetProfiles: React.FC<TabTargetProfilesProps> = ({
   const { to } = useEntityBreadcrumbs(archetype.name, [
     { title: t("sidebar.archetypes"), path: DevPaths.archetypes },
   ]);
-  const ManageLink = useLinkComponent(
-    to(formatPath(Paths.archetypeTargetProfiles, { archetypeId: archetype.id }))
-  );
+  const ManageLink = useLinkComponent(to(targetProfilesPath(archetype.id)));
   const { getAssignedPlan, isLoading, isError } = useTargetProfilePlans(
     isAgenticEnabled ? archetype.id : undefined
   );

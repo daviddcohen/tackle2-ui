@@ -1890,6 +1890,7 @@
       "goToSkills": "Go to skills"
     },
     "archetype": {
+      "skills": "Skills",
       "agenticDataUnavailableBody": "Assignments shown here may be incomplete. Reload the page to try again.",
       "agenticDataUnavailableTitle": "Migration plans and skills could not be loaded",
       "analysisProfileHelp": "The analysis profile used when applications are analyzed for this target.",
