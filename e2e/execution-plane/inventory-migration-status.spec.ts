@@ -192,6 +192,94 @@ test.describe("Inventory migration column", () => {
   });
 });
 
+test.describe("Inventory attention alert", () => {
+  test("counts every application that needs action and filters to them", async ({
+    page,
+  }) => {
+    await page.goto(protoUrl("/applications", { scenario: "actionRequired" }));
+    await waitForInventory(page);
+    const alert = main(page).locator(".pf-v6-c-alert", {
+      hasText: /^.*\d+ applications? needs? action/,
+    });
+    await expect(alert).toHaveCount(1);
+    const count = Number(
+      (await alert.getByRole("heading").innerText()).match(/(\d+)/)?.[1]
+    );
+    expect(count).toBeGreaterThan(0);
+    await alert.getByRole("button", { name: "Show applications" }).click();
+    await expect(page).toHaveURL(/filters=/);
+    await expect(main(page)).toContainText("Migration status");
+    const statuses = main(page)
+      .locator('td[data-label="Migration"]')
+      .locator(AGENTIC_STATUS);
+    await expect(statuses).toHaveCount(Math.min(count, 10));
+    await expect
+      .poll(async () => [...new Set(await statuses.allInnerTexts())])
+      .toEqual(["Action required"]);
+  });
+
+  for (const scenario of ["running", "completed"] as const) {
+    test(`is absent when nothing needs action (${scenario})`, async ({
+      page,
+    }) => {
+      await page.goto(protoUrl("/applications", { scenario }));
+      await waitForInventory(page);
+      await expect(
+        migrationCell(page, "Customer Management").locator(AGENTIC_STATUS)
+      ).toBeVisible();
+      await expect(main(page).getByText(/need action/)).toHaveCount(0);
+    });
+  }
+
+  test("a failed migrations query says so once and disables the filter", async ({
+    page,
+  }) => {
+    // Only the migrations read fails: send it to a path no mock handles,
+    // which the dev server cannot answer either.
+    await page.addInitScript(() => {
+      const open = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (
+        this: XMLHttpRequest,
+        method: string,
+        url: string | URL,
+        ...rest: unknown[]
+      ) {
+        const target = String(url).replace(
+          "/application-migrations",
+          "/application-migrations-unavailable"
+        );
+        return (open as (...args: unknown[]) => void).call(
+          this,
+          method,
+          target,
+          ...rest
+        );
+      } as typeof XMLHttpRequest.prototype.open;
+    });
+    await page.goto(protoUrl("/applications", { scenario: "configured" }));
+    await waitForInventory(page);
+    await expect(
+      main(page).getByText("Migration status could not be loaded")
+    ).toBeVisible({ timeout: 20000 });
+    await expect(main(page).getByText(/need action/)).toHaveCount(0);
+    await expect(migrationCell(page, "Customer Management")).toHaveText(
+      "Unavailable"
+    );
+    await page.getByRole("button", { name: "Name" }).first().click();
+    await page
+      .getByRole("menuitem", { name: "Migration status", exact: true })
+      .click();
+    // A category without options renders a disabled typeahead toggle.
+    await expect(
+      page.locator(".pf-v6-c-menu-toggle.pf-m-typeahead", {
+        has: page.locator(
+          '[data-ouia-component-id="filter-for-agenticMigration"]'
+        ),
+      })
+    ).toHaveClass(/pf-m-disabled/);
+  });
+});
+
 test.describe("Preflight modal", () => {
   test("mixed outcomes: only ready applications start; blocked and review-required are excluded", async ({
     page,

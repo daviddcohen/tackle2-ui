@@ -1673,7 +1673,11 @@
       "latestPlanRun": "Latest plan run",
       "planFilter": "Migration plan",
       "statusFilter": "Migration status",
-      "planStage": "{{plan}} · {{stage}}"
+      "planStage": "{{plan}} · {{stage}}",
+      "needAction_one": "{{count}} application needs action",
+      "needAction_other": "{{count}} applications need action",
+      "showApplications": "Show applications",
+      "statusUnavailable": "Migration status could not be loaded"
     },
     "skillCollection": {
       "create": "Create skill collection",
