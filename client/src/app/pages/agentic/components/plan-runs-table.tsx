@@ -11,7 +11,7 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
-import { PlanRun, StageRun, getOrderedStageRuns } from "@app/agentic";
+import { PlanRun } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar } from "@app/components/FilterToolbar";
 import { FilterCategory } from "@app/components/FilterToolbar/FilterToolbar";
@@ -24,51 +24,37 @@ import {
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
-import { formatDuration, planRunDurationSeconds } from "@app/utils/agentic";
+import {
+  formatDuration,
+  getCurrentStage,
+  planRunDurationSeconds,
+} from "@app/utils/agentic";
 import { formatTableDate } from "@app/utils/utils";
 
 import { RunStatus } from "./agentic-status";
 
-/**
- * The stage a run is at, for a person scanning runs: the stage awaiting
- * approval, or the running one, with its position in the run. Undefined when
- * no stage is active (pending, finished).
- */
-export const getActiveStage = (
-  run: PlanRun
-): { stageRun: StageRun; position: number; count: number } | undefined => {
-  const stageRuns = getOrderedStageRuns(run);
-  const index = stageRuns.findIndex(
-    (stageRun) =>
-      stageRun.status === "AwaitingApproval" || stageRun.status === "Running"
-  );
-  return index < 0
-    ? undefined
-    : {
-        stageRun: stageRuns[index],
-        position: index + 1,
-        count: stageRuns.length,
-      };
-};
-
 const PlanRunStatus: React.FC<{ run: PlanRun }> = ({ run }) => {
   const { t } = useTranslation();
-  const active = getActiveStage(run);
+  // A failed run gets no second line here: its status says enough in a list.
+  const current = getCurrentStage(run);
+  const status = current?.stageRun.status;
   return (
     <RunStatus
       status={run.status}
       supportingText={
-        active == null
+        current == null
           ? undefined
-          : active.stageRun.status === "AwaitingApproval"
+          : status === "AwaitingApproval"
             ? t("agentic.planRunsTable.approvalNeeded", {
-                stage: active.stageRun.name,
+                stage: current.stageRun.name,
               })
-            : t("agentic.planRunsTable.stagePosition", {
-                position: active.position,
-                total: active.count,
-                stage: active.stageRun.name,
-              })
+            : status === "Running"
+              ? t("agentic.common.stagePosition", {
+                  position: current.position,
+                  total: current.total,
+                  stage: current.stageRun.name,
+                })
+              : undefined
       }
     />
   );

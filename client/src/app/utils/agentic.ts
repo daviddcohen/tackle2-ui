@@ -6,6 +6,7 @@ import {
   PlanRun,
   StageRun,
   TERMINAL_RUN_PHASES,
+  getOrderedStageRuns,
 } from "@app/agentic";
 import type {
   AgentResource,
@@ -198,6 +199,35 @@ export function planRunDurationSeconds(
       now
     )
   );
+}
+
+/** Where a plan run is: one of its stages and that stage's place in the run. */
+export interface CurrentStage {
+  stageRun: StageRun;
+  /** 1-based position in stage order. */
+  position: number;
+  total: number;
+}
+
+/**
+ * The stage a plan run is at, for the run status line ("Stage n of m:
+ * {stage}", plan-runs amendment 6) and the runs table: the stage awaiting
+ * approval, else the running one, else the failed one. Undefined while no
+ * stage is in one of these states (a pending or succeeded run).
+ */
+export function getCurrentStage(planRun: PlanRun): CurrentStage | undefined {
+  const stageRuns = getOrderedStageRuns(planRun);
+  for (const status of ["AwaitingApproval", "Running", "Failed"] as const) {
+    const index = stageRuns.findIndex((stageRun) => stageRun.status === status);
+    if (index >= 0) {
+      return {
+        stageRun: stageRuns[index],
+        position: index + 1,
+        total: stageRuns.length,
+      };
+    }
+  }
+  return undefined;
 }
 
 export function truncate(text: string, max: number): string {

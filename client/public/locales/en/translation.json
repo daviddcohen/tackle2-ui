@@ -1672,7 +1672,8 @@
       "actions": "Actions",
       "unavailable": "Unavailable",
       "usageUnchecked": "Usage could not be checked. Try again later.",
-      "managedByKonveyor": "Managed by Konveyor. Changes are reverted automatically."
+      "managedByKonveyor": "Managed by Konveyor. Changes are reverted automatically.",
+      "stagePosition": "Stage {{position}} of {{total}}: {{stage}}"
     },
     "skillsTable": {
       "label": "Skills",
@@ -1689,7 +1690,6 @@
       "run": "Run",
       "duration": "Duration",
       "approvalNeeded": "Approval needed: {{stage}}",
-      "stagePosition": "Stage {{position}} of {{total}}: {{stage}}",
       "applicationCount_one": "{{count}} application",
       "applicationCount_other": "{{count}} applications"
     },
