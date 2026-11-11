@@ -1,15 +1,12 @@
 import * as React from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
   Card,
   CardBody,
   CardTitle,
   Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
+  ExpandableSection,
   Label,
   LabelGroup,
   PageSection,
@@ -17,8 +14,9 @@ import {
 } from "@patternfly/react-core";
 
 import { DevPaths, StageRunDetailsRoute } from "@app/Paths";
-import { getStageDefinition } from "@app/agentic";
+import { getOrderedStageRuns, getStageDefinition } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { PageHeader } from "@app/components/PageHeader";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import {
@@ -28,11 +26,21 @@ import {
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchAgentById, useFetchPlanRun } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
+import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
+import { formatDate } from "@app/utils/utils";
 
-import { RunStatus } from "../../components/agentic-status";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
-import { StageAttentionAlert } from "../../components/stage-attention-alert";
-import { StageRunContent } from "../components/stage-run-content";
+import {
+  StageAttentionAlert,
+  getStageAttention,
+} from "../../components/stage-attention-alert";
+import {
+  RunPageBody,
+  RunPageFacts,
+  RunPageSection,
+  RunStatusLine,
+} from "../components/run-page-layout";
+import { StageActivity, StageCommits } from "../components/stage-run-content";
 import { useApproveStage } from "../components/use-approve-stage";
 
 const StageRunDetail: React.FC = () => {
@@ -108,191 +116,143 @@ const StageRunDetail: React.FC = () => {
     );
   }
 
-  const title = t("agentic.stageRun.title", {
-    stage: stage.name,
+  const ordered = getOrderedStageRuns(planRun);
+  const position = {
+    position: ordered.findIndex((s) => s.stageId === stageRun.stageId) + 1,
+    total: ordered.length,
     run: planRun.name,
-  });
+  };
+  const duration = stageRunDurationSeconds(stageRun);
+  // The way back to the run, also on a trail that does not pass through it
+  // (Agents > agent > stage, addenda R1).
+  const runLink = (
+    <Link
+      to={breadcrumbTo(
+        generatePath(DevPaths.planRunDetails, { runId: planRun.id }),
+        "",
+        stageChildCrumbs
+      )}
+    />
+  );
+  // The approval gate is still ahead of a gated stage until it succeeds; one
+  // that succeeded without an approval record went on without one (for
+  // example in an unattended run).
+  const isGateAhead = stage.requiresApproval && stageRun.status !== "Succeeded";
+  const facts: [string, React.ReactNode][] = [
+    [
+      t("agentic.entity.agent"),
+      <Link
+        key="agent"
+        to={breadcrumbTo(
+          generatePath(DevPaths.agentDetails, { agentId: stage.agent.id }),
+          `?from=run-${runId}`,
+          stageChildCrumbs
+        )}
+      >
+        {stage.agent.name}
+      </Link>,
+    ],
+    [
+      t("agentic.planRun.duration"),
+      duration != null ? (
+        formatDuration(duration)
+      ) : (
+        <EmptyTextMessage
+          message={
+            stageRun.status === "Pending"
+              ? t("terms.notStarted")
+              : t("agentic.common.unavailable")
+          }
+        />
+      ),
+    ],
+    [
+      t("agentic.stageRun.approval"),
+      stage.requiresApproval && stageRun.approvedAt ? (
+        t("agentic.stageRun.approvedOn", {
+          date: formatDate(new Date(stageRun.approvedAt)),
+        })
+      ) : isGateAhead ? (
+        t("agentic.stageRun.approvalRequired")
+      ) : (
+        <EmptyTextMessage message={t("agentic.stageRun.approvalNotRequired")} />
+      ),
+    ],
+  ];
+  // Instructions are prose: one paragraph per blank-line-separated block.
+  const paragraphs = stage.instructions
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
 
   return (
     <>
       <PageSection hasBodyWrapper={false}>
-        <PageHeader title={title} breadcrumbs={breadcrumbs} />
+        <PageHeader
+          title={stage.name}
+          breadcrumbs={breadcrumbs}
+          description={
+            <RunStatusLine status={stageRun.status}>
+              {stageRun.startedAt ? (
+                <Trans
+                  i18nKey="agentic.stageRun.statusLineStarted"
+                  values={{
+                    ...position,
+                    started: formatDate(new Date(stageRun.startedAt)),
+                  }}
+                  components={{ runLink }}
+                />
+              ) : (
+                <Trans
+                  i18nKey="agentic.stageRun.statusLine"
+                  values={position}
+                  components={{ runLink }}
+                />
+              )}
+            </RunStatusLine>
+          }
+        />
       </PageSection>
 
-      <StageAttentionAlert
-        surface="stage"
-        planRun={planRun}
-        stageRun={stageRun}
-        onApprove={canManageRun ? approve : undefined}
-        isDeciding={isApproving}
-        onRunMigrationPlan={runMigrationPlan.open}
-        wrapper={(alert) => (
-          <PageSection hasBodyWrapper={false}>{alert}</PageSection>
+      <RunPageBody>
+        {getStageAttention(planRun, stageRun) != null && (
+          <StageAttentionAlert
+            surface="stage"
+            planRun={planRun}
+            stageRun={stageRun}
+            onApprove={canManageRun ? approve : undefined}
+            isDeciding={isApproving}
+            onRunMigrationPlan={runMigrationPlan.open}
+          />
         )}
-      />
 
-      {/* Metadata */}
-      <PageSection hasBodyWrapper={false}>
-        <Card>
-          <CardBody>
-            <DescriptionList isHorizontal>
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.stageRun.plan")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <Link
-                    to={breadcrumbTo(
-                      DevPaths.migrationPlanDetails.replace(
-                        ":planId",
-                        planRun.planId.toString()
-                      ),
-                      `?from=run-${runId}`,
-                      stageChildCrumbs
-                    )}
-                  >
-                    {planRun.planName}
-                  </Link>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
+        <RunPageFacts facts={facts} />
 
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.stageRun.stage")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {stage.name}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
+        {paragraphs.length > 0 && (
+          <RunPageSection title={t("agentic.stageRun.instructions")}>
+            {/* Long instructions show their first lines (guide 4.11); the
+                toggle appears only when the text is cut. */}
+            <ExpandableSection
+              variant="truncate"
+              truncateMaxLines={8}
+              toggleTextCollapsed={t("terms.showMore")}
+              toggleTextExpanded={t("terms.showLess")}
+            >
+              <Content>
+                {paragraphs.map((paragraph, index) => (
+                  <Content component="p" key={index}>
+                    {paragraph}
+                  </Content>
+                ))}
+              </Content>
+            </ExpandableSection>
+          </RunPageSection>
+        )}
 
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.stageRun.agent")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <Link
-                    to={breadcrumbTo(
-                      DevPaths.agentDetails.replace(
-                        ":agentId",
-                        stage.agent.id.toString()
-                      ),
-                      `?from=run-${runId}`,
-                      stageChildCrumbs
-                    )}
-                  >
-                    {stage.agent.name}
-                  </Link>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.status")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <RunStatus status={stageRun.status} />
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.stageRun.applications")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <LabelGroup numLabels={5}>
-                    {planRun.applications.map((app) => (
-                      <Label key={app.id} isCompact>
-                        <Link
-                          to={breadcrumbTo(
-                            DevPaths.applicationDetails.replace(
-                              ":applicationId",
-                              String(app.id)
-                            ),
-                            "",
-                            stageChildCrumbs
-                          )}
-                        >
-                          {app.name}
-                        </Link>
-                      </Label>
-                    ))}
-                  </LabelGroup>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.targetBranch")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <Label isCompact color="blue">
-                    {planRun.targetBranch}
-                  </Label>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.started")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {stageRun.startedAt
-                    ? new Date(stageRun.startedAt).toLocaleString()
-                    : "—"}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.completed")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {stageRun.completedAt
-                    ? new Date(stageRun.completedAt).toLocaleString()
-                    : "—"}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              {stageRun.approvedAt && (
-                <DescriptionListGroup>
-                  <DescriptionListTerm>
-                    {t("agentic.stageRun.approvedAt")}
-                  </DescriptionListTerm>
-                  <DescriptionListDescription>
-                    {new Date(stageRun.approvedAt).toLocaleString()}
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-              )}
-
-              {stageRun.output && (
-                <DescriptionListGroup>
-                  <DescriptionListTerm>
-                    {t("agentic.stageRun.output")}
-                  </DescriptionListTerm>
-                  <DescriptionListDescription>
-                    <Content component="pre">{stageRun.output}</Content>
-                  </DescriptionListDescription>
-                </DescriptionListGroup>
-              )}
-            </DescriptionList>
-          </CardBody>
-        </Card>
-      </PageSection>
-
-      {/* Activities and commits */}
-      {stageRun.status !== "Pending" && (
-        <PageSection hasBodyWrapper={false}>
-          <Card>
-            <CardBody>
-              <StageRunContent
-                status={stageRun.status}
-                messages={stageRun.messages ?? []}
-                commits={stageRun.commits ?? []}
-              />
-            </CardBody>
-          </Card>
-        </PageSection>
-      )}
+        {/* A pending stage has done nothing yet; its alert says when it starts. */}
+        {stageRun.status !== "Pending" && <StageActivity stageRun={stageRun} />}
+        {stageRun.status !== "Pending" && <StageCommits stageRun={stageRun} />}
+      </RunPageBody>
 
       {/* Agent skills */}
       {agent && agent.skills.length > 0 && (

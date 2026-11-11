@@ -48,7 +48,7 @@ const routes: RouteCase[] = [
   },
   {
     path: "/plan-runs/1/stages/1",
-    heading: "Prepare proposal: Run #1 — Java EE to Quarkus",
+    heading: "Prepare proposal",
     nav: "Plan runs",
     crumbs: ["Plan runs", "Run #1 — Java EE to Quarkus", "Prepare proposal"],
   },

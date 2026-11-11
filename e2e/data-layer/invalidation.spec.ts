@@ -83,6 +83,6 @@ test("editing a plan keeps its stage ids, so its runs keep their stage runs", as
   await expect(viewRunLinks).toHaveCount(stageRunCount);
   // A stage run of the edited plan still resolves (in-app, same mock state).
   await spaNavigate(page, "/plan-runs/2/stages/4");
-  await expect(mainHeading(page)).toHaveText(/^Analyze: Run #2/);
+  await expect(mainHeading(page)).toHaveText("Analyze");
   await expect(page.getByText(/not found/i)).toHaveCount(0);
 });
