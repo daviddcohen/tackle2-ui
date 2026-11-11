@@ -6,15 +6,21 @@ import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 
 export interface BreadCrumbPathProps {
   breadcrumbs: { title: string; path?: string | (() => void) }[];
+  /**
+   * Every crumb is an ancestor, so the last one is a link too: for a header
+   * whose title is the current page, such as a detail drawer.
+   */
+  ancestorsOnly?: boolean;
 }
 
 export const BreadCrumbPath: React.FC<BreadCrumbPathProps> = ({
   breadcrumbs,
+  ancestorsOnly = false,
 }) => {
   return (
     <Breadcrumb>
       {breadcrumbs.map((crumb, i, { length }) => {
-        const isLast = i === length - 1;
+        const isLast = !ancestorsOnly && i === length - 1;
         if (!crumb.path) {
           // the item is not a link
           return (
