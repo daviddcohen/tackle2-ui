@@ -1,6 +1,7 @@
-import { MemoryRouter } from "react-router-dom";
+import { BrowserRouter, MemoryRouter } from "react-router-dom";
 
 import { PlanRun, StageRun } from "@app/agentic";
+import { FilterType } from "@app/components/FilterToolbar";
 import { render, screen, within } from "@app/test-config/test-utils";
 
 import { PlanRunsTable } from "./plan-runs-table";
@@ -8,6 +9,8 @@ import { PlanRunsTable } from "./plan-runs-table";
 jest.mock("react-i18next", () =>
   jest.requireActual("@app/test-config/english-i18n")
 );
+// setupTests stubs useLocation; the list's URL state needs the real one.
+jest.mock("react-router-dom", () => jest.requireActual("react-router-dom"));
 
 const stage = (
   order: number,
@@ -197,5 +200,76 @@ describe("PlanRunsTable", () => {
   it("shows the caller's empty state without runs", () => {
     renderTable({ runs: [], emptyState: <p>No plan runs yet</p> });
     expect(screen.getByText("No plan runs yet")).toBeInTheDocument();
+  });
+});
+
+describe("PlanRunsTable on the list (with filters)", () => {
+  afterEach(() => window.history.replaceState({}, "", "/"));
+
+  const filterCategories = [
+    {
+      categoryKey: "name",
+      title: "Name",
+      type: FilterType.search,
+      placeholderText: "Filter by name",
+      getItemValue: (item: PlanRun) => item.name,
+    },
+  ];
+
+  // The list keeps its view in the URL, which useUrlParams merges through
+  // document.location: a browser router keeps the two the same.
+  const renderList = (
+    props: Partial<React.ComponentProps<typeof PlanRunsTable>>,
+    search = ""
+  ) => {
+    window.history.replaceState({}, "", `/plan-runs${search}`);
+    return render(
+      <BrowserRouter>
+        <PlanRunsTable
+          runs={runs}
+          linkTo={linkTo}
+          filterCategories={filterCategories}
+          {...props}
+        />
+      </BrowserRouter>
+    );
+  };
+
+  it("adds the toolbar and pagination at any size", () => {
+    renderList({});
+    expect(screen.getByPlaceholderText("Filter by name")).toBeInTheDocument();
+    // Top and bottom pagination, although there are only three runs.
+    expect(screen.getAllByLabelText(/pagination/i).length).toBeGreaterThan(1);
+    expect(bodyRows()).toHaveLength(3);
+  });
+
+  it("reads its filters from the URL under its own prefix", () => {
+    const filters = encodeURIComponent(JSON.stringify({ name: ["Run #3"] }));
+    renderList({}, `?planRuns:filters=${filters}`);
+    expect(bodyRows()).toHaveLength(1);
+    expect(cells(bodyRows()[0])[0]).toBe("Run #3 — Java EE to Quarkus");
+    // Its view state stays under the same prefix.
+    expect(
+      new URLSearchParams(window.location.search).get("planRuns:sortColumn")
+    ).toBe("started");
+  });
+
+  it("says when filters match nothing, and not the empty state", () => {
+    const filters = encodeURIComponent(JSON.stringify({ name: ["Nothing"] }));
+    renderList(
+      { emptyState: <p>No plan runs yet</p> },
+      `?planRuns:filters=${filters}`
+    );
+    expect(screen.queryByText("No plan runs yet")).not.toBeInTheDocument();
+    expect(screen.getByText("No results found")).toBeInTheDocument();
+  });
+
+  it("shows a loading row, then the error row", () => {
+    const { unmount } = renderList({ runs: [], isLoading: true });
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    unmount();
+
+    renderList({ runs: [], fetchError: new Error("503") });
+    expect(screen.getByText("Unable to connect")).toBeInTheDocument();
   });
 });
