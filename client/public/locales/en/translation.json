@@ -1630,12 +1630,6 @@
         },
         "title": "Action required"
       },
-      "portfolio": {
-        "currentWorkDescription": "Current operational work only. Use the status filters for the complete application set.",
-        "reviewRequests_one": "Review {{count}} Request",
-        "reviewRequests_other": "Review {{count}} Requests",
-        "title": "Migration activity"
-      },
       "preflight": {
         "blocked": "Blocked",
         "reviewRequired": "Review required"

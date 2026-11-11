@@ -5,11 +5,11 @@ import {
   AGENTIC_STATUS,
   approveButton,
   approveStage,
+  countWithMigrationStatus,
   expect,
   migrationCell,
   openBulkRunMigration,
   pickMenuOption,
-  portfolioCounts,
   protoUrl,
   test,
   waitForInventory,
@@ -119,7 +119,9 @@ test.describe("Start migration journey", () => {
     await expect(
       migrationCell(page, "Order Service").locator(AGENTIC_STATUS)
     ).toHaveText("Ready to start");
-    expect((await portfolioCounts(page)).Running ?? 0).toBeLessThanOrEqual(1);
+    expect(await countWithMigrationStatus(page, "Running")).toBeLessThanOrEqual(
+      1
+    );
   });
 
   // Regression guard: list rows show raw fixture status; detail rows are re-projected by scenario.

@@ -129,7 +129,6 @@ import { ColumnAssessmentStatus } from "./components/column-assessment-status";
 import { ColumnReviewStatus } from "./components/column-review-status";
 import { ManageColumnsToolbar } from "./components/manage-columns-toolbar";
 import { MigrationAttentionModal } from "./components/migration-attention-modal";
-import { MigrationPortfolioOverview } from "./components/migration-portfolio-overview";
 
 /** Migration status filter options, in the guide 5.2 order (most urgent first). */
 const agenticMigrationStatuses: ApplicationMigrationDisplayStatus[] = [
@@ -1159,16 +1158,6 @@ export const ApplicationsTable: FC = () => {
             }
           />
         )}
-        {isAgenticEnabled &&
-          areMigrationsAvailable &&
-          applications.length > 0 && (
-            <div style={{ paddingBottom: "var(--pf-t--global--spacer--lg)" }}>
-              <MigrationPortfolioOverview
-                migrations={applications.map(getMigration)}
-                onReviewAttention={() => setIsAttentionModalOpen(true)}
-              />
-            </div>
-          )}
         <Toolbar {...toolbarProps} clearAllFilters={clearFilters}>
           <ToolbarContent>
             <ToolbarBulkSelector {...toolbarBulkSelectorProps} />

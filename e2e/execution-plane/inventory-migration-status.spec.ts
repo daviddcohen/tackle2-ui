@@ -1,17 +1,17 @@
 /**
- * Application Inventory "Migration" column, Migration activity overview, row/bulk start actions
+ * Application Inventory "Migration" column, attention alert, row/bulk start actions
  * and the preflight modal. Expectations are derived from the projection in
  * client/src/app/prototype/agentic/projection.ts (portfolio is fixed at 12 applications).
  */
 import {
   AGENTIC_STATUS,
   type Scenario,
+  countWithMigrationStatus,
   expect,
   expectNoBrokenText,
   main,
   migrationCell,
   openBulkRunMigration,
-  portfolioCounts,
   protoUrl,
   test,
   waitForInventory,
@@ -82,7 +82,7 @@ test.describe("Inventory migration column", () => {
     });
   }
 
-  test("overview counts add up to the portfolio for execution scenarios", async ({
+  test("status counts add up to the portfolio for execution scenarios", async ({
     page,
   }) => {
     for (const [scenario, key] of [
@@ -95,9 +95,7 @@ test.describe("Inventory migration column", () => {
       await expect(
         page.getByRole("button", { name: "1 - 10 of 12" }).first()
       ).toBeVisible();
-      await expect
-        .poll(async () => (await portfolioCounts(page))[key])
-        .toBe(12);
+      expect(await countWithMigrationStatus(page, key)).toBe(12);
     }
   });
 
@@ -186,9 +184,14 @@ test.describe("Inventory migration column", () => {
   }) => {
     await page.goto(protoUrl("/applications", { scenario: "actionRequired" }));
     await waitForInventory(page);
-    await expect
-      .poll(async () => (await portfolioCounts(page))["Action required"] ?? 0)
-      .toBeGreaterThan(0);
+    await expect(
+      main(page).getByRole("heading", {
+        name: /\d+ applications? needs? action/,
+      })
+    ).toBeVisible();
+    expect(
+      await countWithMigrationStatus(page, "Action required")
+    ).toBeGreaterThan(0);
   });
 });
 
