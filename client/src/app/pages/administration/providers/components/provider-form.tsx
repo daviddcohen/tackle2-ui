@@ -13,6 +13,7 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  Skeleton,
   Stack,
 } from "@patternfly/react-core";
 
@@ -69,12 +70,19 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const { providers } = useFetchProviders();
-  // The in-use sentence counts models only once they are known (X6).
-  const { gateways: models, isSuccess: isModelsLoaded } = useFetchGateways();
+  // The in-use sentence counts models only once they are known (X6): a
+  // skeleton while they load, a usage-unchecked sentence if they fail.
+  const {
+    gateways: models,
+    isSuccess: isModelsLoaded,
+    fetchError: modelsError,
+  } = useFetchGateways();
   const usedByCount =
     provider != null && isModelsLoaded
       ? models.filter((model) => model.provider.id === provider.id).length
       : 0;
+  const isUsageLoading =
+    provider != null && !isModelsLoaded && modelsError == null;
 
   const onSuccess = () => {
     pushNotification({
@@ -154,9 +162,16 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
 
   // One alert carries the status and the in-use consequence (amendment 2).
   const inUse =
-    usedByCount > 0
-      ? t("agentic.provider.inUse", { count: usedByCount })
-      : undefined;
+    provider == null || isUsageLoading
+      ? undefined
+      : !isModelsLoaded
+        ? t("agentic.provider.editUsageUnchecked")
+        : usedByCount > 0
+          ? t("agentic.provider.inUse", { count: usedByCount })
+          : undefined;
+  const usageSkeleton = (
+    <Skeleton width="50%" screenreaderText={t("terms.loading")} />
+  );
   const statusAlert =
     provider != null && provider.verificationStatus !== "verified" ? (
       <Alert
@@ -191,8 +206,11 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
                 .join(" ")}
             </Content>
           )}
+          {isUsageLoading && usageSkeleton}
         </Content>
       </Alert>
+    ) : isUsageLoading ? (
+      usageSkeleton
     ) : inUse != null ? (
       <Alert isInline isPlain variant="warning" title={inUse} />
     ) : null;

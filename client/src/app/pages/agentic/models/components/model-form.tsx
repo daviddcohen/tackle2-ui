@@ -13,6 +13,7 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  Skeleton,
   Stack,
 } from "@patternfly/react-core";
 
@@ -67,12 +68,30 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
   const { providers } = useFetchProviders();
   const { identities, isSuccess: isIdentitiesLoaded } = useFetchIdentities();
   const credentialsLink = useLinkComponent(AdminPaths.identities);
-  // The in-use sentence counts agents only once they are known (X6).
-  const { agents, isSuccess: isAgentsLoaded } = useFetchAgents();
+  // The in-use sentence counts agents only once they are known (X6): a
+  // skeleton while they load, a usage-unchecked sentence if they fail.
+  const {
+    agents,
+    isSuccess: isAgentsLoaded,
+    fetchError: agentsError,
+  } = useFetchAgents();
   const usedByCount =
     model != null && isAgentsLoaded
       ? agents.filter((agent) => agent.model.id === model.id).length
       : 0;
+  const isUsageLoading =
+    model != null && !isAgentsLoaded && agentsError == null;
+  const inUse =
+    model == null || isUsageLoading
+      ? undefined
+      : !isAgentsLoaded
+        ? t("agentic.model.editUsageUnchecked")
+        : usedByCount > 0
+          ? t("agentic.model.inUse", { count: usedByCount })
+          : undefined;
+  const usageSkeleton = (
+    <Skeleton width="50%" screenreaderText={t("terms.loading")} />
+  );
 
   // Credentials are Hub identities that hold an API key. The Model's current
   // credential stays selectable even when the Hub no longer lists it.
@@ -243,20 +262,15 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
               .filter(Boolean)
               .join(" ")}
           </Content>
-          {usedByCount > 0 && (
-            <Content component="p">
-              {t("agentic.model.inUse", { count: usedByCount })}
-            </Content>
-          )}
+          {isUsageLoading
+            ? usageSkeleton
+            : inUse != null && <Content component="p">{inUse}</Content>}
         </Content>
       </Alert>
-    ) : usedByCount > 0 ? (
-      <Alert
-        isInline
-        isPlain
-        variant="warning"
-        title={t("agentic.model.inUse", { count: usedByCount })}
-      />
+    ) : isUsageLoading ? (
+      usageSkeleton
+    ) : inUse != null ? (
+      <Alert isInline isPlain variant="warning" title={inUse} />
     ) : null;
 
   const form = (

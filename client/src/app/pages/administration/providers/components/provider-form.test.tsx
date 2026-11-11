@@ -155,6 +155,24 @@ describe("ProviderForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("never looks unused while the models load or after they fail (X6)", async () => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
+        res(ctx.status(500))
+      )
+    );
+    render(<ProviderForm provider={existing} onClose={jest.fn()} />);
+    expect(await screen.findByText("terms.loading")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "agentic.provider.editUsageUnchecked",
+        undefined,
+        { timeout: 5000 }
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("terms.loading")).toBeNull();
+  });
+
   it("shows an unreachable provider's status, last verification and usage in one alert", async () => {
     models = [modelUsing("m1", "1")];
     render(
