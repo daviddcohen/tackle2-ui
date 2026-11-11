@@ -10,13 +10,9 @@ import {
   Content,
   Divider,
   DividerVariant,
-  Dropdown,
   DropdownItem,
-  DropdownList,
   FormSelect,
   FormSelectOption,
-  MenuToggle,
-  MenuToggleElement,
   Modal,
   ModalBody,
   ModalFooter,
@@ -177,7 +173,6 @@ export const ApplicationsTable: FC = () => {
     useState<DecoratedApplication | null>(null);
 
   const [isAnalyzeModalOpen, setAnalyzeModalOpen] = useState(false);
-  const [isActionsDropdownOpen, setIsActionsDropdownOpen] = useState(false);
   const [retrieveConfigApplications, setRetrieveConfigApplications] = useState<
     DecoratedApplication[] | null
   >(null);
@@ -889,6 +884,15 @@ export const ApplicationsTable: FC = () => {
         ),
       ],
       [
+        canStartMigrations && (
+          <DropdownItem
+            key="run-migration-plan"
+            isDisabled={selectedRows.length < 1}
+            onClick={() => startMigrationsFor(selectedRows)}
+          >
+            {t("agentic.execution.startMigration")}
+          </DropdownItem>
+        ),
         applicationWriteAccess && tasksReadAccess && tasksWriteAccess && (
           <DropdownItem
             key="applications-bulk-cancel"
@@ -1199,36 +1203,6 @@ export const ApplicationsTable: FC = () => {
                   </ToolbarItem>
                 </ScopeGate>
               </ToolbarItem>
-              {canStartMigrations && selectedRows.length > 0 && (
-                <ToolbarItem>
-                  <Dropdown
-                    isOpen={isActionsDropdownOpen}
-                    onOpenChange={setIsActionsDropdownOpen}
-                    toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
-                      <MenuToggle
-                        ref={toggleRef}
-                        variant="secondary"
-                        onClick={() => setIsActionsDropdownOpen((o) => !o)}
-                        isExpanded={isActionsDropdownOpen}
-                      >
-                        {t("agentic.applicationDetail.actions")}
-                      </MenuToggle>
-                    )}
-                  >
-                    <DropdownList>
-                      <DropdownItem
-                        key="run-migration-plan"
-                        onClick={() => {
-                          setIsActionsDropdownOpen(false);
-                          startMigrationsFor(selectedRows);
-                        }}
-                      >
-                        {t("agentic.execution.startMigration")}
-                      </DropdownItem>
-                    </DropdownList>
-                  </Dropdown>
-                </ToolbarItem>
-              )}
             </ToolbarGroup>
             <ToolbarGroup variant="action-group-plain">
               {toolbarKebabItems.length ? (

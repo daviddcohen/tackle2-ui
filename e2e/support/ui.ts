@@ -269,7 +269,7 @@ export const openBulkRunMigration = async (
 ) => {
   for (const name of applicationNames)
     await inventoryRow(page, name).getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Actions", exact: true }).click();
+  await page.getByRole("button", { name: "Application actions" }).click();
   await page.getByRole("menuitem", { name: "Run migration plan" }).click();
   const preflight = dialog(page, "Run migration plan");
   await expect(preflight).toBeVisible();
