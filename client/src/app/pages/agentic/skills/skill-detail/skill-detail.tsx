@@ -30,6 +30,7 @@ import {
   Tabs,
 } from "@patternfly/react-core";
 import { CubesIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths, SkillDetailsRoute } from "@app/Paths";
@@ -70,16 +71,6 @@ const sourceTypeColor: Record<SkillSourceType, "blue" | "green" | "orange"> = {
   inline: "blue",
   git: "green",
   oci: "orange",
-};
-
-const scopeColor: Record<
-  SkillAssociationScope,
-  "blue" | "orange" | "green" | "grey"
-> = {
-  agent: "blue",
-  archetype: "orange",
-  targetProfile: "green",
-  application: "grey",
 };
 
 const SKILL_DETAIL_TABS = ["details", "associations"] as const;
@@ -392,13 +383,8 @@ const SkillDetail: React.FC = () => {
                                   "1px solid var(--pf-t--global--border--color--subtle)",
                               }}
                             >
-                              <FlexItem>
-                                <Label
-                                  isCompact
-                                  color={scopeColor[assoc.scope]}
-                                >
-                                  {scopeLabel(assoc.scope)}
-                                </Label>
+                              <FlexItem className={textStyles.textColorSubtle}>
+                                {scopeLabel(assoc.scope)}
                               </FlexItem>
                               <FlexItem>
                                 {destination != null ? (
@@ -490,24 +476,10 @@ const SkillDetail: React.FC = () => {
                               <Stack hasGutter>
                                 {entries.map((es, i) => (
                                   <StackItem key={i}>
-                                    <Flex
-                                      spaceItems={{
-                                        default: "spaceItemsSm",
-                                      }}
-                                      alignItems={{
-                                        default: "alignItemsCenter",
-                                      }}
-                                    >
-                                      <FlexItem>
-                                        <Label
-                                          isCompact
-                                          color={scopeColor[es.scope]}
-                                        >
-                                          {scopeLabel(es.scope)}
-                                        </Label>
-                                      </FlexItem>
-                                      <FlexItem>{es.scopeName}</FlexItem>
-                                    </Flex>
+                                    {t("agentic.skillsTable.source", {
+                                      scope: scopeLabel(es.scope),
+                                      name: es.scopeName,
+                                    })}
                                   </StackItem>
                                 ))}
                               </Stack>
