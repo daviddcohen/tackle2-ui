@@ -128,11 +128,32 @@ test.describe("Models list", () => {
     page,
   }) => {
     await openRowActions(page, "Claude 3.7 Sonnet");
-    await expect(
-      page.getByRole("menuitem", { name: "Set as Default" })
-    ).toBeDisabled();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "Edit",
+      "Set as default",
+      "Delete",
+    ]);
+    const setDefault = page.getByRole("menuitem", { name: "Set as default" });
+    await expect(setDefault).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "Edit" })).toBeEnabled();
+    await expectTooltipOnHover(page, setDefault, "Already the default model.");
+    await expectTooltipOnHover(
+      page,
+      page.getByRole("menuitem", { name: "Delete" }),
+      "Choose another default model before deleting this one."
+    );
+  });
+
+  test("only verified models can be set as default", async ({ page }) => {
+    await openRowActions(page, "Gemini 2.5 Pro");
+    const setDefault = page.getByRole("menuitem", { name: "Set as default" });
+    await expect(setDefault).toBeDisabled();
+    await expectTooltipOnHover(
+      page,
+      setDefault,
+      "Only verified models can be the default."
+    );
   });
 
   test("model used by agents cannot be deleted", async ({ page }) => {
@@ -146,14 +167,24 @@ test.describe("Models list", () => {
     await expectTooltipOnHover(
       page,
       page.getByRole("menuitem", { name: "Delete" }),
-      "Remove this Model from its Agents"
+      "Used by 2 agents. Remove it from those agents before deleting it."
     );
   });
 
   test("set another model as default moves the label", async ({ page }) => {
     await openRowActions(page, "GPT-4o");
-    await page.getByRole("menuitem", { name: "Set as Default" }).click();
-    await expect(toast(page, /default/i)).toBeVisible();
+    await page.getByRole("menuitem", { name: "Set as default" }).click();
+    await expect(dialog(page)).toContainText("Change the default model?");
+    await expect(dialog(page)).toContainText(
+      "GPT-4o will replace Claude 3.7 Sonnet as the organization default. New agents start with the default model selected; existing agents keep the model they use."
+    );
+    await dialog(page).getByRole("button", { name: "Cancel" }).click();
+    await expect(rowByText(page, "Claude 3.7 Sonnet")).toContainText("Default");
+
+    await openRowActions(page, "GPT-4o");
+    await page.getByRole("menuitem", { name: "Set as default" }).click();
+    await dialog(page).getByRole("button", { name: "Set as default" }).click();
+    await expect(toast(page, "Default model updated")).toBeVisible();
     await expect(rowByText(page, "GPT-4o")).toContainText("Default");
     await expect(rowByText(page, "Claude 3.7 Sonnet")).not.toContainText(
       "Default"
@@ -165,8 +196,9 @@ test.describe("Models list", () => {
   }) => {
     await openRowActions(page, "Granite Code 20B");
     await page.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(dialog(page)).toContainText("Delete model?");
     await expect(dialog(page)).toContainText(
-      'Delete Model "Granite Code 20B"?'
+      "Granite Code 20B will be deleted. It can no longer be selected for agents. This action cannot be undone."
     );
     await dialog(page).getByRole("button", { name: "Cancel" }).click();
     await expect(rowByText(page, "Granite Code 20B")).toHaveCount(1);
