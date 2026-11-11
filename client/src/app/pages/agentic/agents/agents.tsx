@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
-import { Link, generatePath } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
@@ -75,8 +75,6 @@ export const AgentsPage: React.FC = () => {
 
   const [agentToDelete, setAgentToDelete] = React.useState<Agent>();
   const [agentToTest, setAgentToTest] = React.useState<Agent | null>(null);
-  const [agentSkillsToInspect, setAgentSkillsToInspect] =
-    React.useState<Agent | null>(null);
 
   const [createUpdateModalState, setCreateUpdateModalState, formKey] =
     useFormModalState<"create" | Agent>();
@@ -289,20 +287,7 @@ export const AgentsPage: React.FC = () => {
                           width={10}
                           {...getTdProps({ columnKey: "skillsCount" })}
                         >
-                          {agent.skills?.length ? (
-                            <Button
-                              variant="link"
-                              isInline
-                              aria-label={t("agentic.agent.inspectSkills", {
-                                agent: agent.name,
-                              })}
-                              onClick={() => setAgentSkillsToInspect(agent)}
-                            >
-                              {agent.skills.length}
-                            </Button>
-                          ) : (
-                            0
-                          )}
+                          {agent.skills?.length ?? 0}
                         </Td>
                         <Td isActionCell>
                           {(canManageAgents || canTestAgents) && (
@@ -395,36 +380,6 @@ export const AgentsPage: React.FC = () => {
         agent={agentToTest}
         onClose={() => setAgentToTest(null)}
       />
-      <Modal
-        isOpen={agentSkillsToInspect != null}
-        onClose={() => setAgentSkillsToInspect(null)}
-        variant="small"
-      >
-        <ModalHeader
-          title={t("agentic.agent.associatedSkillsTitle", {
-            agent: agentSkillsToInspect?.name,
-          })}
-          description={t("agentic.agent.associatedSkillsDescription")}
-        />
-        <ModalBody>
-          <Content component="ul">
-            {agentSkillsToInspect?.skills.map((skill) => (
-              <Content component="li" key={skill.id}>
-                <Link
-                  to={to(
-                    generatePath(DevPaths.skillDetails, {
-                      skillId: String(skill.id),
-                    })
-                  )}
-                  onClick={() => setAgentSkillsToInspect(null)}
-                >
-                  {skill.name}
-                </Link>
-              </Content>
-            ))}
-          </Content>
-        </ModalBody>
-      </Modal>
       {isConfirmDialogOpen && (
         <ConfirmDialog
           title={t("agentic.agent.deleteTitle", {

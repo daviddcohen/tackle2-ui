@@ -1230,9 +1230,6 @@
         "parameterDefaultType": "The default value must match the parameter type (a number, or true or false)."
       },
       "addSkillCollection": "Add Skill collection",
-      "associatedSkillsDescription": "Skills directly associated with this agent.",
-      "associatedSkillsTitle": "{{agent}} — Skills",
-      "inspectSkills": "View Skills for {{agent}}",
       "skillCollectionsHelp": "Skill collections bundle related Skills together.",
       "skillCollectionsSelect": "Select Skill collections",
       "startTest": "Start test run",
