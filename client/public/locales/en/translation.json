@@ -1374,7 +1374,6 @@
       "noPathBody": "Applications get this plan only after it has an archetype and target profiles.",
       "noPathTitle": "No migration path assigned",
       "notAssigned": "Not assigned",
-      "notConfigured": "Not configured",
       "notFoundBody": "This migration plan may have been deleted, or the link is out of date.",
       "notFoundTitle": "Migration plan not found",
       "plansDescription": "A migration plan is an ordered set of stages for applications of one archetype and target profile.",
@@ -1391,7 +1390,6 @@
       "stageName": "Stage name",
       "stageNumber": "Stage {{number}}",
       "selectAgent": "Select an agent",
-      "targetProfile": "Target profiles",
       "tableLabel": "Migration plans",
       "updated": "Migration plan updated",
       "validation": {
@@ -1808,7 +1806,6 @@
       "goToApplicationInventory": "Go to application inventory",
       "stages": "Stages",
       "commits": "Commits",
-      "commitsEmpty": "No commits recorded for this stage.",
       "notFoundTitle": "Plan run not found",
       "notFoundBody": "This plan run may have been deleted, or the link is out of date.",
       "backToPlanRuns": "Back to plan runs",
