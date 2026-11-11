@@ -233,175 +233,158 @@ export const SkillCollectionsTab: React.FC = () => {
   return (
     <PageSection hasBodyWrapper={false}>
       <ConditionalRender
-        when={isFetching && !(skillCollections.length || fetchError)}
+        when={isFetching && !(skillCollections || fetchError)}
         then={<AppPlaceholder />}
       >
-        {/* The list wrapper of archetypes-page.tsx, kept for parity (guide 4.1). */}
-        <div
-          style={{
-            backgroundColor:
-              "var(--pf-t--global--background--color--primary--default)",
-          }}
-        >
-          <Toolbar {...toolbarProps}>
-            <ToolbarContent>
-              {/* Filters stay expanded down to 1024 wide (kit-list@1024). */}
-              <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
-              {canManageCollections && (
-                <ToolbarGroup variant="action-group">
-                  <ToolbarItem>{createButton}</ToolbarItem>
-                </ToolbarGroup>
-              )}
-              <ToolbarItem {...paginationToolbarItemProps}>
-                <SimplePagination
-                  idPrefix="skill-collections-table"
-                  isTop
-                  paginationProps={paginationProps}
+        <Toolbar {...toolbarProps}>
+          <ToolbarContent>
+            {/* Filters stay expanded down to 1024 wide (kit-list@1024). */}
+            <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
+            {canManageCollections && (
+              <ToolbarGroup variant="action-group">
+                <ToolbarItem>{createButton}</ToolbarItem>
+              </ToolbarGroup>
+            )}
+            <ToolbarItem {...paginationToolbarItemProps}>
+              <SimplePagination
+                idPrefix="skill-collections-table"
+                isTop
+                paginationProps={paginationProps}
+              />
+            </ToolbarItem>
+          </ToolbarContent>
+        </Toolbar>
+        <Table {...tableProps} aria-label={t("agentic.skillCollection.title")}>
+          <Thead>
+            <Tr>
+              <TableHeaderContentWithControls {...tableControls}>
+                <Th {...getThProps({ columnKey: "name" })} width={20} />
+                <Th {...getThProps({ columnKey: "description" })} width={30} />
+                <Th
+                  {...getThProps({ columnKey: "skills" })}
+                  modifier="fitContent"
                 />
-              </ToolbarItem>
-            </ToolbarContent>
-          </Toolbar>
-          <Table
-            {...tableProps}
-            aria-label={t("agentic.skillCollection.title")}
+                <Th
+                  {...getThProps({ columnKey: "agents" })}
+                  modifier="fitContent"
+                />
+              </TableHeaderContentWithControls>
+            </Tr>
+          </Thead>
+          <ConditionalTableBody
+            isLoading={isFetching}
+            isError={!!fetchError}
+            isNoData={currentPageItems.length === 0}
+            noDataEmptyState={
+              skillCollections.length > 0 ? (
+                <NoDataEmptyState
+                  title={t("message.noResultsFoundTitle")}
+                  description={t("message.noResultsFoundBody")}
+                />
+              ) : (
+                <NoDataEmptyState
+                  title={t("agentic.skillCollection.emptyTitle")}
+                  description={
+                    canManageCollections
+                      ? t("agentic.skillCollection.emptyDescription")
+                      : t("agentic.skillCollection.emptyDescriptionReadOnly")
+                  }
+                  actions={canManageCollections && createButton}
+                />
+              )
+            }
+            numRenderedColumns={numRenderedColumns}
           >
-            <Thead>
-              <Tr>
-                <TableHeaderContentWithControls {...tableControls}>
-                  <Th {...getThProps({ columnKey: "name" })} width={20} />
-                  <Th
-                    {...getThProps({ columnKey: "description" })}
-                    width={30}
-                  />
-                  <Th
-                    {...getThProps({ columnKey: "skills" })}
-                    modifier="fitContent"
-                  />
-                  <Th
-                    {...getThProps({ columnKey: "agents" })}
-                    modifier="fitContent"
-                  />
-                </TableHeaderContentWithControls>
-              </Tr>
-            </Thead>
-            <ConditionalTableBody
-              isLoading={isFetching}
-              isError={!!fetchError}
-              isNoData={currentPageItems.length === 0}
-              noDataEmptyState={
-                skillCollections.length > 0 ? (
-                  <NoDataEmptyState
-                    title={t("message.noResultsFoundTitle")}
-                    description={t("message.noResultsFoundBody")}
-                  />
-                ) : (
-                  <NoDataEmptyState
-                    title={t("agentic.skillCollection.emptyTitle")}
-                    description={
-                      canManageCollections
-                        ? t("agentic.skillCollection.emptyDescription")
-                        : t("agentic.skillCollection.emptyDescriptionReadOnly")
-                    }
-                    actions={canManageCollections && createButton}
-                  />
-                )
-              }
-              numRenderedColumns={numRenderedColumns}
-            >
-              <Tbody>
-                {currentPageItems.map((collection, rowIndex) => {
-                  const deleteBlockedReason = getCollectionDeleteBlockedReason(
-                    t,
-                    collection.id,
-                    knownAgents
-                  );
-                  return (
-                    <Tr
-                      key={collection.id}
-                      {...getTrProps({ item: collection })}
+            <Tbody>
+              {currentPageItems.map((collection, rowIndex) => {
+                const deleteBlockedReason = getCollectionDeleteBlockedReason(
+                  t,
+                  collection.id,
+                  knownAgents
+                );
+                return (
+                  <Tr key={collection.id} {...getTrProps({ item: collection })}>
+                    <TableRowContentWithControls
+                      {...tableControls}
+                      item={collection}
+                      rowIndex={rowIndex}
                     >
-                      <TableRowContentWithControls
-                        {...tableControls}
-                        item={collection}
-                        rowIndex={rowIndex}
+                      <Td {...getTdProps({ columnKey: "name" })}>
+                        <Link to={to(collectionPath(collection))}>
+                          {collection.name}
+                        </Link>
+                      </Td>
+                      <Td
+                        {...getTdProps({ columnKey: "description" })}
+                        modifier="truncate"
+                        tooltip={collection.description || undefined}
                       >
-                        <Td {...getTdProps({ columnKey: "name" })}>
-                          <Link to={to(collectionPath(collection))}>
-                            {collection.name}
-                          </Link>
-                        </Td>
-                        <Td
-                          {...getTdProps({ columnKey: "description" })}
-                          modifier="truncate"
-                          tooltip={collection.description || undefined}
-                        >
-                          {collection.description}
-                        </Td>
-                        <Td
-                          {...getTdProps({ columnKey: "skills" })}
-                          modifier="nowrap"
-                        >
-                          {skillsCell(collection)}
-                        </Td>
-                        <Td
-                          {...getTdProps({ columnKey: "agents" })}
-                          modifier="nowrap"
-                        >
-                          {agentsCell(collection)}
-                        </Td>
-                        {canManageCollections && (
-                          <Td isActionCell>
-                            <ActionsColumn
-                              items={[
-                                {
-                                  title: t("actions.edit"),
-                                  onClick: () =>
-                                    openModalAfterMenuClose(() =>
-                                      setFormModalState(collection)
-                                    ),
-                                  ...managedActionProps(
-                                    collection.operatorManaged,
-                                    managedTooltip
+                        {collection.description}
+                      </Td>
+                      <Td
+                        {...getTdProps({ columnKey: "skills" })}
+                        modifier="nowrap"
+                      >
+                        {skillsCell(collection)}
+                      </Td>
+                      <Td
+                        {...getTdProps({ columnKey: "agents" })}
+                        modifier="nowrap"
+                      >
+                        {agentsCell(collection)}
+                      </Td>
+                      {canManageCollections && (
+                        <Td isActionCell>
+                          <ActionsColumn
+                            items={[
+                              {
+                                title: t("actions.edit"),
+                                onClick: () =>
+                                  openModalAfterMenuClose(() =>
+                                    setFormModalState(collection)
                                   ),
-                                },
-                                { isSeparator: true },
-                                {
-                                  title: t("actions.delete"),
-                                  onClick: () =>
-                                    openModalAfterMenuClose(() =>
-                                      setCollectionToDelete(collection)
-                                    ),
-                                  ...(collection.operatorManaged
-                                    ? managedActionProps(
-                                        true,
-                                        managedTooltip,
-                                        "left"
-                                      )
-                                    : disabledActionProps(
-                                        deleteBlockedReason,
-                                        "left"
-                                      )),
-                                  isDanger:
-                                    !collection.operatorManaged &&
-                                    deleteBlockedReason == null,
-                                },
-                              ]}
-                            />
-                          </Td>
-                        )}
-                      </TableRowContentWithControls>
-                    </Tr>
-                  );
-                })}
-              </Tbody>
-            </ConditionalTableBody>
-          </Table>
-          <SimplePagination
-            idPrefix="skill-collections-table"
-            isTop={false}
-            paginationProps={paginationProps}
-          />
-        </div>
+                                ...managedActionProps(
+                                  collection.operatorManaged,
+                                  managedTooltip
+                                ),
+                              },
+                              { isSeparator: true },
+                              {
+                                title: t("actions.delete"),
+                                onClick: () =>
+                                  openModalAfterMenuClose(() =>
+                                    setCollectionToDelete(collection)
+                                  ),
+                                ...(collection.operatorManaged
+                                  ? managedActionProps(
+                                      true,
+                                      managedTooltip,
+                                      "left"
+                                    )
+                                  : disabledActionProps(
+                                      deleteBlockedReason,
+                                      "left"
+                                    )),
+                                isDanger:
+                                  !collection.operatorManaged &&
+                                  deleteBlockedReason == null,
+                              },
+                            ]}
+                          />
+                        </Td>
+                      )}
+                    </TableRowContentWithControls>
+                  </Tr>
+                );
+              })}
+            </Tbody>
+          </ConditionalTableBody>
+        </Table>
+        <SimplePagination
+          idPrefix="skill-collections-table"
+          isTop={false}
+          paginationProps={paginationProps}
+        />
       </ConditionalRender>
 
       <SkillCollectionModal

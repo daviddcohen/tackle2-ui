@@ -57,20 +57,29 @@ const SkillsPage: React.FC = () => {
           />
         </Tabs>
       </PageSection>
-      <DetailTabPanel
-        prefix={TAB_PREFIX}
-        eventKey="skills"
-        activeKey={activeTab}
+      {/* The list wrapper of archetypes-page.tsx, kept for parity (guide
+          4.1), once around both tab bodies. */}
+      <div
+        style={{
+          backgroundColor:
+            "var(--pf-t--global--background--color--primary--default)",
+        }}
       >
-        <SkillsTab />
-      </DetailTabPanel>
-      <DetailTabPanel
-        prefix={TAB_PREFIX}
-        eventKey="collections"
-        activeKey={activeTab}
-      >
-        <SkillCollectionsTab />
-      </DetailTabPanel>
+        <DetailTabPanel
+          prefix={TAB_PREFIX}
+          eventKey="skills"
+          activeKey={activeTab}
+        >
+          <SkillsTab />
+        </DetailTabPanel>
+        <DetailTabPanel
+          prefix={TAB_PREFIX}
+          eventKey="collections"
+          activeKey={activeTab}
+        >
+          <SkillCollectionsTab />
+        </DetailTabPanel>
+      </div>
     </>
   );
 };
