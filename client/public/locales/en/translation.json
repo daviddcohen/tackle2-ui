@@ -1531,7 +1531,6 @@
       "contentHelp": "Markdown. Agents read it as instructions.",
       "repositoryHelp": "For example, https://github.com/org/repo.",
       "imageHelp": "For example, quay.io/org/skill-name:latest.",
-      "associationsDescription": "Where this skill is used. Each field says when agents get it.",
       "associationFields": {
         "agents": {
           "label": "Agents",
