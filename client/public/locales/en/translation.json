@@ -1693,6 +1693,10 @@
       "skill": "Skill",
       "skillCollection": "Skill collection"
     },
+    "skillsTable": {
+      "label": "Skills",
+      "source": "{{scope}}: {{name}}"
+    },
     "planRun": {
       "title": "Plan runs",
       "description": "History of all migration plan runs across your application portfolio.",
