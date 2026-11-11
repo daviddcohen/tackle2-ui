@@ -142,7 +142,7 @@ test.describe("Inventory migration column", () => {
       .toEqual(["Blocked"]);
   });
 
-  test("row action Start is disabled for blocked applications and enabled for ready ones", async ({
+  test("row action Start is disabled with its reason for blocked applications and enabled for ready ones", async ({
     page,
   }) => {
     await page.goto(
@@ -153,9 +153,13 @@ test.describe("Inventory migration column", () => {
       .getByRole("row", { name: /Branch Operations/ })
       .getByRole("button", { name: "Row actions" })
       .click();
-    await expect(
-      page.getByRole("menuitem", { name: "Run migration plan" })
-    ).toBeDisabled();
+    const blocked = page.getByRole("menuitem", { name: "Run migration plan" });
+    await expect(blocked).toBeDisabled();
+    // Guide 4.12: a disabled action says why.
+    await blocked.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "A source control credential reference is missing."
+    );
     await page.keyboard.press("Escape");
     await page
       .getByRole("row", { name: /Advisor Workbench API/ })
