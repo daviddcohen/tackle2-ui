@@ -1540,8 +1540,6 @@
       "importConfirm": "Import",
       "importSuccess": "Skill imported successfully",
       "createCollection": "Create collection",
-      "createCollectionFromSelected": "Create collection ({{count}} selected)",
-      "selectAll": "Select all skills on this page",
       "notFoundTitle": "Skill not found",
       "notFoundBody": "This skill may have been deleted, or the link is out of date.",
       "backToSkills": "Back to skills",
