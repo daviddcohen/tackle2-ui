@@ -79,10 +79,11 @@ interface MigrationPreflightModalProps {
   /** Prefills the form, for example to start a new run like a failed one. */
   initialValues?: Partial<MigrationPreflightValues>;
   /**
-   * Hides the expert override caution under the plan picker. A rerun of a
-   * failed run picks the run's own plan, which is not an override (R5).
+   * The plan of the failed run this dialog runs again. Picking that plan for
+   * all applications is not an override, so its caution is hidden (R5); any
+   * other plan still shows it.
    */
-  hideOverrideCaution?: boolean;
+  rerunPlanId?: EntityId;
   isStarting?: boolean;
   /** Builds a link that carries the caller's breadcrumb trail. */
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
@@ -145,7 +146,7 @@ export const MigrationPreflightModal: React.FC<
   applications,
   migrations: providedMigrations,
   initialValues,
-  hideOverrideCaution = false,
+  rerunPlanId,
   isStarting = false,
   linkTo: to,
   onClose,
@@ -352,15 +353,16 @@ export const MigrationPreflightModal: React.FC<
               />
               {/* A plan picked for all applications is an override: say what
                   it does, unless the field shows its error instead. */}
-              {!hideOverrideCaution && !(error && (isDirty || isTouched)) && (
-                <FormHelperText>
-                  <HelperText>
-                    <HelperTextItem variant="warning">
-                      {t("agentic.execution.overrideCaution")}
-                    </HelperTextItem>
-                  </HelperText>
-                </FormHelperText>
-              )}
+              {!(rerunPlanId != null && value === rerunPlanId) &&
+                !(error && (isDirty || isTouched)) && (
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem variant="warning">
+                        {t("agentic.execution.overrideCaution")}
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                )}
             </>
           )}
         />

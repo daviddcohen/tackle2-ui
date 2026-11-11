@@ -58,7 +58,8 @@ interface RunMigrationPlanLauncherOptions {
  * undefined without `agenticWorkflowRunsWriteScopes`, so callers render no
  * trigger; `open(applications)` runs those applications instead of the
  * hook's. Render `modal` anywhere in the page. A rerun (`rerunOf`) starts
- * from the failed run's values and shows no override caution (addenda R5).
+ * from the failed run's values and shows no override caution while its own
+ * plan is picked (addenda R5).
  */
 export const useRunMigrationPlanLauncher = ({
   applications,
@@ -112,7 +113,7 @@ export const useRunMigrationPlanLauncher = ({
             ? rerunInitialValues(rerunOf, targets, views)
             : undefined
         }
-        hideOverrideCaution={rerunOf != null}
+        rerunPlanId={rerunOf?.planId}
         isStarting={isStarting}
         linkTo={(pathname, search = "") =>
           breadcrumbTo(pathname, search, linkCrumbs)

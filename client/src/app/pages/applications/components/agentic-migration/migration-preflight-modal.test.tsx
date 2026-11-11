@@ -199,6 +199,26 @@ describe("MigrationPreflightModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("hides the override caution only while the rerun's own plan is picked", async () => {
+    const user = userEvent.setup();
+    renderModal({
+      rerunPlanId: "1",
+      initialValues: { planSelection: "single", planId: "1" },
+    });
+    await screen.findAllByText("Java EE to Quarkus");
+    expect(
+      screen.queryByText("agentic.execution.overrideCaution")
+    ).not.toBeInTheDocument();
+    // Another plan is a real override.
+    await user.click(
+      screen.getByRole("button", { name: "agentic.execution.planOverride" })
+    );
+    await user.click(await screen.findByText("Spring Boot to Quarkus"));
+    expect(
+      await screen.findByText("agentic.execution.overrideCaution")
+    ).toBeInTheDocument();
+  });
+
   it("links the run a reason names, and offers the run otherwise", () => {
     const run = { id: "1", name: "Run #1 — Java EE to Quarkus" };
     renderModal({
