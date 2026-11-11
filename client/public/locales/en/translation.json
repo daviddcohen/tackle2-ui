@@ -1498,8 +1498,6 @@
         "repositoryUrl": "Enter a valid Git repository URL (https, ssh or git)."
       },
       "repository": "Repository",
-      "noArchetypeSkills": "No Skills associated",
-      "noArchetypeSkillsDescription": "Skills can be associated with this archetype to provide migration guidance for matching applications.",
       "importFile": "Import skill file",
       "importDescription": "Creates an inline skill from a Markdown or text file.",
       "importFileHelp": "Markdown (.md) or text (.txt). The first heading, or else the file name, becomes the skill name.",
@@ -1908,6 +1906,9 @@
       "goToSkills": "Go to skills"
     },
     "archetype": {
+      "goToSkills": "Go to skills",
+      "noSkillsBody": "Skills associated with this archetype or its target profiles appear here. Associations are edited on each skill.",
+      "noSkillsTitle": "No skills yet",
       "noTargetProfilesBody": "Create a target profile for where applications in this archetype are going, then assign a migration plan to it.",
       "noTargetProfilesBodyReadOnly": "Target profiles appear here once they are created.",
       "noTargetProfilesBodyWithoutPlans": "Create a target profile for where applications in this archetype are going.",
