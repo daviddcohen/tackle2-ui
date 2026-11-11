@@ -9,7 +9,6 @@ import {
   breadcrumb,
   currentCrumb,
   expect,
-  fixtureGraph,
   personaSelect,
   protoUrl,
   scenarioSelect,
@@ -133,33 +132,6 @@ test("returning through an Agent association restores the saved runs tab and tru
     page.getByRole("tab", { name: "Agent runs", exact: true })
   ).toHaveAttribute("aria-selected", "true");
   await expect(currentCrumb(page)).toHaveText("Code Migrator");
-});
-
-test("every Agent Skills dialog link preserves the list context", async ({
-  page,
-}) => {
-  await page.goto(view("/agents"));
-  const graph = await fixtureGraph(page);
-  for (const agent of graph.agents) {
-    for (const skill of agent.skills) {
-      await page.goto(view("/agents"));
-      await page
-        .getByRole("button", {
-          name: `View Skills for ${agent.name}`,
-          exact: true,
-        })
-        .click();
-      await page
-        .getByRole("dialog")
-        .getByRole("link", { name: skill.name, exact: true })
-        .click();
-      await expect(currentCrumb(page)).toHaveText(skill.name);
-      await expect(
-        breadcrumb(page).getByRole("link", { name: "Agents", exact: true })
-      ).toBeVisible();
-      await expect(page.getByRole("dialog")).toHaveCount(0);
-    }
-  }
 });
 
 test("selected Archetype drawers survive pagination and filtering without losing the originating Skill", async ({

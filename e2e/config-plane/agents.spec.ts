@@ -45,21 +45,8 @@ test.describe("Agents list", () => {
   }) => {
     const codeMigrator = rowByText(page, "Code Migrator");
     await expect(codeMigrator).toContainText("Claude 3.7 Sonnet");
-    await expect(
-      codeMigrator.getByRole("button", { name: /Code Migrator/ })
-    ).toHaveText("4");
+    await expect(codeMigrator.getByRole("cell").nth(3)).toHaveText("4");
     expectHealthy(diagnostics);
-  });
-
-  test("skill count opens the associated skills modal with links", async ({
-    page,
-  }) => {
-    await rowByText(page, "Code Migrator")
-      .getByRole("button", { name: /Code Migrator/ })
-      .click();
-    await expect(dialog(page).getByRole("link")).toHaveCount(4);
-    await dialog(page).getByRole("link").first().click();
-    await expect(page).toHaveURL(/\/skills\/\d+/);
   });
 
   test("agent used by plans cannot be deleted from the list (with reason)", async ({
