@@ -3,10 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
 import {
   Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
   ExpandableSection,
   ExpandableSectionVariant,
   Label,
@@ -24,9 +20,14 @@ import { ConditionalTableBody } from "@app/components/TableControls";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { formatDate } from "@app/utils/utils";
 
+import {
+  DetailFacts,
+  DetailSection,
+  DetailSections,
+  LinkLabels,
+  SectionEmpty,
+} from "../../components/detail-section";
 import { AgentModel } from "../components/agent-model";
-
-import { DetailSection, DetailSections, SectionEmpty } from "./detail-section";
 
 export interface AgentDetailsTabProps {
   agent: Agent;
@@ -73,23 +74,13 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
     refs.length === 0 ? (
       none
     ) : (
-      <LabelGroup numLabels={5}>
-        {refs.map((ref) => (
-          <Label
-            key={ref.id}
-            variant="outline"
-            isCompact
-            isClickable
-            render={({ className, content }) => (
-              <Link className={className} to={linkTo(pathOf(ref.id))}>
-                {content}
-              </Link>
-            )}
-          >
-            {ref.name}
-          </Label>
-        ))}
-      </LabelGroup>
+      <LinkLabels
+        items={refs.map((ref) => ({
+          id: ref.id,
+          name: ref.name,
+          to: linkTo(pathOf(ref.id)),
+        }))}
+      />
     );
 
   const facts: [string, React.ReactNode][] = [
@@ -166,18 +157,7 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
 
   return (
     <DetailSections>
-      <DescriptionList
-        isHorizontal
-        isCompact
-        horizontalTermWidthModifier={{ default: "18ch" }}
-      >
-        {facts.map(([term, value]) => (
-          <DescriptionListGroup key={term}>
-            <DescriptionListTerm>{term}</DescriptionListTerm>
-            <DescriptionListDescription>{value}</DescriptionListDescription>
-          </DescriptionListGroup>
-        ))}
-      </DescriptionList>
+      <DetailFacts facts={facts} />
 
       <DetailSection title={t("agentic.agent.personaPrompt")}>
         {promptParagraphs.length === 0 ? (
