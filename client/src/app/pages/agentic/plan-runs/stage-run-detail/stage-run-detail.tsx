@@ -72,19 +72,24 @@ const StageRunDetail: React.FC = () => {
       onApproveError
     );
 
+  // The run itself is missing (addenda R3): the page is the run's not found.
+  const isRunMissing =
+    planRun == null && !isLoading && (isNotFound || fetchError == null);
   const { breadcrumbs, linkCrumbs: stageChildCrumbs } = useEntityBreadcrumbs(
-    stage?.name ?? t("agentic.entity.stage"),
+    isRunMissing
+      ? t("agentic.entity.planRun")
+      : (stage?.name ?? t("agentic.entity.stage")),
     [
       { title: t("sidebar.planRuns"), path: DevPaths.planRuns },
-      // While the run loads, its crumb is the noun (guide 3.5 rule 2).
-      ...(planRun != null || isLoading
-        ? [
+      // While the run loads or fails, its crumb is the noun (guide 3.5 rule 2).
+      ...(isRunMissing
+        ? []
+        : [
             {
               title: planRun?.name ?? t("agentic.entity.planRun"),
               path: generatePath(DevPaths.planRunDetails, { runId }),
             },
-          ]
-        : []),
+          ]),
     ]
   );
 
@@ -97,23 +102,29 @@ const StageRunDetail: React.FC = () => {
     if (planRun == null && isLoading) {
       return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
     }
-    // A stage of a known run goes back to that run; otherwise to the list.
+    if (planRun == null) {
+      // A missing run is the run's not found; any other failure is the
+      // error branch under the full trail (addenda X7).
+      return (
+        <EntityDetailUnavailable
+          breadcrumbs={breadcrumbs}
+          isNotFound={isRunMissing}
+          notFoundTitle={t("agentic.planRun.notFoundTitle")}
+          notFoundBody={t("agentic.planRun.notFoundBody")}
+          backLabel={t("agentic.planRun.backToPlanRuns")}
+          backPath={DevPaths.planRuns}
+        />
+      );
+    }
+    // A missing stage of a known run goes back to that run.
     return (
       <EntityDetailUnavailable
         breadcrumbs={breadcrumbs}
-        isNotFound={planRun != null || isNotFound || fetchError == null}
+        isNotFound
         notFoundTitle={t("agentic.stageRun.notFoundTitle")}
         notFoundBody={t("agentic.stageRun.notFoundBody")}
-        backLabel={
-          planRun
-            ? t("agentic.stageRun.backToRun")
-            : t("agentic.planRun.backToPlanRuns")
-        }
-        backPath={
-          planRun
-            ? generatePath(DevPaths.planRunDetails, { runId })
-            : DevPaths.planRuns
-        }
+        backLabel={t("agentic.stageRun.backToRun", { run: planRun.name })}
+        backPath={generatePath(DevPaths.planRunDetails, { runId })}
       />
     );
   }

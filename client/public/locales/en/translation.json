@@ -1771,7 +1771,7 @@
       "output": "Output",
       "notFoundTitle": "Stage not found",
       "notFoundBody": "This stage may have been deleted, or the link is out of date.",
-      "backToRun": "Back to plan run",
+      "backToRun": "Back to {{run}}",
       "title": "{{stage}}: {{run}}"
     },
     "agentDetail": {
