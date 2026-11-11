@@ -85,6 +85,36 @@ export const getNextActionKey = (
   }
 };
 
+/** A stage whose agent's model cannot be used yet, with what it resolved to. */
+export interface StageWithUnverifiedModel {
+  stage: PlanStage;
+  /** Undefined when the stage's agent no longer exists. */
+  agent?: Agent;
+  /** Undefined when the agent's model no longer exists. */
+  model?: ModelProjection;
+}
+
+/**
+ * Stages of `plan`, in order, whose agent's model is not verified (or whose
+ * agent or model is missing): agents can use a model only after it is
+ * verified. The Models check and the plan's configuration alert both read it.
+ */
+export const getStagesWithUnverifiedModel = (
+  plan: MigrationPlan,
+  agents: Agent[],
+  models: ModelProjection[]
+): StageWithUnverifiedModel[] =>
+  [...plan.stages]
+    .sort((a, b) => a.order - b.order)
+    .map((stage) => {
+      const agent = agents.find((candidate) => candidate.id === stage.agent.id);
+      const model = models.find(
+        (candidate) => candidate.id === agent?.model.id
+      );
+      return { stage, agent, model };
+    })
+    .filter(({ model }) => model?.verificationStatus !== "verified");
+
 /**
  * Configuration checks of a Plan. Pass `undefined` for `agents` or `models`
  * while they are loading or failed to load: the Model check is then not
@@ -97,16 +127,7 @@ export const getPlanConfigurationChecks = (
 ): ConfigurationCheck[] => {
   const unavailableStages =
     agents != null && models != null
-      ? plan.stages.filter((stage) => {
-          const agent = agents.find(
-            (candidate) => candidate.id === stage.agent.id
-          );
-          return !models.some(
-            (model) =>
-              model.id === agent?.model.id &&
-              model.verificationStatus === "verified"
-          );
-        })
+      ? getStagesWithUnverifiedModel(plan, agents, models)
       : undefined;
   return [
     {
@@ -159,11 +180,12 @@ export const getPlanConfigurationChecks = (
     {
       id: "skills",
       labelKey: "agentic.plan.configurationCheck.skills.label",
-      status: plan.effectiveSkills?.length ? "passed" : "notEvaluated",
-      detailKey: plan.effectiveSkills?.length
+      // Undefined means the server did not report skills (X6); an empty list means none apply (P9).
+      status: plan.effectiveSkills ? "passed" : "notEvaluated",
+      detailKey: plan.effectiveSkills
         ? "agentic.plan.configurationCheck.skills.resolved"
         : "agentic.plan.configurationCheck.skills.notEvaluated",
-      detailValues: plan.effectiveSkills?.length
+      detailValues: plan.effectiveSkills
         ? { count: plan.effectiveSkills.length }
         : undefined,
     },
