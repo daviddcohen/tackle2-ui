@@ -18,13 +18,7 @@ import {
   Tabs,
   Title,
 } from "@patternfly/react-core";
-import {
-  BookOpenIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  LockIcon,
-  MinusCircleIcon,
-} from "@patternfly/react-icons";
+import { BookOpenIcon, LockIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
@@ -59,7 +53,10 @@ import {
 } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
 
-import { RunStatus } from "../../components/agentic-status";
+import {
+  ConfigurationStatus,
+  RunStatus,
+} from "../../components/agentic-status";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
 interface PlanDetailsRouteParams {
@@ -295,6 +292,37 @@ const PlanDetailsPage: React.FC = () => {
     isLoadingModels || modelsFetchError != null ? undefined : gateways
   );
   const hasConfigIssue = configurationChecks.some((c) => c.status === "issue");
+  // Per-check rows (guide 5.4): the check name is plain text, never the
+  // status label, and an issue always shows its detail under the status.
+  const checkList = (
+    <Table aria-label={t("agentic.plan.configurationChecks")} variant="compact">
+      <Thead>
+        <Tr>
+          <Th>{t("agentic.plan.checkColumnName")}</Th>
+          <Th>{t("terms.status")}</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {configurationChecks.map((check) => (
+          <Tr key={check.id}>
+            <Td dataLabel={t("agentic.plan.checkColumnName")}>
+              {t(check.labelKey)}
+            </Td>
+            <Td dataLabel={t("terms.status")}>
+              <ConfigurationStatus
+                status={check.status}
+                supportingText={
+                  check.status === "issue"
+                    ? t(check.detailKey, check.detailValues)
+                    : undefined
+                }
+              />
+            </Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
+  );
 
   return (
     <>
@@ -424,30 +452,7 @@ const PlanDetailsPage: React.FC = () => {
               variant="warning"
               title={t("agentic.plan.checksHaveIssues")}
             >
-              <Flex
-                spaceItems={{ default: "spaceItemsLg" }}
-                alignItems={{ default: "alignItemsCenter" }}
-              >
-                {configurationChecks.map((check) => (
-                  <FlexItem key={check.id}>
-                    <Flex
-                      spaceItems={{ default: "spaceItemsXs" }}
-                      alignItems={{ default: "alignItemsCenter" }}
-                    >
-                      <FlexItem>
-                        {check.status === "passed" ? (
-                          <CheckCircleIcon color="var(--pf-t--global--icon--color--severity--success--default)" />
-                        ) : check.status === "issue" ? (
-                          <ExclamationTriangleIcon color="var(--pf-t--global--icon--color--severity--warning--default)" />
-                        ) : (
-                          <MinusCircleIcon color="var(--pf-t--global--icon--color--disabled)" />
-                        )}
-                      </FlexItem>
-                      <FlexItem>{t(check.labelKey)}</FlexItem>
-                    </Flex>
-                  </FlexItem>
-                ))}
-              </Flex>
+              {checkList}
             </Alert>
           ) : (
             <Alert
@@ -456,24 +461,7 @@ const PlanDetailsPage: React.FC = () => {
               variant="success"
               title={t("agentic.plan.allChecksPassed")}
             >
-              <Flex
-                spaceItems={{ default: "spaceItemsLg" }}
-                alignItems={{ default: "alignItemsCenter" }}
-              >
-                {configurationChecks.map((check) => (
-                  <FlexItem key={check.id}>
-                    <Flex
-                      spaceItems={{ default: "spaceItemsXs" }}
-                      alignItems={{ default: "alignItemsCenter" }}
-                    >
-                      <FlexItem>
-                        <CheckCircleIcon color="var(--pf-t--global--icon--color--severity--success--default)" />
-                      </FlexItem>
-                      <FlexItem>{t(check.labelKey)}</FlexItem>
-                    </Flex>
-                  </FlexItem>
-                ))}
-              </Flex>
+              {checkList}
             </Alert>
           )}
         </PageSection>
