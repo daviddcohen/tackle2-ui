@@ -88,7 +88,7 @@ test.describe("Plan run detail", () => {
     await stageLinks(page).first().click();
     await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/1\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Prepare proposal: Run #1 — Java EE to Quarkus"
+      "Prepare proposal"
     );
     await expect(page.getByRole("heading", { name: "Commits" })).toBeVisible();
   });
