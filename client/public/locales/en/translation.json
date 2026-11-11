@@ -1608,8 +1608,6 @@
       "queued_one": "{{count}} migration queued",
       "queued_other": "{{count}} migrations queued",
       "readiness": "Readiness",
-      "readOnlyDescription": "You can review migration status, but your access does not permit starting or approving migrations.",
-      "readOnlyTitle": "Read-only access",
       "requestResolved": "Migration request resolved",
       "resolvedPlan": "Resolved Plan",
       "startMigration": "Run migration plan",

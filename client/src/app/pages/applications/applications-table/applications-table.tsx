@@ -1117,15 +1117,6 @@ export const ApplicationsTable: FC = () => {
             "var(--pf-t--global--background--color--primary--default)",
         }}
       >
-        {isAgenticEnabled && !agenticWorkflowRunWriteAccess && (
-          <Alert
-            isInline
-            variant="info"
-            title={t("agentic.execution.readOnlyTitle")}
-          >
-            {t("agentic.execution.readOnlyDescription")}
-          </Alert>
-        )}
         {isAgenticEnabled && migrationsFetchError != null && (
           <Alert
             isInline
