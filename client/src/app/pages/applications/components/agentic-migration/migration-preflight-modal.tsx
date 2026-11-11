@@ -60,6 +60,11 @@ interface MigrationPreflightModalProps {
   migrations?: ApplicationMigrationMap;
   /** Prefills the form, for example to start a new run like a failed one. */
   initialValues?: Partial<MigrationPreflightValues>;
+  /**
+   * Hides the expert override caution under the plan picker. A rerun of a
+   * failed run picks the run's own plan, which is not an override (R5).
+   */
+  hideOverrideCaution?: boolean;
   isStarting?: boolean;
   /** Builds a link that carries the caller's breadcrumb trail. */
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
@@ -78,6 +83,7 @@ export const MigrationPreflightModal: React.FC<
   applications,
   migrations: providedMigrations,
   initialValues,
+  hideOverrideCaution = false,
   isStarting = false,
   linkTo: to,
   onClose,
@@ -226,13 +232,15 @@ export const MigrationPreflightModal: React.FC<
                       />
                     )}
                   />
-                  <Alert
-                    isInline
-                    variant="warning"
-                    title={t("agentic.execution.expertOverrideTitle")}
-                  >
-                    {t("agentic.execution.expertOverrideDescription")}
-                  </Alert>
+                  {!hideOverrideCaution && (
+                    <Alert
+                      isInline
+                      variant="warning"
+                      title={t("agentic.execution.expertOverrideTitle")}
+                    >
+                      {t("agentic.execution.expertOverrideDescription")}
+                    </Alert>
+                  )}
                 </StackItem>
               )}
               <StackItem>

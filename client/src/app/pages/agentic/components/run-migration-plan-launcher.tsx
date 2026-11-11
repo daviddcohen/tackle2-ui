@@ -36,7 +36,10 @@ export const rerunInitialValues = (
       };
 
 interface RunMigrationPlanLauncherOptions {
-  /** The applications to run; defaults to the applications of `rerunOf`. */
+  /**
+   * The applications to run; defaults to the applications of `rerunOf`. A
+   * page whose selection changes (the inventory) passes them to `open`.
+   */
   applications?: Ref[];
   /** Migration views the caller already holds (the preflight fetches them otherwise). */
   migrations?: ApplicationMigrationMap;
@@ -44,27 +47,36 @@ interface RunMigrationPlanLauncherOptions {
   rerunOf?: PlanRun;
   /** The caller's breadcrumb trail, kept by links in the preflight and after starting. */
   linkCrumbs: BreadcrumbEntry[];
+  /** Called once the runs are created, before the page moves to them (for example to clear a selection). */
+  onStarted?: () => void;
 }
 
 /**
  * The one "Run migration plan" launcher (addenda R4) for the plan run page,
- * the stage page and the application Migration tab: the preflight modal and
- * the start, which opens the created run. `open` is undefined without
- * `agenticWorkflowRunsWriteScopes`, so callers render no trigger; render
- * `modal` anywhere in the page.
+ * the stage page, the application Migration tab and the inventory: the
+ * preflight modal and the start, which opens the created run. `open` is
+ * undefined without `agenticWorkflowRunsWriteScopes`, so callers render no
+ * trigger; `open(applications)` runs those applications instead of the
+ * hook's. Render `modal` anywhere in the page. A rerun (`rerunOf`) starts
+ * from the failed run's values and shows no override caution (addenda R5).
  */
 export const useRunMigrationPlanLauncher = ({
   applications,
   migrations,
   rerunOf,
   linkCrumbs,
+  onStarted,
 }: RunMigrationPlanLauncherOptions) => {
   const canRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
-  const [isOpen, setIsOpen] = React.useState(false);
-  const { startMigrations, isStarting } = useStartMigrations(linkCrumbs, () =>
-    setIsOpen(false)
-  );
-  const targets = applications ?? rerunOf?.applications ?? [];
+  // Open with the applications given to `open`, or undefined for the hook's.
+  const [opened, setOpened] = React.useState<{ applications?: Ref[] }>();
+  const isOpen = opened != null;
+  const { startMigrations, isStarting } = useStartMigrations(linkCrumbs, () => {
+    setOpened(undefined);
+    onStarted?.();
+  });
+  const targets =
+    opened?.applications ?? applications ?? rerunOf?.applications ?? [];
 
   // A rerun's starting values depend on the applications' views. The query
   // is the one the preflight uses, so it is fetched once.
@@ -80,7 +92,15 @@ export const useRunMigrationPlanLauncher = ({
       : undefined);
 
   return {
-    open: canRun ? () => setIsOpen(true) : undefined,
+    open: canRun
+      ? (applications?: Ref[]) =>
+          // Also a click handler: an event is not a list of applications.
+          setOpened({
+            applications: Array.isArray(applications)
+              ? applications
+              : undefined,
+          })
+      : undefined,
     modal: isOpen ? (
       <MigrationPreflightModal
         // Starting values are read once: remount when the views arrive.
@@ -92,11 +112,12 @@ export const useRunMigrationPlanLauncher = ({
             ? rerunInitialValues(rerunOf, targets, views)
             : undefined
         }
+        hideOverrideCaution={rerunOf != null}
         isStarting={isStarting}
         linkTo={(pathname, search = "") =>
           breadcrumbTo(pathname, search, linkCrumbs)
         }
-        onClose={() => setIsOpen(false)}
+        onClose={() => setOpened(undefined)}
         onStartReady={startMigrations}
       />
     ) : null,
