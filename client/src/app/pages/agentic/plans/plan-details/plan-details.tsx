@@ -48,10 +48,8 @@ import {
 } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
 
-import {
-  ConfigurationStatus,
-  RunStatus,
-} from "../../components/agentic-status";
+import { ConfigurationStatus } from "../../components/agentic-status";
+import { PlanRunsTable } from "../../components/plan-runs-table";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
@@ -459,43 +457,14 @@ const PlanDetailsPage: React.FC = () => {
               </EmptyStateBody>
             </EmptyState>
           ) : (
-            <div>
-              {planRuns.map((run) => (
-                <Flex
-                  key={run.id}
-                  alignItems={{ default: "alignItemsCenter" }}
-                  spaceItems={{ default: "spaceItemsMd" }}
-                  style={{
-                    padding: "var(--pf-t--global--spacer--sm) 0",
-                    borderBottom:
-                      "1px solid var(--pf-t--global--border--color--default)",
-                  }}
-                >
-                  <FlexItem>
-                    <Link
-                      to={breadcrumbTo(
-                        DevPaths.planRunDetails.replace(
-                          ":runId",
-                          run.id.toString()
-                        ),
-                        `?from=plan-${migrationPlan.id}`,
-                        planChildCrumbs
-                      )}
-                    >
-                      {run.name}
-                    </Link>
-                  </FlexItem>
-                  <FlexItem>
-                    <RunStatus status={run.status} />
-                  </FlexItem>
-                  <FlexItem>
-                    <Content component="small">
-                      {new Date(run.startedAt).toLocaleString()}
-                    </Content>
-                  </FlexItem>
-                </Flex>
-              ))}
-            </div>
+            <PlanRunsTable
+              runs={planRuns}
+              showPlan={false}
+              linkTo={(pathname, search = "") =>
+                breadcrumbTo(pathname, search, planChildCrumbs)
+              }
+              origin={`?from=plan-${migrationPlan.id}`}
+            />
           )}
         </PageSection>
       </DetailTabPanel>
