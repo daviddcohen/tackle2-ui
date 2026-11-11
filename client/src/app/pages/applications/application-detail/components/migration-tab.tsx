@@ -311,7 +311,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                       <Content component="small">
                         {t("agentic.execution.skillProvenance", {
                           scope: t(
-                            `agentic.skill.associationScope.${association.scope}`
+                            `agentic.skillsTable.scope.${association.scope}`
                           ),
                           name: association.scopeName,
                         })}

@@ -120,15 +120,15 @@ const ProvidersPage: React.FC = () => {
         selectOptions: [
           {
             value: "verified",
-            label: t("agentic.model.verificationStatuses.verified"),
+            label: t("agentic.verificationStatus.verified"),
           },
           {
             value: "pending",
-            label: t("agentic.model.verificationStatuses.pending"),
+            label: t("agentic.verificationStatus.pending"),
           },
           {
             value: "unreachable",
-            label: t("agentic.model.verificationStatuses.unreachable"),
+            label: t("agentic.verificationStatus.unreachable"),
           },
         ],
         matcher: (filter: string, item: Provider) =>

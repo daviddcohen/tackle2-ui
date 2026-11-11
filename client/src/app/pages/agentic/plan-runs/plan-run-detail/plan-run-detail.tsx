@@ -236,10 +236,10 @@ const PlanRunDetail: React.FC = () => {
           <Stack hasGutter>
             <StackItem>
               <Title headingLevel="h2" size="md">
-                {t("agentic.skillsTable.title", { count: skillRows.length })}
+                {t("agentic.planRun.skillsTitle", { count: skillRows.length })}
               </Title>
               <Content component="p">
-                {t("agentic.skillsTable.runDescription")}
+                {t("agentic.planRun.skillsDescription")}
               </Content>
             </StackItem>
             <StackItem>

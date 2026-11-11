@@ -1297,11 +1297,6 @@
         "nameRequired": "Name is required.",
         "providerRequired": "A provider is required."
       },
-      "verificationStatuses": {
-        "pending": "Pending",
-        "unreachable": "Unreachable",
-        "verified": "Verified"
-      },
       "providerOption": "{{provider}} ({{type}})",
       "providerEndpoint": "{{provider}} — {{endpoint}}"
     },
@@ -1481,12 +1476,6 @@
       "multipleAssociations": "{{first}} and {{remaining}} more",
       "noArchetypeSkills": "No Skills associated",
       "noArchetypeSkillsDescription": "Skills can be associated with this archetype to provide migration guidance for matching applications.",
-      "associationScope": {
-        "agent": "Agent",
-        "application": "Application",
-        "archetype": "Archetype",
-        "targetProfile": "Target profile"
-      },
       "type": "Type",
       "typeSkill": "Skill",
       "typeCollection": "Collection",
@@ -1583,12 +1572,6 @@
         "reviewRequests_other": "Review {{count}} Requests",
         "title": "Migration activity"
       },
-      "displayStatus": {
-        "notConfigured": "Not configured",
-        "preflightBlocked": "Blocked",
-        "preflightReady": "Ready to start",
-        "reviewRequired": "Review before start"
-      },
       "preflight": {
         "blocked": "Blocked",
         "reviewRequired": "Review required"
@@ -1666,6 +1649,17 @@
       "issues_one": "{{count}} issue",
       "issues_other": "{{count}} issues"
     },
+    "migrationStatus": {
+      "notConfigured": "Not configured",
+      "preflightBlocked": "Blocked",
+      "preflightReady": "Ready to start",
+      "reviewRequired": "Review before start"
+    },
+    "verificationStatus": {
+      "pending": "Pending",
+      "unreachable": "Unreachable",
+      "verified": "Verified"
+    },
     "entity": {
       "agent": "Agent",
       "migrationPlan": "Migration plan",
@@ -1674,16 +1668,18 @@
       "skill": "Skill",
       "skillCollection": "Skill collection"
     },
+    "common": {
+      "actions": "Actions"
+    },
     "skillsTable": {
       "label": "Skills",
       "source": "{{scope}}: {{name}}",
-      "title": "Skills ({{count}})",
-      "titleEmpty": "Skills",
-      "planDescription": "Skills from this plan's agents, archetype and target profiles. Collection and application skills are added when the plan runs.",
-      "runDescription": "Skills given to the agents when this run started.",
-      "applicationDescription": "Skills the agents use when migrating this application, and where each one comes from.",
-      "applicationAssociatedDescription": "Skills associated with this application and its archetypes.",
-      "archetypeDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
+      "scope": {
+        "agent": "Agent",
+        "application": "Application",
+        "archetype": "Archetype",
+        "targetProfile": "Target profile"
+      }
     },
     "planRunsTable": {
       "label": "Plan runs",
@@ -1697,6 +1693,7 @@
     "stageRunsTable": {
       "label": "Stages",
       "order": "#",
+      "duration": "Duration",
       "notFinished": "Not finished"
     },
     "stageAttention": {
@@ -1755,7 +1752,9 @@
       "notFoundTitle": "Plan run not found",
       "notFoundBody": "This plan run may have been deleted, or the link is out of date.",
       "backToPlanRuns": "Back to plan runs",
-      "stageApproved": "Stage \"{{stage}}\" approved"
+      "stageApproved": "Stage \"{{stage}}\" approved",
+      "skillsTitle": "Skills ({{count}})",
+      "skillsDescription": "Skills given to the agents when this run started."
     },
     "stageRun": {
       "plan": "Migration Plan",
@@ -1801,7 +1800,10 @@
       "runsEmptyDescription": "Select applications in Application Inventory and run this plan to see results here.",
       "knowledgeBaseEmptyTitle": "No lessons learned yet",
       "knowledgeBaseEmptyDescription": "Lessons learned from plan runs will appear here. This feature is coming soon.",
-      "tabsLabel": "Plan details"
+      "tabsLabel": "Plan details",
+      "skillsTitle": "Skills ({{count}})",
+      "skillsTitleEmpty": "Skills",
+      "skillsDescription": "Skills from this plan's agents, archetype and target profiles. Collection and application skills are added when the plan runs."
     },
     "applicationDetail": {
       "tabDetails": "Details",
@@ -1822,7 +1824,13 @@
       "notFoundDescription": "This application could not be found. It may have been deleted.",
       "tabsLabel": "Application details",
       "taskCanceled": "Task canceled",
-      "taskCancelFailed": "Task cancelation failed"
+      "taskCancelFailed": "Task cancelation failed",
+      "skillsTitle": "Skills ({{count}})",
+      "skillsDescription": "Skills the agents use when migrating this application, and where each one comes from.",
+      "skillsAssociatedDescription": "Skills associated with this application and its archetypes."
+    },
+    "archetype": {
+      "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
     },
     "provider": {
       "title": "Model providers",

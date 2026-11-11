@@ -89,19 +89,19 @@ export const statusPresentation: {
   // 5.2 Application migration.
   migration: {
     notConfigured: {
-      labelKey: "agentic.execution.displayStatus.notConfigured",
+      labelKey: "agentic.migrationStatus.notConfigured",
       icon: MinusCircleIcon,
     },
     preflightReady: {
-      labelKey: "agentic.execution.displayStatus.preflightReady",
+      labelKey: "agentic.migrationStatus.preflightReady",
       icon: NotStartedIcon,
     },
     preflightBlocked: {
-      labelKey: "agentic.execution.displayStatus.preflightBlocked",
+      labelKey: "agentic.migrationStatus.preflightBlocked",
       icon: BanIcon,
     },
     reviewRequired: {
-      labelKey: "agentic.execution.displayStatus.reviewRequired",
+      labelKey: "agentic.migrationStatus.reviewRequired",
       status: "warning",
       icon: ExclamationTriangleIcon,
     },
@@ -114,16 +114,16 @@ export const statusPresentation: {
   // 5.3 Verification (models and model providers).
   verification: {
     verified: {
-      labelKey: "agentic.model.verificationStatuses.verified",
+      labelKey: "agentic.verificationStatus.verified",
       status: "success",
       icon: CheckCircleIcon,
     },
     pending: {
-      labelKey: "agentic.model.verificationStatuses.pending",
+      labelKey: "agentic.verificationStatus.pending",
       icon: PendingIcon,
     },
     unreachable: {
-      labelKey: "agentic.model.verificationStatuses.unreachable",
+      labelKey: "agentic.verificationStatus.unreachable",
       status: "danger",
       icon: ExclamationCircleIcon,
     },

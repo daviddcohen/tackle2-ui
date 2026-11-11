@@ -13,7 +13,7 @@ import {
 const openMenu = async () => {
   const user = userEvent.setup();
   await user.click(
-    screen.getByRole("button", { name: "agentic.applicationDetail.actions" })
+    screen.getByRole("button", { name: "agentic.common.actions" })
   );
   return user;
 };
@@ -71,7 +71,7 @@ describe("EntityDetailActions", () => {
     render(<EntityDetailActions />);
     expect(
       screen.queryByRole("button", {
-        name: "agentic.applicationDetail.actions",
+        name: "agentic.common.actions",
       })
     ).not.toBeInTheDocument();
   });

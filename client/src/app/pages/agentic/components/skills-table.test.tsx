@@ -170,13 +170,13 @@ describe("SkillsTable", () => {
         .getAllByRole("listitem")
         .map((item) => item.textContent)
     ).toEqual([
-      "agentic.skill.associationScope.agent: Code Migrator",
-      "agentic.skill.associationScope.archetype: Java EE Application",
+      "agentic.skillsTable.scope.agent: Code Migrator",
+      "agentic.skillsTable.scope.archetype: Java EE Application",
     ]);
     // Sources are text, never links or labels.
     expect(within(first).getAllByRole("link")).toHaveLength(1);
     expect(within(second).getByRole("listitem")).toHaveTextContent(
-      "agentic.skill.associationScope.targetProfile: Q3"
+      "agentic.skillsTable.scope.targetProfile: Q3"
     );
     expect(linkTo).toHaveBeenCalledWith("/skills/4");
   });

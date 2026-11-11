@@ -57,7 +57,7 @@ export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
         <Stack hasGutter className={spacing.mtLg}>
           <StackItem>
             <Content component="p">
-              {t("agentic.skillsTable.archetypeDescription")}
+              {t("agentic.archetype.skillsDescription")}
             </Content>
           </StackItem>
           <StackItem>
