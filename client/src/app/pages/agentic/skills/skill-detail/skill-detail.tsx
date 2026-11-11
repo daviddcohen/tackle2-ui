@@ -18,9 +18,6 @@ import {
   DescriptionListGroup,
   DescriptionListTerm,
   FlexItem,
-  Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Panel,
   PanelMain,
@@ -45,7 +42,6 @@ import { PageHeader } from "@app/components/PageHeader";
 import { ConditionalTableBody } from "@app/components/TableControls";
 import { markdownPFComponents } from "@app/components/markdownPFComponents";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
-import { useFormModalState } from "@app/hooks/useFormModalState";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
   SkillSources,
@@ -71,7 +67,7 @@ import { formatDate, getAxiosErrorMessage } from "@app/utils/utils";
 
 import { CountLink } from "../components/count-link";
 import { Section, Sections, XsEmptyState } from "../components/section";
-import { SkillForm } from "../components/skill-form";
+import { SkillModal } from "../components/skill-form";
 import {
   getCollectionsContainingSkill,
   getSkillAssociationRows,
@@ -167,8 +163,7 @@ const SkillDetail: React.FC = () => {
     SKILL_DETAIL_TABS,
     "details"
   );
-  const [editModal, setEditModal, editFormKey] = useFormModalState<true>();
-  const isEditOpen = editModal !== null;
+  const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
 
   const onDeleteSuccess = () => {
@@ -279,7 +274,7 @@ const SkillDetail: React.FC = () => {
           btnActions={
             canManageSkills && (
               <EntityDetailActions
-                onEdit={() => setEditModal(true)}
+                onEdit={() => setIsEditOpen(true)}
                 onDelete={() => setIsDeleteOpen(true)}
                 managedReason={managedReason}
                 deleteDisabledReason={deleteBlockedReason}
@@ -491,24 +486,14 @@ const SkillDetail: React.FC = () => {
         </PageSection>
       </DetailTabPanel>
 
-      <Modal
-        id="edit-skill-modal"
-        variant="medium"
+      <SkillModal
         isOpen={isEditOpen}
-        onClose={() => setEditModal(null)}
-      >
-        <ModalHeader title={t("agentic.skill.edit")} />
-        <ModalBody>
-          <SkillForm
-            key={editFormKey}
-            skill={skill}
-            onClose={() => {
-              setEditModal(null);
-              refetch();
-            }}
-          />
-        </ModalBody>
-      </Modal>
+        skill={skill}
+        onClose={() => {
+          setIsEditOpen(false);
+          refetch();
+        }}
+      />
 
       {isDeleteOpen && (
         <ConfirmDialog

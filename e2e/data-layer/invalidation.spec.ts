@@ -34,10 +34,18 @@ test("skill detail: the plans-resolving-skill table refreshes after its associat
 
   await page.getByRole("button", { name: "Actions", exact: true }).click();
   await page.getByRole("menuitem", { name: "Edit" }).click();
-  await dialog(page).getByRole("button", { name: "Clear input value" }).click();
-  await expect(
-    dialog(page).getByRole("button", { name: /^Remove / })
-  ).toHaveCount(0);
+  // One picker per scope: clear each one that has values. A picker shows
+  // its values once its options load, so wait for them, and clear again if
+  // one arrives late.
+  const clearButtons = dialog(page).getByRole("button", {
+    name: "Clear input value",
+  });
+  const removeButtons = dialog(page).getByRole("button", { name: /^Remove / });
+  await expect(removeButtons.first()).toBeVisible();
+  await expect(async () => {
+    while ((await clearButtons.count()) > 0) await clearButtons.first().click();
+    await expect(removeButtons).toHaveCount(0, { timeout: 1000 });
+  }).toPass();
   await dialog(page).getByRole("button", { name: "Save" }).click();
   await expect(dialog(page)).toHaveCount(0);
 
