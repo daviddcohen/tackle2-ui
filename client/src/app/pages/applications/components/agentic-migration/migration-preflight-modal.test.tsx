@@ -46,10 +46,10 @@ const migrations: ApplicationMigrationMap = {
   3: view({ preflight: "reviewRequired" }),
 };
 
-const plans = [
-  { id: "1", name: "Java EE to Quarkus", stages: [] },
-  { id: "2", name: "Spring Boot to Quarkus", stages: [] },
-] as unknown as MigrationPlan[];
+const plans: MigrationPlan[] = [
+  { id: "1", name: "Java EE to Quarkus", description: "", stages: [] },
+  { id: "2", name: "Spring Boot to Quarkus", description: "", stages: [] },
+];
 
 const renderModal = (
   props: Partial<ComponentProps<typeof MigrationPreflightModal>> = {},
