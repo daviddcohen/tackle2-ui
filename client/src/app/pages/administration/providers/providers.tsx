@@ -8,8 +8,6 @@ import {
   List,
   ListItem,
   Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Popover,
   Skeleton,
@@ -62,7 +60,11 @@ import {
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
-import { ProviderForm } from "./components/provider-form";
+import {
+  PROVIDER_FORM_DESCRIPTION_ID,
+  PROVIDER_FORM_TITLE_ID,
+  ProviderForm,
+} from "./components/provider-form";
 
 const ProvidersPage: React.FC = () => {
   const { t } = useTranslation();
@@ -410,23 +412,18 @@ const ProvidersPage: React.FC = () => {
       <Modal
         id="create-edit-provider-modal"
         variant="medium"
+        aria-labelledby={PROVIDER_FORM_TITLE_ID}
+        aria-describedby={PROVIDER_FORM_DESCRIPTION_ID}
         isOpen={isModalOpen}
         onClose={closeModal}
       >
-        <ModalHeader
-          title={
-            providerToEdit
-              ? t("agentic.provider.edit")
-              : t("agentic.provider.create")
-          }
-        />
-        <ModalBody>
+        {isModalOpen && (
           <ProviderForm
             key={formKey}
             provider={providerToEdit}
             onClose={closeModal}
           />
-        </ModalBody>
+        )}
       </Modal>
 
       {providerToDelete && (

@@ -139,7 +139,8 @@ test.describe("Provider form", () => {
     page,
   }) => {
     const submit = dialog(page).getByRole("button", {
-      name: "Create model provider",
+      name: "Create",
+      exact: true,
     });
     await expect(submit).toBeDisabled();
     await field(dialog(page), "Name").fill("QA Provider");
@@ -159,7 +160,7 @@ test.describe("Provider form", () => {
     await field(dialog(page), "Name").fill("QA Provider");
     await field(dialog(page), "API endpoint").fill("https://qa.example.com/v1");
     await dialog(page)
-      .getByRole("button", { name: "Create model provider" })
+      .getByRole("button", { name: "Create", exact: true })
       .click();
     await expect(toast(page, "Model provider created")).toBeVisible();
     await expect(rowByText(page, "QA Provider")).toContainText("Pending");
@@ -172,7 +173,7 @@ test.describe("Provider form", () => {
     await field(dialog(page), "Name").fill("QA Polling");
     await field(dialog(page), "API endpoint").fill("https://qa.example.com/v1");
     await dialog(page)
-      .getByRole("button", { name: "Create model provider" })
+      .getByRole("button", { name: "Create", exact: true })
       .click();
     await expect(rowByText(page, "QA Polling")).toContainText("Verified", {
       timeout: 10000,
@@ -184,7 +185,7 @@ test.describe("Provider form", () => {
     await field(dialog(page), "Name").fill("Anthropic Production");
     await field(dialog(page), "API endpoint").fill("https://qa.example.com/v1");
     await expect(
-      dialog(page).getByRole("button", { name: "Create model provider" })
+      dialog(page).getByRole("button", { name: "Create", exact: true })
     ).toBeDisabled();
   });
 
@@ -193,7 +194,7 @@ test.describe("Provider form", () => {
     await field(dialog(page), "Name").fill("QA Bad URL");
     await field(dialog(page), "API endpoint").fill("not a url");
     await expect(
-      dialog(page).getByRole("button", { name: "Create model provider" })
+      dialog(page).getByRole("button", { name: "Create", exact: true })
     ).toBeDisabled();
   });
 
@@ -217,6 +218,78 @@ test.describe("Provider form", () => {
     await nextFrames(page);
     await expect(dialog(page)).toBeVisible();
     await expect(field(dialog(page), "Name")).toHaveValue("Unsaved");
+  });
+
+  test("create form says what a provider is and gives the example in helper text", async ({
+    page,
+  }) => {
+    // the dialog is named and described by its header
+    await expect(
+      page.getByRole("dialog", { name: "Create model provider" })
+    ).toHaveAccessibleDescription(
+      "A model provider connects to a service that hosts models. It is verified after you save it."
+    );
+    await expect(dialog(page)).toContainText(
+      "For example, https://api.anthropic.com/v1"
+    );
+    await expect(field(dialog(page), "API endpoint")).toHaveValue("");
+  });
+
+  test("editing an unreachable provider shows its status, last verification and models", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Escape");
+    await openRowActions(page, "Azure OpenAI Corp");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(dialog(page)).toContainText("Edit model provider");
+    await expect(dialog(page)).toContainText(
+      "This model provider is unreachable"
+    );
+    await expect(dialog(page)).toContainText(
+      "The configured endpoint did not respond within 30 seconds. Check the API endpoint, then save to verify it again."
+    );
+    await expect(dialog(page)).toContainText(
+      /Last verified .+\. Used by 1 model\. Changes apply to it\./
+    );
+    // the alert says to save to verify it again, so the description does not
+    await expect(
+      page.getByRole("dialog", { name: "Edit model provider" })
+    ).toHaveAccessibleDescription(
+      "A model provider connects to a service that hosts models."
+    );
+  });
+
+  test("editing a pending provider without a verification date omits it", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Escape");
+    await openRowActions(page, "Google Vertex AI");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(dialog(page)).toContainText(
+      "This model provider is being verified"
+    );
+    await expect(dialog(page)).toContainText(
+      "Used by 1 model. Changes apply to it."
+    );
+    await expect(dialog(page)).not.toContainText("Last verified");
+  });
+
+  test("editing a verified provider in use warns about its models", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Escape");
+    await openRowActions(page, "Anthropic Production");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(dialog(page)).toContainText(
+      "Used by 1 model. Changes apply to it."
+    );
+    await expect(dialog(page)).not.toContainText("unreachable");
+    // saving moves it to Pending, and no alert says so
+    await expect(
+      page.getByRole("dialog", { name: "Edit model provider" })
+    ).toHaveAccessibleDescription(
+      "A model provider connects to a service that hosts models. Saving verifies it again."
+    );
   });
 
   test("Escape closes the modal without creating anything", async ({
