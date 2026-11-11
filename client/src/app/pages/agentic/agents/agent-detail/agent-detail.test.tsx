@@ -4,6 +4,7 @@ import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
 import { Agent, MigrationPlan } from "@app/agentic";
+import { hub } from "@app/api/rest";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import {
@@ -66,7 +67,11 @@ const useEndpoints = ({
     rest.get(`${AGENTIC_ENDPOINTS.agents}/:id`, detail),
     rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) => res(ctx.json(plans))),
     rest.get(AGENTIC_ENDPOINTS.planRuns, (_req, res, ctx) => res(ctx.json([]))),
-    rest.get(AGENTIC_ENDPOINTS.agentRuns, (_req, res, ctx) => res(ctx.json([])))
+    rest.get(AGENTIC_ENDPOINTS.agentRuns, (_req, res, ctx) =>
+      res(ctx.json([]))
+    ),
+    rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) => res(ctx.json([]))),
+    rest.get(hub`/applications`, (_req, res, ctx) => res(ctx.json([])))
   );
 
 const renderAt = (id: string, notifications = createMockNotifications()) => {
@@ -169,5 +174,85 @@ describe("AgentDetail", () => {
         name: "agentic.common.actions",
       })
     ).toBeNull();
+  });
+
+  it("lists Edit, Test agent and Delete, and opens the test modal", async () => {
+    const user = userEvent.setup();
+    useEndpoints({ detail: (_req, res, ctx) => res(ctx.json(agent)) });
+    renderAt("7");
+    await screen.findByRole("heading", { name: "Code Migrator" });
+    expect(screen.getByText("Migrates code.")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "agentic.common.actions" })
+    );
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual(["actions.edit", "agentic.agent.test", "actions.delete"]);
+    await user.click(
+      screen.getByRole("menuitem", { name: "agentic.agent.test" })
+    );
+    expect(
+      await screen.findByRole("heading", { name: "agentic.agent.test" })
+    ).toBeInTheDocument();
+  });
+
+  it("offers only Test agent with the agent run scope alone (A2)", async () => {
+    const user = userEvent.setup();
+    mockGrantedScopes.all = false;
+    mockGrantedScopes.scopes = ["agentic.agents:get", "agentic.agentruns:post"];
+    useEndpoints({ detail: (_req, res, ctx) => res(ctx.json(agent)) });
+    renderAt("7");
+    await screen.findByRole("heading", { name: "Code Migrator" });
+    await user.click(
+      screen.getByRole("button", { name: "agentic.common.actions" })
+    );
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual(["agentic.agent.test"]);
+  });
+
+  it("disables Edit and Delete of an operator-managed agent (A13)", async () => {
+    const user = userEvent.setup();
+    useEndpoints({
+      detail: (_req, res, ctx) =>
+        res(ctx.json({ ...agent, operatorManaged: true })),
+    });
+    renderAt("7");
+    await screen.findByRole("heading", { name: "Code Migrator" });
+    await user.click(
+      screen.getByRole("button", { name: "agentic.common.actions" })
+    );
+    for (const name of ["actions.edit", "actions.delete"]) {
+      expect(screen.getByRole("menuitem", { name })).toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
+    }
+  });
+
+  it("keeps Delete disabled until the plans show the agent is unused (X6)", async () => {
+    const user = userEvent.setup();
+    server.use(
+      rest.get(`${AGENTIC_ENDPOINTS.agents}/:id`, (_req, res, ctx) =>
+        res(ctx.json(agent))
+      ),
+      rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
+        res(ctx.status(500))
+      ),
+      rest.get(AGENTIC_ENDPOINTS.planRuns, (_req, res, ctx) =>
+        res(ctx.json([]))
+      ),
+      rest.get(AGENTIC_ENDPOINTS.agentRuns, (_req, res, ctx) =>
+        res(ctx.json([]))
+      )
+    );
+    renderAt("7");
+    await screen.findByRole("heading", { name: "Code Migrator" });
+    await user.click(
+      screen.getByRole("button", { name: "agentic.common.actions" })
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "actions.delete" })
+    ).toHaveAttribute("aria-disabled", "true");
   });
 });

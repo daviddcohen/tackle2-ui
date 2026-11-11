@@ -289,7 +289,7 @@ test.describe("Agent test modal", () => {
       (url) =>
         url.pathname === "/agents/4" && url.searchParams.get("tab") === "runs"
     );
-    await expect(page.getByRole("tab", { name: "Agent runs" })).toHaveAttribute(
+    await expect(page.getByRole("tab", { name: "Runs" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
@@ -343,7 +343,7 @@ test.describe("Agent detail", () => {
 
   test("runs tab is deep-linkable", async ({ page }) => {
     await gotoProto(page, "/agents/3?tab=runs", { persona: ARCHITECT });
-    await expect(page.getByRole("tab", { name: "Agent runs" })).toHaveAttribute(
+    await expect(page.getByRole("tab", { name: "Runs" })).toHaveAttribute(
       "aria-selected",
       "true"
     );

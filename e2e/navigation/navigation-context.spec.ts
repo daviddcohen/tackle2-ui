@@ -88,7 +88,7 @@ test("tabs, table filters, scenario changes and sidebar navigation have explicit
   await expect(agentLinks).toHaveCount(1);
   const listURL = page.url();
   await agentLinks.click();
-  await page.getByRole("tab", { name: "Agent runs", exact: true }).click();
+  await page.getByRole("tab", { name: "Runs", exact: true }).click();
   await expect(page).toHaveURL(/tab=runs/);
   await page.locator('main a[href*="/stages/"]').first().click();
   await expect(crumbItems(page)).toHaveCount(3);
@@ -98,7 +98,7 @@ test("tabs, table filters, scenario changes and sidebar navigation have explicit
     .getByRole("link", { name: "Code Migrator", exact: true })
     .click();
   await expect(
-    page.getByRole("tab", { name: "Agent runs", exact: true })
+    page.getByRole("tab", { name: "Runs", exact: true })
   ).toHaveAttribute("aria-selected", "true");
   await expect(scenarioSelect(page)).toHaveValue("failed");
   await expect(page).toHaveURL(/tab=runs/);
@@ -133,7 +133,7 @@ test("returning through an Agent association restores the saved runs tab and tru
     .click();
   await expect(crumbItems(page)).toHaveCount(2);
   await expect(
-    page.getByRole("tab", { name: "Agent runs", exact: true })
+    page.getByRole("tab", { name: "Runs", exact: true })
   ).toHaveAttribute("aria-selected", "true");
   await expect(currentCrumb(page)).toHaveText("Code Migrator");
 });
