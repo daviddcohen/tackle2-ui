@@ -11,11 +11,13 @@ import {
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import {
+  DetailSection,
+  DetailSections,
+} from "@app/pages/agentic/components/detail-section";
 import { PlanRunsTable } from "@app/pages/agentic/components/plan-runs-table";
 import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
 import { useFetchPlanRuns } from "@app/queries/agentic";
-
-import { TabSection, TabSections } from "./tab-sections";
 
 interface PlanRunsTabProps {
   applicationId: number;
@@ -54,9 +56,9 @@ export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
 
   return (
     <>
-      <TabSections>
+      <DetailSections>
         {appRuns.length === 0 ? (
-          <TabSection title={t("agentic.applicationDetail.tabPlanRuns")}>
+          <DetailSection title={t("agentic.applicationDetail.tabPlanRuns")}>
             <EmptyState variant="xs">
               <EmptyStateBody>
                 {t("agentic.applicationDetail.planRunsEmpty")}
@@ -74,9 +76,9 @@ export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
                 </EmptyStateFooter>
               )}
             </EmptyState>
-          </TabSection>
+          </DetailSection>
         ) : (
-          <TabSection
+          <DetailSection
             title={t("agentic.applicationDetail.planRunsTitle", {
               count: appRuns.length,
             })}
@@ -90,9 +92,9 @@ export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
               origin={`?from=app-${applicationId}`}
               currentApplicationId={applicationId}
             />
-          </TabSection>
+          </DetailSection>
         )}
-      </TabSections>
+      </DetailSections>
       {runMigrationPlan.modal}
     </>
   );
