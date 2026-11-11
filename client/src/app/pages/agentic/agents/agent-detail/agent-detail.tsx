@@ -50,12 +50,16 @@ import {
   useFetchMigrationPlans,
   useFetchPlanRuns,
 } from "@app/queries/agentic";
-import { agentsWriteScopes } from "@app/scopes";
+import { agenticAgentRunsWriteScopes, agentsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { RunStatus } from "../../components/agentic-status";
-import { getPlansUsingAgent } from "../agent-usage";
+import {
+  getPlansUsingAgent,
+  useAgentDeleteBlockedReason,
+} from "../agent-usage";
 import { AgentFormModal } from "../components/agent-form-modal";
+import { AgentTestModal } from "../components/agent-test-modal";
 
 const AGENT_DETAIL_TABS = ["details", "runs"] as const;
 type AgentDetailTab = (typeof AGENT_DETAIL_TABS)[number];
@@ -67,10 +71,13 @@ const AgentDetail: React.FC = () => {
   const history = useHistory();
   const { pushNotification } = React.useContext(NotificationsContext);
   const canManageAgents = useHasSomeScopes(agentsWriteScopes);
+  const canTestAgents = useHasSomeScopes(agenticAgentRunsWriteScopes);
+  const deleteBlockedReason = useAgentDeleteBlockedReason();
+  const [isTestOpen, setIsTestOpen] = React.useState(false);
 
   const { agent, isLoading, fetchError, isNotFound, refetch } =
     useFetchAgentById(agentId);
-  const { migrationPlans } = useFetchMigrationPlans();
+  const { migrationPlans, isSuccess: hasPlans } = useFetchMigrationPlans();
   const { planRuns } = useFetchPlanRuns();
   const { agentTestRuns } = useFetchAgentTestRuns(agentId);
 
@@ -166,21 +173,39 @@ const AgentDetail: React.FC = () => {
       <PageSection hasBodyWrapper={false}>
         <PageHeader
           title={agent.name}
+          description={
+            agent.description ? (
+              <Content component="p">{agent.description}</Content>
+            ) : undefined
+          }
           breadcrumbs={breadcrumbs}
           btnActions={
-            canManageAgents && (
-              <EntityDetailActions
-                onEdit={() => setEditModal(true)}
-                onDelete={() => setIsDeleteOpen(true)}
-                deleteDisabledReason={
-                  plansUsingAgent.length > 0
-                    ? t("agentic.agent.deleteInUse", {
-                        count: plansUsingAgent.length,
-                      })
-                    : undefined
-                }
-              />
-            )
+            // Each entry by its own scope; nothing left, no menu (A2, X5).
+            <EntityDetailActions
+              onEdit={canManageAgents ? () => setEditModal(true) : undefined}
+              items={
+                canTestAgents
+                  ? [
+                      {
+                        key: "test",
+                        label: t("agentic.agent.test"),
+                        onClick: () => setIsTestOpen(true),
+                      },
+                    ]
+                  : []
+              }
+              onDelete={
+                canManageAgents ? () => setIsDeleteOpen(true) : undefined
+              }
+              deleteDisabledReason={deleteBlockedReason(
+                hasPlans ? plansUsingAgent.length : undefined
+              )}
+              managedReason={
+                agent.operatorManaged
+                  ? t("agentic.common.managedByKonveyor")
+                  : undefined
+              }
+            />
           }
         />
       </PageSection>
@@ -217,15 +242,6 @@ const AgentDetail: React.FC = () => {
               <Card>
                 <CardBody>
                   <DescriptionList isHorizontal>
-                    <DescriptionListGroup>
-                      <DescriptionListTerm>
-                        {t("terms.description")}
-                      </DescriptionListTerm>
-                      <DescriptionListDescription>
-                        {agent.description || "—"}
-                      </DescriptionListDescription>
-                    </DescriptionListGroup>
-
                     <DescriptionListGroup>
                       <DescriptionListTerm>
                         {t("agentic.agentDetail.personaPrompt")}
@@ -572,6 +588,11 @@ const AgentDetail: React.FC = () => {
           setEditModal(null);
           refetch();
         }}
+      />
+
+      <AgentTestModal
+        agent={isTestOpen ? agent : null}
+        onClose={() => setIsTestOpen(false)}
       />
 
       {isDeleteOpen && (

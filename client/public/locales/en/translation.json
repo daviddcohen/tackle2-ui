@@ -1799,7 +1799,7 @@
     },
     "agentDetail": {
       "tabDetails": "Details",
-      "tabRuns": "Agent runs",
+      "tabRuns": "Runs",
       "model": "Model",
       "skills": "Skills",
       "skillCollections": "Skill collections",
