@@ -92,6 +92,9 @@ const ModelsPage: React.FC = () => {
   >();
   const [modelToDelete, setModelToDelete] =
     React.useState<ModelProjection | null>(null);
+  const [modelToSetDefault, setModelToSetDefault] =
+    React.useState<ModelProjection | null>(null);
+  const currentDefault = gateways.find((model) => model.isOrganizationDefault);
 
   const handleError = (error: AxiosError) => {
     pushNotification({
@@ -204,11 +207,23 @@ const ModelsPage: React.FC = () => {
     );
   };
 
+  /** Why Set as default is disabled; usage does not matter here (AD4). */
+  const getSetDefaultBlocker = (model: ModelProjection) => {
+    if (model.isOrganizationDefault)
+      return t("agentic.model.setDefaultAlready");
+    if (model.verificationStatus !== "verified") {
+      return t("agentic.model.setDefaultUnverified");
+    }
+    return undefined;
+  };
+
   /** Why Delete is disabled: the default first, then unknown or actual usage. */
   const getDeleteBlocker = (model: ModelProjection, users: Agent[]) => {
     if (model.isOrganizationDefault) return t("agentic.model.deleteDefault");
     if (!isAgentsLoaded) return t("agentic.common.usageUnchecked");
-    if (users.length > 0) return t("agentic.model.deleteInUse");
+    if (users.length > 0) {
+      return t("agentic.model.deleteInUse", { count: users.length });
+    }
     return undefined;
   };
 
@@ -382,16 +397,22 @@ const ModelsPage: React.FC = () => {
                               <ActionsColumn
                                 items={[
                                   {
-                                    title: t("agentic.model.setDefault"),
-                                    onClick: () => setDefault(model.id),
-                                    isDisabled: model.isOrganizationDefault,
-                                  },
-                                  {
                                     title: t("actions.edit"),
                                     onClick: () =>
                                       openModalAfterMenuClose(() =>
                                         setModalState(model)
                                       ),
+                                  },
+                                  {
+                                    title: t("agentic.model.setDefault"),
+                                    onClick: () =>
+                                      openModalAfterMenuClose(() =>
+                                        setModelToSetDefault(model)
+                                      ),
+                                    ...disabledActionProps(
+                                      getSetDefaultBlocker(model),
+                                      "left"
+                                    ),
                                   },
                                   { isSeparator: true },
                                   {
@@ -452,9 +473,10 @@ const ModelsPage: React.FC = () => {
 
       {modelToDelete && (
         <ConfirmDialog
-          title={t("agentic.model.deleteTitle", { model: modelToDelete.name })}
-          titleIconVariant="warning"
-          message={t("agentic.model.deleteDescription")}
+          title={t("agentic.model.deleteTitle")}
+          message={t("agentic.model.deleteBody", {
+            model: modelToDelete.name,
+          })}
           isOpen
           confirmBtnVariant={ButtonVariant.danger}
           confirmBtnLabel={t("actions.delete")}
@@ -464,6 +486,31 @@ const ModelsPage: React.FC = () => {
           onConfirm={() => {
             deleteModel(modelToDelete.id);
             setModelToDelete(null);
+          }}
+        />
+      )}
+      {modelToSetDefault && (
+        <ConfirmDialog
+          title={t("agentic.model.setDefaultTitle")}
+          message={
+            currentDefault
+              ? t("agentic.model.setDefaultBody", {
+                  model: modelToSetDefault.name,
+                  current: currentDefault.name,
+                })
+              : t("agentic.model.setDefaultBodyFirst", {
+                  model: modelToSetDefault.name,
+                })
+          }
+          isOpen
+          confirmBtnVariant={ButtonVariant.primary}
+          confirmBtnLabel={t("agentic.model.setDefault")}
+          cancelBtnLabel={t("actions.cancel")}
+          onCancel={() => setModelToSetDefault(null)}
+          onClose={() => setModelToSetDefault(null)}
+          onConfirm={() => {
+            setDefault(modelToSetDefault.id);
+            setModelToSetDefault(null);
           }}
         />
       )}
