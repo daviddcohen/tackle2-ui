@@ -10,17 +10,23 @@ import {
   Form,
   FormFieldGroupHeader,
   FormGroup,
+  FormHelperText,
   FormSection,
   FormSelect,
   FormSelectOption,
   Grid,
   GridItem,
+  HelperText,
+  HelperTextItem,
   ModalBody,
   ModalFooter,
 } from "@patternfly/react-core";
 import { MinusCircleIcon } from "@patternfly/react-icons";
 
+import { AdminPaths } from "@app/Paths";
 import { Agent, AgentRequest, EntityId } from "@app/agentic";
+import { useHasSomeScopes } from "@app/auth";
+import { adminViewScopes } from "@app/auth/roles-to-scopes";
 import { ControlledFormFieldGroupExpandable } from "@app/components/ControlledFormFieldGroupExpandable";
 import { FilterSelectOptionProps } from "@app/components/FilterToolbar/FilterToolbar";
 import { MultiSelect } from "@app/components/FilterToolbar/components/MultiSelect";
@@ -31,6 +37,7 @@ import {
   HookFormPFTextInput,
 } from "@app/components/HookFormPFFields";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
   useCreateAgentMutation,
   useFetchAgents,
@@ -70,6 +77,17 @@ export const findDuplicateParameterIndex = (
   });
 };
 
+/** The link from the model helper to the Models page (A5). */
+const GoToModelsLink: React.FC = () => {
+  const { t } = useTranslation();
+  const link = useLinkComponent(AdminPaths.models);
+  return (
+    <Button variant="link" isInline component={link}>
+      {t("agentic.agent.goToModels")}
+    </Button>
+  );
+};
+
 /** Relationships are held by id; names are only rendered from the options. */
 interface FormValues {
   name: string;
@@ -104,7 +122,8 @@ export const AgentForm: React.FC<AgentFormProps> = ({
   const { pushNotification } = React.useContext(NotificationsContext);
 
   const { agents } = useFetchAgents();
-  const { gateways } = useFetchGateways();
+  const { gateways, isSuccess: hasGateways } = useFetchGateways();
+  const canViewModels = useHasSomeScopes(adminViewScopes);
   const { skills: availableSkills } = useFetchSkills();
   const { skillCollections: availableSkillCollections } =
     useFetchSkillCollections();
@@ -153,19 +172,30 @@ export const AgentForm: React.FC<AgentFormProps> = ({
   const isSaving = isCreating || isUpdating;
 
   // Verified Models, plus the Agent's current Model so an edit never loses it.
-  const gatewayOptions: FilterSelectOptionProps[] = gateways
-    .filter(
-      (gateway) =>
-        gateway.verificationStatus === "verified" ||
-        gateway.id === agent?.model.id
-    )
-    .map((gateway) => ({
+  const usableGateways = gateways.filter(
+    (gateway) =>
+      gateway.verificationStatus === "verified" ||
+      gateway.id === agent?.model.id
+  );
+  const gatewayOptions: FilterSelectOptionProps[] = usableGateways.map(
+    (gateway) => ({
       value: gateway.id,
       label: t("agentic.agent.modelOption", {
         model: gateway.name,
         provider: gateway.provider.name,
       }),
-    }));
+      // The organization default is marked, not renamed (A7).
+      optionProps: gateway.isOrganizationDefault
+        ? { description: t("agentic.agent.modelDefault") }
+        : undefined,
+    })
+  );
+  // Nothing to choose until a model is verified (A5); never while loading.
+  const hasNoUsableModel = hasGateways && usableGateways.length === 0;
+  const defaultGateway = gateways.find(
+    (gateway) =>
+      gateway.isOrganizationDefault && gateway.verificationStatus === "verified"
+  );
 
   const skillOptions: FilterSelectOptionProps[] = availableSkills.map((s) => ({
     value: s.id,
@@ -236,6 +266,7 @@ export const AgentForm: React.FC<AgentFormProps> = ({
     handleSubmit,
     formState: { isSubmitting, isValidating, isValid, isDirty },
     control,
+    getValues,
     setValue,
   } = useForm<FormValues>({
     defaultValues: {
@@ -263,6 +294,21 @@ export const AgentForm: React.FC<AgentFormProps> = ({
     name: "skillCollections",
   });
   const selectedModel = useWatch({ control, name: "model" });
+  const selectedGateway = gateways.find(
+    (gateway) => gateway.id === selectedModel
+  );
+  const isSelectedModelUnverified =
+    selectedGateway != null &&
+    selectedGateway.verificationStatus !== "verified";
+
+  // A new agent starts on the organization default once the models load,
+  // only when that model is verified (A5). It is not a user change.
+  const defaultGatewayId = defaultGateway?.id;
+  React.useEffect(() => {
+    if (agent == null && defaultGatewayId != null && !getValues("model")) {
+      setValue("model", defaultGatewayId, { shouldValidate: true });
+    }
+  }, [agent, defaultGatewayId, getValues, setValue]);
   const {
     fields: parameterFields,
     append: appendParameter,
@@ -359,22 +405,52 @@ export const AgentForm: React.FC<AgentFormProps> = ({
               label={t("agentic.agent.model")}
               fieldId="agent-gateways"
               isRequired
-              helperText={t("agentic.agent.modelHelp")}
+              helperText={
+                hasNoUsableModel || isSelectedModelUnverified
+                  ? undefined
+                  : t("agentic.agent.modelHelp")
+              }
               renderInput={() => (
-                <TypeaheadSelect
-                  toggleId="gateway-select-toggle"
-                  toggleAriaLabel={t("agentic.agent.modelSelect")}
-                  ariaLabel={t("agentic.agent.model")}
-                  value={selectedModel}
-                  options={gatewayOptions}
-                  onSelect={(value) =>
-                    setValue("model", value || "", {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                  placeholderText={t("agentic.agent.selectModel")}
-                />
+                <>
+                  <TypeaheadSelect
+                    isDisabled={hasNoUsableModel}
+                    toggleId="gateway-select-toggle"
+                    toggleAriaLabel={t("agentic.agent.modelSelect")}
+                    ariaLabel={t("agentic.agent.model")}
+                    value={selectedModel}
+                    options={gatewayOptions}
+                    onSelect={(value) =>
+                      setValue("model", value || "", {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                    placeholderText={t("agentic.agent.selectModel")}
+                  />
+                  {hasNoUsableModel ? (
+                    <FormHelperText>
+                      <HelperText>
+                        <HelperTextItem>
+                          {t("agentic.agent.noVerifiedModels")}
+                          {canViewModels && (
+                            <>
+                              {" "}
+                              <GoToModelsLink />
+                            </>
+                          )}
+                        </HelperTextItem>
+                      </HelperText>
+                    </FormHelperText>
+                  ) : isSelectedModelUnverified ? (
+                    <FormHelperText>
+                      <HelperText>
+                        <HelperTextItem variant="warning">
+                          {t("agentic.agent.modelNotVerifiedHelp")}
+                        </HelperTextItem>
+                      </HelperText>
+                    </FormHelperText>
+                  ) : null}
+                </>
               )}
             />
             <HookFormPFGroupController

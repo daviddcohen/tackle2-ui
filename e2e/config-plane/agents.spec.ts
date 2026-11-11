@@ -134,13 +134,18 @@ test.describe("Agent form", () => {
     );
   });
 
-  test("only verified models are offered", async ({ page }) => {
-    await page.locator("#gateway-select-toggle-input").click();
+  test("only verified models are offered, the default preselected", async ({
+    page,
+  }) => {
+    const input = page.locator("#gateway-select-toggle-input");
+    await expect(input).toHaveValue("Claude 3.7 Sonnet (Anthropic Production)");
+    await input.click();
     await expect(page.getByRole("option")).toHaveText([
-      // Labels show the Model's Provider record (models reference providers by id).
-      "Claude 3.7 Sonnet (Anthropic Production)",
-      "GPT-4o (Azure OpenAI Corp)",
-      "Llama 3.3 70B (Internal Ollama)",
+      // Labels show the Model's Provider record (models reference providers by id);
+      // the organization default is marked with the option description.
+      /Claude 3\.7 Sonnet \(Anthropic Production\)\s*Default$/,
+      /GPT-4o \(Azure OpenAI Corp\)$/,
+      /Llama 3\.3 70B \(Internal Ollama\)$/,
     ]);
   });
 
@@ -232,6 +237,22 @@ test.describe("Agent form", () => {
     await openCreate(page);
     await expect(field(dialog(page), "Name")).toHaveValue("");
   });
+});
+
+test("with no verified model, Model is disabled and points to the models", async ({
+  page,
+}) => {
+  await gotoProto(page, "/agents", {
+    persona: "platformEngineer",
+    scenario: "partialConfiguration",
+  });
+  await openCreate(page);
+  await expect(page.locator("#gateway-select-toggle-input")).toBeDisabled();
+  await expect(dialog(page)).toContainText(
+    "No verified models yet. Agents can use a model once it is verified."
+  );
+  await dialog(page).getByRole("link", { name: "Go to models" }).click();
+  await expect(page).toHaveURL(/\/models/);
 });
 
 test.describe("Agent test modal", () => {
