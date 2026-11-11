@@ -1,0 +1,454 @@
+import * as React from "react";
+import { AxiosError } from "axios";
+import { useTranslation } from "react-i18next";
+import { Link, generatePath } from "react-router-dom";
+import {
+  Button,
+  ButtonVariant,
+  DropdownItem,
+  Modal,
+  ModalBody,
+  ModalHeader,
+  PageSection,
+  Toolbar,
+  ToolbarContent,
+  ToolbarGroup,
+  ToolbarItem,
+} from "@patternfly/react-core";
+import {
+  ActionsColumn,
+  Table,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+} from "@patternfly/react-table";
+
+import { DevPaths } from "@app/Paths";
+import { Skill, SkillSourceType } from "@app/agentic";
+import { useHasSomeScopes } from "@app/auth";
+import { AppPlaceholder } from "@app/components/AppPlaceholder";
+import { ConditionalRender } from "@app/components/ConditionalRender";
+import { ConfirmDialog } from "@app/components/ConfirmDialog";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
+import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
+import { KebabDropdown } from "@app/components/KebabDropdown";
+import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
+import { NotificationsContext } from "@app/components/NotificationsContext";
+import { SimplePagination } from "@app/components/SimplePagination";
+import {
+  ConditionalTableBody,
+  TableHeaderContentWithControls,
+  TableRowContentWithControls,
+} from "@app/components/TableControls";
+import { useLocalTableControls } from "@app/hooks/table-controls";
+import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
+import { useFormModalState } from "@app/hooks/useFormModalState";
+import {
+  useDeleteSkillMutation,
+  useFetchSkillCollections,
+  useFetchSkills,
+} from "@app/queries/agentic";
+import { skillsWriteScopes } from "@app/scopes";
+import { disabledActionProps, managedActionProps } from "@app/utils/agentic";
+import {
+  getAxiosErrorMessage,
+  openModalAfterMenuClose,
+} from "@app/utils/utils";
+
+import { getSkillDeleteBlockedReason } from "../skill-usage";
+
+import { CountLink } from "./count-link";
+import { ImportSkillModal } from "./import-skill-modal";
+import { SkillForm } from "./skill-form";
+
+const SOURCE_TYPES: SkillSourceType[] = ["inline", "git", "oci"];
+
+/** The Skills tab of the Skills page (guide 7.5, skills-list). */
+export const SkillsTab: React.FC = () => {
+  const { t } = useTranslation();
+  const { to } = useBreadcrumbs(t("sidebar.skills"), []);
+  const canManageSkills = useHasSomeScopes(skillsWriteScopes);
+  const { pushNotification } = React.useContext(NotificationsContext);
+
+  const { skills, isFetching, fetchError, refetch } = useFetchSkills();
+  const {
+    skillCollections,
+    isLoading: isLoadingCollections,
+    fetchError: collectionsError,
+  } = useFetchSkillCollections();
+  // Memberships block a delete; unknown until the collections have loaded (X6).
+  const knownCollections =
+    isLoadingCollections || collectionsError != null
+      ? undefined
+      : skillCollections;
+
+  const [formModalState, setFormModalState, formKey] = useFormModalState<
+    "create" | Skill
+  >();
+  const skillToUpdate = formModalState !== "create" ? formModalState : null;
+  const closeFormModal = () => {
+    setFormModalState(null);
+    refetch();
+  };
+  const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
+  const [skillToDelete, setSkillToDelete] = React.useState<Skill>();
+
+  const { mutate: deleteSkill } = useDeleteSkillMutation(
+    () =>
+      pushNotification({
+        title: t("agentic.skill.deleted"),
+        variant: "success",
+      }),
+    (error: AxiosError) =>
+      pushNotification({
+        title: getAxiosErrorMessage(error),
+        variant: "danger",
+      })
+  );
+
+  const sourceLabel = (sourceType: SkillSourceType) =>
+    t(`agentic.skill.sourceTypes.${sourceType}`);
+
+  const tableControls = useLocalTableControls({
+    persistTo: "urlParams",
+    persistenceKeyPrefix: "skills",
+    tableName: "skills-table",
+    idProperty: "id",
+    dataNameProperty: "name",
+    items: skills,
+    columnNames: {
+      name: t("terms.name"),
+      description: t("terms.description"),
+      source: t("terms.source"),
+      associations: t("agentic.skill.associations"),
+    },
+    isFilterEnabled: true,
+    isSortEnabled: true,
+    isPaginationEnabled: true,
+    hasActionsColumn: canManageSkills,
+    filterCategories: [
+      {
+        categoryKey: "name",
+        title: t("terms.name"),
+        type: FilterType.search,
+        placeholderText: t("agentic.skill.filterByName"),
+        getItemValue: (item) => item?.name || "",
+      },
+      {
+        categoryKey: "source",
+        title: t("terms.source"),
+        type: FilterType.multiselect,
+        placeholderText: t("agentic.skill.filterBySourceType"),
+        selectOptions: SOURCE_TYPES.map((value) => ({
+          value,
+          label: sourceLabel(value),
+        })),
+        matcher: (filter: string, item: Skill) => item.sourceType === filter,
+      },
+    ],
+    initialItemsPerPage: 10,
+    sortableColumns: ["name", "source"],
+    initialSort: { columnKey: "name", direction: "asc" },
+    getSortValues: (item) => ({
+      name: item?.name || "",
+      source: sourceLabel(item.sourceType),
+    }),
+    isLoading: isFetching,
+  });
+
+  const {
+    currentPageItems,
+    numRenderedColumns,
+    propHelpers: {
+      toolbarProps,
+      filterToolbarProps,
+      paginationToolbarItemProps,
+      paginationProps,
+      tableProps,
+      getThProps,
+      getTrProps,
+      getTdProps,
+    },
+  } = tableControls;
+
+  const createButton = (
+    <Button
+      type="button"
+      id="create-skill"
+      variant={ButtonVariant.primary}
+      onClick={() => setFormModalState("create")}
+    >
+      {t("agentic.skill.create")}
+    </Button>
+  );
+
+  const managedTooltip = t("agentic.common.managedByKonveyor");
+
+  return (
+    <PageSection hasBodyWrapper={false}>
+      <ConditionalRender
+        when={isFetching && !(skills.length || fetchError)}
+        then={<AppPlaceholder />}
+      >
+        {/* The list wrapper of archetypes-page.tsx, kept for parity (guide 4.1). */}
+        <div
+          style={{
+            backgroundColor:
+              "var(--pf-t--global--background--color--primary--default)",
+          }}
+        >
+          <Toolbar {...toolbarProps}>
+            <ToolbarContent>
+              {/* Filters stay expanded down to 1024 wide (kit-list@1024). */}
+              <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
+              {canManageSkills && (
+                <ToolbarGroup variant="action-group">
+                  <ToolbarItem>{createButton}</ToolbarItem>
+                  <ToolbarItem>
+                    <KebabDropdown
+                      ariaLabel={t("agentic.skill.toolbarActions")}
+                      dropdownItems={[
+                        <DropdownItem
+                          key="import-skill"
+                          id="import-skill"
+                          onClick={() => setIsImportModalOpen(true)}
+                        >
+                          {t("agentic.skill.importFile")}
+                        </DropdownItem>,
+                      ]}
+                    />
+                  </ToolbarItem>
+                </ToolbarGroup>
+              )}
+              <ToolbarItem {...paginationToolbarItemProps}>
+                <SimplePagination
+                  idPrefix="skills-table"
+                  isTop
+                  paginationProps={paginationProps}
+                />
+              </ToolbarItem>
+            </ToolbarContent>
+          </Toolbar>
+          <Table {...tableProps} aria-label={t("agentic.skill.title")}>
+            <Thead>
+              <Tr>
+                <TableHeaderContentWithControls {...tableControls}>
+                  <Th {...getThProps({ columnKey: "name" })} width={20} />
+                  <Th
+                    {...getThProps({ columnKey: "description" })}
+                    width={30}
+                  />
+                  <Th
+                    {...getThProps({ columnKey: "source" })}
+                    modifier="fitContent"
+                  />
+                  <Th
+                    {...getThProps({ columnKey: "associations" })}
+                    modifier="fitContent"
+                  />
+                </TableHeaderContentWithControls>
+              </Tr>
+            </Thead>
+            <ConditionalTableBody
+              isLoading={isFetching}
+              isError={!!fetchError}
+              isNoData={currentPageItems.length === 0}
+              noDataEmptyState={
+                skills.length > 0 ? (
+                  <NoDataEmptyState
+                    title={t("message.noResultsFoundTitle")}
+                    description={t("message.noResultsFoundBody")}
+                  />
+                ) : (
+                  <NoDataEmptyState
+                    title={t("agentic.skill.emptyTitle")}
+                    description={
+                      canManageSkills
+                        ? t("agentic.skill.emptyDescription")
+                        : t("agentic.skill.emptyDescriptionReadOnly")
+                    }
+                    actions={
+                      canManageSkills && (
+                        <>
+                          {createButton}
+                          <Button
+                            variant={ButtonVariant.link}
+                            onClick={() => setIsImportModalOpen(true)}
+                          >
+                            {t("agentic.skill.importFile")}
+                          </Button>
+                        </>
+                      )
+                    }
+                  />
+                )
+              }
+              numRenderedColumns={numRenderedColumns}
+            >
+              <Tbody>
+                {currentPageItems.map((skill, rowIndex) => {
+                  const associationCount = skill.associations?.length;
+                  const deleteBlockedReason = getSkillDeleteBlockedReason(
+                    t,
+                    skill,
+                    knownCollections
+                  );
+                  return (
+                    <Tr key={skill.id} {...getTrProps({ item: skill })}>
+                      <TableRowContentWithControls
+                        {...tableControls}
+                        item={skill}
+                        rowIndex={rowIndex}
+                      >
+                        <Td {...getTdProps({ columnKey: "name" })}>
+                          <Link
+                            to={to(
+                              generatePath(DevPaths.skillDetails, {
+                                skillId: String(skill.id),
+                              })
+                            )}
+                          >
+                            {skill.name}
+                          </Link>
+                        </Td>
+                        <Td
+                          {...getTdProps({ columnKey: "description" })}
+                          modifier="truncate"
+                          tooltip={skill.description}
+                        >
+                          {skill.description}
+                        </Td>
+                        <Td
+                          {...getTdProps({ columnKey: "source" })}
+                          modifier="nowrap"
+                        >
+                          {sourceLabel(skill.sourceType)}
+                        </Td>
+                        <Td
+                          {...getTdProps({ columnKey: "associations" })}
+                          modifier="nowrap"
+                        >
+                          {associationCount == null ? (
+                            <EmptyTextMessage
+                              message={t("agentic.common.unavailable")}
+                            />
+                          ) : associationCount === 0 ? (
+                            <EmptyTextMessage message={t("terms.none")} />
+                          ) : (
+                            <CountLink
+                              to={to(
+                                generatePath(DevPaths.skillDetails, {
+                                  skillId: String(skill.id),
+                                }),
+                                "?tab=associations"
+                              )}
+                            >
+                              {t("agentic.skill.associationCount", {
+                                count: associationCount,
+                              })}
+                            </CountLink>
+                          )}
+                        </Td>
+                        {canManageSkills && (
+                          <Td isActionCell>
+                            <ActionsColumn
+                              items={[
+                                {
+                                  title: t("actions.edit"),
+                                  onClick: () =>
+                                    openModalAfterMenuClose(() =>
+                                      setFormModalState(skill)
+                                    ),
+                                  ...managedActionProps(
+                                    skill.operatorManaged,
+                                    managedTooltip
+                                  ),
+                                },
+                                { isSeparator: true },
+                                {
+                                  title: t("actions.delete"),
+                                  onClick: () =>
+                                    openModalAfterMenuClose(() =>
+                                      setSkillToDelete(skill)
+                                    ),
+                                  ...(skill.operatorManaged
+                                    ? managedActionProps(
+                                        true,
+                                        managedTooltip,
+                                        "left"
+                                      )
+                                    : disabledActionProps(
+                                        deleteBlockedReason,
+                                        "left"
+                                      )),
+                                  isDanger:
+                                    !skill.operatorManaged &&
+                                    deleteBlockedReason == null,
+                                },
+                              ]}
+                            />
+                          </Td>
+                        )}
+                      </TableRowContentWithControls>
+                    </Tr>
+                  );
+                })}
+              </Tbody>
+            </ConditionalTableBody>
+          </Table>
+          <SimplePagination
+            idPrefix="skills-table"
+            isTop={false}
+            paginationProps={paginationProps}
+          />
+        </div>
+      </ConditionalRender>
+
+      <Modal
+        id="create-edit-skill-modal"
+        variant="medium"
+        isOpen={formModalState !== null}
+        onClose={closeFormModal}
+      >
+        <ModalHeader
+          title={
+            skillToUpdate ? t("agentic.skill.edit") : t("agentic.skill.create")
+          }
+        />
+        <ModalBody>
+          <SkillForm
+            key={formKey}
+            skill={skillToUpdate}
+            onClose={closeFormModal}
+          />
+        </ModalBody>
+      </Modal>
+
+      <ImportSkillModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+      />
+
+      {skillToDelete != null && (
+        <ConfirmDialog
+          title={t("agentic.skill.deleteTitle")}
+          message={t("agentic.skill.deleteDescription", {
+            name: skillToDelete.name,
+          })}
+          isOpen
+          confirmBtnVariant={ButtonVariant.danger}
+          confirmBtnLabel={t("actions.delete")}
+          cancelBtnLabel={t("actions.cancel")}
+          onCancel={() => setSkillToDelete(undefined)}
+          onClose={() => setSkillToDelete(undefined)}
+          onConfirm={() => {
+            deleteSkill(skillToDelete.id);
+            setSkillToDelete(undefined);
+          }}
+        />
+      )}
+    </PageSection>
+  );
+};

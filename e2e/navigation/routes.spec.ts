@@ -275,13 +275,17 @@ test.describe("unknown and retired routes", () => {
     });
   }
 
-  test("/skills/collections (Paths.skillCollections) opens Skills filtered to collections", async ({
+  test("/skills/collections (Paths.skillCollections) opens the Skill collections tab", async ({
     page,
   }) => {
     await page.goto(protoUrl("/skills/collections"));
     await expect(mainHeading(page)).toHaveText("Skills", { timeout: 15_000 });
     expect(new URL(page.url()).pathname).toBe("/skills");
-    expect(searchParam(page, "skills:filters")).toBe('{"type":["collection"]}');
+    expect(searchParam(page, "tab")).toBe("collections");
+    expect(searchParam(page, "skills:filters")).toBeNull();
+    await expect(
+      page.getByRole("tab", { name: "Skill collections" })
+    ).toHaveAttribute("aria-selected", "true");
     expect(searchParam(page, "protoPersona")).toBe("enterpriseArchitect");
   });
 

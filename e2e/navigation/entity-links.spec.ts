@@ -55,6 +55,7 @@ const surfaces = (graph: FixtureGraph, group: Group): string[] => {
         "/migration-plans",
         "/plan-runs",
         "/skills?skills:itemsPerPage=100&skills:pageNumber=1",
+        "/skills?tab=collections",
       ];
     case "skills":
       return graph.skills.flatMap((skill) => [
@@ -223,11 +224,17 @@ for (const group of GROUPS) {
               /^\d+ runs?$/.test(label) &&
               /^\/migration-plans\/\d+$/.test(destination.pathname) &&
               destination.searchParams.get("tab") === "runs";
+            // So do the Skills page counts ("6 associations", "3 skills",
+            // "2 agents"): they open the skill or collection that lists them.
+            const isSkillsCountLink =
+              /^\d+ (associations?|skills|agents)$/.test(label) &&
+              /^\/skills\//.test(destination.pathname);
             if (
               !/\/stages\//.test(href) &&
               !isRunCountLink &&
               !isAgentCountLink &&
-              !isPlanRunsCountLink
+              !isPlanRunsCountLink &&
+              !isSkillsCountLink
             )
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected
