@@ -51,7 +51,7 @@ import {
 import { useFetchArchetypes } from "@app/queries/archetypes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { PlanSection, PlanSections } from "../components/plan-section";
+import { DetailSection, DetailSections } from "../../components/detail-section";
 import { StageCard, StageFormData } from "../components/stage-card";
 import { StagesTable } from "../components/stages-table";
 
@@ -739,7 +739,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
               )(),
           }}
         >
-          <PlanSections>
+          <DetailSections>
             {invalidStepId != null && (
               <InvalidStepAlert
                 stepId={invalidStepId}
@@ -801,7 +801,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
                 </DescriptionListDescription>
               </DescriptionListGroup>
             </DescriptionList>
-            <PlanSection title={t("agentic.plan.stages")}>
+            <DetailSection title={t("agentic.plan.stages")}>
               <StagesTable
                 aria-label={t("agentic.plan.stagesToReview")}
                 rows={stages.map((stage) => ({
@@ -815,8 +815,8 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
                 models={loadedModels}
                 isLoading={isLoadingAgents || isLoadingModels}
               />
-            </PlanSection>
-          </PlanSections>
+            </DetailSection>
+          </DetailSections>
         </WizardStep>
       </Wizard>
     </Modal>

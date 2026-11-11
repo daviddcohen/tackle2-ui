@@ -65,10 +65,11 @@ import {
   useFetchPlanRuns,
 } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
-import { disabledActionProps, managedActionProps } from "@app/utils/agentic";
+import { deleteActionProps, managedActionProps } from "@app/utils/agentic";
 import { openModalAfterMenuClose } from "@app/utils/utils";
 
-import { PlanCountLink } from "./components/plan-count-link";
+import { CountLink } from "../components/count-link";
+
 import {
   getPlanDeleteBlocker,
   useDeletePlanDialog,
@@ -200,9 +201,9 @@ const RunsCell: React.FC<{
     }
   }
   return (
-    <PlanCountLink to={linkTo(planPath(plan.id, "runs"))}>
+    <CountLink to={linkTo(planPath(plan.id, "runs"))}>
       {t("agentic.plan.runCount", { count })}
-    </PlanCountLink>
+    </CountLink>
   );
 };
 
@@ -301,14 +302,6 @@ const MigrationPlansPage: React.FC = () => {
     expansionDerivedState: { isCellExpanded },
   } = tableControls;
 
-  /** Delete: disabled with the reason (tooltip on the left, X12), danger only when enabled. */
-  const deleteActionProps = (plan: MigrationPlan) => {
-    const reason = plan.operatorManaged
-      ? t("agentic.common.managedByKonveyor")
-      : getPlanDeleteBlocker(plan, t);
-    return { isDanger: reason == null, ...disabledActionProps(reason, "left") };
-  };
-
   const closeWizard = () => {
     setIsWizardOpen(false);
     setPlanToEdit(null);
@@ -341,7 +334,7 @@ const MigrationPlansPage: React.FC = () => {
           >
             <Toolbar {...toolbarProps}>
               <ToolbarContent>
-                <FilterToolbar {...filterToolbarProps} />
+                <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
                 <ToolbarGroup variant="action-group">
                   {canManagePlans && (
                     <ToolbarItem>
@@ -461,13 +454,13 @@ const MigrationPlansPage: React.FC = () => {
                             <EmptyTextMessage message={t("terms.none")} />
                           ) : (
                             // A count even at 1 (addenda P4): the plan has no application refs.
-                            <PlanCountLink
+                            <CountLink
                               to={planApplicationsLocation(plan.id, linkCrumbs)}
                             >
                               {t("agentic.plan.applicationCount", {
                                 count: plan.applicationImpact.matching,
                               })}
-                            </PlanCountLink>
+                            </CountLink>
                           )}
                         </Td>
                         <Td {...getTdProps({ columnKey: "runs" })}>
@@ -502,7 +495,11 @@ const MigrationPlansPage: React.FC = () => {
                                     openModalAfterMenuClose(() =>
                                       requestDelete(plan)
                                     ),
-                                  ...deleteActionProps(plan),
+                                  ...deleteActionProps(
+                                    plan.operatorManaged
+                                      ? t("agentic.common.managedByKonveyor")
+                                      : getPlanDeleteBlocker(plan, t)
+                                  ),
                                 },
                               ]}
                             />

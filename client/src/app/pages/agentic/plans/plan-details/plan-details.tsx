@@ -5,16 +5,10 @@ import { Link, generatePath, useHistory, useParams } from "react-router-dom";
 import {
   Button,
   Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
   EmptyState,
   EmptyStateActions,
   EmptyStateBody,
   EmptyStateFooter,
-  Label,
-  LabelGroup,
   PageSection,
   Skeleton,
   Tab,
@@ -55,16 +49,21 @@ import {
 import { agenticWorkflowRunsWriteScopes, plansWriteScopes } from "@app/scopes";
 
 import { ConfigurationStatus } from "../../components/agentic-status";
+import { CountLink } from "../../components/count-link";
+import {
+  DetailFacts,
+  DetailSection,
+  DetailSections,
+  LinkLabels,
+} from "../../components/detail-section";
 import { PlanRunsTable } from "../../components/plan-runs-table";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 import { PlanConfigurationAlert } from "../components/plan-configuration-alert";
-import { PlanCountLink } from "../components/plan-count-link";
 import {
   getPlanDeleteBlocker,
   useDeletePlanDialog,
 } from "../components/plan-delete";
 import { planApplicationsLocation } from "../components/plan-paths";
-import { PlanSection, PlanSections } from "../components/plan-section";
 import { StagesTable } from "../components/stages-table";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
@@ -110,30 +109,17 @@ const TargetProfilesFact: React.FC<{
   }
   return (
     <>
-      <LabelGroup numLabels={5}>
-        {path.targetProfiles.map((profile) => (
-          <Label
-            key={profile.id}
-            variant="outline"
-            isCompact
-            isClickable
-            render={({ className, content }) => (
-              <Link
-                className={className}
-                to={breadcrumbTo(
-                  targetProfilePath(path.archetype.id, profile.id),
-                  "",
-                  linkCrumbs
-                )}
-              >
-                {content}
-              </Link>
-            )}
-          >
-            {profile.name}
-          </Label>
-        ))}
-      </LabelGroup>
+      <LinkLabels
+        items={path.targetProfiles.map((profile) => ({
+          id: profile.id,
+          name: profile.name,
+          to: breadcrumbTo(
+            targetProfilePath(path.archetype.id, profile.id),
+            "",
+            linkCrumbs
+          ),
+        }))}
+      />
       {!path.isDefault && (
         <Content component="small" className={textStyles.textColorSubtle}>
           {t("agentic.plan.notAssignedCue")}{" "}
@@ -237,94 +223,77 @@ const PlanDetailsPage: React.FC = () => {
       ? undefined
       : groupSkillSources(migrationPlan.effectiveSkills);
 
-  const facts = (
-    <DescriptionList
-      isHorizontal
-      isCompact
-      horizontalTermWidthModifier={{ default: "18ch" }}
-    >
-      <DescriptionListGroup>
-        <DescriptionListTerm>{t("terms.archetype")}</DescriptionListTerm>
-        <DescriptionListDescription>
-          {path ? (
-            <Link
-              to={breadcrumbTo(
-                archetypePath(path.archetype.id),
-                "",
-                planChildCrumbs
-              )}
-            >
-              {path.archetype.name}
-            </Link>
-          ) : (
-            <EmptyTextMessage message={t("agentic.common.unavailable")} />
+  const facts: [string, React.ReactNode][] = [
+    [
+      t("terms.archetype"),
+      path ? (
+        <Link
+          to={breadcrumbTo(
+            archetypePath(path.archetype.id),
+            "",
+            planChildCrumbs
           )}
-        </DescriptionListDescription>
-      </DescriptionListGroup>
-      <DescriptionListGroup>
-        <DescriptionListTerm>{t("terms.targetProfiles")}</DescriptionListTerm>
-        <DescriptionListDescription>
-          <TargetProfilesFact
-            plan={migrationPlan}
-            linkCrumbs={planChildCrumbs}
-          />
-        </DescriptionListDescription>
-      </DescriptionListGroup>
-      <DescriptionListGroup>
-        <DescriptionListTerm>{t("terms.applications")}</DescriptionListTerm>
-        <DescriptionListDescription>
-          {impact == null ? (
-            <EmptyTextMessage message={t("agentic.common.unavailable")} />
-          ) : impact.matching === 0 ? (
-            <EmptyTextMessage message={t("terms.none")} />
-          ) : (
-            <PlanCountLink
-              to={planApplicationsLocation(migrationPlan.id, planChildCrumbs)}
-            >
-              {t("agentic.plan.applicationCount", { count: impact.matching })}
-            </PlanCountLink>
-          )}
-        </DescriptionListDescription>
-      </DescriptionListGroup>
-      <DescriptionListGroup>
-        <DescriptionListTerm>{t("agentic.plan.runs")}</DescriptionListTerm>
-        <DescriptionListDescription>
-          {runCount == null ? (
-            <EmptyTextMessage message={t("agentic.common.unavailable")} />
-          ) : runCount === 0 ? (
-            <EmptyTextMessage message={t("terms.none")} />
-          ) : (
-            // The Runs tab of this page: switch tabs, do not navigate.
-            <Button
-              variant="link"
-              isInline
-              className={textStyles.textNowrap}
-              onClick={() => setActiveTab("runs")}
-            >
-              {t("agentic.plan.runCount", { count: runCount })}
-            </Button>
-          )}
-        </DescriptionListDescription>
-      </DescriptionListGroup>
-      <DescriptionListGroup>
-        <DescriptionListTerm>
-          {t("agentic.plan.configuration")}
-        </DescriptionListTerm>
-        <DescriptionListDescription>
-          {isLoadingConfiguration ? (
-            <Skeleton width="8rem" screenreaderText={t("terms.loading")} />
-          ) : notEvaluatedDetails &&
-            !configurationChecks.some((check) => check.status === "issue") ? (
-            <Tooltip content={notEvaluatedDetails}>
-              <span tabIndex={0}>{configurationStatus}</span>
-            </Tooltip>
-          ) : (
-            configurationStatus
-          )}
-        </DescriptionListDescription>
-      </DescriptionListGroup>
-    </DescriptionList>
-  );
+        >
+          {path.archetype.name}
+        </Link>
+      ) : (
+        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+      ),
+    ],
+    [
+      t("terms.targetProfiles"),
+      <TargetProfilesFact
+        key="profiles"
+        plan={migrationPlan}
+        linkCrumbs={planChildCrumbs}
+      />,
+    ],
+    [
+      t("terms.applications"),
+      impact == null ? (
+        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+      ) : impact.matching === 0 ? (
+        <EmptyTextMessage message={t("terms.none")} />
+      ) : (
+        <CountLink
+          to={planApplicationsLocation(migrationPlan.id, planChildCrumbs)}
+        >
+          {t("agentic.plan.applicationCount", { count: impact.matching })}
+        </CountLink>
+      ),
+    ],
+    [
+      t("agentic.plan.runs"),
+      runCount == null ? (
+        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+      ) : runCount === 0 ? (
+        <EmptyTextMessage message={t("terms.none")} />
+      ) : (
+        // The Runs tab of this page: switch tabs, do not navigate.
+        <Button
+          variant="link"
+          isInline
+          className={textStyles.textNowrap}
+          onClick={() => setActiveTab("runs")}
+        >
+          {t("agentic.plan.runCount", { count: runCount })}
+        </Button>
+      ),
+    ],
+    [
+      t("agentic.plan.configuration"),
+      isLoadingConfiguration ? (
+        <Skeleton width="8rem" screenreaderText={t("terms.loading")} />
+      ) : notEvaluatedDetails &&
+        !configurationChecks.some((check) => check.status === "issue") ? (
+        <Tooltip content={notEvaluatedDetails}>
+          <span tabIndex={0}>{configurationStatus}</span>
+        </Tooltip>
+      ) : (
+        configurationStatus
+      ),
+    ],
+  ];
 
   return (
     <>
@@ -378,7 +347,7 @@ const PlanDetailsPage: React.FC = () => {
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          <PlanSections>
+          <DetailSections>
             {configurationChecks.some((check) => check.status === "issue") && (
               <PlanConfigurationAlert
                 plan={migrationPlan}
@@ -389,8 +358,8 @@ const PlanDetailsPage: React.FC = () => {
                 onEdit={canManagePlans ? () => setIsEditOpen(true) : undefined}
               />
             )}
-            {facts}
-            <PlanSection
+            <DetailFacts facts={facts} />
+            <DetailSection
               title={t("agentic.plan.stages")}
               description={t("agentic.plan.stagesDescription")}
             >
@@ -413,30 +382,30 @@ const PlanDetailsPage: React.FC = () => {
                   childLink(generatePath(DevPaths.agentDetails, { agentId }))
                 }
               />
-            </PlanSection>
+            </DetailSection>
             {skillRows == null ? (
-              <PlanSection title={t("agentic.planDetail.skillsTitleEmpty")}>
+              <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
                 <EmptyTextMessage message={t("agentic.common.unavailable")} />
-              </PlanSection>
+              </DetailSection>
             ) : skillRows.length === 0 ? (
-              <PlanSection title={t("agentic.planDetail.skillsTitleEmpty")}>
+              <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
                 <EmptyState
                   variant="xs"
                   headingLevel="h3"
                   titleText={t("agentic.planDetail.skillsEmpty")}
                 />
-              </PlanSection>
+              </DetailSection>
             ) : (
-              <PlanSection
+              <DetailSection
                 title={t("agentic.planDetail.skillsTitle", {
                   count: skillRows.length,
                 })}
                 description={t("agentic.planDetail.skillsDescription")}
               >
                 <SkillsTable rows={skillRows} linkTo={childLink} />
-              </PlanSection>
+              </DetailSection>
             )}
-          </PlanSections>
+          </DetailSections>
         </PageSection>
       </DetailTabPanel>
 
@@ -448,7 +417,7 @@ const PlanDetailsPage: React.FC = () => {
         <PageSection hasBodyWrapper={false}>
           {isLoadingRuns || runsFetchError != null ? (
             // The spinner and error rows of the table (addenda X6).
-            <PlanSection title={t("agentic.planDetail.runsTitleEmpty")}>
+            <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
               <PlanRunsTable
                 runs={[]}
                 isLoading={isLoadingRuns}
@@ -458,9 +427,9 @@ const PlanDetailsPage: React.FC = () => {
                   breadcrumbTo(pathname, search, planChildCrumbs)
                 }
               />
-            </PlanSection>
+            </DetailSection>
           ) : planRuns.length === 0 ? (
-            <PlanSection title={t("agentic.planDetail.runsTitleEmpty")}>
+            <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
               <EmptyState
                 headingLevel="h3"
                 icon={CubesIcon}
@@ -478,9 +447,9 @@ const PlanDetailsPage: React.FC = () => {
                   </EmptyStateActions>
                 </EmptyStateFooter>
               </EmptyState>
-            </PlanSection>
+            </DetailSection>
           ) : (
-            <PlanSection
+            <DetailSection
               title={t("agentic.planDetail.runsTitle", {
                 count: planRuns.length,
               })}
@@ -513,7 +482,7 @@ const PlanDetailsPage: React.FC = () => {
                 }
                 origin={`?from=plan-${migrationPlan.id}`}
               />
-            </PlanSection>
+            </DetailSection>
           )}
         </PageSection>
       </DetailTabPanel>
