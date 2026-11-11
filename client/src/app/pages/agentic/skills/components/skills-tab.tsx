@@ -186,221 +186,210 @@ export const SkillsTab: React.FC = () => {
   return (
     <PageSection hasBodyWrapper={false}>
       <ConditionalRender
-        when={isFetching && !(skills.length || fetchError)}
+        when={isFetching && !(skills || fetchError)}
         then={<AppPlaceholder />}
       >
-        {/* The list wrapper of archetypes-page.tsx, kept for parity (guide 4.1). */}
-        <div
-          style={{
-            backgroundColor:
-              "var(--pf-t--global--background--color--primary--default)",
-          }}
-        >
-          <Toolbar {...toolbarProps}>
-            <ToolbarContent>
-              {/* Filters stay expanded down to 1024 wide (kit-list@1024). */}
-              <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
-              {canManageSkills && (
-                <ToolbarGroup variant="action-group">
-                  <ToolbarItem>{createButton}</ToolbarItem>
-                  <ToolbarItem>
-                    <KebabDropdown
-                      ariaLabel={t("agentic.skill.toolbarActions")}
-                      dropdownItems={[
-                        <DropdownItem
-                          key="import-skill"
-                          id="import-skill"
+        <Toolbar {...toolbarProps}>
+          <ToolbarContent>
+            {/* Filters stay expanded down to 1024 wide (kit-list@1024). */}
+            <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
+            {canManageSkills && (
+              <ToolbarGroup variant="action-group">
+                <ToolbarItem>{createButton}</ToolbarItem>
+                <ToolbarItem>
+                  <KebabDropdown
+                    ariaLabel={t("agentic.skill.toolbarActions")}
+                    dropdownItems={[
+                      <DropdownItem
+                        key="import-skill"
+                        id="import-skill"
+                        onClick={() => setIsImportModalOpen(true)}
+                      >
+                        {t("agentic.skill.importFile")}
+                      </DropdownItem>,
+                    ]}
+                  />
+                </ToolbarItem>
+              </ToolbarGroup>
+            )}
+            <ToolbarItem {...paginationToolbarItemProps}>
+              <SimplePagination
+                idPrefix="skills-table"
+                isTop
+                paginationProps={paginationProps}
+              />
+            </ToolbarItem>
+          </ToolbarContent>
+        </Toolbar>
+        <Table {...tableProps} aria-label={t("agentic.skill.title")}>
+          <Thead>
+            <Tr>
+              <TableHeaderContentWithControls {...tableControls}>
+                <Th {...getThProps({ columnKey: "name" })} width={20} />
+                <Th {...getThProps({ columnKey: "description" })} width={30} />
+                <Th
+                  {...getThProps({ columnKey: "source" })}
+                  modifier="fitContent"
+                />
+                <Th
+                  {...getThProps({ columnKey: "associations" })}
+                  modifier="fitContent"
+                />
+              </TableHeaderContentWithControls>
+            </Tr>
+          </Thead>
+          <ConditionalTableBody
+            isLoading={isFetching}
+            isError={!!fetchError}
+            isNoData={currentPageItems.length === 0}
+            noDataEmptyState={
+              skills.length > 0 ? (
+                <NoDataEmptyState
+                  title={t("message.noResultsFoundTitle")}
+                  description={t("message.noResultsFoundBody")}
+                />
+              ) : (
+                <NoDataEmptyState
+                  title={t("agentic.skill.emptyTitle")}
+                  description={
+                    canManageSkills
+                      ? t("agentic.skill.emptyDescription")
+                      : t("agentic.skill.emptyDescriptionReadOnly")
+                  }
+                  actions={
+                    canManageSkills && (
+                      <>
+                        {createButton}
+                        <Button
+                          variant={ButtonVariant.link}
                           onClick={() => setIsImportModalOpen(true)}
                         >
                           {t("agentic.skill.importFile")}
-                        </DropdownItem>,
-                      ]}
-                    />
-                  </ToolbarItem>
-                </ToolbarGroup>
-              )}
-              <ToolbarItem {...paginationToolbarItemProps}>
-                <SimplePagination
-                  idPrefix="skills-table"
-                  isTop
-                  paginationProps={paginationProps}
+                        </Button>
+                      </>
+                    )
+                  }
                 />
-              </ToolbarItem>
-            </ToolbarContent>
-          </Toolbar>
-          <Table {...tableProps} aria-label={t("agentic.skill.title")}>
-            <Thead>
-              <Tr>
-                <TableHeaderContentWithControls {...tableControls}>
-                  <Th {...getThProps({ columnKey: "name" })} width={20} />
-                  <Th
-                    {...getThProps({ columnKey: "description" })}
-                    width={30}
-                  />
-                  <Th
-                    {...getThProps({ columnKey: "source" })}
-                    modifier="fitContent"
-                  />
-                  <Th
-                    {...getThProps({ columnKey: "associations" })}
-                    modifier="fitContent"
-                  />
-                </TableHeaderContentWithControls>
-              </Tr>
-            </Thead>
-            <ConditionalTableBody
-              isLoading={isFetching}
-              isError={!!fetchError}
-              isNoData={currentPageItems.length === 0}
-              noDataEmptyState={
-                skills.length > 0 ? (
-                  <NoDataEmptyState
-                    title={t("message.noResultsFoundTitle")}
-                    description={t("message.noResultsFoundBody")}
-                  />
-                ) : (
-                  <NoDataEmptyState
-                    title={t("agentic.skill.emptyTitle")}
-                    description={
-                      canManageSkills
-                        ? t("agentic.skill.emptyDescription")
-                        : t("agentic.skill.emptyDescriptionReadOnly")
-                    }
-                    actions={
-                      canManageSkills && (
-                        <>
-                          {createButton}
-                          <Button
-                            variant={ButtonVariant.link}
-                            onClick={() => setIsImportModalOpen(true)}
-                          >
-                            {t("agentic.skill.importFile")}
-                          </Button>
-                        </>
-                      )
-                    }
-                  />
-                )
-              }
-              numRenderedColumns={numRenderedColumns}
-            >
-              <Tbody>
-                {currentPageItems.map((skill, rowIndex) => {
-                  const associationCount = skill.associations?.length;
-                  const deleteBlockedReason = getSkillDeleteBlockedReason(
-                    t,
-                    skill,
-                    knownCollections
-                  );
-                  return (
-                    <Tr key={skill.id} {...getTrProps({ item: skill })}>
-                      <TableRowContentWithControls
-                        {...tableControls}
-                        item={skill}
-                        rowIndex={rowIndex}
+              )
+            }
+            numRenderedColumns={numRenderedColumns}
+          >
+            <Tbody>
+              {currentPageItems.map((skill, rowIndex) => {
+                const associationCount = skill.associations?.length;
+                const deleteBlockedReason = getSkillDeleteBlockedReason(
+                  t,
+                  skill,
+                  knownCollections
+                );
+                return (
+                  <Tr key={skill.id} {...getTrProps({ item: skill })}>
+                    <TableRowContentWithControls
+                      {...tableControls}
+                      item={skill}
+                      rowIndex={rowIndex}
+                    >
+                      <Td {...getTdProps({ columnKey: "name" })}>
+                        <Link
+                          to={to(
+                            generatePath(DevPaths.skillDetails, {
+                              skillId: String(skill.id),
+                            })
+                          )}
+                        >
+                          {skill.name}
+                        </Link>
+                      </Td>
+                      <Td
+                        {...getTdProps({ columnKey: "description" })}
+                        modifier="truncate"
+                        tooltip={skill.description}
                       >
-                        <Td {...getTdProps({ columnKey: "name" })}>
-                          <Link
+                        {skill.description}
+                      </Td>
+                      <Td
+                        {...getTdProps({ columnKey: "source" })}
+                        modifier="nowrap"
+                      >
+                        {sourceLabel(skill.sourceType)}
+                      </Td>
+                      <Td
+                        {...getTdProps({ columnKey: "associations" })}
+                        modifier="nowrap"
+                      >
+                        {associationCount == null ? (
+                          <EmptyTextMessage
+                            message={t("agentic.common.unavailable")}
+                          />
+                        ) : associationCount === 0 ? (
+                          <EmptyTextMessage message={t("terms.none")} />
+                        ) : (
+                          <CountLink
                             to={to(
                               generatePath(DevPaths.skillDetails, {
                                 skillId: String(skill.id),
-                              })
+                              }),
+                              "?tab=associations"
                             )}
                           >
-                            {skill.name}
-                          </Link>
-                        </Td>
-                        <Td
-                          {...getTdProps({ columnKey: "description" })}
-                          modifier="truncate"
-                          tooltip={skill.description}
-                        >
-                          {skill.description}
-                        </Td>
-                        <Td
-                          {...getTdProps({ columnKey: "source" })}
-                          modifier="nowrap"
-                        >
-                          {sourceLabel(skill.sourceType)}
-                        </Td>
-                        <Td
-                          {...getTdProps({ columnKey: "associations" })}
-                          modifier="nowrap"
-                        >
-                          {associationCount == null ? (
-                            <EmptyTextMessage
-                              message={t("agentic.common.unavailable")}
-                            />
-                          ) : associationCount === 0 ? (
-                            <EmptyTextMessage message={t("terms.none")} />
-                          ) : (
-                            <CountLink
-                              to={to(
-                                generatePath(DevPaths.skillDetails, {
-                                  skillId: String(skill.id),
-                                }),
-                                "?tab=associations"
-                              )}
-                            >
-                              {t("agentic.skill.associationCount", {
-                                count: associationCount,
-                              })}
-                            </CountLink>
-                          )}
-                        </Td>
-                        {canManageSkills && (
-                          <Td isActionCell>
-                            <ActionsColumn
-                              items={[
-                                {
-                                  title: t("actions.edit"),
-                                  onClick: () =>
-                                    openModalAfterMenuClose(() =>
-                                      setFormModalState(skill)
-                                    ),
-                                  ...managedActionProps(
-                                    skill.operatorManaged,
-                                    managedTooltip
-                                  ),
-                                },
-                                { isSeparator: true },
-                                {
-                                  title: t("actions.delete"),
-                                  onClick: () =>
-                                    openModalAfterMenuClose(() =>
-                                      setSkillToDelete(skill)
-                                    ),
-                                  ...(skill.operatorManaged
-                                    ? managedActionProps(
-                                        true,
-                                        managedTooltip,
-                                        "left"
-                                      )
-                                    : disabledActionProps(
-                                        deleteBlockedReason,
-                                        "left"
-                                      )),
-                                  isDanger:
-                                    !skill.operatorManaged &&
-                                    deleteBlockedReason == null,
-                                },
-                              ]}
-                            />
-                          </Td>
+                            {t("agentic.skill.associationCount", {
+                              count: associationCount,
+                            })}
+                          </CountLink>
                         )}
-                      </TableRowContentWithControls>
-                    </Tr>
-                  );
-                })}
-              </Tbody>
-            </ConditionalTableBody>
-          </Table>
-          <SimplePagination
-            idPrefix="skills-table"
-            isTop={false}
-            paginationProps={paginationProps}
-          />
-        </div>
+                      </Td>
+                      {canManageSkills && (
+                        <Td isActionCell>
+                          <ActionsColumn
+                            items={[
+                              {
+                                title: t("actions.edit"),
+                                onClick: () =>
+                                  openModalAfterMenuClose(() =>
+                                    setFormModalState(skill)
+                                  ),
+                                ...managedActionProps(
+                                  skill.operatorManaged,
+                                  managedTooltip
+                                ),
+                              },
+                              { isSeparator: true },
+                              {
+                                title: t("actions.delete"),
+                                onClick: () =>
+                                  openModalAfterMenuClose(() =>
+                                    setSkillToDelete(skill)
+                                  ),
+                                ...(skill.operatorManaged
+                                  ? managedActionProps(
+                                      true,
+                                      managedTooltip,
+                                      "left"
+                                    )
+                                  : disabledActionProps(
+                                      deleteBlockedReason,
+                                      "left"
+                                    )),
+                                isDanger:
+                                  !skill.operatorManaged &&
+                                  deleteBlockedReason == null,
+                              },
+                            ]}
+                          />
+                        </Td>
+                      )}
+                    </TableRowContentWithControls>
+                  </Tr>
+                );
+              })}
+            </Tbody>
+          </ConditionalTableBody>
+        </Table>
+        <SimplePagination
+          idPrefix="skills-table"
+          isTop={false}
+          paginationProps={paginationProps}
+        />
       </ConditionalRender>
 
       <SkillModal
