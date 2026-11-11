@@ -4,6 +4,7 @@ import { Archetype } from "@app/api/models";
 import {
   archetypePath,
   skillAssociationPath,
+  targetProfileOwnerPath,
   targetProfilePath,
 } from "./entity-paths";
 
@@ -28,6 +29,13 @@ describe("entity paths", () => {
     expect(targetProfilePath(1, 11)).toBe(
       "/archetypes/1/target-profiles#target-profile-11"
     );
+  });
+
+  it("anchors a target profile on the archetype that owns it, when known", () => {
+    expect(targetProfileOwnerPath(21, archetypes)).toBe(
+      "/archetypes/2/target-profiles#target-profile-21"
+    );
+    expect(targetProfileOwnerPath(99, archetypes)).toBeUndefined();
   });
 
   it.each([
