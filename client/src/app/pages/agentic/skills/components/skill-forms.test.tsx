@@ -114,6 +114,13 @@ describe("SkillCollectionForm", () => {
       ),
       rest.get(AGENTIC_ENDPOINTS.skillCollections, (_req, res, ctx) =>
         res(ctx.json([collection]))
+      ),
+      rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
+        res(
+          ctx.json([
+            { id: "1", name: "Code Migrator", skillCollections: [{ id: "1" }] },
+          ])
+        )
       )
     );
   });
@@ -148,6 +155,23 @@ describe("SkillCollectionForm", () => {
     expect(
       await screen.findByText("agentic.skillCollection.validation.nameMaximum")
     ).toBeInTheDocument();
+  });
+
+  it("warns on edit how many agents use the collection (S3)", async () => {
+    render(<SkillCollectionForm collection={collection} onClose={jest.fn()} />);
+    expect(
+      await screen.findByText("agentic.skillCollection.editWarning")
+    ).toBeInTheDocument();
+  });
+
+  it("has no warning when creating", async () => {
+    render(<SkillCollectionForm collection={null} onClose={jest.fn()} />);
+    await screen.findByRole("button", { name: "actions.create" });
+    await waitFor(() =>
+      expect(
+        screen.queryByText("agentic.skillCollection.editWarning")
+      ).not.toBeInTheDocument()
+    );
   });
 
   it("keeps Save disabled until something changes", async () => {

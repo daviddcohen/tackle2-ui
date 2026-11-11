@@ -15,9 +15,6 @@ import {
   EmptyStateBody,
   Flex,
   FlexItem,
-  Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Skeleton,
   Title,
@@ -35,7 +32,6 @@ import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
 import { ConditionalTableBody } from "@app/components/TableControls";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
-import { useFormModalState } from "@app/hooks/useFormModalState";
 import {
   EntityDetailActions,
   EntityDetailLoading,
@@ -52,7 +48,7 @@ import {
 import { skillCollectionsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { SkillCollectionForm } from "../components/skill-collection-form";
+import { SkillCollectionModal } from "../components/skill-collection-form";
 import {
   USED_BY_AGENTS_ID,
   getAgentsUsingCollection,
@@ -127,7 +123,7 @@ const SkillCollectionDetail: React.FC = () => {
   } = useFetchSkills();
   const { gateways } = useFetchGateways();
 
-  const [editModal, setEditModal, editFormKey] = useFormModalState<true>();
+  const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
 
   const { mutate: deleteCollection } = useDeleteSkillCollectionMutation(
@@ -230,7 +226,7 @@ const SkillCollectionDetail: React.FC = () => {
           btnActions={
             canManageCollections && (
               <EntityDetailActions
-                onEdit={() => setEditModal(true)}
+                onEdit={() => setIsEditOpen(true)}
                 onDelete={() => setIsDeleteOpen(true)}
                 managedReason={managedReason}
                 deleteDisabledReason={getCollectionDeleteBlockedReason(
@@ -398,24 +394,14 @@ const SkillCollectionDetail: React.FC = () => {
         </Flex>
       </PageSection>
 
-      <Modal
-        id="edit-skill-collection-modal"
-        variant="medium"
-        isOpen={editModal !== null}
-        onClose={() => setEditModal(null)}
-      >
-        <ModalHeader title={t("agentic.skillCollection.edit")} />
-        <ModalBody>
-          <SkillCollectionForm
-            key={editFormKey}
-            collection={skillCollection}
-            onClose={() => {
-              setEditModal(null);
-              refetch();
-            }}
-          />
-        </ModalBody>
-      </Modal>
+      <SkillCollectionModal
+        isOpen={isEditOpen}
+        collection={skillCollection}
+        onClose={() => {
+          setIsEditOpen(false);
+          refetch();
+        }}
+      />
 
       {isDeleteOpen && (
         <ConfirmDialog
