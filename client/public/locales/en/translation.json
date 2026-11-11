@@ -1664,7 +1664,12 @@
       "planRunsStarted_one": "{{count}} plan run started",
       "planRunsStarted_other": "{{count}} plan runs started",
       "viewPlanRuns": "View plan runs",
-      "noPlanRunStarted": "No plan run was started"
+      "noPlanRunStarted": "No plan run was started",
+      "noMigrationPathTitle": "No migration path",
+      "noMigrationPathBody": "Applications get their migration plan from their archetype's target profile. Check the target profiles of {{archetype}}.",
+      "noArchetypeBody": "This application has no archetype. Applications get their migration plan from their archetype's target profile.",
+      "viewTargetProfiles": "View target profiles",
+      "goToArchetypes": "Go to archetypes"
     },
     "skillCollection": {
       "create": "Create skill collection",
