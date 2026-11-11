@@ -7,8 +7,6 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  EmptyState,
-  EmptyStateBody,
   ExpandableSection,
   ExpandableSectionVariant,
   Label,
@@ -28,14 +26,7 @@ import { formatDate } from "@app/utils/utils";
 
 import { AgentModel } from "../components/agent-model";
 
-import { DetailSection, DetailSections } from "./detail-section";
-
-/** A small section empty state (kit-tables): one sentence, no icon. */
-const SectionEmpty: React.FC<{ children: string }> = ({ children }) => (
-  <EmptyState variant="xs">
-    <EmptyStateBody>{children}</EmptyStateBody>
-  </EmptyState>
-);
+import { DetailSection, DetailSections, SectionEmpty } from "./detail-section";
 
 export interface AgentDetailsTabProps {
   agent: Agent;

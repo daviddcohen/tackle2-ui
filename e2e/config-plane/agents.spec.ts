@@ -291,8 +291,10 @@ test.describe("Agent test modal", () => {
       "aria-selected",
       "true"
     );
-    const runRow = page.getByRole("row", { name: /Run the unit tests/ });
-    await expect(runRow).toContainText("Test");
+    // Test runs are their own section, so the row needs no type label.
+    const runRow = page
+      .getByRole("grid", { name: "Test runs" })
+      .getByRole("row", { name: /Run the unit tests/ });
     await expect(runRow).toContainText("Customer Management");
   });
 
@@ -345,9 +347,16 @@ test.describe("Agent detail", () => {
       "aria-selected",
       "true"
     );
-    for (const column of ["Started", "Completed"])
+    await expect(
+      page.getByRole("heading", { name: /^Migration plan stages/ })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /^Test runs/ })
+    ).toBeVisible();
+    const stages = page.getByRole("grid", { name: "Migration plan stages" });
+    for (const column of ["Run", "Stage", "Status", "Started", "Duration"])
       await expect(
-        page.getByRole("columnheader", { name: column })
+        stages.getByRole("columnheader", { name: column, exact: true })
       ).toBeVisible();
   });
 

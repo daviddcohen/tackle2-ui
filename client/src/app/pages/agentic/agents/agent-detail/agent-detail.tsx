@@ -1,28 +1,21 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
-import { Link, generatePath, useHistory, useParams } from "react-router-dom";
+import { useHistory, useParams } from "react-router-dom";
 import {
   ButtonVariant,
   Content,
-  EmptyState,
-  EmptyStateBody,
-  Label,
   PageSection,
   Tab,
   TabTitleText,
   Tabs,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
-import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { AgentDetailsRoute, DevPaths } from "@app/Paths";
-import { ControllerRunPhase, EntityId } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
-import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
@@ -43,7 +36,6 @@ import {
 import { agenticAgentRunsWriteScopes, agentsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { RunStatus } from "../../components/agentic-status";
 import {
   getPlansUsingAgent,
   useAgentDeleteBlockedReason,
@@ -52,6 +44,7 @@ import { AgentFormModal } from "../components/agent-form-modal";
 import { AgentTestModal } from "../components/agent-test-modal";
 
 import { AgentDetailsTab } from "./agent-details-tab";
+import { AgentRunsTab } from "./agent-runs-tab";
 
 const AGENT_DETAIL_TABS = ["details", "runs"] as const;
 type AgentDetailTab = (typeof AGENT_DETAIL_TABS)[number];
@@ -76,8 +69,16 @@ const AgentDetail: React.FC = () => {
     fetchError: plansError,
   } = useFetchMigrationPlans();
   const { gateways } = useFetchGateways();
-  const { planRuns } = useFetchPlanRuns();
-  const { agentTestRuns } = useFetchAgentTestRuns(agentId);
+  const {
+    planRuns,
+    isLoading: isLoadingPlanRuns,
+    fetchError: planRunsError,
+  } = useFetchPlanRuns();
+  const {
+    agentTestRuns,
+    isLoading: isLoadingTestRuns,
+    fetchError: testRunsError,
+  } = useFetchAgentTestRuns(agentId);
 
   const [activeTab, setActiveTab] = useUrlTab<AgentDetailTab>(
     AGENT_DETAIL_TABS,
@@ -104,44 +105,6 @@ const AgentDetail: React.FC = () => {
   const plansUsingAgent = agent
     ? getPlansUsingAgent(agent.id, migrationPlans)
     : [];
-
-  // Agent runs: stage runs whose stage snapshot was assigned to this agent
-  const agentRunEntries = React.useMemo(() => {
-    if (!agent) return [];
-    const entries: Array<{
-      key: string;
-      planRunId: EntityId;
-      planRunName: string;
-      planId: EntityId;
-      stageName: string;
-      stageId: EntityId;
-      status: ControllerRunPhase;
-      startedAt?: string;
-      completedAt?: string;
-    }> = [];
-    planRuns.forEach((run) => {
-      run.stageRuns
-        .filter((sr) => sr.agent.id === agent.id)
-        .forEach((sr) => {
-          entries.push({
-            key: `${run.id}-${sr.stageId}`,
-            planRunId: run.id,
-            planRunName: run.name,
-            planId: run.planId,
-            stageName: sr.name,
-            stageId: sr.stageId,
-            status: sr.status,
-            startedAt: sr.startedAt,
-            completedAt: sr.completedAt,
-          });
-        });
-    });
-    return entries.sort((a, b) => {
-      const aTime = a.startedAt ? new Date(a.startedAt).getTime() : 0;
-      const bTime = b.startedAt ? new Date(b.startedAt).getTime() : 0;
-      return bTime - aTime;
-    });
-  }, [agent, planRuns]);
 
   const { breadcrumbs, linkCrumbs: agentChildCrumbs } = useEntityBreadcrumbs(
     agent?.name ?? t("agentic.entity.agent"),
@@ -248,121 +211,17 @@ const AgentDetail: React.FC = () => {
 
       <DetailTabPanel prefix={TAB_PREFIX} eventKey="runs" activeKey={activeTab}>
         <PageSection hasBodyWrapper={false}>
-          {agentRunEntries.length === 0 && agentTestRuns.length === 0 ? (
-            <EmptyState
-              headingLevel="h3"
-              icon={CubesIcon}
-              titleText={t("agentic.agentDetail.runsEmptyTitle")}
-              variant="sm"
-            >
-              <EmptyStateBody>
-                {t("agentic.agentDetail.runsEmptyDescription")}
-              </EmptyStateBody>
-            </EmptyState>
-          ) : (
-            <Table
-              aria-label={t("agentic.agentDetail.runsTableLabel")}
-              variant="compact"
-            >
-              <Thead>
-                <Tr>
-                  <Th width={25}>{t("agentic.agentDetail.planRun")}</Th>
-                  <Th width={20}>{t("agentic.agentDetail.stage")}</Th>
-                  <Th width={15}>{t("agentic.agentDetail.runType")}</Th>
-                  <Th width={10}>{t("agentic.planRun.status")}</Th>
-                  <Th width={15}>{t("agentic.planRun.started")}</Th>
-                  <Th width={15}>{t("agentic.planRun.completed")}</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {agentRunEntries.map((entry) => (
-                  <Tr key={entry.key}>
-                    <Td dataLabel={t("agentic.agentDetail.planRun")}>
-                      <Link
-                        to={breadcrumbTo(
-                          DevPaths.planRunDetails.replace(
-                            ":runId",
-                            entry.planRunId.toString()
-                          ),
-                          `?from=agent-${agentId}`,
-                          agentChildCrumbs
-                        )}
-                      >
-                        {entry.planRunName}
-                      </Link>
-                    </Td>
-                    <Td dataLabel={t("agentic.agentDetail.stage")}>
-                      <Link
-                        to={breadcrumbTo(
-                          DevPaths.stageRunDetails
-                            .replace(":runId", entry.planRunId.toString())
-                            .replace(":stageId", entry.stageId.toString()),
-                          `?fromAgent=${agentId}`,
-                          agentChildCrumbs
-                        )}
-                      >
-                        {entry.stageName}
-                      </Link>
-                    </Td>
-                    <Td dataLabel={t("agentic.agentDetail.runType")}>
-                      <Label color="blue" isCompact>
-                        {t("agentic.agentDetail.runTypePlan")}
-                      </Label>
-                    </Td>
-                    <Td dataLabel={t("agentic.planRun.status")}>
-                      <RunStatus status={entry.status} />
-                    </Td>
-                    <Td dataLabel={t("agentic.planRun.started")}>
-                      {entry.startedAt
-                        ? new Date(entry.startedAt).toLocaleString()
-                        : "—"}
-                    </Td>
-                    <Td dataLabel={t("agentic.planRun.completed")}>
-                      {entry.completedAt
-                        ? new Date(entry.completedAt).toLocaleString()
-                        : "—"}
-                    </Td>
-                  </Tr>
-                ))}
-                {agentTestRuns.map((testRun) => (
-                  <Tr key={`test-${testRun.id}`}>
-                    <Td dataLabel={t("agentic.agentDetail.planRun")}>
-                      <Link
-                        to={breadcrumbTo(
-                          generatePath(DevPaths.applicationDetails, {
-                            applicationId: String(testRun.application.id),
-                          }),
-                          "",
-                          agentChildCrumbs
-                        )}
-                      >
-                        {testRun.application.name}
-                      </Link>
-                    </Td>
-                    <Td dataLabel={t("agentic.agentDetail.stage")}>
-                      <Content component="small">
-                        {testRun.task.length > 60
-                          ? `${testRun.task.slice(0, 60)}…`
-                          : testRun.task}
-                      </Content>
-                    </Td>
-                    <Td dataLabel={t("agentic.agentDetail.runType")}>
-                      <Label color="orange" isCompact>
-                        {t("agentic.agentDetail.runTypeTest")}
-                      </Label>
-                    </Td>
-                    <Td dataLabel={t("agentic.planRun.status")}>
-                      <RunStatus status={testRun.phase} />
-                    </Td>
-                    <Td dataLabel={t("agentic.planRun.started")}>
-                      {new Date(testRun.startedAt).toLocaleString()}
-                    </Td>
-                    <Td dataLabel={t("agentic.planRun.completed")}>—</Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          )}
+          <AgentRunsTab
+            agentId={agent.id}
+            planRuns={planRuns}
+            isLoadingPlanRuns={isLoadingPlanRuns}
+            planRunsError={planRuns.length > 0 ? null : planRunsError}
+            testRuns={agentTestRuns}
+            isLoadingTestRuns={isLoadingTestRuns}
+            testRunsError={agentTestRuns.length > 0 ? null : testRunsError}
+            canTestAgent={canTestAgents}
+            linkCrumbs={agentChildCrumbs}
+          />
         </PageSection>
       </DetailTabPanel>
 
