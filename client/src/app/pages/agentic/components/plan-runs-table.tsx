@@ -173,7 +173,7 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
       {hasToolbar && (
         <Toolbar {...toolbarProps}>
           <ToolbarContent>
-            <FilterToolbar {...filterToolbarProps} />
+            <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
             <ToolbarItem {...paginationToolbarItemProps}>
               <SimplePagination
                 idPrefix="plan-runs-table"
