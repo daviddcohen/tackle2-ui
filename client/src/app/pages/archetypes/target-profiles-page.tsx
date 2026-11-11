@@ -441,20 +441,18 @@ const TargetProfilesPage: React.FC = () => {
           {/* Delete Confirmation Modal */}
           <ConfirmDialog
             isOpen={!!profileToDelete}
-            titleIconVariant={"warning"}
-            title={t("dialog.title.delete", {
-              what: t("terms.targetProfile"),
-            })}
+            title={t("agentic.archetype.deleteTitle")}
             message={
-              profileToDelete && (
-                <>
-                  {t("dialog.message.delete", {
-                    what: t("terms.targetProfile").toLowerCase(),
-                  })}
-                  <br />
-                  <strong>{profileToDelete.name}</strong>
-                </>
-              )
+              profileToDelete &&
+              // The skills consequence only when it applies (amendment 5).
+              (isAgenticEnabled && profileSkills(profileToDelete).length > 0
+                ? t("agentic.archetype.deleteBodyWithSkills", {
+                    profile: profileToDelete.name,
+                    archetype: archetype.name,
+                  })
+                : t("agentic.archetype.deleteBody", {
+                    profile: profileToDelete.name,
+                  }))
             }
             confirmBtnLabel={t("actions.delete")}
             confirmBtnVariant={ButtonVariant.danger}
