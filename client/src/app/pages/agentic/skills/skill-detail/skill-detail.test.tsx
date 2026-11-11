@@ -287,6 +287,53 @@ describe("SkillDetail, Details tab", () => {
     );
   });
 
+  it("leaves for the list before the deleted skill could be read again", async () => {
+    // A skill that can be deleted: no associations, no collection, no plan.
+    const deletable = { ...inlineSkill, associations: [] };
+    let isDeleted = false;
+    let readsAfterDelete = 0;
+    server.use(
+      rest.get(`${AGENTIC_ENDPOINTS.skills}/:id`, (_req, res, ctx) => {
+        if (!isDeleted) return res(ctx.json(deletable));
+        readsAfterDelete++;
+        return res(ctx.status(404));
+      }),
+      rest.delete(`${AGENTIC_ENDPOINTS.skills}/:id`, (_req, res, ctx) => {
+        isDeleted = true;
+        return res(ctx.status(204));
+      }),
+      rest.get(AGENTIC_ENDPOINTS.skillCollections, (_req, res, ctx) =>
+        res(ctx.json([]))
+      ),
+      rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) => res(ctx.json([]))),
+      rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.json([])))
+    );
+    render(
+      <MemoryRouter initialEntries={["/skills/1"]}>
+        <Route path={DevPaths.skillDetails}>
+          <SkillDetail />
+        </Route>
+        <Route exact path={DevPaths.skills}>
+          <p>Skills list</p>
+        </Route>
+      </MemoryRouter>
+    );
+    const user = userEvent.setup();
+
+    await findTitle();
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" })
+    );
+
+    expect(await screen.findByText("Skills list")).toBeInTheDocument();
+    // The page is gone before the invalidated queries re-render it, so the
+    // detail query never asks for the deleted skill (a 404 in the console).
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(readsAfterDelete).toBe(0);
+  });
+
   it("has no Actions menu without the write scope (X9)", async () => {
     mockGrantedScopes.all = false;
     useEndpoints();
