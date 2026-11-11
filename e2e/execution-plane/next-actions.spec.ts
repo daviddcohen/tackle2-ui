@@ -241,10 +241,38 @@ test.describe("Migration next actions", () => {
       "Not configured"
     ).click();
     await expectMigrationTab(page, "Aardvark Unmapped Service");
+    // Without an archetype there is no target profile to assign a plan to.
+    await expect(
+      page.getByText("This application has no archetype.", { exact: false })
+    ).toBeVisible();
     await page
       .getByRole("main")
-      .getByRole("button", { name: "Configure migration path", exact: true })
+      .getByRole("link", { name: "Go to archetypes", exact: true })
       .click();
-    await expect(page).toHaveURL(/\/migration-plans(\?|$)/);
+    await expect(page).toHaveURL(/\/archetypes(\?|$)/);
+  });
+
+  test("an application whose archetype has no plan links to its target profiles", async ({
+    page,
+  }) => {
+    await page.goto(
+      protoUrl("/applications/1", {
+        scenario: "initial",
+        params: { tab: "migration" },
+      })
+    );
+    await expect(
+      page.getByRole("heading", { name: "No migration path" })
+    ).toBeVisible();
+    await expect(
+      page.getByText("Check the target profiles of Java EE Application.", {
+        exact: false,
+      })
+    ).toBeVisible();
+    await page
+      .getByRole("main")
+      .getByRole("link", { name: "View target profiles", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/archetypes\/\d+\/target-profiles/);
   });
 });

@@ -1,9 +1,11 @@
 import * as React from "react";
 import { AxiosError } from "axios";
+import { LocationDescriptor } from "history";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
 import {
   Alert,
+  Button,
   Card,
   CardBody,
   CardTitle,
@@ -13,21 +15,28 @@ import {
   DescriptionListGroup,
   DescriptionListTerm,
   Divider,
+  EmptyState,
+  EmptyStateActions,
+  EmptyStateBody,
+  EmptyStateFooter,
   Stack,
   StackItem,
   Title,
 } from "@patternfly/react-core";
+import { RouteIcon } from "@patternfly/react-icons";
 
 import { DevPaths } from "@app/Paths";
 import {
   UNCONFIGURED_MIGRATION,
   getMigrationDisplayStatus,
 } from "@app/agentic";
+import { Ref } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
   MigrationStatus,
   RunStatus,
@@ -135,6 +144,15 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           {t("agentic.execution.unavailableDescription")}
         </Alert>
       </DrawerTabContent>
+    );
+  }
+
+  if (!migration.configured) {
+    return (
+      <NoMigrationPath
+        archetype={application.archetypes?.[0]}
+        linkTo={linkTo}
+      />
     );
   }
 
@@ -417,5 +435,53 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
 
       {runMigrationPlan.modal}
     </DrawerTabContent>
+  );
+};
+
+/**
+ * No migration plan resolves for the application (applications AP10). Plans
+ * come from the archetype's target profile, so the next step is there; an
+ * application without an archetype is told to get one first. The data gives
+ * no cause (a profile without a plan, no profile, a plan on another profile),
+ * so the copy names none.
+ */
+const NoMigrationPath: React.FC<{
+  archetype?: Ref;
+  linkTo: (pathname: string) => LocationDescriptor;
+}> = ({ archetype, linkTo }) => {
+  const { t } = useTranslation();
+  const link = useLinkComponent(
+    linkTo(
+      archetype != null
+        ? generatePath(DevPaths.archetypeTargetProfiles, {
+            archetypeId: String(archetype.id),
+          })
+        : DevPaths.archetypes
+    )
+  );
+  return (
+    <EmptyState
+      headingLevel="h2"
+      icon={RouteIcon}
+      titleText={t("agentic.execution.noMigrationPathTitle")}
+      variant="sm"
+    >
+      <EmptyStateBody>
+        {archetype != null
+          ? t("agentic.execution.noMigrationPathBody", {
+              archetype: archetype.name,
+            })
+          : t("agentic.execution.noArchetypeBody")}
+      </EmptyStateBody>
+      <EmptyStateFooter>
+        <EmptyStateActions>
+          <Button variant="link" component={link}>
+            {archetype != null
+              ? t("agentic.execution.viewTargetProfiles")
+              : t("agentic.execution.goToArchetypes")}
+          </Button>
+        </EmptyStateActions>
+      </EmptyStateFooter>
+    </EmptyState>
   );
 };
