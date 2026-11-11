@@ -85,30 +85,37 @@ test.describe("Inventory migration column", () => {
     }
   });
 
-  test("Migration filter offers every display status", async ({ page }) => {
+  test("Migration status filter offers every display status, most urgent first", async ({
+    page,
+  }) => {
     await page.goto(
       protoUrl("/applications", { scenario: "preflightBlocked" })
     );
     await waitForInventory(page);
     await page.getByRole("button", { name: "Name" }).first().click();
     await page
-      .getByRole("menuitem", { name: "Migration", exact: true })
+      .getByRole("menuitem", { name: "Migration status", exact: true })
       .click();
     await page.getByRole("combobox", { name: "Type to filter" }).click();
-    for (const label of [
-      "Not configured",
-      "Ready to start",
+    const options = [
+      "Action required",
+      "Failed",
+      "Running",
+      "Pending",
       "Blocked",
       "Review before start",
-      "Pending",
-      "Running",
-      "Action required",
+      "Ready to start",
+      "Not configured",
       "Succeeded",
-      "Failed",
-    ]) {
+    ];
+    // Guide 5.2 order, and every option shows without scrolling the menu.
+    await expect(page.getByRole("listbox").getByRole("menuitem")).toHaveText(
+      options
+    );
+    for (const label of options) {
       await expect(
         page.getByRole("menuitem", { name: label, exact: true })
-      ).toBeVisible();
+      ).toBeInViewport({ ratio: 1 });
     }
     await page.getByRole("menuitem", { name: "Blocked", exact: true }).click();
     await page.keyboard.press("Escape");

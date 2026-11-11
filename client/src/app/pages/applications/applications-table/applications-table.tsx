@@ -130,16 +130,17 @@ import { ManageColumnsToolbar } from "./components/manage-columns-toolbar";
 import { MigrationAttentionModal } from "./components/migration-attention-modal";
 import { MigrationPortfolioOverview } from "./components/migration-portfolio-overview";
 
+/** Migration status filter options, in the guide 5.2 order (most urgent first). */
 const agenticMigrationStatuses: ApplicationMigrationDisplayStatus[] = [
-  "notConfigured",
-  "preflightReady",
+  "actionRequired",
+  "failed",
+  "running",
+  "pending",
   "preflightBlocked",
   "reviewRequired",
-  "pending",
-  "running",
-  "actionRequired",
+  "preflightReady",
+  "notConfigured",
   "succeeded",
-  "failed",
 ];
 
 export const ApplicationsTable: FC = () => {
@@ -677,16 +678,22 @@ export const ApplicationsTable: FC = () => {
         ? [
             {
               categoryKey: "agenticMigration",
-              title: t("agentic.execution.columnTitle"),
+              title: t("agentic.execution.statusFilter"),
               type: FilterType.multiselect,
               placeholderText:
                 t("actions.filterBy", {
-                  what: t("agentic.execution.columnTitle").toLowerCase(),
+                  what: t("agentic.execution.statusFilter").toLowerCase(),
                 }) + "...",
-              selectOptions: agenticMigrationStatuses.map((status) => ({
-                value: status,
-                label: t(statusPresentation.migration[status].labelKey),
-              })),
+              // Without the statuses there is nothing to filter: no options
+              // disables the control (ADDENDA AP1).
+              selectOptions:
+                migrationsFetchError != null
+                  ? []
+                  : agenticMigrationStatuses.map((status) => ({
+                      value: status,
+                      label: t(statusPresentation.migration[status].labelKey),
+                    })),
+              maxMenuHeight: "24rem",
               getItemValue: (item: DecoratedApplication) =>
                 getMigrationDisplayStatus(getMigration(item)),
             },

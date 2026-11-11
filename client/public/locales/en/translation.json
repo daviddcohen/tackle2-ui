@@ -1673,6 +1673,7 @@
       },
       "latestPlanRun": "Latest plan run",
       "planFilter": "Migration plan",
+      "statusFilter": "Migration status",
       "loadingMigration": "Loading migration status",
       "migrationUnavailable": "Migration status unavailable",
       "nextPrefix": "Next:"
