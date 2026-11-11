@@ -4,10 +4,10 @@ import { expect, pickMenuOption, protoUrl, test } from "../support";
 
 const openCreateWizard = async (page: Page) => {
   await page.goto(protoUrl("/migration-plans", { scenario: "configured" }));
-  await page.getByRole("button", { name: "Create Plan" }).click();
+  await page.getByRole("button", { name: "Create migration plan" }).click();
   const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole("heading", { name: "Create Plan" })
+    dialog.getByRole("heading", { name: "Create migration plan" })
   ).toBeVisible();
   return dialog;
 };
@@ -128,7 +128,7 @@ test.describe("Plan wizard", () => {
     await dialog.getByRole("button", { name: "Next" }).click();
     expect(await stageNames(dialog)).toEqual(["Stage C", "Stage B"]);
     await dialog.getByRole("button", { name: "Next" }).click();
-    await dialog.getByRole("button", { name: "Create Plan" }).click();
+    await dialog.getByRole("button", { name: "Create migration plan" }).click();
 
     await expect(dialog).toBeHidden();
     await expect(
@@ -151,7 +151,7 @@ test.describe("Plan wizard", () => {
     await expect(
       page.getByRole("link", { name: "Draft that is cancelled" })
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "Create Plan" }).click();
+    await page.getByRole("button", { name: "Create migration plan" }).click();
     await expect(
       page.getByRole("dialog").getByRole("textbox", { name: /^Name/ })
     ).toHaveValue("");
