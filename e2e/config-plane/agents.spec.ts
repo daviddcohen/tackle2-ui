@@ -73,7 +73,7 @@ test.describe("Agents list", () => {
     await openRowActions(page, "Migration Proposal Agent");
     const del = page.getByRole("menuitem", { name: "Delete" });
     await expect(del).toHaveAttribute("aria-disabled", "true");
-    await expectTooltipOnHover(page, del, "Used by 8 Plans");
+    await expectTooltipOnHover(page, del, "Used by 8 migration plans");
   });
 
   test("unused agent can be deleted after confirmation", async ({ page }) => {
@@ -241,7 +241,7 @@ test.describe("Agent test modal", () => {
     page,
   }) => {
     await openRowActions(page, "Test Runner");
-    await page.getByRole("menuitem", { name: "Test" }).click();
+    await page.getByRole("menuitem", { name: "Test agent" }).click();
     await expect(dialog(page)).toContainText("Test Test Runner");
     const start = dialog(page).getByRole("button", { name: "Start test run" });
     await expect(start).toBeDisabled();
@@ -267,7 +267,7 @@ test.describe("Agent test modal", () => {
     page,
   }) => {
     await openRowActions(page, "Build Validator");
-    await page.getByRole("menuitem", { name: "Test" }).click();
+    await page.getByRole("menuitem", { name: "Test agent" }).click();
     await pickTypeahead(
       page,
       "agent-test-application-select",
@@ -278,7 +278,7 @@ test.describe("Agent test modal", () => {
     );
     await dialog(page).getByRole("button", { name: "Cancel" }).click();
     await openRowActions(page, "Test Runner");
-    await page.getByRole("menuitem", { name: "Test" }).click();
+    await page.getByRole("menuitem", { name: "Test agent" }).click();
     await expect(field(dialog(page), "Task description")).toHaveValue("");
     await expect(
       page.locator("#agent-test-application-select-input")

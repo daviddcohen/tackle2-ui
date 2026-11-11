@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { EntityId, MigrationPlan } from "@app/agentic";
 
 /**
@@ -12,3 +14,18 @@ export const getPlansUsingAgent = (
   plans.filter((plan) =>
     plan.stages.some((stage) => stage.agent?.id === agentId)
   );
+
+/**
+ * Why Delete is disabled, from the number of plans using the agent:
+ * undefined while that is unknown (the plans query is loading or failed),
+ * so Delete is never enabled on a guess (X6). No reason when it is unused.
+ */
+export const useAgentDeleteBlockedReason = () => {
+  const { t } = useTranslation();
+  return (planCount: number | undefined): string | undefined =>
+    planCount == null
+      ? t("agentic.common.usageUnchecked")
+      : planCount > 0
+        ? t("agentic.agent.deleteInUse", { count: planCount })
+        : undefined;
+};
