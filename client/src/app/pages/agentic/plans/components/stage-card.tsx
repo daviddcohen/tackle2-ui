@@ -34,6 +34,8 @@ import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { Agent, EntityId, ModelProjection } from "@app/agentic";
 
+import { useAgentSkillsSummary } from "../../agents/agent-skills-summary";
+
 export interface StageFormData {
   /** Server id of an existing stage; undefined for a stage added in the form. */
   id?: EntityId;
@@ -108,19 +110,9 @@ export const StageCard: React.FC<StageCardProps> = ({
   const sortedAgents = [...(agents ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name)
   );
-  const skillsSummary = (agent: Agent) => {
-    const parts = [
-      agent.skills.length > 0
-        ? t("agentic.plan.agentSkills", { count: agent.skills.length })
-        : undefined,
-      (agent.skillCollections?.length ?? 0) > 0
-        ? t("agentic.plan.agentCollections", {
-            count: agent.skillCollections?.length,
-          })
-        : undefined,
-    ].filter((part): part is string => part != null);
-    return parts.length > 0 ? parts.join(", ") : t("terms.none");
-  };
+  const agentSkillsSummary = useAgentSkillsSummary();
+  const skillsSummary = (agent: Agent) =>
+    agentSkillsSummary(agent) ?? t("terms.none");
   const modelName = (agent: Agent) =>
     models?.find((model) => model.id === agent.model.id)?.name ??
     agent.model.name;
