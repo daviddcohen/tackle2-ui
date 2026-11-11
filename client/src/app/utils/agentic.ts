@@ -1,6 +1,12 @@
 import { AxiosError } from "axios";
 import type { TooltipProps } from "@patternfly/react-core";
 
+import {
+  ControllerRunPhase,
+  PlanRun,
+  StageRun,
+  TERMINAL_RUN_PHASES,
+} from "@app/agentic";
 import type {
   AgentResource,
   AgentWorkflow,
@@ -108,6 +114,90 @@ export function workflowRunDuration(run: AgentWorkflowRun): number | undefined {
   const end = run.status?.completionTime;
   const ms = (end ? Date.parse(end) : Date.now()) - Date.parse(start);
   return ms >= 0 ? Math.round(ms / 1000) : undefined;
+}
+
+/**
+ * When a stage awaiting approval stopped: its agent's last message. A
+ * `StageRun` has no completion time until it is approved, but the waiting
+ * is not the agent's work, so its clock stops there (addenda X3).
+ */
+const awaitingSince = (stageRun?: Pick<StageRun, "messages">) => {
+  const times = (stageRun?.messages ?? [])
+    .filter((message) => message.role === "agent")
+    .map((message) => Date.parse(message.timestamp));
+  return times.length > 0 ? Math.max(...times) : Number.NaN;
+};
+
+/** Seconds from `startedAt` to `end`, or undefined when either is unknown. */
+const secondsBetween = (startedAt: string | undefined, end: number) => {
+  if (!startedAt) return undefined;
+  const seconds = Math.round((end - Date.parse(startedAt)) / 1000);
+  return seconds >= 0 ? seconds : undefined;
+};
+
+/**
+ * The end of a run's or stage's clock: its completion, now while it is
+ * running, or `awaiting()` while it waits for approval. NaN for a finished
+ * one without a completion time.
+ */
+const clockEnd = (
+  { status, completedAt }: { status: ControllerRunPhase; completedAt?: string },
+  awaiting: () => number,
+  now: number
+) =>
+  completedAt
+    ? Date.parse(completedAt)
+    : status === "AwaitingApproval"
+      ? awaiting()
+      : TERMINAL_RUN_PHASES.includes(status)
+        ? Number.NaN
+        : now;
+
+/**
+ * Seconds a stage has taken (addenda X3): from start to completion, or to
+ * now while it is running. A stage awaiting approval stops at its agent's
+ * last message. Undefined while Pending, for a finished stage without a
+ * completion time and for an awaiting stage without messages. `StageRun`
+ * carries no duration field; this is the one place it is derived.
+ */
+export function stageRunDurationSeconds(
+  stageRun: Pick<StageRun, "status" | "startedAt" | "completedAt" | "messages">,
+  now: number = Date.now()
+): number | undefined {
+  if (stageRun.status === "Pending") return undefined;
+  return secondsBetween(
+    stageRun.startedAt,
+    clockEnd(stageRun, () => awaitingSince(stageRun), now)
+  );
+}
+
+/**
+ * Seconds a plan run has taken (addenda X3): from start to completion, or to
+ * now while it is running. A run awaiting approval stops where its awaiting
+ * stage stopped, so the wait for a decision does not count. Undefined while
+ * Pending (a pending run's `startedAt` is not a start; see
+ * docs/agentic-handoff.md), for a finished run without a completion time and
+ * for an awaiting run whose stage has no messages. `PlanRun` carries no
+ * duration field; this is the one place it is derived.
+ */
+export function planRunDurationSeconds(
+  planRun: Pick<PlanRun, "status" | "startedAt" | "completedAt"> & {
+    stageRuns: Pick<StageRun, "status" | "messages">[];
+  },
+  now: number = Date.now()
+): number | undefined {
+  if (planRun.status === "Pending") return undefined;
+  return secondsBetween(
+    planRun.startedAt,
+    clockEnd(
+      planRun,
+      () =>
+        awaitingSince(
+          planRun.stageRuns.find((s) => s.status === "AwaitingApproval")
+        ),
+      now
+    )
+  );
 }
 
 export function truncate(text: string, max: number): string {
