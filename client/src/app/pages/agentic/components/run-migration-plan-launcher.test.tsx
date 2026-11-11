@@ -147,7 +147,7 @@ describe("useRunMigrationPlanLauncher", () => {
     act(() => result.current.open?.());
     expect(result.current.modal).not.toBeNull();
     expect(modalProps()?.applications).toEqual([run.applications[0]]);
-    expect(modalProps()?.hideOverrideCaution).toBe(false);
+    expect(modalProps()?.rerunPlanId).toBeUndefined();
 
     act(() => result.current.open?.([run.applications[1]]));
     expect(modalProps()?.applications).toEqual([run.applications[1]]);
@@ -172,7 +172,7 @@ describe("useRunMigrationPlanLauncher", () => {
     expect(result.current.modal).toBeNull();
   });
 
-  it("reruns a failed run from its values, with no override caution", () => {
+  it("reruns a failed run from its values and names its plan for the caution", () => {
     mockViews.isLoading = true;
     const { result, rerender } = launch({ rerunOf: run });
     act(() => result.current.open?.());
@@ -182,7 +182,7 @@ describe("useRunMigrationPlanLauncher", () => {
       planSelection: "single",
       planId: "3",
     });
-    expect(modalProps()?.hideOverrideCaution).toBe(true);
+    expect(modalProps()?.rerunPlanId).toBe("3");
     const loadingKey = (result.current.modal as React.ReactElement).key;
 
     mockViews.isLoading = false;
