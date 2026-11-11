@@ -14,10 +14,6 @@ import {
   ButtonVariant,
   ClipboardCopy,
   Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
   FlexItem,
   PageSection,
   Panel,
@@ -66,8 +62,13 @@ import { useFetchArchetypes } from "@app/queries/archetypes";
 import { skillsWriteScopes } from "@app/scopes";
 import { formatDate, getAxiosErrorMessage } from "@app/utils/utils";
 
-import { CountLink } from "../components/count-link";
-import { Section, Sections, XsEmptyState } from "../components/section";
+import { CountLink } from "../../components/count-link";
+import {
+  DetailFacts,
+  DetailSection,
+  DetailSections,
+  SectionEmpty,
+} from "../../components/detail-section";
 import { SkillModal } from "../components/skill-form";
 import {
   getCollectionsContainingSkill,
@@ -128,16 +129,6 @@ const skillContentComponents: Components = {
 
 /** A Git repository opens in a new tab only when it is a web URL (S9). */
 const isWebUrl = (value: string) => /^https?:\/\//i.test(value);
-
-const Fact: React.FC<{ term: string; children: React.ReactNode }> = ({
-  term,
-  children,
-}) => (
-  <DescriptionListGroup>
-    <DescriptionListTerm>{term}</DescriptionListTerm>
-    <DescriptionListDescription>{children}</DescriptionListDescription>
-  </DescriptionListGroup>
-);
 
 const SkillDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -316,13 +307,13 @@ const SkillDetail: React.FC = () => {
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          <Sections>
+          <DetailSections>
             <FlexItem>
               <SkillFacts skill={skill} />
             </FlexItem>
             {skill.sourceType === "inline" && skill.content && (
               <FlexItem>
-                <Section
+                <DetailSection
                   title={t("agentic.skill.content")}
                   description={t("agentic.skillDetail.contentDescription")}
                 >
@@ -337,10 +328,10 @@ const SkillDetail: React.FC = () => {
                       </PanelMainBody>
                     </PanelMain>
                   </Panel>
-                </Section>
+                </DetailSection>
               </FlexItem>
             )}
-          </Sections>
+          </DetailSections>
         </PageSection>
       </DetailTabPanel>
 
@@ -350,7 +341,7 @@ const SkillDetail: React.FC = () => {
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          <Sections>
+          <DetailSections>
             <FlexItem>
               <AssociatedWithSection
                 skill={skill}
@@ -361,7 +352,7 @@ const SkillDetail: React.FC = () => {
             </FlexItem>
 
             <FlexItem>
-              <Section
+              <DetailSection
                 title={
                   planCount
                     ? t("agentic.skillDetail.usedInPlansTitle", {
@@ -374,7 +365,9 @@ const SkillDetail: React.FC = () => {
                 {arePlansLoaded && isPlanUsageUnknown ? (
                   <EmptyTextMessage message={t("agentic.common.unavailable")} />
                 ) : planCount === 0 ? (
-                  <XsEmptyState text={t("agentic.skillDetail.noPlans")} />
+                  <SectionEmpty>
+                    {t("agentic.skillDetail.noPlans")}
+                  </SectionEmpty>
                 ) : (
                   <Table
                     aria-label={t("agentic.skillDetail.usedInPlans")}
@@ -414,11 +407,11 @@ const SkillDetail: React.FC = () => {
                     </ConditionalTableBody>
                   </Table>
                 )}
-              </Section>
+              </DetailSection>
             </FlexItem>
 
             <FlexItem>
-              <Section
+              <DetailSection
                 title={
                   knownCollections != null &&
                   collectionsContainingSkill.length > 0
@@ -431,9 +424,9 @@ const SkillDetail: React.FC = () => {
               >
                 {knownCollections != null &&
                 collectionsContainingSkill.length === 0 ? (
-                  <XsEmptyState
-                    text={t("agentic.skillDetail.notInAnyCollection")}
-                  />
+                  <SectionEmpty>
+                    {t("agentic.skillDetail.notInAnyCollection")}
+                  </SectionEmpty>
                 ) : (
                   <Table
                     aria-label={t("agentic.skillDetail.inCollections")}
@@ -483,9 +476,9 @@ const SkillDetail: React.FC = () => {
                     </ConditionalTableBody>
                   </Table>
                 )}
-              </Section>
+              </DetailSection>
             </FlexItem>
-          </Sections>
+          </DetailSections>
         </PageSection>
       </DetailTabPanel>
 
@@ -538,80 +531,80 @@ const SkillFacts: React.FC<{ skill: Skill }> = ({ skill }) => {
     <span className={textStyles.fontFamilyMonospace}>{value}</span>
   );
 
-  return (
-    <DescriptionList
-      isHorizontal
-      isCompact
-      horizontalTermWidthModifier={{ default: "18ch" }}
-    >
-      <Fact term={t("terms.source")}>
-        {t(`agentic.skill.sourceTypes.${skill.sourceType}`)}
-      </Fact>
-
-      {skill.sourceType === "git" && (
-        <>
-          <Fact term={t("agentic.skill.repository")}>
-            {!skill.repoUrl ? (
-              <EmptyTextMessage message={t("terms.none")} />
+  const facts: [string, React.ReactNode][] = [
+    [t("terms.source"), t(`agentic.skill.sourceTypes.${skill.sourceType}`)],
+    ...(skill.sourceType === "git"
+      ? ([
+          [
+            t("agentic.skill.repository"),
+            !skill.repoUrl ? (
+              <EmptyTextMessage key="repo" message={t("terms.none")} />
             ) : isWebUrl(skill.repoUrl) ? (
-              <ExternalLink href={skill.repoUrl} isInline>
+              <ExternalLink key="repo" href={skill.repoUrl} isInline>
                 {skill.repoUrl}
               </ExternalLink>
             ) : (
-              <ClipboardCopy isReadOnly variant="inline-compact">
+              <ClipboardCopy key="repo" isReadOnly variant="inline-compact">
                 {skill.repoUrl}
               </ClipboardCopy>
-            )}
-          </Fact>
-          {skill.repoBranch && (
-            <Fact term={t("agentic.skill.branch")}>
-              {monospace(skill.repoBranch)}
-            </Fact>
-          )}
-          {skill.repoPath && skill.repoPath !== "/" && (
-            <Fact term={t("agentic.skill.path")}>
-              {monospace(skill.repoPath)}
-            </Fact>
-          )}
-        </>
-      )}
+            ),
+          ],
+          ...(skill.repoBranch
+            ? [[t("agentic.skill.branch"), monospace(skill.repoBranch)]]
+            : []),
+          ...(skill.repoPath && skill.repoPath !== "/"
+            ? [[t("agentic.skill.path"), monospace(skill.repoPath)]]
+            : []),
+        ] as [string, React.ReactNode][])
+      : []),
+    ...(skill.sourceType === "oci"
+      ? ([
+          [
+            t("agentic.skill.image"),
+            skill.imageRef ? (
+              <ClipboardCopy key="image" isReadOnly variant="inline-compact">
+                {skill.imageRef}
+              </ClipboardCopy>
+            ) : (
+              <EmptyTextMessage key="image" message={t("terms.none")} />
+            ),
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+    [
+      t("agentic.skill.associations"),
+      associationCount == null ? (
+        <EmptyTextMessage
+          key="associations"
+          message={t("agentic.common.unavailable")}
+        />
+      ) : associationCount === 0 ? (
+        <EmptyTextMessage key="associations" message={t("terms.none")} />
+      ) : (
+        <CountLink key="associations" to={associationsTab}>
+          {t("agentic.skill.associationCount", { count: associationCount })}
+        </CountLink>
+      ),
+    ],
+    ...(skill.createTime
+      ? ([
+          [
+            t("agentic.skillDetail.createdAt"),
+            formatDate(new Date(skill.createTime)),
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+    ...(skill.updateTime
+      ? ([
+          [
+            t("agentic.skillDetail.updatedAt"),
+            formatDate(new Date(skill.updateTime)),
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+  ];
 
-      {skill.sourceType === "oci" && (
-        <Fact term={t("agentic.skill.image")}>
-          {skill.imageRef ? (
-            <ClipboardCopy isReadOnly variant="inline-compact">
-              {skill.imageRef}
-            </ClipboardCopy>
-          ) : (
-            <EmptyTextMessage message={t("terms.none")} />
-          )}
-        </Fact>
-      )}
-
-      <Fact term={t("agentic.skill.associations")}>
-        {associationCount == null ? (
-          <EmptyTextMessage message={t("agentic.common.unavailable")} />
-        ) : associationCount === 0 ? (
-          <EmptyTextMessage message={t("terms.none")} />
-        ) : (
-          <CountLink to={associationsTab}>
-            {t("agentic.skill.associationCount", { count: associationCount })}
-          </CountLink>
-        )}
-      </Fact>
-
-      {skill.createTime && (
-        <Fact term={t("agentic.skillDetail.createdAt")}>
-          {formatDate(new Date(skill.createTime))}
-        </Fact>
-      )}
-      {skill.updateTime && (
-        <Fact term={t("agentic.skillDetail.updatedAt")}>
-          {formatDate(new Date(skill.updateTime))}
-        </Fact>
-      )}
-    </DescriptionList>
-  );
+  return <DetailFacts facts={facts} />;
 };
 
 interface AssociatedWithSectionProps {
@@ -646,7 +639,9 @@ const AssociatedWithSection: React.FC<AssociatedWithSectionProps> = ({
   if (associations == null) {
     content = <EmptyTextMessage message={t("agentic.common.unavailable")} />;
   } else if (count === 0) {
-    content = <XsEmptyState text={t("agentic.skillDetail.noAssociations")} />;
+    content = (
+      <SectionEmpty>{t("agentic.skillDetail.noAssociations")}</SectionEmpty>
+    );
   } else {
     content = (
       <Table
@@ -691,7 +686,7 @@ const AssociatedWithSection: React.FC<AssociatedWithSectionProps> = ({
   }
 
   return (
-    <Section
+    <DetailSection
       title={
         count > 0
           ? t("agentic.skillDetail.associatedWithTitle", { count })
@@ -700,7 +695,7 @@ const AssociatedWithSection: React.FC<AssociatedWithSectionProps> = ({
       description={t("agentic.skillDetail.associatedWithDescription")}
     >
       {content}
-    </Section>
+    </DetailSection>
   );
 };
 

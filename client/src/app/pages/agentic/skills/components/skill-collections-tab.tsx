@@ -47,19 +47,19 @@ import {
   useFetchSkillCollections,
 } from "@app/queries/agentic";
 import { skillCollectionsWriteScopes } from "@app/scopes";
-import { disabledActionProps, managedActionProps } from "@app/utils/agentic";
+import { deleteActionProps, managedActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
+import { CountLink } from "../../components/count-link";
 import {
   USED_BY_AGENTS_ID,
   getAgentsUsingCollection,
   getCollectionDeleteBlockedReason,
 } from "../skill-usage";
 
-import { CountLink } from "./count-link";
 import { SkillCollectionModal } from "./skill-collection-form";
 
 /** The Skill collections tab of the Skills page (guide 7.5, collections-list). */
@@ -355,19 +355,11 @@ export const SkillCollectionsTab: React.FC = () => {
                                   openModalAfterMenuClose(() =>
                                     setCollectionToDelete(collection)
                                   ),
-                                ...(collection.operatorManaged
-                                  ? managedActionProps(
-                                      true,
-                                      managedTooltip,
-                                      "left"
-                                    )
-                                  : disabledActionProps(
-                                      deleteBlockedReason,
-                                      "left"
-                                    )),
-                                isDanger:
-                                  !collection.operatorManaged &&
-                                  deleteBlockedReason == null,
+                                ...deleteActionProps(
+                                  collection.operatorManaged
+                                    ? managedTooltip
+                                    : deleteBlockedReason
+                                ),
                               },
                             ]}
                           />

@@ -48,15 +48,15 @@ import {
   useFetchSkills,
 } from "@app/queries/agentic";
 import { skillsWriteScopes } from "@app/scopes";
-import { disabledActionProps, managedActionProps } from "@app/utils/agentic";
+import { deleteActionProps, managedActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
+import { CountLink } from "../../components/count-link";
 import { getSkillDeleteBlockedReason } from "../skill-usage";
 
-import { CountLink } from "./count-link";
 import { ImportSkillModal } from "./import-skill-modal";
 import { SkillModal } from "./skill-form";
 
@@ -360,19 +360,11 @@ export const SkillsTab: React.FC = () => {
                                   openModalAfterMenuClose(() =>
                                     setSkillToDelete(skill)
                                   ),
-                                ...(skill.operatorManaged
-                                  ? managedActionProps(
-                                      true,
-                                      managedTooltip,
-                                      "left"
-                                    )
-                                  : disabledActionProps(
-                                      deleteBlockedReason,
-                                      "left"
-                                    )),
-                                isDanger:
-                                  !skill.operatorManaged &&
-                                  deleteBlockedReason == null,
+                                ...deleteActionProps(
+                                  skill.operatorManaged
+                                    ? managedTooltip
+                                    : deleteBlockedReason
+                                ),
                               },
                             ]}
                           />

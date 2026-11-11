@@ -27,7 +27,7 @@ import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
 import { ConditionalTableBody } from "@app/components/TableControls";
-import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import {
   EntityDetailActions,
   EntityDetailLoading,
@@ -44,7 +44,11 @@ import {
 import { skillCollectionsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { Section, Sections, XsEmptyState } from "../components/section";
+import {
+  DetailSection,
+  DetailSections,
+  SectionEmpty,
+} from "../../components/detail-section";
 import { SkillCollectionModal } from "../components/skill-collection-form";
 import {
   USED_BY_AGENTS_ID,
@@ -145,8 +149,8 @@ const SkillCollectionDetail: React.FC = () => {
     );
   }
 
-  const childLink = (path: string, crumbs: BreadcrumbEntry[] = linkCrumbs) =>
-    breadcrumbTo(path, `?from=collection-${collectionId}`, crumbs);
+  const childLink = (path: string) =>
+    breadcrumbTo(path, `?from=collection-${collectionId}`, linkCrumbs);
 
   const memberCount = skillCollection.skills.length;
   // Same order as the Skills list (by name).
@@ -197,9 +201,9 @@ const SkillCollectionDetail: React.FC = () => {
       </PageSection>
 
       <PageSection hasBodyWrapper={false}>
-        <Sections>
+        <DetailSections>
           <FlexItem>
-            <Section
+            <DetailSection
               title={
                 memberCount > 0
                   ? t("agentic.skillCollectionDetail.skillsTitle", {
@@ -209,9 +213,9 @@ const SkillCollectionDetail: React.FC = () => {
               }
             >
               {memberCount === 0 ? (
-                <XsEmptyState
-                  text={t("agentic.skillCollectionDetail.noSkills")}
-                />
+                <SectionEmpty>
+                  {t("agentic.skillCollectionDetail.noSkills")}
+                </SectionEmpty>
               ) : (
                 <Table
                   aria-label={t("agentic.skillCollection.members")}
@@ -266,11 +270,11 @@ const SkillCollectionDetail: React.FC = () => {
                   </Tbody>
                 </Table>
               )}
-            </Section>
+            </DetailSection>
           </FlexItem>
 
           <FlexItem>
-            <Section
+            <DetailSection
               id={USED_BY_AGENTS_ID}
               title={
                 knownAgents != null && agentCount > 0
@@ -284,9 +288,9 @@ const SkillCollectionDetail: React.FC = () => {
               )}
             >
               {knownAgents != null && agentCount === 0 ? (
-                <XsEmptyState
-                  text={t("agentic.skillCollectionDetail.noAgents")}
-                />
+                <SectionEmpty>
+                  {t("agentic.skillCollectionDetail.noAgents")}
+                </SectionEmpty>
               ) : (
                 <Table
                   aria-label={t("agentic.skillCollectionDetail.usedByAgents")}
@@ -341,9 +345,9 @@ const SkillCollectionDetail: React.FC = () => {
                   </ConditionalTableBody>
                 </Table>
               )}
-            </Section>
+            </DetailSection>
           </FlexItem>
-        </Sections>
+        </DetailSections>
       </PageSection>
 
       <SkillCollectionModal
