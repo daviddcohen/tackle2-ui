@@ -1710,7 +1710,6 @@
     "planRun": {
       "title": "Plan runs",
       "description": "History of all migration plan runs across your application portfolio.",
-      "tableLabel": "Plan runs table",
       "plan": "Migration Plan",
       "applications": "Applications",
       "status": "Status",
