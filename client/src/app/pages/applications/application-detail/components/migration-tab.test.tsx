@@ -4,7 +4,14 @@ import { createMemoryHistory } from "history";
 import { Router } from "react-router-dom";
 
 import { ApplicationMigrationView, PlanRun } from "@app/agentic";
-import { render, screen, within } from "@app/test-config/test-utils";
+import { NotificationsContext } from "@app/components/NotificationsContext";
+import {
+  createMockNotifications,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@app/test-config/test-utils";
 
 import { DecoratedApplication } from "../../useDecoratedApplications";
 
@@ -20,7 +27,8 @@ const mockState: {
   canRun: boolean;
   archetypes: { id: number; name: string; profiles?: { id: number }[] }[];
   open: jest.Mock;
-} = { canRun: true, archetypes: [], open: jest.fn() };
+  decide: jest.Mock;
+} = { canRun: true, archetypes: [], open: jest.fn(), decide: jest.fn() };
 
 jest.mock("@app/auth", () => ({
   ...jest.requireActual("@app/auth"),
@@ -39,7 +47,7 @@ jest.mock("@app/queries/agentic", () => ({
     fetchError: mockState.runError ?? null,
   }),
   useResolveApplicationMigrationRequestMutation: () => ({
-    mutateAsync: jest.fn(),
+    mutateAsync: mockState.decide,
     isPending: false,
   }),
 }));
@@ -110,11 +118,16 @@ const run = (
 
 const runRef = { id: "1", name: "Run #1 — Java EE to Quarkus" };
 
-const renderTab = (app = application()) =>
+const renderTab = (
+  app = application(),
+  notifications = createMockNotifications()
+) =>
   render(
-    <Router history={createMemoryHistory()}>
-      <MigrationTab application={app} applicationId={1} linkCrumbs={[]} />
-    </Router>
+    <NotificationsContext.Provider value={notifications}>
+      <Router history={createMemoryHistory()}>
+        <MigrationTab application={app} applicationId={1} linkCrumbs={[]} />
+      </Router>
+    </NotificationsContext.Provider>
   );
 
 const fact = (term: string) =>
@@ -132,6 +145,7 @@ describe("MigrationTab", () => {
     mockState.canRun = true;
     mockState.archetypes = [];
     mockState.open = jest.fn();
+    mockState.decide = jest.fn().mockResolvedValue({});
   });
 
   describe("no migration path", () => {
@@ -289,6 +303,44 @@ describe("MigrationTab", () => {
         screen.getByRole("link", { name: "agentic.stageAttention.reviewStage" })
       ).toHaveAttribute("href", "/plan-runs/1/stages/s1");
     });
+
+    it.each([
+      [
+        "approve",
+        "agentic.stageAttention.approve",
+        "agentic.planRun.stageApproved",
+      ],
+      [
+        "reject",
+        "agentic.stageAttention.reject",
+        "agentic.execution.runRejected",
+      ],
+    ])(
+      "confirms, then says what the %s decided (AP13)",
+      async (decision, button, toast) => {
+        mockState.migration = view({
+          planRun: runRef,
+          runPhase: "Running",
+          intervention: "actionRequired",
+        });
+        mockState.planRun = awaiting();
+        const notifications = createMockNotifications();
+        renderTab(application(), notifications);
+        screen.getByRole("button", { name: button }).click();
+        const dialog = await screen.findByRole("dialog");
+        within(dialog).getByRole("button", { name: button }).click();
+        await waitFor(() =>
+          expect(notifications.pushNotification).toHaveBeenCalledWith({
+            title: toast,
+            variant: "success",
+          })
+        );
+        expect(mockState.decide).toHaveBeenCalledWith({
+          applicationId: 1,
+          decision,
+        });
+      }
+    );
 
     it("keeps a profile no archetype owns as text (AP14)", () => {
       mockState.migration = view({ planRun: runRef, runPhase: "Running" });

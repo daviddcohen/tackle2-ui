@@ -25,6 +25,7 @@ import {
   ApplicationMigrationView,
   HubRef,
   PlanRun,
+  StageRun,
   UNCONFIGURED_MIGRATION,
   getMigrationDisplayStatus,
 } from "@app/agentic";
@@ -98,19 +99,29 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   } = useFetchPlanRun(migration.planRun?.id);
 
   const resolveRequest = useResolveApplicationMigrationRequestMutation(
-    () =>
-      pushNotification({
-        title: t("agentic.execution.requestResolved"),
-        variant: "success",
-      }),
+    // The toast names what was decided, which only the caller knows.
+    () => undefined,
     (error: AxiosError) =>
       pushNotification({
         title: getAxiosErrorMessage(error),
         variant: "danger",
       })
   );
-  const decide = (decision: "approve" | "reject") => () =>
-    resolveRequest.mutateAsync({ applicationId, decision });
+  // Approve: "{stage} approved". Reject fails the whole run: "{run} rejected"
+  // (applications AP13). A failure is reported by the mutation.
+  const decide =
+    (decision: "approve" | "reject") => async (stageRun: StageRun) => {
+      await resolveRequest.mutateAsync({ applicationId, decision });
+      pushNotification({
+        title:
+          decision === "approve"
+            ? t("agentic.planRun.stageApproved", { stage: stageRun.name })
+            : t("agentic.execution.runRejected", {
+                run: planRun?.name ?? migration.planRun?.name,
+              }),
+        variant: "success",
+      });
+    };
   const runMigrationPlan = useRunMigrationPlanLauncher({
     applications: [{ id: applicationId, name: application.name }],
     migrations,

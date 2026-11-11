@@ -1601,7 +1601,6 @@
       "preflightDescription": "Starts migrating the selected applications. Each application is checked before it starts.",
       "preflightTable": "Selected applications",
       "readiness": "Readiness",
-      "requestResolved": "Migration request resolved",
       "startMigration": "Run migration plan",
       "startReady_one": "Run on {{count}} application",
       "startReady_other": "Run on {{count}} applications",
@@ -1657,7 +1656,8 @@
       "commitsDescription": "Changes the agents committed to the target branch for this application.",
       "commitsEmpty": "The agents made no commits to the target branch for this application.",
       "commitColumn": "Commit",
-      "messageColumn": "Message"
+      "messageColumn": "Message",
+      "runRejected": "{{run}} rejected"
     },
     "skillCollection": {
       "create": "Create skill collection",
