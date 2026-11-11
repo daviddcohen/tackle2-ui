@@ -2,8 +2,10 @@
  * Exhaustive link sweep: on every list and detail view of the fixture graph,
  * every rendered entity link must
  *  - open the entity it names (current crumb === link text; the archetype
- *    drawer's title is its leaf),
- *  - extend the source view's trail by exactly one crumb, and
+ *    drawer's title is its leaf, and a target profile is the selected row of
+ *    the "Target profiles" page),
+ *  - extend the source view's trail by exactly one crumb (plus the owning
+ *    archetype before a target profiles leaf, guide 3.5.5), and
  *  - return to the exact source view (URL and trail) from the parent crumb.
  *
  * One test per entity group so failures point at a surface and the groups run
@@ -227,10 +229,18 @@ for (const group of GROUPS) {
           await ready(page);
           await expect(breadcrumb(page)).toBeVisible();
           const expected = expectedName(graph, href);
+          const profilesOwner = /^\/archetypes\/(\d+)\/target-profiles$/.exec(
+            destination.pathname
+          )?.[1];
           if (expected != null) {
             if (isArchetypeDrawer(destination))
               await expect(drawerTitle(page)).toHaveText(expected);
-            else await expect(currentCrumb(page)).toHaveText(expected);
+            else if (profilesOwner != null) {
+              await expect(currentCrumb(page)).toHaveText("Target profiles");
+              await expect(page.locator("tr.pf-m-selected")).toContainText(
+                expected
+              );
+            } else await expect(currentCrumb(page)).toHaveText(expected);
             // A plan run's count link ("3 applications", guide 4.10, addenda
             // X14) names the set it opens, not the run page it lands on.
             const isRunCountLink =
@@ -307,14 +317,35 @@ for (const group of GROUPS) {
             checked++;
             return;
           }
+          const sourceTrail = sourceTitles.length
+            ? sourceTitles
+            : [sourceTitle];
+          const owner = graph.archetypes.find(
+            (archetype) => `${archetype.id}` === profilesOwner
+          )?.name;
+          // The owning archetype follows the source trail; another
+          // archetype's open drawer at its end is replaced, not kept.
+          const replacesDrawer =
+            owner != null &&
+            sourceTrail.at(-1) !== owner &&
+            isArchetypeDrawer(new URL(sourceURL));
           expect(
             (await trailTitles(page)).slice(0, -1),
             `${source} -> ${href}: source context lost`
-          ).toEqual(sourceTitles.length ? sourceTitles : [sourceTitle]);
-          await breadcrumb(page)
-            .getByRole("link", { name: sourceTitle, exact: true })
-            .last()
-            .click();
+          ).toEqual(
+            owner != null && sourceTrail.at(-1) !== owner
+              ? [
+                  ...(replacesDrawer ? sourceTrail.slice(0, -1) : sourceTrail),
+                  owner,
+                ]
+              : sourceTrail
+          );
+          if (replacesDrawer) await page.goBack();
+          else
+            await breadcrumb(page)
+              .getByRole("link", { name: sourceTitle, exact: true })
+              .last()
+              .click();
           await expect(page).toHaveURL(sourceURL);
           await ready(page);
           expect(await trailTitles(page)).toEqual(sourceTitles);

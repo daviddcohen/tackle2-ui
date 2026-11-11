@@ -14,14 +14,14 @@ import {
 } from "../support";
 
 // The leaf is the missing entity's noun (guide 3.5 rule 2); a stage of a
-// missing run is that run's not found (addenda R3). The archetype page keeps
-// its own alert (archetypes area), so its leaf is not pinned here.
+// missing run is that run's not found (addenda R3). The target profiles page
+// keeps its own leaf, "Target profiles", under the missing archetype (AR8).
 const cases: [
   path: string,
   message: RegExp,
   list: string,
   listPath: string,
-  leaf: string | null,
+  leaf: string,
 ][] = [
   [
     "/migration-plans/99999",
@@ -99,10 +99,10 @@ const cases: [
   ],
   [
     "/archetypes/99999/target-profiles",
-    /not found/i,
+    /Archetype not found/,
     "Archetypes",
     "/archetypes",
-    null,
+    "Target profiles",
   ],
 ];
 
@@ -114,7 +114,7 @@ for (const [path, message, list, listPath, leaf] of cases) {
     await page.goto(protoUrl(path));
     await expect(page.getByText(message).first()).toBeVisible();
     await expect(page.getByText("Loading...")).toHaveCount(0);
-    if (leaf != null) await expect(currentCrumb(page)).toHaveText(leaf);
+    await expect(currentCrumb(page)).toHaveText(leaf);
     await breadcrumb(page)
       .getByRole("link", { name: list, exact: true })
       .click();
