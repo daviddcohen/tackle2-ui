@@ -1,7 +1,8 @@
 import userEvent from "@testing-library/user-event";
 import { rest } from "msw";
+import { MemoryRouter } from "react-router-dom";
 
-import { ModelProjection, ModelRequest, Provider } from "@app/agentic";
+import { Agent, ModelProjection, ModelRequest, Provider } from "@app/agentic";
 import { Identity } from "@app/api/models";
 import { hub } from "@app/api/rest";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
@@ -54,20 +55,39 @@ const identities: Identity[] = [
   { id: 6, kind: "source", name: "Git credential" },
 ];
 
+const agentUsing = (id: string, modelId: string) =>
+  ({ id, name: `Agent ${id}`, model: { id: modelId, name: "" } }) as Agent;
+
+const renderForm = (props: React.ComponentProps<typeof ModelForm>) =>
+  render(
+    <MemoryRouter>
+      <ModelForm {...props} />
+    </MemoryRouter>
+  );
+
 describe("ModelForm", () => {
   let updates: ModelRequest[];
   let creates: ModelRequest[];
   let existingModels: ModelProjection[];
+  let agents: Agent[];
+  let hubIdentities: Identity[];
 
   beforeEach(() => {
     updates = [];
     creates = [];
     existingModels = [model];
+    agents = [];
+    hubIdentities = identities;
     server.use(
+      rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
+        res(ctx.json(agents))
+      ),
       rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
         res(ctx.json(existingModels))
       ),
-      rest.get(hub`/identities`, (_req, res, ctx) => res(ctx.json(identities))),
+      rest.get(hub`/identities`, (_req, res, ctx) =>
+        res(ctx.json(hubIdentities))
+      ),
       rest.post(AGENTIC_ENDPOINTS.models, async (req, res, ctx) => {
         creates.push(await req.json());
         return res(ctx.status(201), ctx.json({}));
@@ -95,11 +115,11 @@ describe("ModelForm", () => {
   it("edits without wiping the Model ID; the provider is pre-selected once providers load", async () => {
     const user = userEvent.setup();
     const onClose = jest.fn();
-    render(<ModelForm model={model} onClose={onClose} />);
+    renderForm({ model, onClose });
 
     // (i18n keys are rendered as-is in tests)
     await waitFor(() =>
-      expect(providerInput()).toHaveValue("agentic.model.providerOption")
+      expect(providerInput()).toHaveValue("Anthropic Production")
     );
     // the saved Model ID stays selected even though the provider no longer lists it
     await waitFor(() =>
@@ -129,9 +149,13 @@ describe("ModelForm", () => {
 
   it("clears the Model ID only when the user picks a different provider", async () => {
     const user = userEvent.setup();
-    render(<ModelForm model={model} onClose={jest.fn()} />);
+    renderForm({ model, onClose: jest.fn() });
     await waitFor(() =>
       expect(modelIdInput()).toHaveValue("claude-3-7-sonnet")
+    );
+    // the provider options arrive after the form mounts
+    await waitFor(() =>
+      expect(providerInput()).toHaveValue("Anthropic Production")
     );
 
     // re-picking the same provider keeps the Model ID
@@ -152,7 +176,7 @@ describe("ModelForm", () => {
     existingModels = [];
     const user = userEvent.setup();
     const onClose = jest.fn();
-    render(<ModelForm model={null} onClose={onClose} />);
+    renderForm({ model: null, onClose });
 
     await user.type(
       screen.getByRole("textbox", { name: /terms.name/ }),
@@ -163,7 +187,7 @@ describe("ModelForm", () => {
     await user.click((await screen.findAllByRole("option"))[0]);
     await user.click(modelIdInput()!);
     await user.click(
-      await screen.findByRole("option", { name: "Claude Sonnet 4.6" })
+      await screen.findByRole("option", { name: "agentic.model.modelIdOption" })
     );
 
     const credentialInput = document.querySelector<HTMLInputElement>(
@@ -193,5 +217,71 @@ describe("ModelForm", () => {
         credential: { id: 5 },
       },
     ]);
+  });
+
+  it("keeps Model ID disabled until a provider is selected", async () => {
+    renderForm({ model: null, onClose: jest.fn() });
+    await waitFor(() => expect(modelIdInput()).toBeDisabled());
+    expect(screen.getByText("agentic.model.modelHelp")).toBeInTheDocument();
+    expect(screen.getByText("agentic.model.providerHelp")).toBeInTheDocument();
+  });
+
+  it("warns that changes apply to the agents using the model", async () => {
+    agents = [agentUsing("a1", "m1"), agentUsing("a2", "m1")];
+    renderForm({ model, onClose: jest.fn() });
+    expect(await screen.findByText("agentic.model.inUse")).toBeInTheDocument();
+    expect(screen.queryByText("agentic.model.unreachableTitle")).toBeNull();
+  });
+
+  it("shows an unreachable model's status, with the in-use sentence in the same alert", async () => {
+    agents = [agentUsing("a1", "m1")];
+    renderForm({
+      model: {
+        ...model,
+        verificationStatus: "unreachable",
+        statusReason: "No response.",
+      },
+      onClose: jest.fn(),
+    });
+    expect(
+      await screen.findByText("agentic.model.unreachableTitle")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No response. agentic.model.statusAlertAction")
+    ).toBeInTheDocument();
+    expect(await screen.findByText("agentic.model.inUse")).toBeInTheDocument();
+    // one alert carries both: the modal never stacks two
+    expect(document.querySelectorAll(".pf-v6-c-alert")).toHaveLength(1);
+  });
+
+  it("links to Credentials when no API-key credential exists", async () => {
+    hubIdentities = [{ id: 6, kind: "source", name: "Git credential" }];
+    renderForm({ model: null, onClose: jest.fn() });
+    expect(
+      await screen.findByRole("link", { name: "agentic.model.credentialNone" })
+    ).toHaveAttribute("href", "/identities");
+  });
+
+  it("keeps the Credentials link once the empty credential field is touched", async () => {
+    hubIdentities = [];
+    const user = userEvent.setup();
+    renderForm({ model: null, onClose: jest.fn() });
+    await screen.findByRole("link", { name: "agentic.model.credentialNone" });
+    await user.click(
+      document.querySelector<HTMLInputElement>(
+        "#model-credential-select-input"
+      )!
+    );
+    await user.click(screen.getByRole("textbox", { name: /terms.name/ }));
+    // the next step stays visible; the required error would replace it
+    expect(
+      screen.getByRole("link", { name: "agentic.model.credentialNone" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("agentic.model.validation.credentialRequired")
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "actions.create" })
+    ).toBeDisabled();
   });
 });

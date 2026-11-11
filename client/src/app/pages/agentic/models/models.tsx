@@ -12,8 +12,6 @@ import {
   List,
   ListItem,
   Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Popover,
   Skeleton,
@@ -70,7 +68,11 @@ import {
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
-import { ModelForm } from "./components/model-form";
+import {
+  MODEL_FORM_DESCRIPTION_ID,
+  MODEL_FORM_TITLE_ID,
+  ModelForm,
+} from "./components/model-form";
 
 const ModelsPage: React.FC = () => {
   const { t } = useTranslation();
@@ -492,17 +494,12 @@ const ModelsPage: React.FC = () => {
 
       <Modal
         variant="medium"
+        aria-labelledby={MODEL_FORM_TITLE_ID}
+        aria-describedby={MODEL_FORM_DESCRIPTION_ID}
         isOpen={modalState != null}
         onClose={() => setModalState(null)}
       >
-        <ModalHeader
-          title={
-            modalState === "create"
-              ? t("agentic.model.create")
-              : t("agentic.model.edit")
-          }
-        />
-        <ModalBody>
+        {modalState != null && (
           <ModelForm
             key={formKey}
             model={modalState === "create" ? null : modalState}
@@ -511,7 +508,7 @@ const ModelsPage: React.FC = () => {
               refetch();
             }}
           />
-        </ModalBody>
+        )}
       </Modal>
 
       {modelToDelete && (
