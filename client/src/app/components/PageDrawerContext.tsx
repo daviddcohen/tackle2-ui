@@ -48,6 +48,18 @@ const PageDrawerContext = React.createContext<PageDrawerState>({
   drawerFocusRef: null,
 });
 
+// Focus the drawer's title when its head has one, so the focus ring wraps the
+// title only; otherwise focus the whole head.
+export const focusDrawerHead = (head: HTMLElement | null | undefined) => {
+  const title = head?.querySelector<HTMLElement>("h1, h2, h3, h4, h5, h6");
+  if (title) {
+    title.tabIndex = -1;
+    title.focus();
+  } else {
+    head?.focus();
+  }
+};
+
 // PageContentWithDrawerProvider should only be rendered as the direct child of a PatternFly Page component.
 interface IPageContentWithDrawerProviderProps {
   children: React.ReactNode; // The entire content of the page. See usage in client/src/app/layout/DefaultLayout.
@@ -68,7 +80,7 @@ export const PageContentWithDrawerProvider: React.FC<
       <div className={pageStyles.pageDrawer}>
         <Drawer
           isExpanded={isDrawerExpanded}
-          onExpand={() => drawerFocusRef?.current?.focus()}
+          onExpand={() => focusDrawerHead(drawerFocusRef?.current)}
           position="right"
         >
           <DrawerContent
