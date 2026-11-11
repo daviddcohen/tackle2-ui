@@ -24,7 +24,7 @@
 ## Enterprise Architect portfolio execution
 
 1. Select Enterprise Architect and Preflight blocked.
-2. Open Application Inventory, select applications, and choose Actions > Run migration plan to open preflight. A single application can also be started from its row actions.
+2. Open Application Inventory, select applications, and choose Run migration plan in the toolbar kebab to open preflight. A single application can also be started from its row actions.
 3. Review ready, blocked, and review-required outcomes. Blocked applications are excluded from the start. In the Migration column, Blocked and Review before start show the reason under the status, and the status opens the application's Migration tab with the blocker.
 4. Change the scenario to Running and inspect application and stage progress in the Migration column. A running row shows its plan and current stage under the status; the status opens the application's Migration tab, which links to the plan run.
 5. Change the scenario to Action required. The alert above the inventory counts the applications that need action; "Show applications" filters the inventory to them. Each Action required status opens the application's Migration tab, where the request is approved or rejected. On a plan run, the alert under the title names the stage awaiting approval and offers "Approve and continue", which asks for confirmation first.

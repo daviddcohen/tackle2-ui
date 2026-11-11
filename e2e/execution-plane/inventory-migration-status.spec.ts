@@ -166,6 +166,27 @@ test.describe("Inventory migration column", () => {
     ).toBeEnabled();
   });
 
+  test("bulk Run migration plan sits in the toolbar kebab and needs a selection", async ({
+    page,
+  }) => {
+    await page.goto(protoUrl("/applications", { scenario: "configured" }));
+    await waitForInventory(page);
+    // No selection-only toggle appears next to Analyze.
+    await expect(
+      page.getByRole("button", { name: "Actions", exact: true })
+    ).toHaveCount(0);
+    const kebab = page.getByRole("button", { name: "Application actions" });
+    await kebab.click();
+    await expect(
+      page.getByRole("menuitem", { name: "Run migration plan" })
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    await expect(
+      dialog.getByRole("row", { name: /Customer Management/ })
+    ).toBeVisible();
+  });
+
   // Regression guard: initial scenario returns zero applications; the disabled migrations query reports
   // isLoading=true forever in TanStack Query v4, so the inventory never leaves "Loading...".
   test("initial scenario renders the inventory (not an endless spinner)", async ({
