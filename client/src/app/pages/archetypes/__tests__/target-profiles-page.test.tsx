@@ -536,4 +536,55 @@ describe("TargetProfilesPage", () => {
       );
     });
   });
+
+  describe("delete target profile", () => {
+    it("names the profile and its skills consequence, then confirms with a toast", async () => {
+      const notifications = createMockNotifications();
+      const updated = jest.fn();
+      serve();
+      server.use(
+        rest.put("/hub/archetypes/1", async (req, res, ctx) => {
+          updated(await req.json());
+          return res(ctx.status(204));
+        })
+      );
+      renderPage(undefined, notifications);
+
+      const dialog = await openRowAction("OpenShift lift and shift", "Delete");
+      expect(
+        within(dialog).getByRole("heading", { name: "Delete target profile?" })
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(
+          "OpenShift lift and shift will be deleted. Skills associated with it are no longer used for applications in Java EE Application. This action cannot be undone."
+        )
+      ).toBeInTheDocument();
+
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Delete" })
+      );
+      await waitFor(() =>
+        expect(updated).toHaveBeenCalledWith(
+          expect.objectContaining({ profiles: [archetype.profiles![0]] })
+        )
+      );
+      await waitFor(() =>
+        expect(notifications.pushNotification).toHaveBeenCalledWith(
+          expect.objectContaining({ title: "Target profile deleted" })
+        )
+      );
+    });
+
+    it("omits the skills sentence when the profile has no skills", async () => {
+      serve({ skillsResolver: (_req, res, ctx) => res(ctx.json([])) });
+      renderPage();
+
+      const dialog = await openRowAction("OpenShift lift and shift", "Delete");
+      expect(
+        within(dialog).getByText(
+          "OpenShift lift and shift will be deleted. This action cannot be undone."
+        )
+      ).toBeInTheDocument();
+    });
+  });
 });
