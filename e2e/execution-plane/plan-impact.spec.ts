@@ -8,58 +8,69 @@ import {
 } from "../support";
 
 test.describe("Plan impact and lifecycle", () => {
-  // Regression guard: applicationImpact.matching is a fixture constant (18); the button filters the inventory
-  // by archetype only and returns 4 apps, 2 of which resolve to a different Plan.
-  test("'View N applications' count matches the applications shown", async ({
+  // Regression guard: applicationImpact.matching is a fixture constant (18); the link filtered the inventory
+  // by archetype only and returned 4 apps, 2 of which resolve to a different Plan.
+  test("the Applications count matches the applications shown", async ({
     page,
   }) => {
     await page.goto(protoUrl("/migration-plans/1", { scenario: "configured" }));
-    const button = page.getByRole("button", {
-      name: /^View \d+ applications?$/,
-    });
-    const expected = Number((await button.innerText()).match(/\d+/)![0]);
-    await button.click();
+    const link = page
+      .getByRole("main")
+      .locator("dl")
+      .getByRole("link", { name: /^\d+ applications?$/ });
+    const expected = Number((await link.innerText()).match(/\d+/)![0]);
+    await link.click();
     await waitForInventory(page);
     await expect(
       page.getByRole("button", { name: new RegExp(`of ${expected}$`) }).first()
     ).toBeVisible();
   });
 
-  // Guide 5.4 / kit-status per-check rows: the check name is its own cell, never
-  // the status label, and an issue shows its detail under the status.
-  test("configuration checks name each check apart from its status", async ({
+  // Guide 5.4 / 7.3: the Configuration fact counts failing checks, and one alert
+  // names the problem and lists each affected stage with its agent and model.
+  test("an unverified model is named with the stages it affects", async ({
     page,
   }) => {
     await page.goto(
       protoUrl("/migration-plans/1", { scenario: "partialConfiguration" })
     );
-    const checks = page.getByRole("grid", { name: "Configuration checks" });
-    const models = checks
-      .getByRole("row")
-      .filter({ hasText: "Models verified" });
-    await expect(models.getByRole("gridcell").first()).toHaveText(
-      "Models verified"
+    const configuration = page
+      .getByRole("main")
+      .locator("dl")
+      .locator(".pf-v6-c-description-list__group")
+      .filter({
+        has: page.getByRole("term").getByText("Configuration", { exact: true }),
+      });
+    await expect(configuration).toContainText("1 issue");
+    const alert = page.locator(".pf-v6-c-alert.pf-m-warning");
+    await expect(alert).toContainText(
+      "3 stages use a model that is not verified"
     );
-    await expect(models.getByRole("gridcell").nth(1)).toHaveText(
-      /^Issue\s*(A stage uses|\d+ stages use) a model that is not verified$/
+    await expect(alert.getByRole("listitem")).toHaveText([
+      "Prepare proposal: Migration Proposal Agent uses Claude 3.7 Sonnet (Pending)",
+      "Migrate: Code Migrator uses Claude 3.7 Sonnet (Pending)",
+      "Validate: Build Validator uses GPT-4o (Pending)",
+    ]);
+    // Architects cannot open Models (the route needs the admin view scopes), so no link.
+    await expect(alert.getByRole("link", { name: "View models" })).toHaveCount(
+      0
     );
+
+    await page.goto(
+      protoUrl("/migration-plans/1", {
+        persona: "platformEngineer",
+        scenario: "partialConfiguration",
+      })
+    );
+    await alert.getByRole("link", { name: "View models" }).click();
+    await expect(page).toHaveURL(/\/models(\?|$)/);
     await expect(
-      checks
-        .getByRole("row")
-        .filter({ hasText: "Migration path" })
-        .getByRole("gridcell")
-        .nth(1)
-    ).toHaveText("Passed");
+      page.getByRole("heading", { level: 1, name: "Models" })
+    ).toBeVisible();
 
     await page.goto(protoUrl("/migration-plans/1", { scenario: "configured" }));
-    await expect(
-      page
-        .getByRole("grid", { name: "Configuration checks" })
-        .getByRole("row")
-        .filter({ hasText: "Models verified" })
-        .getByRole("gridcell")
-        .nth(1)
-    ).toHaveText("Passed");
+    await expect(configuration).toContainText("Checks passed");
+    await expect(page.locator(".pf-v6-c-alert.pf-m-warning")).toHaveCount(0);
   });
 
   test("all fixture plans are protected from deletion while in use", async ({
