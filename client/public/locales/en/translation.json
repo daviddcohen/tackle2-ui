@@ -1695,7 +1695,14 @@
     },
     "skillsTable": {
       "label": "Skills",
-      "source": "{{scope}}: {{name}}"
+      "source": "{{scope}}: {{name}}",
+      "title": "Skills ({{count}})",
+      "titleEmpty": "Skills",
+      "planDescription": "Skills from this plan's agents, archetype and target profiles. Collection and application skills are added when the plan runs.",
+      "runDescription": "Skills given to the agents when this run started.",
+      "applicationDescription": "Skills the agents use when migrating this application, and where each one comes from.",
+      "applicationAssociatedDescription": "Skills associated with this application and its archetypes.",
+      "archetypeDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
     },
     "planRun": {
       "title": "Plan runs",

@@ -47,8 +47,8 @@ import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { RunStatus } from "../../components/agentic-status";
+import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 
-import { ResolvedSkillsTable } from "./components/resolved-skills-table";
 import { StageRunSection } from "./components/stage-run-section";
 
 const phaseVariant = (
@@ -79,6 +79,8 @@ const PlanRunDetail: React.FC = () => {
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
   // Stages render from the run's own snapshot, never from the current Plan.
   const stageRuns = planRun ? getOrderedStageRuns(planRun) : [];
+  // The run's snapshot of skills: render what the server returns, never more.
+  const skillRows = groupSkillSources(planRun?.resolvedSkills ?? []);
 
   const onApproveError = (error: AxiosError) => {
     pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
@@ -285,23 +287,23 @@ const PlanRunDetail: React.FC = () => {
         </Stack>
       </PageSection>
 
-      {/* Resolved skills — shown after stages as supporting context */}
-      {planRun.resolvedSkills && planRun.resolvedSkills.length > 0 && (
+      {skillRows.length > 0 && (
         <PageSection hasBodyWrapper={false}>
           <Stack hasGutter>
             <StackItem>
               <Title headingLevel="h2" size="md">
-                {t("agentic.planRun.resolvedSkills")}
+                {t("agentic.skillsTable.title", { count: skillRows.length })}
               </Title>
               <Content component="p">
-                {t("agentic.planRun.resolvedSkillsInfo")}
+                {t("agentic.skillsTable.runDescription")}
               </Content>
             </StackItem>
             <StackItem>
-              <ResolvedSkillsTable
-                skills={planRun.resolvedSkills}
-                runId={planRun.id}
-                runChildCrumbs={runChildCrumbs}
+              <SkillsTable
+                rows={skillRows}
+                linkTo={(pathname) =>
+                  breadcrumbTo(pathname, `?from=run-${runId}`, runChildCrumbs)
+                }
               />
             </StackItem>
           </Stack>
