@@ -435,6 +435,8 @@ Not checked yet: approving through ACP needs `agentic.agentruns.acp:post` (`agen
 22. `useFetchAgentTestRuns` assumes a server-side `agentId` filter, and `useFetchPlanRuns` a `planId` filter. With the real API, filter client-side and exclude stage AgentRuns (`isAgentTestRun`), as `agentic-hub.ts` does.
 23. The mock serves migration views only for its 12 portfolio applications, and resolves applications from mock data even with `MOCK=stub=agentic.pass`.
 24. Run application names: the adapters name a run's application `#<id>` unless given an `ApplicationNameIndex`; join `useFetchApplications` in the hook. A test run with no application maps to `{ id: 0, name: "" }`, and a run with no timestamps to `startedAt: ""`.
+25. `PlanRun.startedAt` is set even while the run is Pending (the mock fills it at creation; the adapter falls back to `creationTimestamp`). The UI does not read it as a start: a Pending run shows "Not started" for Started and Duration (`planRunDurationSeconds` in `utils/agentic.ts`). A server that leaves it unset until the run starts would match the UI better.
+26. Fixture oddities, rendered as the server returns them: Run #1's `resolvedSkills` (`fixtures.ts`) has only archetype, target profile and application sources, no agent or collection sources, although a run snapshot covers sources 1 to 5 (guide 2.3); the UI never adds sources. Run #7's awaiting stage has no messages, so its duration (and the run's) reads "Unavailable": the clock of a stage awaiting approval stops at its agent's last message.
 
 ### Contract drift
 
