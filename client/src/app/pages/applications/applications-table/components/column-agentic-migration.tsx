@@ -1,87 +1,82 @@
 import * as React from "react";
 import { LocationDescriptor } from "history";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
-import { Content, Spinner, Stack, StackItem } from "@patternfly/react-core";
+import { Skeleton } from "@patternfly/react-core";
 
-import { DevPaths } from "@app/Paths";
 import {
+  ApplicationMigrationDisplayStatus,
   ApplicationMigrationView,
   getMigrationDisplayStatus,
 } from "@app/agentic";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { MigrationStatus } from "@app/pages/agentic/components/agentic-status";
 
-import { MigrationNextAction } from "../../components/agentic-migration/migration-next-action";
+import {
+  MIGRATION_TAB_SEARCH,
+  applicationDetailsPath,
+} from "../../components/agentic-migration/paths";
+
+/** Statuses whose second line says where the run is: "{plan} · {stage}". */
+const IN_RUN: ApplicationMigrationDisplayStatus[] = [
+  "pending",
+  "running",
+  "actionRequired",
+];
+/** Statuses whose second line is the server's reason they cannot start. */
+const BEFORE_START: ApplicationMigrationDisplayStatus[] = [
+  "preflightBlocked",
+  "reviewRequired",
+];
 
 interface ColumnAgenticMigrationProps {
   /** Undefined while the migrations load or when they could not be read. */
   migration?: ApplicationMigrationView;
   isLoading: boolean;
   applicationId: number;
-  archetypeId?: number;
+  /** Builds a link that carries the inventory's breadcrumb trail. */
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
-  /** Opens preflight for this application; omitted when the user cannot start runs. */
-  onStart?: () => void;
 }
 
+/**
+ * The inventory Migration cell (guide 7.6, ACCEPTED amendment 6): the status,
+ * linked to the application's Migration tab, and at most one subtle second
+ * line. Pending, running and action required say "{plan} · {stage}"; Blocked
+ * and Review before start show the server's reason verbatim, never linked.
+ */
 export const ColumnAgenticMigration: React.FC<ColumnAgenticMigrationProps> = ({
   migration,
   isLoading,
   applicationId,
-  archetypeId,
   linkTo,
-  onStart,
 }) => {
   const { t } = useTranslation();
 
   if (!migration) {
     return isLoading ? (
-      <Spinner size="md" aria-label={t("agentic.execution.loadingMigration")} />
+      <Skeleton screenreaderText={t("terms.loading")} />
     ) : (
-      <Content component="small">
-        {t("agentic.execution.migrationUnavailable")}
-      </Content>
+      <EmptyTextMessage message={t("agentic.common.unavailable")} />
     );
   }
 
+  const status = getMigrationDisplayStatus(migration);
+  let supportingText: string | undefined;
+  if (IN_RUN.includes(status) && migration.plan) {
+    supportingText = migration.currentStage
+      ? t("agentic.execution.planStage", {
+          plan: migration.plan.name,
+          stage: migration.currentStage,
+        })
+      : migration.plan.name;
+  } else if (BEFORE_START.includes(status)) {
+    supportingText = migration.preflightReason;
+  }
+
   return (
-    <Stack>
-      <StackItem>
-        <MigrationStatus status={getMigrationDisplayStatus(migration)} />
-      </StackItem>
-      {migration.plan && (
-        <StackItem>
-          <Content component="small">
-            <Link
-              to={linkTo(
-                DevPaths.migrationPlanDetails.replace(
-                  ":planId",
-                  migration.plan.id
-                )
-              )}
-            >
-              {migration.plan.name}
-            </Link>
-            {migration.currentStage
-              ? `, ${t("agentic.execution.currentStage", {
-                  stage: migration.currentStage,
-                })}`
-              : null}
-          </Content>
-        </StackItem>
-      )}
-      <StackItem>
-        <Content component="small">
-          {t("agentic.execution.nextPrefix")}{" "}
-          <MigrationNextAction
-            migration={migration}
-            applicationId={applicationId}
-            archetypeId={archetypeId}
-            linkTo={linkTo}
-            onStart={onStart}
-          />
-        </Content>
-      </StackItem>
-    </Stack>
+    <MigrationStatus
+      status={status}
+      to={linkTo(applicationDetailsPath(applicationId), MIGRATION_TAB_SEARCH)}
+      supportingText={supportingText}
+    />
   );
 };
