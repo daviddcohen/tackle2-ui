@@ -409,16 +409,15 @@ test.describe("Skill cross-entity consistency", () => {
 
     await spaNavigate(page, "/agents");
     const row = rowByText(page, "Code Migrator");
-    await expect(row.getByRole("button", { name: /Code Migrator/ })).toHaveText(
-      "4"
-    );
+    // The Skills cell summarizes what the agent uses (A12): its 4 skills
+    // and 1 collection.
+    const skillsSummary = row.getByRole("link", { name: /^\d+ skills?\b/ });
+    await expect(skillsSummary).toHaveText("4 skills, 1 collection");
     await openRowActions(page, "Code Migrator");
     await page.getByRole("menuitem", { name: "Edit" }).click();
     await dialog(page).locator("#agent-description").fill("Unrelated change");
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Agent updated")).toBeVisible();
-    await expect(row.getByRole("button", { name: /Code Migrator/ })).toHaveText(
-      "4"
-    );
+    await expect(skillsSummary).toHaveText("4 skills, 1 collection");
   });
 });

@@ -39,14 +39,32 @@ test.describe("Agents list", () => {
     await expect(dataRows(page)).toHaveCount(8);
   });
 
-  test("renders agents with model and skill counts", async ({
+  test("renders agents with model and skills summary", async ({
     page,
     diagnostics,
   }) => {
     const codeMigrator = rowByText(page, "Code Migrator");
     await expect(codeMigrator).toContainText("Claude 3.7 Sonnet");
-    await expect(codeMigrator.getByRole("cell").nth(3)).toHaveText("4");
+    await expect(
+      codeMigrator.getByRole("link", { name: "4 skills, 1 collection" })
+    ).toBeVisible();
     expectHealthy(diagnostics);
+  });
+
+  test("skills summary opens the agent; a single skill opens the skill", async ({
+    page,
+  }) => {
+    await rowByText(page, "Test Runner")
+      .getByRole("link", { name: "Database migration patterns" })
+      .click();
+    await expect(page).toHaveURL(/\/skills\/\d+/);
+    await page.goBack();
+    await rowByText(page, "Code Migrator")
+      .getByRole("link", { name: "4 skills, 1 collection" })
+      .click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Code Migrator" })
+    ).toBeVisible();
   });
 
   test("agent used by plans cannot be deleted from the list (with reason)", async ({

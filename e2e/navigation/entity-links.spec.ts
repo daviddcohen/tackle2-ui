@@ -203,7 +203,17 @@ for (const group of GROUPS) {
             const isRunCountLink =
               /^\d+ applications$/.test(label) &&
               /^\/plan-runs\/\d+$/.test(destination.pathname);
-            if (!/\/stages\//.test(href) && !isRunCountLink)
+            // So does an agent's skills summary or plan count (A12, 4.10):
+            // "4 skills, 1 collection" and "5 migration plans" open the agent.
+            const isAgentCountLink =
+              /^\d+ (skills?|collections?|migration plans?)(, \d+ collections?)?$/.test(
+                label
+              ) && /^\/agents\/\d+$/.test(destination.pathname);
+            if (
+              !/\/stages\//.test(href) &&
+              !isRunCountLink &&
+              !isAgentCountLink
+            )
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected
               );

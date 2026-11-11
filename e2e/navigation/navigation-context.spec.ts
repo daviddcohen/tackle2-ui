@@ -9,6 +9,7 @@ import {
   breadcrumb,
   currentCrumb,
   expect,
+  fixtureGraph,
   personaSelect,
   protoUrl,
   scenarioSelect,
@@ -80,7 +81,10 @@ test("tabs, table filters, scenario changes and sidebar navigation have explicit
   });
   await nameFilter.fill("Code Migrator");
   await nameFilter.press("Enter");
-  const agentLinks = page.locator('main a[href^="/agents/"]');
+  // The row's skills summary also opens the agent (A12).
+  const agentLinks = page
+    .locator("main")
+    .getByRole("link", { name: "Code Migrator", exact: true });
   await expect(agentLinks).toHaveCount(1);
   const listURL = page.url();
   await agentLinks.click();
@@ -132,6 +136,44 @@ test("returning through an Agent association restores the saved runs tab and tru
     page.getByRole("tab", { name: "Agent runs", exact: true })
   ).toHaveAttribute("aria-selected", "true");
   await expect(currentCrumb(page)).toHaveText("Code Migrator");
+});
+
+test("every Agents list Skills link preserves the list context", async ({
+  page,
+}) => {
+  await page.goto(view("/agents"));
+  const graph = await fixtureGraph(page);
+  let onList = true;
+  for (const agent of graph.agents) {
+    const collections = agent.skillCollections ?? [];
+    if (agent.skills.length === 0 && collections.length === 0) continue;
+    // Back to the list through its crumb, not with a full page load per
+    // agent: the loop then stays well inside the test timeout on a busy
+    // machine.
+    if (!onList)
+      await breadcrumb(page)
+        .getByRole("link", { name: "Agents", exact: true })
+        .click();
+    const row = page.getByRole("row").filter({
+      has: page.getByRole("link", { name: agent.name, exact: true }),
+    });
+    // One skill and no collection is the skill itself (C1); otherwise the
+    // summary opens the agent, whose Details tab lists them (A12).
+    const single = agent.skills.length === 1 && collections.length === 0;
+    await (
+      single
+        ? // A plan can share the skill's name: pick the skill's own link.
+          row.locator(`a[href^="/skills/${agent.skills[0].id}"]`)
+        : row.getByRole("link", { name: /^\d+ (skill|collection)/ })
+    ).click();
+    await expect(currentCrumb(page)).toHaveText(
+      single ? agent.skills[0].name : agent.name
+    );
+    await expect(
+      breadcrumb(page).getByRole("link", { name: "Agents", exact: true })
+    ).toBeVisible();
+    onList = false;
+  }
 });
 
 test("selected Archetype drawers survive pagination and filtering without losing the originating Skill", async ({
