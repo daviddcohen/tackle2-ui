@@ -1601,8 +1601,6 @@
       "detailsTab": "Migration",
       "preflightDescription": "Starts migrating the selected applications. Each application is checked before it starts.",
       "preflightTable": "Selected applications",
-      "queued_one": "{{count}} migration queued",
-      "queued_other": "{{count}} migrations queued",
       "readiness": "Readiness",
       "requestResolved": "Migration request resolved",
       "resolvedPlan": "Resolved Plan",
@@ -1662,7 +1660,11 @@
       "notSelected": "Not selected",
       "none": "None",
       "viewPlanRun": "View plan run",
-      "overrideCaution": "Applications run this plan even if it is not assigned to their archetype and target profile."
+      "overrideCaution": "Applications run this plan even if it is not assigned to their archetype and target profile.",
+      "planRunsStarted_one": "{{count}} plan run started",
+      "planRunsStarted_other": "{{count}} plan runs started",
+      "viewPlanRuns": "View plan runs",
+      "noPlanRunStarted": "No plan run was started"
     },
     "skillCollection": {
       "create": "Create skill collection",
