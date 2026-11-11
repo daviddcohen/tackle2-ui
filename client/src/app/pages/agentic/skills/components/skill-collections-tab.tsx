@@ -5,9 +5,6 @@ import { Link, generatePath } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
-  Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
   Skeleton,
   Toolbar,
@@ -63,7 +60,7 @@ import {
 } from "../skill-usage";
 
 import { CountLink } from "./count-link";
-import { SkillCollectionForm } from "./skill-collection-form";
+import { SkillCollectionModal } from "./skill-collection-form";
 
 /** The Skill collections tab of the Skills page (guide 7.5, collections-list). */
 export const SkillCollectionsTab: React.FC = () => {
@@ -83,7 +80,7 @@ export const SkillCollectionsTab: React.FC = () => {
   const knownAgents =
     isLoadingAgents || agentsError != null ? undefined : agents;
 
-  const [formModalState, setFormModalState, formKey] = useFormModalState<
+  const [formModalState, setFormModalState] = useFormModalState<
     "create" | SkillCollection
   >();
   const closeFormModal = () => {
@@ -407,27 +404,11 @@ export const SkillCollectionsTab: React.FC = () => {
         </div>
       </ConditionalRender>
 
-      <Modal
-        id="create-edit-skill-collection-modal"
-        variant="medium"
+      <SkillCollectionModal
         isOpen={formModalState !== null}
+        collection={formModalState !== "create" ? formModalState : null}
         onClose={closeFormModal}
-      >
-        <ModalHeader
-          title={
-            formModalState !== "create"
-              ? t("agentic.skillCollection.edit")
-              : t("agentic.skillCollection.create")
-          }
-        />
-        <ModalBody>
-          <SkillCollectionForm
-            key={formKey}
-            collection={formModalState !== "create" ? formModalState : null}
-            onClose={closeFormModal}
-          />
-        </ModalBody>
-      </Modal>
+      />
 
       {collectionToDelete != null && (
         <ConfirmDialog
