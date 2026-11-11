@@ -37,10 +37,7 @@ import { NotificationsContext } from "@app/components/NotificationsContext";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
-import {
-  MigrationStatus,
-  RunStatus,
-} from "@app/pages/agentic/components/agentic-status";
+import { MigrationStatus } from "@app/pages/agentic/components/agentic-status";
 import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
 import {
   StageAttentionAlert,
@@ -260,16 +257,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                   t("agentic.plan.notConfigured")}
               </DescriptionListDescription>
             </DescriptionListGroup>
-            {migration.runPhase && (
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.execution.controllerRunPhase")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <RunStatus status={migration.runPhase} />
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-            )}
           </DescriptionList>
         </StackItem>
 
