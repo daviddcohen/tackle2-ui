@@ -198,7 +198,12 @@ for (const group of GROUPS) {
           const expected = expectedName(graph, href);
           if (expected != null) {
             await expect(currentCrumb(page)).toHaveText(expected);
-            if (!/\/stages\//.test(href))
+            // A plan run's count link ("3 applications", guide 4.10, addenda
+            // X14) names the set it opens, not the run page it lands on.
+            const isRunCountLink =
+              /^\d+ applications$/.test(label) &&
+              /^\/plan-runs\/\d+$/.test(destination.pathname);
+            if (!/\/stages\//.test(href) && !isRunCountLink)
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected
               );
