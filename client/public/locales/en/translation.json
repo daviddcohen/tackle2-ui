@@ -1710,6 +1710,7 @@
       "emptyDescriptionReadOnly": "Skill collections appear here once they are created.",
       "formDescription": "Agents that use this collection use all of its skills.",
       "skillsHelper": "Select at least one skill.",
+      "editUsageUnchecked": "Usage could not be checked. Changes apply to every agent that uses this collection.",
       "editWarning_one": "Used by {{count}} agent. Changes apply to it.",
       "editWarning_other": "Used by {{count}} agents. Changes apply to them.",
       "validation": {

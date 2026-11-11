@@ -13,6 +13,7 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  Skeleton,
 } from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
@@ -92,11 +93,14 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
     fetchError: agentsError,
   } = useFetchAgents();
   // The edit warning counts the agents the same way as the delete reason
-  // (S3), once the agents have loaded.
+  // (S3). Until the agents are known it never looks like "not used" (X6): a
+  // skeleton while they load, a usage-unchecked warning if they fail.
   const agentsUsingCollection =
     collection == null || isLoadingAgents || agentsError != null
       ? 0
       : getAgentsUsingCollection(collection.id, agents).length;
+  const isUsageUnchecked =
+    collection != null && !isLoadingAgents && agentsError != null;
 
   const options: FilterSelectOptionProps[] = skills.map((skill) => ({
     value: skill.id,
@@ -187,17 +191,27 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
         labelId={TITLE_ID}
       />
       <ModalBody>
-        {agentsUsingCollection > 0 && (
+        {collection != null && isLoadingAgents ? (
+          <Skeleton
+            width="50%"
+            className={spacing.mbLg}
+            screenreaderText={t("terms.loading")}
+          />
+        ) : isUsageUnchecked || agentsUsingCollection > 0 ? (
           <Alert
             variant="warning"
             isInline
             isPlain
-            title={t("agentic.skillCollection.editWarning", {
-              count: agentsUsingCollection,
-            })}
+            title={
+              isUsageUnchecked
+                ? t("agentic.skillCollection.editUsageUnchecked")
+                : t("agentic.skillCollection.editWarning", {
+                    count: agentsUsingCollection,
+                  })
+            }
             className={spacing.mbLg}
           />
-        )}
+        ) : null}
         <Form id={FORM_ID} onSubmit={handleSubmit(onSubmit)}>
           <HookFormPFTextInput
             control={control}

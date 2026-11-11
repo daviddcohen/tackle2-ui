@@ -84,6 +84,27 @@ describe("SkillCollectionForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("never looks unused while the agents load or after they fail (X6)", async () => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
+        res(ctx.status(500))
+      )
+    );
+    render(<SkillCollectionForm collection={collection} onClose={jest.fn()} />);
+    expect(await screen.findByText("terms.loading")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "agentic.skillCollection.editUsageUnchecked",
+        undefined,
+        { timeout: 5000 }
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("terms.loading")).toBeNull();
+    expect(
+      screen.queryByText("agentic.skillCollection.editWarning")
+    ).not.toBeInTheDocument();
+  });
+
   it("has no warning when creating", async () => {
     render(<SkillCollectionForm collection={null} onClose={jest.fn()} />);
     await screen.findByRole("button", { name: "actions.create" });
