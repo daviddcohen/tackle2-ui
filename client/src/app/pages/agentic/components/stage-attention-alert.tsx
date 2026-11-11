@@ -119,6 +119,18 @@ export type StageAttentionAlertProps = StageAttentionSurface & {
   /** Application tab: the failure as the application view reports it, instead of the stage output. */
   failureDetails?: { summary?: string; evidence?: string[] };
   /**
+   * Application tab, failed variant: why the migration cannot run again yet
+   * (the view's `preflightReason` when `preflight` is not ready). Adds "Before
+   * it can run again: {reason}" before the next step (applications AP8).
+   */
+  restartBlockedReason?: string;
+  /**
+   * The plan run page, for a failure that names no stage: the slot that
+   * otherwise holds "Review stage" reads "View plan run" (applications
+   * amendment 2). The run page itself passes nothing.
+   */
+  planRunTo?: LocationDescriptor;
+  /**
    * Places the alert in the caller's layout (a page section, a stack item).
    * It is called only when there is something to show, so the caller renders
    * no empty wrapper.
@@ -157,12 +169,21 @@ const AttentionAlert: React.FC<
   isDeciding = false,
   onRunMigrationPlan,
   failureDetails,
+  restartBlockedReason,
+  planRunTo,
 }) => {
   const { t } = useTranslation();
   const [decision, setDecision] = React.useState<"approve" | "reject">();
   const stage = attention.kind === "pending" ? undefined : attention.stageRun;
+  // One link slot: Review stage, or View plan run when no stage is named.
   const reviewTo =
-    stage != null && surface !== "stage" ? reviewStageTo?.(stage) : undefined;
+    stage != null
+      ? surface !== "stage"
+        ? reviewStageTo?.(stage)
+        : undefined
+      : attention.kind === "failed"
+        ? planRunTo
+        : undefined;
   const reviewLink = useLinkComponent(reviewTo);
 
   if (attention.kind === "pending") {
@@ -176,7 +197,10 @@ const AttentionAlert: React.FC<
     );
   }
 
-  const reviewLabel = t("agentic.stageAttention.reviewStage");
+  const reviewLabel =
+    stage != null
+      ? t("agentic.stageAttention.reviewStage")
+      : t("agentic.stageAttention.viewPlanRun");
   const reviewButton = reviewLink != null && (
     <Button variant="link" component={reviewLink}>
       {reviewLabel}
@@ -233,6 +257,15 @@ const AttentionAlert: React.FC<
       >
         <Stack hasGutter>
           {details && <StackItem>{details}</StackItem>}
+          {restartBlockedReason && (
+            <StackItem>
+              <Content component="p">
+                {t("agentic.stageAttention.restartBlocked", {
+                  reason: restartBlockedReason,
+                })}
+              </Content>
+            </StackItem>
+          )}
           <StackItem>
             <Content component="p">
               {t("agentic.stageAttention.failedNextStep")}
