@@ -1800,15 +1800,12 @@
     "agentDetail": {
       "tabDetails": "Details",
       "tabRuns": "Runs",
-      "model": "Model",
-      "skills": "Skills",
-      "skillCollections": "Skill collections",
-      "capabilities": "Capabilities",
-      "parameters": "Parameters",
       "createdAt": "Created",
+      "updatedAt": "Updated",
       "usedInPlans": "Used in migration plans",
-      "notUsedInPlans": "This agent is not assigned to any migration plan stage yet.",
-      "stagesLabel": "Stage(s) in plan",
+      "usedInPlansCount": "Used in migration plans ({{count}})",
+      "notUsedInPlans": "This agent is not used in any migration plan yet.",
+      "stagesLabel": "Stages",
       "runsTableLabel": "Agent runs table",
       "planRun": "Plan run",
       "stage": "Stage",
@@ -1817,8 +1814,9 @@
       "runTypeTest": "Test",
       "runsEmptyTitle": "No runs yet",
       "runsEmptyDescription": "Runs will appear here once this agent is assigned to a plan stage or you start a test run.",
-      "personaPrompt": "Persona prompt",
-      "parameterDefault": "(default: {{value}})"
+      "noPersonaPrompt": "This agent has no persona prompt.",
+      "parameterDefault": "Default",
+      "noParameters": "This agent has no parameters."
     },
     "planDetail": {
       "tabOverview": "Overview",
