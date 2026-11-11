@@ -1349,10 +1349,8 @@
           "label": "Stages have agents"
         }
       },
-      "changePlan": "Change Plan",
       "deleted": "Migration plan deleted",
       "deleteDescription": "{{plan}} will be deleted. This action cannot be undone.",
-      "deleteProfilePlanAssociated": "Remove the Plan association before deleting this target profile.",
       "deleteTitle": "Delete migration plan?",
       "editPlan": "Edit migration plan",
       "emptyDescription": "Create a migration plan to define the stages that migrate applications of one archetype and target profile.",
@@ -1900,7 +1898,10 @@
     "archetype": {
       "agenticDataUnavailableBody": "Assignments shown here may be incomplete. Reload the page to try again.",
       "agenticDataUnavailableTitle": "Migration plans and skills could not be loaded",
+      "assignPlan": "Assign migration plan",
       "backToArchetypes": "Back to archetypes",
+      "changePlan": "Change migration plan",
+      "deleteBlocked": "{{plan}} is assigned to this target profile. Edit {{plan}} to use a different target profile before deleting it.",
       "goToSkills": "Go to skills",
       "noSkillsBody": "Skills associated with this archetype or its target profiles appear here. Associations are edited on each skill.",
       "noSkillsTitle": "No skills yet",
@@ -1912,6 +1913,7 @@
       "notAssigned": "Not assigned",
       "notFoundBody": "This archetype may have been deleted, or the link is out of date.",
       "notFoundTitle": "Archetype not found",
+      "plansNotLoaded": "Migration plans are not loaded yet.",
       "profileSkillsDescription": "Agents also use these skills when they migrate applications in this archetype that target this profile.",
       "profileSkillsTitle": "Skills for {{profile}}",
       "skillCount_one": "{{count}} skill",

@@ -8,6 +8,7 @@ import { MigrationPlan, Skill } from "@app/agentic";
 import { Archetype } from "@app/api/models";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { ARCHETYPE_QUERY_KEY } from "@app/queries/archetypes";
+import { archetypesWriteScopes, plansWriteScopes } from "@app/scopes";
 import {
   act,
   render,
@@ -28,10 +29,15 @@ jest.mock("@app/Constants", () => ({
   isAgenticEnabled: true,
 }));
 
-const mockGrantedScopes = { all: true };
+// `denied` withholds single scope groups, such as plansWriteScopes.
+const mockGrantedScopes: { all: boolean; denied: readonly string[][] } = {
+  all: true,
+  denied: [],
+};
 jest.mock("@app/auth", () => ({
   ...jest.requireActual("@app/auth"),
-  useHasSomeScopes: () => mockGrantedScopes.all,
+  useHasSomeScopes: (scopes: string[]) =>
+    mockGrantedScopes.all && !mockGrantedScopes.denied.includes(scopes),
 }));
 
 const archetype: Archetype = {
@@ -111,6 +117,7 @@ const row = async (name: string) =>
 
 beforeEach(() => {
   mockGrantedScopes.all = true;
+  mockGrantedScopes.denied = [];
 });
 
 describe("TargetProfilesPage", () => {
@@ -211,6 +218,125 @@ describe("TargetProfilesPage", () => {
       screen.getByRole("cell", { name: "OpenShift lift and shift" })
     ).toBeInTheDocument();
     expect(screen.queryByText(/There was an error retrieving data/)).toBeNull();
+  });
+
+  it("orders the row actions and blocks Delete while a plan is assigned", async () => {
+    serve();
+    renderPage();
+
+    await userEvent.click(
+      within(await row("Quarkus 3.x")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Edit",
+      "Change migration plan",
+      "Delete",
+    ]);
+    expect(screen.getByRole("separator")).toBeInTheDocument();
+    expect(items[2]).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("offers Assign migration plan and Delete for a profile without a plan", async () => {
+    serve();
+    renderPage();
+
+    await userEvent.click(
+      within(await row("OpenShift lift and shift")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "Assign migration plan" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete" })
+    ).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("disables the plan action and Delete when plans fail (X6)", async () => {
+    serve({ plansResolver: (_req, res, ctx) => res(ctx.status(403)) });
+    renderPage();
+
+    await userEvent.click(
+      within(await row("OpenShift lift and shift")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    const assign = await screen.findByRole("menuitem", {
+      name: "Assign migration plan",
+    });
+    expect(assign).toHaveAttribute("aria-disabled", "true");
+    await userEvent.hover(assign);
+    expect(
+      await screen.findByText("Migration plans are not loaded yet.")
+    ).toBeInTheDocument();
+
+    const remove = screen.getByRole("menuitem", { name: "Delete" });
+    expect(remove).toHaveAttribute("aria-disabled", "true");
+    await userEvent.hover(remove);
+    expect(
+      await screen.findByText("Usage could not be checked. Try again later.")
+    ).toBeInTheDocument();
+  });
+
+  it("disables Delete when skills fail, even without a plan (X6)", async () => {
+    serve({ skillsResolver: (_req, res, ctx) => res(ctx.status(403)) });
+    renderPage();
+
+    await userEvent.click(
+      within(await row("OpenShift lift and shift")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "Assign migration plan" })
+    ).not.toHaveAttribute("aria-disabled", "true");
+    const remove = screen.getByRole("menuitem", { name: "Delete" });
+    expect(remove).toHaveAttribute("aria-disabled", "true");
+    await userEvent.hover(remove);
+    expect(
+      await screen.findByText("Usage could not be checked. Try again later.")
+    ).toBeInTheDocument();
+  });
+
+  it("offers no plan action without the plans write scope", async () => {
+    mockGrantedScopes.denied = [plansWriteScopes];
+    serve();
+    renderPage();
+
+    await userEvent.click(
+      within(await row("Quarkus 3.x")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Edit", "Delete"]);
+    expect(
+      screen.getByRole("button", { name: "Create target profile" })
+    ).toBeInTheDocument();
+  });
+
+  it("offers only the plan action without the archetype write scope", async () => {
+    mockGrantedScopes.denied = [archetypesWriteScopes];
+    serve();
+    renderPage();
+
+    await userEvent.click(
+      within(await row("Quarkus 3.x")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Change migration plan",
+    ]);
+    expect(screen.queryByRole("separator")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Create target profile" })
+    ).toBeNull();
   });
 
   it("has no toolbar and no row actions for read-only users (X9)", async () => {
