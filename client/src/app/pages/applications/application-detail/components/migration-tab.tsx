@@ -197,7 +197,10 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           </DescriptionList>
         </StackItem>
 
-        {migration.preflight != null &&
+        {/* Only before a run: once one exists, the run says why nothing
+            can start, and the attention alert covers what needs a person. */}
+        {migration.planRun == null &&
+          migration.preflight != null &&
           migration.preflight !== "ready" &&
           migration.preflightReason && (
             <StackItem>
