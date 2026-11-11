@@ -119,12 +119,12 @@ test.describe("Plan impact and lifecycle", () => {
       .getByRole("button", { name: "Row actions" })
       .click();
     await page.getByRole("menuitem", { name: "Run migration plan" }).click();
-    await dialog.getByLabel("Override with a specific Plan").check();
-    await dialog.getByRole("button", { name: "Plan override" }).click();
-    await pickMenuOption(page, "Plan in use by a run");
     await dialog
-      .getByRole("button", { name: "Start 1 Ready Application" })
-      .click();
+      .getByLabel("Use one migration plan for all applications")
+      .check();
+    await dialog.getByRole("button", { name: "Migration plan to run" }).click();
+    await pickMenuOption(page, "Plan in use by a run");
+    await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "Plan in use by a run"
     );

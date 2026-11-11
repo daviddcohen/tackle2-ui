@@ -47,7 +47,7 @@ test.describe("Migration next actions", () => {
       dialog.getByRole("row", { name: /Customer Management/ })
     ).toBeVisible();
     await expect(
-      dialog.getByRole("button", { name: "Start 1 Ready Application" })
+      dialog.getByRole("button", { name: "Run on 1 application" })
     ).toBeEnabled();
   });
 
@@ -160,7 +160,9 @@ test.describe("Migration next actions", () => {
     ).toBeVisible();
     // The application still resolves to the run's plan (R5), even though
     // the run covers other applications this tab does not load.
-    await expect(dialog.getByLabel("Use recommended Plan")).toBeChecked();
+    await expect(
+      dialog.getByLabel("Use each application's migration plan")
+    ).toBeChecked();
   });
 
   for (const [scenario, label, title] of [
@@ -196,12 +198,14 @@ test.describe("Migration next actions", () => {
     await page.getByRole("button", { name: "Run migration plan" }).click();
     const dialog = page.getByRole("dialog", { name: "Run migration plan" });
     // Every application still resolves to the run's plan: keep their own.
-    await expect(dialog.getByLabel("Use recommended Plan")).toBeChecked();
+    await expect(
+      dialog.getByLabel("Use each application's migration plan")
+    ).toBeChecked();
     await expect(
       dialog.getByRole("textbox", { name: /Target branch/ })
     ).toHaveValue("mta/spring-quarkus");
     await dialog
-      .getByRole("button", { name: /^Start \d+ Ready Applications?$/ })
+      .getByRole("button", { name: /^Run on \d+ applications?$/ })
       .click();
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "Spring Boot to Quarkus"
