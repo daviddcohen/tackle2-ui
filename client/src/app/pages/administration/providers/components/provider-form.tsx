@@ -5,10 +5,15 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { mixed, object, string } from "yup";
 import {
-  ActionGroup,
+  Alert,
   Button,
   ButtonVariant,
+  Content,
   Form,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  Stack,
 } from "@patternfly/react-core";
 
 import { Provider, ProviderRequest, ProviderType } from "@app/agentic";
@@ -21,14 +26,20 @@ import {
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import {
   useCreateProviderMutation,
+  useFetchGateways,
   useFetchProviders,
   useUpdateProviderMutation,
 } from "@app/queries/agentic";
 import {
   duplicateNameCheck,
+  formatDate,
   getAxiosErrorMessage,
   isValidStandardUrl,
 } from "@app/utils/utils";
+
+/** Ids of the form's modal title and description, for the Modal that hosts the form. */
+export const PROVIDER_FORM_TITLE_ID = "provider-form-title";
+export const PROVIDER_FORM_DESCRIPTION_ID = "provider-form-description";
 
 export const PROVIDER_TYPES: readonly ProviderType[] = [
   "anthropic",
@@ -58,6 +69,12 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const { providers } = useFetchProviders();
+  // The in-use sentence counts models only once they are known (X6).
+  const { gateways: models, isSuccess: isModelsLoaded } = useFetchGateways();
+  const usedByCount =
+    provider != null && isModelsLoaded
+      ? models.filter((model) => model.provider.id === provider.id).length
+      : 0;
 
   const onSuccess = () => {
     pushNotification({
@@ -135,8 +152,53 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
 
   const isSaving = isCreating || isUpdating;
 
-  return (
-    <Form onSubmit={handleSubmit(onSubmit)}>
+  // One alert carries the status and the in-use consequence (amendment 2).
+  const inUse =
+    usedByCount > 0
+      ? t("agentic.provider.inUse", { count: usedByCount })
+      : undefined;
+  const statusAlert =
+    provider != null && provider.verificationStatus !== "verified" ? (
+      <Alert
+        isInline
+        isPlain
+        variant={
+          provider.verificationStatus === "unreachable" ? "danger" : "info"
+        }
+        title={
+          provider.verificationStatus === "unreachable"
+            ? t("agentic.provider.unreachableTitle")
+            : t("agentic.provider.pendingTitle")
+        }
+      >
+        <Content>
+          <Content component="p">
+            {[provider.statusReason, t("agentic.provider.statusAlertAction")]
+              .filter(Boolean)
+              .join(" ")}
+          </Content>
+          {(provider.lastVerified != null || inUse != null) && (
+            <Content component="p">
+              {[
+                provider.lastVerified != null
+                  ? t("agentic.provider.lastVerified", {
+                      date: formatDate(new Date(provider.lastVerified)),
+                    })
+                  : undefined,
+                inUse,
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            </Content>
+          )}
+        </Content>
+      </Alert>
+    ) : inUse != null ? (
+      <Alert isInline isPlain variant="warning" title={inUse} />
+    ) : null;
+
+  const form = (
+    <Form id="provider-form" onSubmit={handleSubmit(onSubmit)}>
       <HookFormPFTextInput
         control={control}
         name="name"
@@ -149,7 +211,6 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         name="description"
         label={t("terms.description")}
         fieldId="provider-description"
-        rows={3}
         resizeOrientation="vertical"
       />
       <HookFormPFGroupController
@@ -177,24 +238,54 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         label={t("agentic.provider.endpoint")}
         fieldId="provider-endpoint"
         type="url"
-        placeholder="https://api.example.com/v1"
+        helperText={t("agentic.provider.endpointHelp")}
         isRequired
       />
-      <ActionGroup>
+    </Form>
+  );
+
+  return (
+    <>
+      <ModalHeader
+        labelId={PROVIDER_FORM_TITLE_ID}
+        descriptorId={PROVIDER_FORM_DESCRIPTION_ID}
+        title={
+          provider ? t("agentic.provider.edit") : t("agentic.provider.create")
+        }
+        description={
+          !provider
+            ? t("agentic.provider.createDescription")
+            : provider.verificationStatus === "verified"
+              ? t("agentic.provider.editVerifiedDescription")
+              : // the status alert already says to save to verify it again
+                t("agentic.provider.editDescription")
+        }
+      />
+      <ModalBody>
+        {statusAlert ? (
+          <Stack hasGutter>
+            {statusAlert}
+            {form}
+          </Stack>
+        ) : (
+          form
+        )}
+      </ModalBody>
+      <ModalFooter>
         <Button
           type="submit"
+          form="provider-form"
           variant={ButtonVariant.primary}
           isDisabled={
             !isDirty || !isValid || isSubmitting || isValidating || isSaving
           }
-          isLoading={isSaving}
         >
-          {provider ? t("actions.save") : t("agentic.provider.create")}
+          {provider ? t("actions.save") : t("actions.create")}
         </Button>
-        <Button type="button" variant={ButtonVariant.link} onClick={onClose}>
+        <Button variant={ButtonVariant.link} onClick={onClose}>
           {t("actions.cancel")}
         </Button>
-      </ActionGroup>
-    </Form>
+      </ModalFooter>
+    </>
   );
 };
