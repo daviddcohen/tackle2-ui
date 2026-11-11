@@ -1,7 +1,8 @@
 /**
  * Exhaustive link sweep: on every list and detail view of the fixture graph,
  * every rendered entity link must
- *  - open the entity it names (current crumb === link text),
+ *  - open the entity it names (current crumb === link text; the archetype
+ *    drawer's title is its leaf),
  *  - extend the source view's trail by exactly one crumb, and
  *  - return to the exact source view (URL and trail) from the parent crumb.
  *
@@ -29,6 +30,26 @@ const state = { scenario: "completed", stage: 4 } as const;
 const ready = async (page: Page) => {
   await expect(mainHeading(page)).toBeVisible();
   await expect(page.locator("#react-refresh-overlay")).toHaveCount(0);
+};
+
+const drawerTitle = (page: Page) => page.locator("#page-drawer-content h2");
+
+const isArchetypeDrawer = (url: URL) =>
+  url.pathname === "/archetypes" && url.searchParams.has("ar:activeItem");
+
+/**
+ * The view's trail, leaf included. The archetype drawer's title is its leaf
+ * and its breadcrumb lists ancestors only, omitted when the only ancestor is
+ * the Archetypes list behind it (guide 3.5.6).
+ */
+const trailTitles = async (page: Page) => {
+  const titles = await breadcrumbTitles(page);
+  if (!isArchetypeDrawer(new URL(page.url()))) return titles;
+  await expect(drawerTitle(page)).toBeVisible();
+  return [
+    ...(titles.length ? titles : ["Archetypes"]),
+    (await drawerTitle(page).innerText()).trim(),
+  ];
 };
 
 const internalEntity =
@@ -154,7 +175,7 @@ for (const group of GROUPS) {
       // Entity tables come from in-page mocks; let every query settle.
       await page.waitForLoadState("networkidle");
       const sourceURL = page.url();
-      const sourceTitles = await breadcrumbTitles(page);
+      const sourceTitles = await trailTitles(page);
       const sourceTitle =
         sourceTitles.at(-1) ?? (await mainHeading(page).innerText()).trim();
       // Ancestor crumbs of the source page, by path: a link to one of them
@@ -207,7 +228,9 @@ for (const group of GROUPS) {
           await expect(breadcrumb(page)).toBeVisible();
           const expected = expectedName(graph, href);
           if (expected != null) {
-            await expect(currentCrumb(page)).toHaveText(expected);
+            if (isArchetypeDrawer(destination))
+              await expect(drawerTitle(page)).toHaveText(expected);
+            else await expect(currentCrumb(page)).toHaveText(expected);
             // A plan run's count link ("3 applications", guide 4.10, addenda
             // X14) names the set it opens, not the run page it lands on.
             const isRunCountLink =
@@ -285,7 +308,7 @@ for (const group of GROUPS) {
             return;
           }
           expect(
-            (await breadcrumbTitles(page)).slice(0, -1),
+            (await trailTitles(page)).slice(0, -1),
             `${source} -> ${href}: source context lost`
           ).toEqual(sourceTitles.length ? sourceTitles : [sourceTitle]);
           await breadcrumb(page)
@@ -294,7 +317,7 @@ for (const group of GROUPS) {
             .click();
           await expect(page).toHaveURL(sourceURL);
           await ready(page);
-          expect(await breadcrumbTitles(page)).toEqual(sourceTitles);
+          expect(await trailTitles(page)).toEqual(sourceTitles);
           checked++;
         });
       }

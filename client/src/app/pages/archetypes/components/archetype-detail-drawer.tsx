@@ -1,4 +1,5 @@
 import * as React from "react";
+import { parsePath } from "history";
 import { useTranslation } from "react-i18next";
 import {
   Content,
@@ -12,6 +13,7 @@ import {
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
 import { isAgenticEnabled } from "@app/Constants";
+import { Paths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
 import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
 import { PageDrawerContent } from "@app/components/PageDrawerContext";
@@ -47,6 +49,18 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
   archetype,
 }) => {
   const { t } = useTranslation();
+  // The title is the leaf, so the trail shows ancestors only, and none when
+  // the only ancestor is the Archetypes list behind the drawer (guide 3.5.6).
+  const ancestors = breadcrumbs
+    .slice(0, -1)
+    .filter(
+      (crumb): crumb is BreadcrumbEntry & { path: string } => !!crumb.path
+    );
+  const showAncestors = !(
+    ancestors.length === 0 ||
+    (ancestors.length === 1 &&
+      parsePath(ancestors[0].path).pathname === Paths.archetypes)
+  );
   const [activeTabKey, setActiveTabKey] = useUrlParams<TabKey, "ar", "tab">({
     persistenceKeyPrefix: "ar",
     keys: ["tab"],
@@ -72,9 +86,9 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
       pageKey="archetype-details"
       header={
         <Stack hasGutter>
-          {archetype && (
+          {archetype && showAncestors && (
             <StackItem>
-              <BreadCrumbPath breadcrumbs={breadcrumbs} />
+              <BreadCrumbPath breadcrumbs={ancestors} ancestorsOnly />
             </StackItem>
           )}
           <StackItem>
