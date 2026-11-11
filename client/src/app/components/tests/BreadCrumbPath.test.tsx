@@ -58,4 +58,26 @@ describe("BreadCrumbPath", () => {
     fireEvent.click(button);
     expect(secondBreadcrumbSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("Given ancestorsOnly, links the last crumb too", () => {
+    render(
+      <Router>
+        <BreadCrumbPath
+          ancestorsOnly
+          breadcrumbs={[
+            { title: "first", path: "/first" },
+            { title: "second", path: "/second" },
+          ]}
+        />
+      </Router>
+    );
+
+    expect(screen.getByRole("link", { name: "second" })).toHaveAttribute(
+      "href",
+      "/second"
+    );
+    expect(
+      screen.queryByText("second", { selector: "[aria-current]" })
+    ).toBeNull();
+  });
 });
