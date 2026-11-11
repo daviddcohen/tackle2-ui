@@ -23,17 +23,13 @@ import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
 import { formatDate } from "@app/utils/utils";
 
+import { DetailFacts, DetailSection } from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import {
   StageAttentionAlert,
   getStageAttention,
 } from "../../components/stage-attention-alert";
-import {
-  RunPageBody,
-  RunPageFacts,
-  RunPageSection,
-  RunStatusLine,
-} from "../components/run-page-layout";
+import { RunPageBody, RunStatusLine } from "../components/run-page-layout";
 import { StageActivity, StageCommits } from "../components/stage-run-content";
 import { useApproveStage } from "../components/use-approve-stage";
 
@@ -218,10 +214,10 @@ const StageRunDetail: React.FC = () => {
           />
         )}
 
-        <RunPageFacts facts={facts} />
+        <DetailFacts facts={facts} isTwoColumn />
 
         {paragraphs.length > 0 && (
-          <RunPageSection title={t("agentic.stageRun.instructions")}>
+          <DetailSection title={t("agentic.stageRun.instructions")}>
             {/* Long instructions show their first lines (guide 4.11); the
                 toggle appears only when the text is cut. */}
             <ExpandableSection
@@ -238,7 +234,7 @@ const StageRunDetail: React.FC = () => {
                 ))}
               </Content>
             </ExpandableSection>
-          </RunPageSection>
+          </DetailSection>
         )}
 
         {/* A pending stage has done nothing yet; its alert says when it starts. */}

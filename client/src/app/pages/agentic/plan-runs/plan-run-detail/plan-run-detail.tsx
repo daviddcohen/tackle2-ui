@@ -1,13 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
-import {
-  EmptyState,
-  EmptyStateBody,
-  Label,
-  LabelGroup,
-  PageSection,
-} from "@patternfly/react-core";
+import { PageSection } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
@@ -30,6 +24,12 @@ import {
 } from "@app/utils/agentic";
 import { formatDate } from "@app/utils/utils";
 
+import {
+  DetailFacts,
+  DetailSection,
+  LinkLabels,
+  SectionEmpty,
+} from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 import {
@@ -37,12 +37,7 @@ import {
   getStageAttention,
 } from "../../components/stage-attention-alert";
 import { StageRunsTable } from "../../components/stage-runs-table";
-import {
-  RunPageBody,
-  RunPageFacts,
-  RunPageSection,
-  RunStatusLine,
-} from "../components/run-page-layout";
+import { RunPageBody, RunStatusLine } from "../components/run-page-layout";
 import { useApproveStage } from "../components/use-approve-stage";
 
 /**
@@ -158,30 +153,17 @@ const PlanRunDetail: React.FC = () => {
     [
       t("agentic.planRun.applications"),
       planRun.applications.length > 0 ? (
-        <LabelGroup numLabels={5}>
-          {planRun.applications.map((application) => (
-            <Label
-              key={application.id}
-              variant="outline"
-              isCompact
-              isClickable
-              render={({ className, content }) => (
-                <Link
-                  className={className}
-                  to={runLink(
-                    generatePath(DevPaths.applicationDetails, {
-                      applicationId: String(application.id),
-                    })
-                  )}
-                >
-                  {content}
-                </Link>
-              )}
-            >
-              {application.name}
-            </Label>
-          ))}
-        </LabelGroup>
+        <LinkLabels
+          items={planRun.applications.map((application) => ({
+            id: application.id,
+            name: application.name,
+            to: runLink(
+              generatePath(DevPaths.applicationDetails, {
+                applicationId: String(application.id),
+              })
+            ),
+          }))}
+        />
       ) : (
         <EmptyTextMessage message={t("terms.none")} />
       ),
@@ -245,18 +227,18 @@ const PlanRunDetail: React.FC = () => {
           />
         )}
 
-        <RunPageFacts facts={facts} />
+        <DetailFacts facts={facts} isTwoColumn />
 
-        <RunPageSection title={t("agentic.planRun.stages")}>
+        <DetailSection title={t("agentic.planRun.stages")}>
           <StageRunsTable
             stageRuns={planRun.stageRuns}
             runId={planRun.id}
             linkTo={runLink}
             origin={`?from=run-${runId}`}
           />
-        </RunPageSection>
+        </DetailSection>
 
-        <RunPageSection
+        <DetailSection
           title={
             skillRows?.length
               ? t("agentic.planRun.skillsTitle", { count: skillRows.length })
@@ -276,13 +258,9 @@ const PlanRunDetail: React.FC = () => {
               linkTo={(pathname) => runLink(pathname, `?from=run-${runId}`)}
             />
           ) : (
-            <EmptyState variant="xs">
-              <EmptyStateBody>
-                {t("agentic.planRun.skillsEmpty")}
-              </EmptyStateBody>
-            </EmptyState>
+            <SectionEmpty>{t("agentic.planRun.skillsEmpty")}</SectionEmpty>
           )}
-        </RunPageSection>
+        </DetailSection>
       </RunPageBody>
 
       {runMigrationPlan.modal}

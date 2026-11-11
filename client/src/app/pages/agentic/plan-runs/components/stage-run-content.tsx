@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next";
 import {
   CodeBlock,
   CodeBlockCode,
-  EmptyState,
-  EmptyStateBody,
   ExpandableSection,
 } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
@@ -14,7 +12,7 @@ import { StageRun } from "@app/agentic";
 import { ExternalLink } from "@app/components/ExternalLink";
 import { formatTableDate } from "@app/utils/utils";
 
-import { RunPageSection } from "./run-page-layout";
+import { DetailSection, SectionEmpty } from "../../components/detail-section";
 
 /**
  * The agent is done with a stage once it succeeded, failed or waits for
@@ -24,12 +22,6 @@ const isFinished = (stageRun: StageRun) =>
   stageRun.status === "Succeeded" ||
   stageRun.status === "Failed" ||
   stageRun.status === "AwaitingApproval";
-
-const SectionEmpty: React.FC<{ children: string }> = ({ children }) => (
-  <EmptyState variant="xs">
-    <EmptyStateBody>{children}</EmptyStateBody>
-  </EmptyState>
-);
 
 /**
  * "Activity" (guide 4.3): the stage's messages as Time · From · Message,
@@ -47,7 +39,7 @@ export const StageActivity: React.FC<{ stageRun: StageRun }> = ({
     message: t("terms.message"),
   };
   return (
-    <RunPageSection title={t("agentic.stageRun.activity")}>
+    <DetailSection title={t("agentic.stageRun.activity")}>
       {messages.length > 0 ? (
         <Table aria-label={t("agentic.stageRun.activity")} variant="compact">
           <Thead>
@@ -90,7 +82,7 @@ export const StageActivity: React.FC<{ stageRun: StageRun }> = ({
           </CodeBlock>
         </ExpandableSection>
       )}
-    </RunPageSection>
+    </DetailSection>
   );
 };
 
@@ -109,7 +101,7 @@ export const StageCommits: React.FC<{ stageRun: StageRun }> = ({
     message: t("terms.message"),
   };
   return (
-    <RunPageSection
+    <DetailSection
       title={
         commits.length > 0
           ? t("agentic.stageRun.commitsTitle", { count: commits.length })
@@ -155,6 +147,6 @@ export const StageCommits: React.FC<{ stageRun: StageRun }> = ({
             : t("agentic.stageRun.commitsEmpty")}
         </SectionEmpty>
       )}
-    </RunPageSection>
+    </DetailSection>
   );
 };
