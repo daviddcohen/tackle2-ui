@@ -52,7 +52,8 @@ const originTypes = {
   collection: {
     path: DevPaths.skillCollectionDetails,
     param: "collectionId",
-    root: DevPaths.skills,
+    // Collections are a tab of the Skills page (guide 3.5 rule 4, skills S7).
+    root: `${DevPaths.skills}?tab=collections`,
     title: "sidebar.skills",
     fetch: getSkillCollectionById,
     group: "skillCollections",

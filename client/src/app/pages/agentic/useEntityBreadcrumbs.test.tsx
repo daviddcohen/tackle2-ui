@@ -86,7 +86,7 @@ describe("useEntityBreadcrumbs", () => {
       "collection-4",
       "collection",
       "sidebar.skills",
-      "/skills",
+      "/skills?tab=collections",
       "/skills/collections/4",
     ],
     ["run-5", "run", "sidebar.planRuns", "/plan-runs", "/plan-runs/5"],
