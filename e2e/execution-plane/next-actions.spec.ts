@@ -117,8 +117,37 @@ test.describe("Migration next actions", () => {
       /This decision applies to all \d+ applications in Run #/
     );
     await confirm.getByRole("button", { name: "Approve and continue" }).click();
-    await expect(page.getByText("Migration request resolved")).toBeVisible();
+    // The toast names the approved stage (AP13), in the one approve string
+    // the run pages use too: no quotes. PF prefixes the title with its
+    // screen reader text ("Success alert:").
+    await expect(
+      page.getByText(/(?:^|:\s*)Prepare proposal approved$/)
+    ).toBeVisible();
     await expect(approveButton(page)).toHaveCount(0);
+  });
+
+  test("Action required: reject on the Migration tab fails the run", async ({
+    page,
+  }) => {
+    await page.goto(
+      protoUrl("/applications/1", {
+        scenario: "actionRequired",
+        params: { tab: "migration" },
+      })
+    );
+    await page
+      .getByRole("main")
+      .getByRole("button", { name: "Reject", exact: true })
+      .click();
+    const confirm = page.getByRole("dialog");
+    await expect(confirm).toContainText(
+      /marked failed and the run stops\. This decision applies to all \d+ applications in Run #/
+    );
+    await confirm.getByRole("button", { name: "Reject", exact: true }).click();
+    await expect(page.getByText(/Run #\d+ .* rejected$/)).toBeVisible();
+    await expect(
+      page.getByRole("tabpanel").getByRole("heading").first()
+    ).toHaveText(/ failed$/);
   });
 
   test("Show applications lists each request and its status opens the Migration tab", async ({
