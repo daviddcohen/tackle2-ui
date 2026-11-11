@@ -7,19 +7,17 @@ import {
   Button,
   ButtonVariant,
   Content,
-  ContentVariants,
-  EmptyState,
-  EmptyStateBody,
   Modal,
   ModalBody,
   ModalHeader,
   PageSection,
+  Skeleton,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
   Table,
@@ -31,7 +29,7 @@ import {
 } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
-import { Agent } from "@app/agentic";
+import { Agent, MigrationPlan } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
@@ -40,6 +38,7 @@ import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { PageHeader } from "@app/components/PageHeader";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -53,6 +52,7 @@ import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
   useDeleteAgentMutation,
   useFetchAgents,
+  useFetchGateways,
   useFetchMigrationPlans,
 } from "@app/queries/agentic";
 import { agenticAgentRunsWriteScopes, agentsWriteScopes } from "@app/scopes";
@@ -64,6 +64,7 @@ import {
 import { useAgentSkillsSummary } from "./agent-skills-summary";
 import { getPlansUsingAgent } from "./agent-usage";
 import { AgentForm } from "./components/agent-form";
+import { AgentModel } from "./components/agent-model";
 import { AgentTestModal } from "./components/agent-test-modal";
 
 type LinkTo = (pathname: string, search?: string) => LocationDescriptor;
@@ -78,7 +79,7 @@ const CountLink: React.FC<{ to: LocationDescriptor; children: string }> = ({
     <Button
       variant="link"
       isInline
-      className="pf-v6-u-text-nowrap"
+      className={textStyles.textNowrap}
       component={link}
     >
       {children}
@@ -113,6 +114,49 @@ const AgentSkillsCell: React.FC<{ agent: Agent; to: LinkTo }> = ({
       to={to(generatePath(DevPaths.agentDetails, { agentId: agent.id }))}
     >
       {summary}
+    </CountLink>
+  );
+};
+
+/**
+ * Where the agent is used: one plan is its name, more are a count opening
+ * the agent (its Details tab lists them). The plans come from a second
+ * query, so the cell never says "None" before it has them (X6).
+ */
+const AgentPlansCell: React.FC<{
+  agent: Agent;
+  plans: MigrationPlan[];
+  isLoading: boolean;
+  isError: boolean;
+  to: LinkTo;
+}> = ({ agent, plans, isLoading, isError, to }) => {
+  const { t } = useTranslation();
+  if (isLoading) {
+    return <Skeleton screenreaderText={t("terms.loading")} />;
+  }
+  if (isError) {
+    return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+  }
+  if (plans.length === 0) {
+    return <EmptyTextMessage message={t("terms.none")} />;
+  }
+  if (plans.length === 1) {
+    const [plan] = plans;
+    return (
+      <Link
+        to={to(
+          generatePath(DevPaths.migrationPlanDetails, { planId: plan.id })
+        )}
+      >
+        {plan.name}
+      </Link>
+    );
+  }
+  return (
+    <CountLink
+      to={to(generatePath(DevPaths.agentDetails, { agentId: agent.id }))}
+    >
+      {t("agentic.agent.planCount", { count: plans.length })}
     </CountLink>
   );
 };
@@ -157,7 +201,12 @@ export const AgentsPage: React.FC = () => {
   );
 
   const { agents, isFetching, fetchError, refetch } = useFetchAgents();
-  const { migrationPlans } = useFetchMigrationPlans();
+  const {
+    migrationPlans,
+    isLoading: isLoadingPlans,
+    isSuccess: hasPlans,
+  } = useFetchMigrationPlans();
+  const { gateways } = useFetchGateways();
 
   const getAgentPlanCount = (agent: Agent) =>
     getPlansUsingAgent(agent.id, migrationPlans).length;
@@ -173,7 +222,8 @@ export const AgentsPage: React.FC = () => {
       name: t("terms.name"),
       description: t("terms.description"),
       model: t("agentic.agent.model"),
-      skillsCount: t("agentic.skill.title"),
+      skills: t("agentic.agent.skills"),
+      plans: t("agentic.agent.migrationPlans"),
     },
     isFilterEnabled: true,
     isSortEnabled: true,
@@ -189,11 +239,11 @@ export const AgentsPage: React.FC = () => {
       },
     ],
     initialItemsPerPage: 10,
-    sortableColumns: ["name", "description"],
+    sortableColumns: ["name", "model"],
     initialSort: { columnKey: "name", direction: "asc" },
     getSortValues: (item) => ({
-      name: item?.name || "",
-      description: item?.description || "",
+      name: item.name,
+      model: item.model.name,
     }),
     isLoading: isFetching,
   });
@@ -226,13 +276,14 @@ export const AgentsPage: React.FC = () => {
 
   return (
     <>
-      <PageSection>
-        <Content component={ContentVariants.h1}>
-          {t("agentic.agent.title")}
-        </Content>
-        <Content component={ContentVariants.p}>
-          {t("agentic.agent.description")}
-        </Content>
+      <PageSection hasBodyWrapper={false}>
+        <PageHeader
+          title={t("agentic.agent.title")}
+          description={
+            <Content component="p">{t("agentic.agent.description")}</Content>
+          }
+          breadcrumbs={[]}
+        />
       </PageSection>
       <PageSection>
         <ConditionalRender
@@ -254,7 +305,6 @@ export const AgentsPage: React.FC = () => {
                       <Button
                         type="button"
                         id="create-agent"
-                        aria-label={t("agentic.agent.create")}
                         variant={ButtonVariant.primary}
                         onClick={() => setCreateUpdateModalState("create")}
                       >
@@ -276,10 +326,18 @@ export const AgentsPage: React.FC = () => {
               <Thead>
                 <Tr>
                   <TableHeaderContentWithControls {...tableControls}>
-                    <Th {...getThProps({ columnKey: "name" })} />
-                    <Th {...getThProps({ columnKey: "description" })} />
+                    <Th {...getThProps({ columnKey: "name" })} width={20} />
+                    <Th
+                      {...getThProps({ columnKey: "description" })}
+                      width={30}
+                    />
                     <Th {...getThProps({ columnKey: "model" })} />
-                    <Th {...getThProps({ columnKey: "skillsCount" })} />
+                    <Th {...getThProps({ columnKey: "skills" })} />
+                    {/* Wraps rather than truncates when the table is narrow (kit). */}
+                    <Th
+                      {...getThProps({ columnKey: "plans" })}
+                      modifier="wrap"
+                    />
                     <Th screenReaderText={t("actions.rowActions")} />
                   </TableHeaderContentWithControls>
                 </Tr>
@@ -295,16 +353,24 @@ export const AgentsPage: React.FC = () => {
                       description={t("message.noResultsFoundBody")}
                     />
                   ) : (
-                    <EmptyState
-                      headingLevel="h2"
-                      icon={CubesIcon}
-                      titleText={t("agentic.agent.emptyTitle")}
-                      variant="sm"
-                    >
-                      <EmptyStateBody>
-                        {t("agentic.agent.emptyDescription")}
-                      </EmptyStateBody>
-                    </EmptyState>
+                    <NoDataEmptyState
+                      title={t("agentic.agent.emptyTitle")}
+                      description={
+                        canManageAgents
+                          ? t("agentic.agent.emptyDescription")
+                          : t("agentic.agent.emptyDescriptionReadOnly")
+                      }
+                      actions={
+                        canManageAgents && (
+                          <Button
+                            variant={ButtonVariant.primary}
+                            onClick={() => setCreateUpdateModalState("create")}
+                          >
+                            {t("agentic.agent.create")}
+                          </Button>
+                        )
+                      }
+                    />
                   )
                 }
                 numRenderedColumns={numRenderedColumns}
@@ -317,32 +383,48 @@ export const AgentsPage: React.FC = () => {
                         item={agent}
                         rowIndex={rowIndex}
                       >
-                        <Td width={25} {...getTdProps({ columnKey: "name" })}>
+                        <Td {...getTdProps({ columnKey: "name" })}>
                           <Link
                             to={to(
-                              DevPaths.agentDetails.replace(
-                                ":agentId",
-                                agent.id.toString()
-                              )
+                              generatePath(DevPaths.agentDetails, {
+                                agentId: agent.id,
+                              })
                             )}
                           >
                             {agent.name}
                           </Link>
                         </Td>
                         <Td
-                          width={35}
+                          modifier="truncate"
+                          tooltip={agent.description}
                           {...getTdProps({ columnKey: "description" })}
                         >
-                          {agent.description}
-                        </Td>
-                        <Td width={20} {...getTdProps({ columnKey: "model" })}>
-                          {agent.model.name}
+                          {agent.description || (
+                            <EmptyTextMessage message={t("terms.none")} />
+                          )}
                         </Td>
                         <Td
-                          width={10}
-                          {...getTdProps({ columnKey: "skillsCount" })}
+                          modifier="nowrap"
+                          {...getTdProps({ columnKey: "model" })}
                         >
+                          <AgentModel
+                            model={agent.model}
+                            gateway={gateways.find(
+                              (gateway) => gateway.id === agent.model.id
+                            )}
+                          />
+                        </Td>
+                        <Td {...getTdProps({ columnKey: "skills" })}>
                           <AgentSkillsCell agent={agent} to={to} />
+                        </Td>
+                        <Td {...getTdProps({ columnKey: "plans" })}>
+                          <AgentPlansCell
+                            agent={agent}
+                            plans={getPlansUsingAgent(agent.id, migrationPlans)}
+                            isLoading={isLoadingPlans}
+                            isError={!hasPlans && !isLoadingPlans}
+                            to={to}
+                          />
                         </Td>
                         <Td isActionCell>
                           {(canManageAgents || canTestAgents) && (

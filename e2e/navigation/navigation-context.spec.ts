@@ -81,7 +81,7 @@ test("tabs, table filters, scenario changes and sidebar navigation have explicit
   });
   await nameFilter.fill("Code Migrator");
   await nameFilter.press("Enter");
-  // The row's skills summary also opens the agent (A12).
+  // The row's skills summary and plan count also open the agent (A12).
   const agentLinks = page
     .locator("main")
     .getByRole("link", { name: "Code Migrator", exact: true });

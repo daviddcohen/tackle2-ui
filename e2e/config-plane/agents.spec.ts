@@ -25,7 +25,7 @@ const ARCHITECT = "enterpriseArchitect" as const;
 
 const openCreate = async (page: Page) => {
   await page.getByRole("button", { name: "Create agent" }).click();
-  await expect(dialog(page)).toContainText("Create Agent");
+  await expect(dialog(page)).toContainText("Create agent");
 };
 
 const fillMinimalAgent = async (page: Page, name: string) => {
@@ -101,7 +101,7 @@ test.describe("Agents list", () => {
       persona: ARCHITECT,
       scenario: "initial",
     });
-    await expect(page.getByText("No Agents yet")).toBeVisible();
+    await expect(page.getByText("No agents yet")).toBeVisible();
   });
 });
 
@@ -253,7 +253,9 @@ test.describe("Agent test modal", () => {
     await field(dialog(page), "Task description").fill("Run the unit tests");
     await start.click();
     await expect(toast(page, "Test run for Test Runner queued")).toBeVisible();
-    await rowByText(page, "Test Runner").getByRole("link").click();
+    await rowByText(page, "Test Runner")
+      .getByRole("link", { name: "Test Runner" })
+      .click();
     await page.getByRole("tab", { name: "Agent runs" }).click();
     const runRow = page.getByRole("row", { name: /Run the unit tests/ });
     await expect(runRow).toContainText("Test");
@@ -363,7 +365,7 @@ test.describe("Agent detail", () => {
   }) => {
     await gotoProto(page, "/agents/99999", { persona: ARCHITECT });
     await expect(page.getByText(/not found/i)).toBeVisible({ timeout: 20000 });
-    await expect(page.getByText("No Agents yet")).toHaveCount(0);
+    await expect(page.getByText("No agents yet")).toHaveCount(0);
   });
 
   // Regression guard: agent-detail.tsx casts searchParams.get('tab') without validation; ?tab=foo renders no tab content (skill-detail validates)
