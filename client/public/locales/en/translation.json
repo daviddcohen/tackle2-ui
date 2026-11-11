@@ -1598,7 +1598,6 @@
       "unavailableTitle": "Migration information unavailable",
       "columnTitle": "Migration",
       "controllerRunPhase": "Controller run phase",
-      "currentStage": "Stage: {{stage}}",
       "detailsTab": "Migration",
       "excludedDescription": "Resolve configuration or review the existing run before starting these applications.",
       "excludedTitle_one": "{{count}} application will not start",
@@ -1674,9 +1673,7 @@
       "latestPlanRun": "Latest plan run",
       "planFilter": "Migration plan",
       "statusFilter": "Migration status",
-      "loadingMigration": "Loading migration status",
-      "migrationUnavailable": "Migration status unavailable",
-      "nextPrefix": "Next:"
+      "planStage": "{{plan}} · {{stage}}"
     },
     "skillCollection": {
       "create": "Create skill collection",

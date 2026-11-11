@@ -1385,6 +1385,7 @@ export const ApplicationsTable: FC = () => {
                     {showMigrationColumn && (
                       <Td
                         width={35}
+                        modifier="wrap"
                         {...getTdProps({ columnKey: "agenticMigration" })}
                       >
                         {application.id != null && (
@@ -1396,13 +1397,7 @@ export const ApplicationsTable: FC = () => {
                             }
                             isLoading={isLoadingMigrations}
                             applicationId={application.id}
-                            archetypeId={application.archetypes?.[0]?.id}
                             linkTo={to}
-                            onStart={
-                              canStartMigrations
-                                ? () => startMigrationsFor([application])
-                                : undefined
-                            }
                           />
                         )}
                       </Td>

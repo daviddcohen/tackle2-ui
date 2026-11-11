@@ -34,21 +34,23 @@ const expectedStatusByScenario = {
   completed: { "Customer Management": "Succeeded" },
 } as const;
 
-const nextActionByStatus: Record<string, string> = {
-  "Ready to start": "Next: Start migration",
-  Blocked: "Next: Resolve blockers",
-  "Review before start": "Next: Resolve blockers",
-  Pending: "Next: Monitor progress",
-  Running: "Next: Monitor progress",
-  Failed: "Next: Review failure and retry",
-  Succeeded: "Next: Review migration results",
+/** The cell's subtle second line by status (ACCEPTED amendment 6): at most one. */
+const secondLineByStatus: Record<string, RegExp | null> = {
+  "Ready to start": null,
+  Blocked: /^.+\.$/,
+  "Review before start": /^.+\.$/,
+  // A pending run has no current stage yet: the plan alone.
+  Pending: /^[^·]+( · .+)?$/,
+  Running: /^.+ · .+$/,
+  Failed: null,
+  Succeeded: null,
 };
 
 test.describe("Inventory migration column", () => {
   for (const [scenario, expectations] of Object.entries(
     expectedStatusByScenario
   )) {
-    test(`shows projected status and next action (${scenario})`, async ({
+    test(`shows the linked status and at most one context line (${scenario})`, async ({
       page,
       pageErrors,
     }) => {
@@ -59,7 +61,21 @@ test.describe("Inventory migration column", () => {
       for (const [application, status] of Object.entries(expectations)) {
         const cell = migrationCell(page, application);
         await expect(cell.locator(AGENTIC_STATUS)).toHaveText(status);
-        await expect(cell).toContainText(nextActionByStatus[status]);
+        // The status words link to the application's Migration tab.
+        await expect(
+          cell.getByRole("link", { name: status, exact: true })
+        ).toHaveAttribute("href", /\/applications\/\d+\?tab=migration/);
+        await expect(cell).not.toContainText("Next:");
+        const lines = (await cell.innerText())
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+        const secondLine = secondLineByStatus[status];
+        if (secondLine == null) expect(lines).toEqual([status]);
+        else {
+          expect(lines).toHaveLength(2);
+          expect(lines[1]).toMatch(secondLine);
+        }
       }
       await expectNoBrokenText(main(page));
       expect(pageErrors).toEqual([]);
@@ -120,8 +136,7 @@ test.describe("Inventory migration column", () => {
     await page.getByRole("menuitem", { name: "Blocked", exact: true }).click();
     await page.keyboard.press("Escape");
     const labels = page
-      .getByRole("gridcell")
-      .filter({ hasText: "Next:" })
+      .locator('td[data-label="Migration"]')
       .locator(AGENTIC_STATUS);
     await expect(labels.first()).toBeVisible();
     await expect
