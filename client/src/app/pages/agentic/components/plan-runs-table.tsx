@@ -201,6 +201,10 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
 
   const showPagination = hasToolbar || runs.length > 10;
   const notStarted = <EmptyTextMessage message={t("terms.notStarted")} />;
+  // A value that cannot be derived is unknown, never "Not available" (4.11).
+  const unavailable = (
+    <EmptyTextMessage message={t("agentic.common.unavailable")} />
+  );
 
   return (
     <>
@@ -344,13 +348,11 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
                       modifier="nowrap"
                       {...getTdProps({ columnKey: "duration" })}
                     >
-                      {duration != null ? (
-                        formatDuration(duration)
-                      ) : run.status === "Pending" ? (
-                        notStarted
-                      ) : (
-                        <EmptyTextMessage />
-                      )}
+                      {duration != null
+                        ? formatDuration(duration)
+                        : run.status === "Pending"
+                          ? notStarted
+                          : unavailable}
                     </Td>
                   </TableRowContentWithControls>
                 </Tr>
