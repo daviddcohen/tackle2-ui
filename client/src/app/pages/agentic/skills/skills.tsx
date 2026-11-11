@@ -3,7 +3,6 @@ import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useHistory } from "react-router-dom";
 import {
-  Alert,
   Button,
   ButtonVariant,
   Content,
@@ -15,8 +14,6 @@ import {
   ModalBody,
   ModalHeader,
   PageSection,
-  Stack,
-  StackItem,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
@@ -34,7 +31,6 @@ import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { NotificationsContext } from "@app/components/NotificationsContext";
-import { PrototypeAnnotation } from "@app/components/PrototypeAnnotation";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -87,7 +83,6 @@ const SkillsPage: React.FC = () => {
     React.useState<boolean>(false);
 
   const [skillToDelete, setSkillToDelete] = React.useState<Skill>();
-  const [skillToInspect, setSkillToInspect] = React.useState<Skill>();
 
   const [createUpdateModalState, setCreateUpdateModalState, skillFormKey] =
     useFormModalState<"create" | Skill>();
@@ -551,23 +546,9 @@ const SkillsPage: React.FC = () => {
                           width={20}
                           {...getTdProps({ columnKey: "associations" })}
                         >
-                          {row.kind === "skill" ? (
-                            <Button
-                              variant={ButtonVariant.link}
-                              isInline
-                              onClick={() => setSkillToInspect(row.item)}
-                              aria-label={t(
-                                "agentic.skill.inspectAssociations",
-                                {
-                                  skill: row.name,
-                                }
-                              )}
-                            >
-                              {getSkillUsageLabel(row.item)}
-                            </Button>
-                          ) : (
-                            "—"
-                          )}
+                          {row.kind === "skill"
+                            ? getSkillUsageLabel(row.item)
+                            : "—"}
                         </Td>
                         <Td isActionCell>
                           {row.kind === "skill" && canManageSkills && (
@@ -690,54 +671,6 @@ const SkillsPage: React.FC = () => {
             skill={skillToUpdate}
             onClose={closeCreateUpdateModal}
           />
-        </ModalBody>
-      </Modal>
-
-      {/* Associations inspector */}
-      <Modal
-        id="skill-associations-modal"
-        variant="medium"
-        isOpen={skillToInspect != null}
-        onClose={() => setSkillToInspect(undefined)}
-      >
-        <ModalHeader
-          title={t("agentic.skill.associationsTitle", {
-            skill: skillToInspect?.name,
-          })}
-        />
-        <ModalBody>
-          <Stack hasGutter>
-            <PrototypeAnnotation>
-              <StackItem>
-                <Alert
-                  isInline
-                  variant="info"
-                  title={t(
-                    "agentic.prototype.annotations.skillAssociationsTitle"
-                  )}
-                >
-                  {t(
-                    "agentic.prototype.annotations.skillAssociationsDescription"
-                  )}
-                </Alert>
-              </StackItem>
-            </PrototypeAnnotation>
-            {skillToInspect != null &&
-              getAssociations(skillToInspect).map((association) => (
-                <StackItem
-                  key={`${association.scope}-${association.scopeName}`}
-                >
-                  <Label color="blue" isCompact>
-                    {t(`agentic.plan.skillScopes.${association.scope}`)}
-                  </Label>{" "}
-                  {association.scopeName}
-                </StackItem>
-              ))}
-            {skillToInspect != null &&
-              getAssociations(skillToInspect).length === 0 && (
-                <StackItem>{t("agentic.skill.notUsed")}</StackItem>
-              )}
-          </Stack>
         </ModalBody>
       </Modal>
 

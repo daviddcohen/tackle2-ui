@@ -70,11 +70,10 @@ test.describe("Skills list", () => {
     await expect(dataRows(page)).toHaveCount(4);
   });
 
-  test("associations link opens the inspector modal", async ({ page }) => {
-    await rowByText(page, "Build validation standards")
-      .getByRole("button", { name: /associations/i })
-      .click();
-    await expect(dialog(page)).toContainText("Build Validator");
+  test("associations cell names where the skill is used", async ({ page }) => {
+    await expect(rowByText(page, "Build validation standards")).toContainText(
+      "Legacy Java Application and 2 more"
+    );
   });
 
   test("skills in use cannot be deleted from the list", async ({ page }) => {

@@ -1173,10 +1173,6 @@
         "completed": "All stages succeeded. Commit links are visible.",
         "loading": "API calls delayed 10 seconds. Loading skeletons shown.",
         "apiError": "All API calls return 503. Error states shown."
-      },
-      "annotations": {
-        "skillAssociationsTitle": "Prototype association data",
-        "skillAssociationsDescription": "These associations are saved by the prototype API. Production integration requires Hub endpoints plus precedence and conflict rules."
       }
     },
     "agent": {
@@ -1475,7 +1471,6 @@
       "associatedTo": "Associated to",
       "associationHelp": "Associate this Skill with one or more Agents, archetypes, target profiles, or applications.",
       "associationSelect": "Skill associations select dropdown",
-      "associationsTitle": "{{skill}} Associations",
       "branch": "Branch",
       "branchPlaceholder": "main",
       "content": "Content",
@@ -1496,7 +1491,6 @@
       "filterBySourceType": "Filter by source type...",
       "imageReference": "Image reference",
       "imagePlaceholder": "quay.io/org/skill-name:latest",
-      "inspectAssociations": "Inspect associations for {{skill}}",
       "notUsed": "Not associated",
       "path": "Path",
       "pathHelp": "Path within the repository to the Skill file or directory.",
