@@ -1,5 +1,4 @@
 import * as React from "react";
-import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
@@ -20,7 +19,6 @@ import {
 import { DevPaths, StageRunDetailsRoute } from "@app/Paths";
 import { getStageDefinition } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import {
@@ -28,23 +26,18 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import {
-  useApproveStageMutation,
-  useFetchAgentById,
-  useFetchPlanRun,
-} from "@app/queries/agentic";
+import { useFetchAgentById, useFetchPlanRun } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
-import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { RunStatus } from "../../components/agentic-status";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import { StageAttentionAlert } from "../../components/stage-attention-alert";
 import { StageRunContent } from "../components/stage-run-content";
+import { useApproveStage } from "../components/use-approve-stage";
 
 const StageRunDetail: React.FC = () => {
   const { t } = useTranslation();
   const { runId, stageId } = useParams<StageRunDetailsRoute>();
-  const { pushNotification } = React.useContext(NotificationsContext);
 
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
 
@@ -56,21 +49,7 @@ const StageRunDetail: React.FC = () => {
 
   const { agent } = useFetchAgentById(stage?.agent.id);
 
-  const onApproveError = (error: AxiosError) => {
-    pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
-  };
-
-  const { mutateAsync: approveStage, isPending: isApproving } =
-    useApproveStageMutation(
-      () =>
-        pushNotification({
-          title: t("agentic.planRun.stageApproved", {
-            stage: stage?.name ?? "",
-          }),
-          variant: "success",
-        }),
-      onApproveError
-    );
+  const { approve, isApproving } = useApproveStage(runId);
 
   // The run itself is missing (addenda R3): the page is the run's not found.
   const isRunMissing =
@@ -144,15 +123,7 @@ const StageRunDetail: React.FC = () => {
         surface="stage"
         planRun={planRun}
         stageRun={stageRun}
-        onApprove={
-          canManageRun
-            ? () =>
-                approveStage({
-                  runId: planRun.id,
-                  stageId: stageRun.stageId,
-                })
-            : undefined
-        }
+        onApprove={canManageRun ? approve : undefined}
         isDeciding={isApproving}
         onRunMigrationPlan={runMigrationPlan.open}
         wrapper={(alert) => (

@@ -1811,7 +1811,7 @@
       "notFoundTitle": "Plan run not found",
       "notFoundBody": "This plan run may have been deleted, or the link is out of date.",
       "backToPlanRuns": "Back to plan runs",
-      "stageApproved": "Stage \"{{stage}}\" approved",
+      "stageApproved": "{{stage}} approved",
       "skillsTitle": "Skills ({{count}})",
       "skillsDescription": "Skills given to the agents when this run started."
     },
