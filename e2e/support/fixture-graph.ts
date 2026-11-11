@@ -14,7 +14,7 @@ export interface FixtureGraph {
     associations?: { scope: string; resource: { id: number } }[];
   })[];
   collections: Named[];
-  agents: (Named & { skills: Named[] })[];
+  agents: (Named & { skills: Named[]; skillCollections?: Named[] })[];
   plans: (Named & { stages: Named[] })[];
   runs: (Named & {
     planId: string;
