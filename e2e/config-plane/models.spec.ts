@@ -248,7 +248,7 @@ test.describe("Model form", () => {
     await expect(create).toBeDisabled();
     await name.fill("Claude 3.7 Sonnet");
     await expect(dialog(page)).toContainText(
-      "A Model with this name already exists."
+      "A model with this name already exists."
     );
     await name.fill("x".repeat(121));
     await expect(dialog(page)).toContainText(
@@ -261,13 +261,41 @@ test.describe("Model form", () => {
   });
 
   test("model ID options depend on the selected provider", async ({ page }) => {
-    await expect(dialog(page)).toContainText("Select a Provider first");
-    await pickTypeahead(page, "model-provider-select", /Anthropic Production/);
-    await page.locator("#model-id-select-input").click();
+    // the dialog is named and described by its header
+    await expect(
+      page.getByRole("dialog", { name: "Create model" })
+    ).toHaveAccessibleDescription(
+      "Agents can use a model once it is verified. Verification runs after you save."
+    );
+    await expect(dialog(page)).toContainText(
+      "The model provider that hosts this model."
+    );
+    await expect(dialog(page)).toContainText("Select a provider first.");
+    const modelId = page.locator("#model-id-select-input");
+    await expect(modelId).toBeDisabled();
+
+    // provider options are sorted and say their type and status
+    await page.locator("#model-provider-select-input").click();
     await expect(page.getByRole("option")).toHaveText([
-      "Claude Opus 5.5",
-      "Claude Sonnet 4.6",
-      "Claude Haiku 4.5",
+      /Anthropic ProductionAnthropic · Verified/,
+      /Azure OpenAI CorpAzure OpenAI · Unreachable/,
+      /Google Vertex AIGoogle Vertex AI · Pending/,
+      /IBM watsonxOther · Verified/,
+      /Internal OllamaOllama · Verified/,
+    ]);
+    await page.getByRole("option", { name: /Anthropic Production/ }).click();
+    await expect(dialog(page)).toContainText(
+      "Endpoint: https://api.anthropic.com/v1"
+    );
+    await expect(dialog(page)).toContainText(
+      "Models offered by Anthropic Production."
+    );
+    await expect(modelId).toBeEnabled();
+    await modelId.click();
+    await expect(page.getByRole("option")).toHaveText([
+      "Claude Opus 5.5 (claude-opus-5-5)",
+      "Claude Sonnet 4.6 (claude-sonnet-4-6)",
+      "Claude Haiku 4.5 (claude-haiku-4-5)",
     ]);
   });
 
@@ -315,7 +343,7 @@ test.describe("Model form", () => {
     await openRowActions(page, "QA Editable");
     await page.getByRole("menuitem", { name: "Edit" }).click();
     await expect(page.locator("#model-id-select-input")).toHaveValue(
-      "Claude Sonnet 4.6"
+      "Claude Sonnet 4.6 (claude-sonnet-4-6)"
     );
     await field(dialog(page), "Name").fill("QA Editable 2");
     await expect(
@@ -332,6 +360,38 @@ test.describe("Model form", () => {
     await expect(
       dialog(page).getByRole("button", { name: "Save" })
     ).toBeEnabled();
+  });
+
+  test("editing a model in use warns that changes apply to its agents", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Escape");
+    await openRowActions(page, "Claude 3.7 Sonnet");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(dialog(page)).toContainText("Edit model");
+    await expect(dialog(page)).toContainText(
+      "Saving verifies the model again."
+    );
+    await expect(dialog(page)).toContainText(
+      "Used by 3 agents. Changes apply to them."
+    );
+    await expect(
+      dialog(page).getByRole("button", { name: "Save" })
+    ).toBeDisabled();
+  });
+
+  test("editing an unreachable model shows its status and what to do", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Escape");
+    await openRowActions(page, "Granite Code 20B");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(dialog(page)).toContainText("This model is unreachable");
+    await expect(dialog(page)).toContainText(
+      "The configured endpoint did not respond within 30 seconds. Check the API endpoint and credential, then save to verify it again."
+    );
+    // not in use, so no in-use sentence
+    await expect(dialog(page)).not.toContainText("Used by");
   });
 
   test("re-selecting the provider while editing keeps the saved Model ID", async ({
