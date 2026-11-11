@@ -21,6 +21,7 @@ import {
   Stack,
   StackItem,
 } from "@patternfly/react-core";
+import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import {
   Caption,
   Table,
@@ -416,7 +417,7 @@ export const MigrationPreflightModal: React.FC<
             )}
             <StackItem>{readinessTable}</StackItem>
             {!isNoneReady && (
-              <StackItem className="pf-v6-u-mt-md">{runOptions}</StackItem>
+              <StackItem className={spacing.mtMd}>{runOptions}</StackItem>
             )}
           </Stack>
         )}
