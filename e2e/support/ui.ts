@@ -86,11 +86,14 @@ export const field = (scope: Locator | Page, label: string) =>
     name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
   });
 
-/** PatternFly status label inside `scope` (run, stage, migration status...). */
-export const statusLabel = (scope: Locator) => scope.locator(".pf-v6-c-label");
-
-/** The first status label in the page body: the plan run header status. */
-export const headerStatus = (page: Page) => statusLabel(main(page)).first();
+/**
+ * An agentic status (run, stage, migration, verification, configuration):
+ * `IconedStatus` renders a Flex whose first item is the status `Icon`, and the
+ * Flex text is the status label. Other `IconedStatus` cells (for example the
+ * inventory Analysis column) match too, so always scope it to a cell or row,
+ * or take `.first()` in `main` only on a run page, whose header status leads.
+ */
+export const AGENTIC_STATUS = ".pf-v6-l-flex:has(> div > .pf-v6-c-icon)";
 
 /** Text that must never be rendered to a user. */
 const BROKEN_TEXT = [
@@ -271,7 +274,7 @@ export const stageStatus = (page: Page, stage: string) =>
       has: page.locator("strong").getByText(stage, { exact: true }),
     })
     .last()
-    .locator(".pf-v6-c-label");
+    .locator(AGENTIC_STATUS);
 
 export const approveButton = (page: Page) =>
   page.getByRole("button", { name: "Approve and continue", exact: true });

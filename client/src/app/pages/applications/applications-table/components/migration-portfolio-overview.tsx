@@ -15,6 +15,7 @@ import {
   ApplicationMigrationView,
   getMigrationDisplayStatus,
 } from "@app/agentic";
+import { statusPresentation } from "@app/pages/agentic/components/agentic-status";
 
 interface MigrationPortfolioOverviewProps {
   migrations: ApplicationMigrationView[];
@@ -56,7 +57,7 @@ export const MigrationPortfolioOverview: React.FC<
           {counts.succeeded > 0 && (
             <FlexItem>
               <Label color="green" isCompact>
-                {t("agentic.execution.displayStatus.succeeded")}:{" "}
+                {t(statusPresentation.migration.succeeded.labelKey)}:{" "}
                 {counts.succeeded}
               </Label>
             </FlexItem>
@@ -64,7 +65,7 @@ export const MigrationPortfolioOverview: React.FC<
           {(["pending", "running", "failed"] as const).map((status) => (
             <FlexItem key={status}>
               <Label color={status === "failed" ? "red" : "blue"} isCompact>
-                {t(`agentic.execution.displayStatus.${status}`)}:{" "}
+                {t(statusPresentation.migration[status].labelKey)}:{" "}
                 {counts[status]}
               </Label>
             </FlexItem>
@@ -78,7 +79,7 @@ export const MigrationPortfolioOverview: React.FC<
               </Button>
             ) : (
               <Label color="grey" isCompact>
-                {t("agentic.execution.displayStatus.actionRequired")}: 0
+                {t(statusPresentation.migration.actionRequired.labelKey)}: 0
               </Label>
             )}
           </FlexItem>

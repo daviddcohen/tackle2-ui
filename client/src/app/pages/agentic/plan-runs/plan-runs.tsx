@@ -16,7 +16,7 @@ import { CubesIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
-import { PlanRun } from "@app/agentic";
+import { ControllerRunPhase, PlanRun } from "@app/agentic";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
@@ -31,7 +31,16 @@ import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { useFetchPlanRuns } from "@app/queries/agentic";
 
-import { RunStatusLabel } from "../components/run-status-label";
+import { RunStatus, statusPresentation } from "../components/agentic-status";
+
+/** Status filter options, in lifecycle order. */
+const runStatusFilterOrder: ControllerRunPhase[] = [
+  "Pending",
+  "Running",
+  "AwaitingApproval",
+  "Succeeded",
+  "Failed",
+];
 
 const PlanRunsPage: React.FC = () => {
   const { t } = useTranslation();
@@ -71,16 +80,10 @@ const PlanRunsPage: React.FC = () => {
         title: t("agentic.planRun.status"),
         type: FilterType.multiselect,
         placeholderText: t("agentic.planRun.filterByStatus"),
-        selectOptions: [
-          { value: "Pending", label: t("agentic.runStatus.pending") },
-          { value: "Running", label: t("agentic.runStatus.running") },
-          {
-            value: "AwaitingApproval",
-            label: t("agentic.runStatus.awaitingApproval"),
-          },
-          { value: "Succeeded", label: t("agentic.runStatus.succeeded") },
-          { value: "Failed", label: t("agentic.runStatus.failed") },
-        ],
+        selectOptions: runStatusFilterOrder.map((status) => ({
+          value: status,
+          label: t(statusPresentation.run[status].labelKey),
+        })),
         matcher: (filter: string, item: PlanRun) => item.status === filter,
       },
       {
@@ -228,7 +231,7 @@ const PlanRunsPage: React.FC = () => {
                           </Link>
                         </Td>
                         <Td width={10} {...getTdProps({ columnKey: "status" })}>
-                          <RunStatusLabel status={run.status} />
+                          <RunStatus status={run.status} />
                         </Td>
                         <Td
                           width={20}

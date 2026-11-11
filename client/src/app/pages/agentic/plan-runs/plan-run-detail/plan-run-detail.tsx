@@ -46,7 +46,7 @@ import { useApproveStageMutation, useFetchPlanRun } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { RunStatusLabel } from "../../components/run-status-label";
+import { RunStatus } from "../../components/agentic-status";
 
 import { ResolvedSkillsTable } from "./components/resolved-skills-table";
 import { StageRunSection } from "./components/stage-run-section";
@@ -136,7 +136,7 @@ const PlanRunDetail: React.FC = () => {
               gap={{ default: "gapMd" }}
             >
               <FlexItem>
-                <RunStatusLabel status={planRun.status} isCompact={false} />
+                <RunStatus status={planRun.status} />
               </FlexItem>
               {planRun.status === "Failed" && canManageRun && (
                 <FlexItem>

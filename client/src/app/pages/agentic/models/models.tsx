@@ -46,6 +46,7 @@ import {
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useFormModalState } from "@app/hooks/useFormModalState";
+import { VerificationStatusText } from "@app/pages/agentic/components/agentic-status";
 import {
   useDeleteGatewayMutation,
   useFetchAgents,
@@ -263,31 +264,10 @@ const ModelsPage: React.FC = () => {
                             width={20}
                             {...getTdProps({ columnKey: "connection" })}
                           >
-                            <Stack>
-                              <StackItem>
-                                <Label
-                                  color={
-                                    model.verificationStatus === "verified"
-                                      ? "green"
-                                      : model.verificationStatus === "pending"
-                                        ? "orange"
-                                        : "red"
-                                  }
-                                  isCompact
-                                >
-                                  {t(
-                                    `agentic.model.verificationStatuses.${model.verificationStatus}`
-                                  )}
-                                </Label>
-                              </StackItem>
-                              {model.statusReason && (
-                                <StackItem>
-                                  <Content component="small">
-                                    {model.statusReason}
-                                  </Content>
-                                </StackItem>
-                              )}
-                            </Stack>
+                            <VerificationStatusText
+                              status={model.verificationStatus}
+                              supportingText={model.statusReason}
+                            />
                           </Td>
                           <Td
                             width={15}

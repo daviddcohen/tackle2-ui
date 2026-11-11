@@ -67,6 +67,7 @@ import { OverflowActionMenu } from "@app/components/overflow-action-menu";
 import { useBulkSelection } from "@app/hooks/selection/useBulkSelection";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { BreadcrumbState, useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
+import { statusPresentation } from "@app/pages/agentic/components/agentic-status";
 import { useFetchApplicationMigrations } from "@app/queries/agentic";
 import {
   useBulkDeleteApplicationMutation,
@@ -688,7 +689,7 @@ export const ApplicationsTable: FC = () => {
                 }) + "...",
               selectOptions: agenticMigrationStatuses.map((status) => ({
                 value: status,
-                label: t(`agentic.execution.displayStatus.${status}`),
+                label: t(statusPresentation.migration[status].labelKey),
               })),
               getItemValue: (item: DecoratedApplication) =>
                 getMigrationDisplayStatus(getMigration(item)),

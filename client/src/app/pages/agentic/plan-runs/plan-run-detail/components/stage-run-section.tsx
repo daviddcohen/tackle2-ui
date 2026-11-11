@@ -25,7 +25,7 @@ import {
 } from "@app/agentic";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 
-import { RunStatusLabel } from "../../../components/run-status-label";
+import { RunStatus } from "../../../components/agentic-status";
 import { StageRunContent } from "../../components/stage-run-content";
 
 interface StageRunSectionProps {
@@ -56,7 +56,7 @@ const StageTitle: React.FC<{ stage: PlanStage; stageRun: StageRun }> = ({
       <strong>{stage.name}</strong>
     </FlexItem>
     <FlexItem component="span">
-      <RunStatusLabel status={stageRun.status} />
+      <RunStatus status={stageRun.status} />
     </FlexItem>
   </Flex>
 );

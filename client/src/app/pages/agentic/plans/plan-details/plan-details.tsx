@@ -59,7 +59,7 @@ import {
 } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
 
-import { RunStatusLabel } from "../../components/run-status-label";
+import { RunStatus } from "../../components/agentic-status";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
 interface PlanDetailsRouteParams {
@@ -559,7 +559,7 @@ const PlanDetailsPage: React.FC = () => {
                     </Link>
                   </FlexItem>
                   <FlexItem>
-                    <RunStatusLabel status={run.status} />
+                    <RunStatus status={run.status} />
                   </FlexItem>
                   <FlexItem>
                     <Content component="small">

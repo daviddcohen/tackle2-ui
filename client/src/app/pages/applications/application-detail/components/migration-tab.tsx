@@ -23,14 +23,22 @@ import {
 } from "@patternfly/react-core";
 
 import { DevPaths } from "@app/Paths";
-import { ControllerRunPhase, UNCONFIGURED_MIGRATION } from "@app/agentic";
+import {
+  ControllerRunPhase,
+  UNCONFIGURED_MIGRATION,
+  getMigrationDisplayStatus,
+} from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
-import { RunStatusLabel } from "@app/pages/agentic/components/run-status-label";
+import {
+  MigrationStatus,
+  RunStatus,
+  statusPresentation,
+} from "@app/pages/agentic/components/agentic-status";
 import {
   useFetchApplicationMigrations,
   useFetchPlanRun,
@@ -41,7 +49,6 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { MigrationNextAction } from "../../components/agentic-migration/migration-next-action";
 import { MigrationPreflightModal } from "../../components/agentic-migration/migration-preflight-modal";
-import { MigrationStatusLabel } from "../../components/agentic-migration/migration-status-label";
 import {
   MigrationNextActionKey,
   getMigrationNextAction,
@@ -65,14 +72,6 @@ const phaseVariant = (
     default:
       return "pending";
   }
-};
-
-const phaseLabelKey: Record<ControllerRunPhase, string> = {
-  Pending: "agentic.runStatus.pending",
-  Running: "agentic.runStatus.running",
-  Succeeded: "agentic.runStatus.succeeded",
-  Failed: "agentic.runStatus.failed",
-  AwaitingApproval: "agentic.runStatus.awaitingApproval",
 };
 
 /** Section ids the next action moves focus to when it is on this tab. */
@@ -191,7 +190,9 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                 {t("agentic.execution.statusLabel")}
               </DescriptionListTerm>
               <DescriptionListDescription>
-                <MigrationStatusLabel migration={migration} />
+                <MigrationStatus
+                  status={getMigrationDisplayStatus(migration)}
+                />
               </DescriptionListDescription>
             </DescriptionListGroup>
             <DescriptionListGroup>
@@ -373,7 +374,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                   {t("agentic.execution.controllerRunPhase")}
                 </DescriptionListTerm>
                 <DescriptionListDescription>
-                  <RunStatusLabel status={migration.runPhase} />
+                  <RunStatus status={migration.runPhase} />
                 </DescriptionListDescription>
               </DescriptionListGroup>
             )}
@@ -431,9 +432,9 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                   isCurrent={stage.stageName === migration.currentStage}
                   aria-label={t("agentic.execution.stagePhase", {
                     stage: stage.stageName,
-                    phase: t(phaseLabelKey[stage.phase]),
+                    phase: t(statusPresentation.run[stage.phase].labelKey),
                   })}
-                  description={t(phaseLabelKey[stage.phase])}
+                  description={t(statusPresentation.run[stage.phase].labelKey)}
                 >
                   {stage.stageName}
                 </ProgressStep>
