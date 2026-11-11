@@ -1,5 +1,4 @@
 import * as React from "react";
-import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
@@ -19,9 +18,7 @@ import {
 } from "@patternfly/react-core";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
-import { StageRun } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import {
@@ -29,20 +26,19 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import { useApproveStageMutation, useFetchPlanRun } from "@app/queries/agentic";
+import { useFetchPlanRun } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
-import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { RunStatus } from "../../components/agentic-status";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 import { StageAttentionAlert } from "../../components/stage-attention-alert";
 import { StageRunsTable } from "../../components/stage-runs-table";
+import { useApproveStage } from "../components/use-approve-stage";
 
 const PlanRunDetail: React.FC = () => {
   const { t } = useTranslation();
   const { runId } = useParams<PlanRunDetailsRoute>();
-  const { pushNotification } = React.useContext(NotificationsContext);
 
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
 
@@ -50,19 +46,7 @@ const PlanRunDetail: React.FC = () => {
   // The run's snapshot of skills: render what the server returns, never more.
   const skillRows = groupSkillSources(planRun?.resolvedSkills ?? []);
 
-  const onApproveError = (error: AxiosError) => {
-    pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
-  };
-
-  const { mutateAsync: approveStage, isPending: isApproving } =
-    useApproveStageMutation(() => undefined, onApproveError);
-  const approve = (stageRun: StageRun) =>
-    approveStage({ runId: runId, stageId: stageRun.stageId }).then(() =>
-      pushNotification({
-        title: t("agentic.planRun.stageApproved", { stage: stageRun.name }),
-        variant: "success",
-      })
-    );
+  const { approve, isApproving } = useApproveStage(runId);
 
   const { breadcrumbs, linkCrumbs: runChildCrumbs } = useEntityBreadcrumbs(
     planRun?.name ?? t("agentic.entity.planRun"),
