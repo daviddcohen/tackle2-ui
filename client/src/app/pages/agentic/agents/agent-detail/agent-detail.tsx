@@ -56,7 +56,7 @@ import {
 import { agentsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { RunStatusLabel } from "../../components/run-status-label";
+import { RunStatus } from "../../components/agentic-status";
 import { getPlansUsingAgent } from "../agent-usage";
 import { AgentForm } from "../components/agent-form";
 
@@ -511,7 +511,7 @@ const AgentDetail: React.FC = () => {
                       </Label>
                     </Td>
                     <Td dataLabel={t("agentic.planRun.status")}>
-                      <RunStatusLabel status={entry.status} />
+                      <RunStatus status={entry.status} />
                     </Td>
                     <Td dataLabel={t("agentic.planRun.started")}>
                       {entry.startedAt
@@ -553,7 +553,7 @@ const AgentDetail: React.FC = () => {
                       </Label>
                     </Td>
                     <Td dataLabel={t("agentic.planRun.status")}>
-                      <RunStatusLabel status={testRun.phase} />
+                      <RunStatus status={testRun.phase} />
                     </Td>
                     <Td dataLabel={t("agentic.planRun.started")}>
                       {new Date(testRun.startedAt).toLocaleString()}

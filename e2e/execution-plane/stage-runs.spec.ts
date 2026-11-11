@@ -71,8 +71,8 @@ test.describe("Plan run stage progression (Run #1, three stages)", () => {
   const cases: [Scenario, number, string[]][] = [
     ["running", 1, ["Running", "Pending", "Pending"]],
     ["running", 2, ["Succeeded", "Running", "Pending"]],
-    ["actionRequired", 1, ["Awaiting approval", "Pending", "Pending"]],
-    ["actionRequired", 2, ["Succeeded", "Awaiting approval", "Pending"]],
+    ["actionRequired", 1, ["Action required", "Pending", "Pending"]],
+    ["actionRequired", 2, ["Succeeded", "Action required", "Pending"]],
     ["failed", 1, ["Failed", "Pending", "Pending"]],
     ["failed", 2, ["Succeeded", "Failed", "Pending"]],
     ["completed", 1, ["Succeeded", "Succeeded", "Succeeded"]],

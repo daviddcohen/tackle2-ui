@@ -8,10 +8,8 @@ import { object, string } from "yup";
 import {
   Alert,
   Button,
-  Content,
   Form,
   FormGroup,
-  Label,
   Modal,
   ModalBody,
   ModalFooter,
@@ -36,6 +34,10 @@ import {
   HookFormPFGroupController,
   HookFormPFTextInput,
 } from "@app/components/HookFormPFFields";
+import {
+  MigrationStatus,
+  preflightDisplayStatus,
+} from "@app/pages/agentic/components/agentic-status";
 import {
   useFetchApplicationMigrations,
   useFetchMigrationPlans,
@@ -309,25 +311,14 @@ export const MigrationPreflightModal: React.FC<
                               )}
                             </Td>
                             <Td dataLabel={t("agentic.execution.readiness")}>
-                              <Label
-                                color={
-                                  migration.preflight === "ready"
-                                    ? "green"
-                                    : migration.preflight === "blocked"
-                                      ? "red"
-                                      : "orange"
+                              <MigrationStatus
+                                status={
+                                  preflightDisplayStatus[
+                                    migration.preflight ?? "blocked"
+                                  ]
                                 }
-                                isCompact
-                              >
-                                {t(
-                                  `agentic.execution.preflight.${migration.preflight || "blocked"}`
-                                )}
-                              </Label>
-                              {migration.preflightReason && (
-                                <Content component="small">
-                                  {migration.preflightReason}
-                                </Content>
-                              )}
+                                supportingText={migration.preflightReason}
+                              />
                             </Td>
                           </Tr>
                         )

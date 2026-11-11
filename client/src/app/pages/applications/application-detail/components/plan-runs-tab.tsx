@@ -9,9 +9,8 @@ import { DevPaths } from "@app/Paths";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { RunStatus } from "@app/pages/agentic/components/agentic-status";
 import { useFetchPlanRuns } from "@app/queries/agentic";
-
-import { RunStatusLabel } from "../../../agentic/components/run-status-label";
 
 interface PlanRunsTabProps {
   applicationId: number;
@@ -99,7 +98,7 @@ export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
               </Link>
             </Td>
             <Td dataLabel={t("agentic.planRun.status")}>
-              <RunStatusLabel status={run.status} />
+              <RunStatus status={run.status} />
             </Td>
             <Td dataLabel={t("agentic.planRun.targetBranch")}>
               <Label isCompact color="blue">

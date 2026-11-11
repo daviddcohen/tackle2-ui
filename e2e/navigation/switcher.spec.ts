@@ -1,4 +1,5 @@
 import {
+  AGENTIC_STATUS,
   PERSONAS,
   PERSONA_LABEL,
   PERSONA_START,
@@ -242,7 +243,7 @@ test.describe("reset and URL validation", () => {
     await page.getByRole("button", { name: /Approve and continue/ }).click();
     await expect(mainHeading(page)).toHaveText(/^Run #1/);
     await expect(
-      page.getByRole("main").locator(".pf-v6-c-label").first()
+      page.getByRole("main").locator(AGENTIC_STATUS).first()
     ).toHaveText("Succeeded");
     await expect(
       page.getByRole("button", { name: /Approve and continue/ })

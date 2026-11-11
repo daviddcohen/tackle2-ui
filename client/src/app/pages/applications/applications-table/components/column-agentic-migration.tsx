@@ -5,10 +5,13 @@ import { Link } from "react-router-dom";
 import { Content, Spinner, Stack, StackItem } from "@patternfly/react-core";
 
 import { DevPaths } from "@app/Paths";
-import { ApplicationMigrationView } from "@app/agentic";
+import {
+  ApplicationMigrationView,
+  getMigrationDisplayStatus,
+} from "@app/agentic";
+import { MigrationStatus } from "@app/pages/agentic/components/agentic-status";
 
 import { MigrationNextAction } from "../../components/agentic-migration/migration-next-action";
-import { MigrationStatusLabel } from "../../components/agentic-migration/migration-status-label";
 
 interface ColumnAgenticMigrationProps {
   /** Undefined while the migrations load or when they could not be read. */
@@ -44,7 +47,7 @@ export const ColumnAgenticMigration: React.FC<ColumnAgenticMigrationProps> = ({
   return (
     <Stack>
       <StackItem>
-        <MigrationStatusLabel migration={migration} />
+        <MigrationStatus status={getMigrationDisplayStatus(migration)} />
       </StackItem>
       {migration.plan && (
         <StackItem>

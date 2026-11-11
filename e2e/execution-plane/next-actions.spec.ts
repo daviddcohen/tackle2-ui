@@ -6,6 +6,7 @@
 import type { Page } from "@playwright/test";
 
 import {
+  AGENTIC_STATUS,
   expect,
   migrationCell,
   protoUrl,
@@ -184,7 +185,7 @@ test.describe("Migration next actions", () => {
       })
     );
     const cell = migrationCell(page, "Aardvark Unmapped Service");
-    await expect(cell.locator(".pf-v6-c-label")).toHaveText("Not configured", {
+    await expect(cell.locator(AGENTIC_STATUS)).toHaveText("Not configured", {
       timeout: 20000,
     });
     await nextAction(

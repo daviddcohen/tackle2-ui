@@ -1625,19 +1625,13 @@
         "title": "Migration activity"
       },
       "displayStatus": {
-        "actionRequired": "Action required",
-        "failed": "Failed",
         "notConfigured": "Not configured",
-        "pending": "Pending",
-        "preflightBlocked": "Blocked before start",
+        "preflightBlocked": "Blocked",
         "preflightReady": "Ready to start",
-        "reviewRequired": "Review required",
-        "running": "Running",
-        "succeeded": "Succeeded"
+        "reviewRequired": "Review before start"
       },
       "preflight": {
         "blocked": "Blocked",
-        "ready": "Ready",
         "reviewRequired": "Review required"
       },
       "commitStage": "({{stage}})",
@@ -1704,7 +1698,15 @@
       "running": "Running",
       "succeeded": "Succeeded",
       "failed": "Failed",
-      "awaitingApproval": "Awaiting approval"
+      "awaitingApproval": "Action required"
+    },
+    "configurationStatus": {
+      "passed": "Passed",
+      "issue": "Issue",
+      "notEvaluated": "Not evaluated",
+      "checksPassed": "Checks passed",
+      "issues_one": "{{count}} issue",
+      "issues_other": "{{count}} issues"
     },
     "entity": {
       "agent": "Agent",

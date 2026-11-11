@@ -16,7 +16,7 @@ test.describe("Plan run approval", () => {
     await expect(
       page.getByText("This stage requires your approval")
     ).toBeVisible();
-    await expect(stageStatus(page, "Analyze")).toHaveText("Awaiting approval");
+    await expect(stageStatus(page, "Analyze")).toHaveText("Action required");
     await expect(stageStatus(page, "Migrate")).toHaveText("Pending");
     await expect(approveButton(page)).toBeEnabled();
   });
@@ -47,7 +47,7 @@ test.describe("Plan run approval", () => {
       "Analyze: Run #2 — Spring Boot to Quarkus"
     );
     await expect(
-      page.getByRole("definition").filter({ hasText: "Awaiting approval" })
+      page.getByRole("definition").filter({ hasText: "Action required" })
     ).toBeVisible();
     await expect(approveButton(page)).toBeVisible();
     await page
@@ -79,7 +79,7 @@ test.describe("Plan run approval", () => {
     await expect(stageStatus(page, "Containerize")).toHaveText("Running");
     // Next approval gate on the same, already-mounted page.
     await expect(stageStatus(page, "Review security")).toHaveText(
-      "Awaiting approval",
+      "Action required",
       {
         timeout: 30000,
       }

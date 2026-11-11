@@ -41,7 +41,7 @@ import {
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { RunStatusLabel } from "../../components/run-status-label";
+import { RunStatus } from "../../components/agentic-status";
 import { StageRunContent } from "../components/stage-run-content";
 
 const StageRunDetail: React.FC = () => {
@@ -186,7 +186,7 @@ const StageRunDetail: React.FC = () => {
                   {t("agentic.planRun.status")}
                 </DescriptionListTerm>
                 <DescriptionListDescription>
-                  <RunStatusLabel status={stageRun.status} isCompact={false} />
+                  <RunStatus status={stageRun.status} />
                 </DescriptionListDescription>
               </DescriptionListGroup>
 
