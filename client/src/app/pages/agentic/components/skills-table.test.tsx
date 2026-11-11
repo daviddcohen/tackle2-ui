@@ -4,6 +4,7 @@ import { EffectiveSkillAssociation, Skill } from "@app/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 
 import {
+  SkillSources,
   SkillsTable,
   groupSkillSources,
   skillAssociationSources,
@@ -179,5 +180,25 @@ describe("SkillsTable", () => {
       "agentic.skillsTable.scope.targetProfile: Q3"
     );
     expect(linkTo).toHaveBeenCalledWith("/skills/4");
+  });
+});
+
+describe("SkillSources", () => {
+  it("renders the Source cell's lines on its own, for other tables", () => {
+    render(
+      <SkillSources
+        sources={[
+          { scope: "archetype", name: "Java EE Application" },
+          { scope: "application", name: "Customer Management" },
+        ]}
+      />
+    );
+    expect(
+      screen.getAllByRole("listitem").map((item) => item.textContent)
+    ).toEqual([
+      "agentic.skillsTable.scope.archetype: Java EE Application",
+      "agentic.skillsTable.scope.application: Customer Management",
+    ]);
+    expect(screen.getByRole("list")).toHaveClass("pf-m-plain");
   });
 });

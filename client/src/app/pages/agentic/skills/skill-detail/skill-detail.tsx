@@ -43,6 +43,10 @@ import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
+  SkillSources,
+  groupSkillSources,
+} from "@app/pages/agentic/components/skills-table";
+import {
   DetailTabPanel,
   EntityDetailActions,
   EntityDetailLoading,
@@ -473,16 +477,11 @@ const SkillDetail: React.FC = () => {
                                 "agentic.skillDetail.resolvedFromColumn"
                               )}
                             >
-                              <Stack hasGutter>
-                                {entries.map((es, i) => (
-                                  <StackItem key={i}>
-                                    {t("agentic.skillsTable.source", {
-                                      scope: scopeLabel(es.scope),
-                                      name: es.scopeName,
-                                    })}
-                                  </StackItem>
-                                ))}
-                              </Stack>
+                              <SkillSources
+                                sources={
+                                  groupSkillSources(entries)[0]?.sources ?? []
+                                }
+                              />
                             </Td>
                           </Tr>
                         ))}
