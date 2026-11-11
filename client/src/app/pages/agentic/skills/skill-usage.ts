@@ -1,55 +1,6 @@
-import {
-  Agent,
-  EffectiveSkillAssociation,
-  MigrationPlan,
-  Skill,
-  SkillCollection,
-} from "@app/agentic";
+import { TFunction } from "i18next";
 
-/**
- * Where a Skill is associated: its server-maintained `associations`, or (for a
- * payload without them) the Agents that list it plus the Plans that resolve it.
- * Deduplicated by scope and name.
- */
-export const getSkillAssociations = (
-  skill: Skill,
-  agents: Agent[],
-  plans: MigrationPlan[]
-): EffectiveSkillAssociation[] => {
-  if (skill.associations) {
-    return skill.associations.map((association) => ({
-      skill: { id: skill.id, name: skill.name },
-      scope: association.scope,
-      scopeName: association.resource.name,
-    }));
-  }
-
-  const associations: EffectiveSkillAssociation[] = [
-    ...agents
-      .filter((agent) =>
-        agent.skills?.some((agentSkill) => agentSkill.id === skill.id)
-      )
-      .map((agent) => ({
-        skill: { id: skill.id, name: skill.name },
-        scope: "agent" as const,
-        scopeName: agent.name,
-      })),
-    ...plans.flatMap((plan) =>
-      (plan.effectiveSkills || []).filter(
-        (association) => association.skill.id === skill.id
-      )
-    ),
-  ];
-
-  return associations.filter(
-    (association, index) =>
-      associations.findIndex(
-        (candidate) =>
-          candidate.scope === association.scope &&
-          candidate.scopeName === association.scopeName
-      ) === index
-  );
-};
+import { Agent, EntityId, Skill, SkillCollection } from "@app/agentic";
 
 export const getCollectionsContainingSkill = (
   skill: Pick<Skill, "id">,
@@ -59,24 +10,77 @@ export const getCollectionsContainingSkill = (
     collection.skills.some((member) => member.id === skill.id)
   );
 
+/** Anchor of the "Used by agents" section on the collection page. */
+export const USED_BY_AGENTS_ID = "used-by-agents";
+
+/** The agents that list the collection in their skill collections. */
+export const getAgentsUsingCollection = (
+  collectionId: EntityId,
+  agents: Agent[]
+): Agent[] =>
+  agents.filter((agent) =>
+    (agent.skillCollections ?? []).some((c) => c.id === collectionId)
+  );
+
 /**
  * Why the Skill cannot be deleted yet, or `undefined` when it can. A Skill
- * with associations or Skill collection memberships is in use; the server
- * refuses those deletes with 409.
+ * with associations or skill collection memberships is in use; the server
+ * refuses those deletes with 409. The association count is the server's
+ * `skill.associations` (addenda S1): when it is missing, usage is unknown.
+ * `collections` is undefined while the collections query has not succeeded
+ * (addenda X6). Either unknown blocks the delete.
  */
-export type SkillDeleteBlocker = "associations" | "collections" | undefined;
-
-export const getSkillDeleteBlocker = (
+export const getSkillDeleteBlockedReason = (
+  t: TFunction,
   skill: Skill,
-  agents: Agent[],
-  plans: MigrationPlan[],
-  collections: SkillCollection[]
-): SkillDeleteBlocker => {
-  if (getSkillAssociations(skill, agents, plans).length > 0) {
-    return "associations";
+  collections: SkillCollection[] | undefined
+): string | undefined => {
+  const associationCount = skill.associations?.length;
+  if (associationCount == null || collections == null) {
+    return t("agentic.common.usageUnchecked");
   }
-  if (getCollectionsContainingSkill(skill, collections).length > 0) {
-    return "collections";
+  const collectionCount = getCollectionsContainingSkill(
+    skill,
+    collections
+  ).length;
+  if (associationCount > 0 && collectionCount > 0) {
+    return t("agentic.skill.deleteBlockedBoth", {
+      associations: t("agentic.skill.associationCount", {
+        count: associationCount,
+      }),
+      collections: t("agentic.skill.collectionCount", {
+        count: collectionCount,
+      }),
+    });
+  }
+  if (associationCount > 0) {
+    return t("agentic.skill.deleteBlockedAssociations", {
+      count: associationCount,
+    });
+  }
+  if (collectionCount > 0) {
+    return t("agentic.skill.deleteBlockedCollections", {
+      count: collectionCount,
+    });
   }
   return undefined;
+};
+
+/**
+ * Why the skill collection cannot be deleted yet, or `undefined` when it can:
+ * agents still use it. `agents` is undefined while the agents query has not
+ * succeeded (addenda X6).
+ */
+export const getCollectionDeleteBlockedReason = (
+  t: TFunction,
+  collectionId: EntityId,
+  agents: Agent[] | undefined
+): string | undefined => {
+  if (agents == null) {
+    return t("agentic.common.usageUnchecked");
+  }
+  const count = getAgentsUsingCollection(collectionId, agents).length;
+  return count > 0
+    ? t("agentic.skillCollection.deleteBlocked", { count })
+    : undefined;
 };

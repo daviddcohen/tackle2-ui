@@ -56,7 +56,6 @@ import { skillAssociationPath } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
   useDeleteSkillMutation,
-  useFetchAgents,
   useFetchMigrationPlans,
   useFetchSkillById,
   useFetchSkillCollections,
@@ -68,7 +67,7 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 import { SkillForm } from "../components/skill-form";
 import {
   getCollectionsContainingSkill,
-  getSkillDeleteBlocker,
+  getSkillDeleteBlockedReason,
 } from "../skill-usage";
 
 const sourceTypeColor: Record<SkillSourceType, "blue" | "green" | "orange"> = {
@@ -91,8 +90,11 @@ const SkillDetail: React.FC = () => {
   const { skill, isLoading, fetchError, isNotFound, refetch } =
     useFetchSkillById(skillId);
   const { archetypes } = useFetchArchetypes();
-  const { agents } = useFetchAgents();
-  const { skillCollections } = useFetchSkillCollections();
+  const {
+    skillCollections,
+    isLoading: isLoadingCollections,
+    fetchError: collectionsError,
+  } = useFetchSkillCollections();
   const { migrationPlans } = useFetchMigrationPlans();
 
   const [activeTab, setActiveTab] = useUrlTab<SkillDetailTab>(
@@ -169,11 +171,12 @@ const SkillDetail: React.FC = () => {
     );
   }
 
-  const deleteBlocker = getSkillDeleteBlocker(
+  const deleteBlockedReason = getSkillDeleteBlockedReason(
+    t,
     skill,
-    agents,
-    migrationPlans,
-    skillCollections
+    isLoadingCollections || collectionsError != null
+      ? undefined
+      : skillCollections
   );
   const panelId = (tab: SkillDetailTab) => tabPanelId(TAB_PREFIX, tab);
 
@@ -188,13 +191,7 @@ const SkillDetail: React.FC = () => {
               <EntityDetailActions
                 onEdit={() => setEditModal(true)}
                 onDelete={() => setIsDeleteOpen(true)}
-                deleteDisabledReason={
-                  deleteBlocker === "associations"
-                    ? t("agentic.skill.deleteInUse")
-                    : deleteBlocker === "collections"
-                      ? t("agentic.skill.deleteInCollection")
-                      : undefined
-                }
+                deleteDisabledReason={deleteBlockedReason}
               />
             )
           }
@@ -584,9 +581,8 @@ const SkillDetail: React.FC = () => {
 
       {isDeleteOpen && (
         <ConfirmDialog
-          title={t("agentic.skill.deleteTitle", { skill: skill.name })}
-          titleIconVariant="warning"
-          message={t("agentic.skill.deleteDescription")}
+          title={t("agentic.skill.deleteTitle")}
+          message={t("agentic.skill.deleteDescription", { name: skill.name })}
           isOpen
           confirmBtnVariant={ButtonVariant.danger}
           confirmBtnLabel={t("actions.delete")}

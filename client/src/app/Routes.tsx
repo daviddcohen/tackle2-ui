@@ -146,13 +146,13 @@ export const toRoutePath = ({ path, numericIds }: IRoute<string>): string =>
   numericIds ? path.replace(ID_PARAM, ":$1(\\d+)") : path;
 
 /**
- * Skill collections are listed on the Skills page (type filter
- * "collection"), so the declared collections path opens that view.
+ * Skill collections are a tab of the Skills page, so the declared
+ * collections path opens that tab.
  */
 const SkillCollectionsRedirect = () => {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  params.set("skills:filters", JSON.stringify({ type: ["collection"] }));
+  params.set("tab", "collections");
   return (
     <Redirect to={{ pathname: Paths.skills, search: params.toString() }} />
   );

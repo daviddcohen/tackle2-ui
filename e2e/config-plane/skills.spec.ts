@@ -12,6 +12,7 @@ import {
   field,
   filterByName,
   gotoProto,
+  main,
   openRowActions,
   pickMulti,
   rowByText,
@@ -38,42 +39,71 @@ const createInlineSkill = async (page: Page, name: string) => {
   await expect(toast(page, "Skill created")).toBeVisible();
 };
 
-const sourceButton = (page: Page, name: "Inline" | "Git" | "OCI") =>
+const sourceButton = (page: Page, name: "Inline" | "Git" | "OCI image") =>
   dialog(page).getByRole("button", { name, exact: true });
 
 test.describe("Skills list", () => {
   test.beforeEach(async ({ page }) => openSkills(page));
 
-  test("lists skills and collections together, paginated", async ({
+  test("lists skills on the Skills tab, paginated", async ({
     page,
     diagnostics,
   }) => {
+    await expect(page.getByRole("tab", { name: "Skills" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     await expect(
-      page.getByRole("button", { name: /1 - 10 of 20/ }).first()
+      page.getByRole("button", { name: /1 - 10 of 16/ }).first()
     ).toBeVisible();
-    await expect(
-      rowByText(page, "Java modernization foundation")
-    ).toContainText("Collection");
     await expect(rowByText(page, "Corporate coding standards")).toContainText(
       "Inline"
     );
+    await expect(
+      dataRows(page).filter({ hasText: "Java modernization foundation" })
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Go to next page" }).first().click();
-    await expect(dataRows(page)).toHaveCount(10);
+    await expect(dataRows(page)).toHaveCount(6);
     expectHealthy(diagnostics);
   });
 
-  test("type filter shows only collections", async ({ page }) => {
+  test("source filter shows only Git skills", async ({ page }) => {
     await page.getByRole("button", { name: "Name" }).first().click();
-    await page.getByRole("menuitem", { name: "Type", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Source", exact: true }).click();
     await page.getByRole("combobox", { name: "Type to filter" }).click();
-    await page.getByRole("menuitem", { name: "Collection" }).click();
-    await expect(dataRows(page)).toHaveCount(4);
+    await page.getByRole("menuitem", { name: "Git" }).click();
+    await expect(dataRows(page).first()).toBeVisible();
+    for (const row of await dataRows(page).all())
+      await expect(row).toContainText("Git");
   });
 
-  test("associations cell names where the skill is used", async ({ page }) => {
-    await expect(rowByText(page, "Build validation standards")).toContainText(
-      "Legacy Java Application and 2 more"
+  test("Skill collections tab lists the collections and keeps the tab in the URL", async ({
+    page,
+  }) => {
+    await page.getByRole("tab", { name: "Skill collections" }).click();
+    await expect(page).toHaveURL(/tab=collections/);
+    await expect(dataRows(page)).toHaveCount(4);
+    const foundation = rowByText(page, "Java modernization foundation");
+    await expect(foundation).toContainText("3 skills");
+    await expect(foundation).toContainText("2 agents");
+    await expect(rowByText(page, "OpenShift delivery checks")).toContainText(
+      "None"
     );
+  });
+
+  test("associations count links to the skill's Associations tab", async ({
+    page,
+  }) => {
+    await rowByText(page, "Build validation standards")
+      .getByRole("link", { name: "3 associations" })
+      .click();
+    await expect(page).toHaveURL(/\/skills\/\d+\?tab=associations/);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: "Build validation standards",
+      })
+    ).toBeVisible();
   });
 
   test("skills in use cannot be deleted from the list", async ({ page }) => {
@@ -81,11 +111,23 @@ test.describe("Skills list", () => {
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
   });
 
+  test("collections in use cannot be deleted from the list", async ({
+    page,
+  }) => {
+    await page.getByRole("tab", { name: "Skill collections" }).click();
+    await openRowActions(page, "Java modernization foundation");
+    await expect(page.getByRole("menuitem", { name: "Edit" })).toBeEnabled();
+    await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
+  });
+
   // Regression guard: translation agentic.skill.collectionContents has no _one/_other variants ('1 skills')
-  test("collection content count is pluralized", async ({ page }) => {
+  test("a collection with one skill names it instead of counting", async ({
+    page,
+  }) => {
     await filterByName(page, "zzz");
     await createInlineSkill(page, "Single Member");
-    await page.getByRole("button", { name: /^Create collection/ }).click();
+    await page.getByRole("tab", { name: "Skill collections" }).click();
+    await page.getByRole("button", { name: "Create skill collection" }).click();
     await field(dialog(page), "Name").fill("Single Pack");
     await pickMulti(page, "skill-collection-skills-select", ["Single Member"]);
     // Close the skills menu so it does not cover the footer buttons.
@@ -94,7 +136,11 @@ test.describe("Skills list", () => {
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill collection created")).toBeVisible();
     await filterByName(page, "Single Pack");
-    await expect(rowByText(page, "Single Pack")).toContainText("1 skill");
+    await expect(
+      rowByText(page, "Single Pack").getByRole("link", {
+        name: "Single Member",
+      })
+    ).toBeVisible();
     await expect(rowByText(page, "Single Pack")).not.toContainText("1 skills");
   });
 
@@ -104,21 +150,35 @@ test.describe("Skills list", () => {
       page.getByRole("button", { name: "Create skill" })
     ).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Import skill file" })
+      page.getByRole("button", { name: "Skill actions" })
     ).toHaveCount(0);
     await expect(
       rowByText(page, "Corporate coding standards").getByRole("button", {
-        name: /row actions/i,
+        name: /kebab toggle|row actions/i,
+      })
+    ).toHaveCount(0);
+    await page.getByRole("tab", { name: "Skill collections" }).click();
+    await expect(
+      page.getByRole("button", { name: "Create skill collection" })
+    ).toHaveCount(0);
+    await expect(
+      rowByText(page, "Security and compliance").getByRole("button", {
+        name: /kebab toggle|row actions/i,
       })
     ).toHaveCount(0);
   });
 
-  test("initial scenario shows the empty state", async ({ page }) => {
+  test("initial scenario shows the empty states", async ({ page }) => {
     await gotoProto(page, "/skills", {
       persona: ARCHITECT,
       scenario: "initial",
     });
-    await expect(page.getByText("No Skills yet")).toBeVisible();
+    await expect(page.getByText("No skills yet")).toBeVisible();
+    await expect(
+      main(page).getByRole("button", { name: "Import skill file" })
+    ).toBeVisible();
+    await page.getByRole("tab", { name: "Skill collections" }).click();
+    await expect(page.getByText("No skill collections yet")).toBeVisible();
   });
 });
 
@@ -144,7 +204,7 @@ test.describe("Skill form", () => {
     );
     await expect(create).toBeEnabled();
 
-    await sourceButton(page, "OCI").click();
+    await sourceButton(page, "OCI image").click();
     await expect(field(dialog(page), "Repository URL")).toHaveCount(0);
     await expect(create).toBeDisabled();
     await field(dialog(page), "Image reference").fill("quay.io/org/skill:1.0");
@@ -186,7 +246,7 @@ test.describe("Skill form", () => {
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill created")).toBeVisible();
     await filterByName(page, "QA Skill");
-    await expect(rowByText(page, "QA Skill")).toContainText("Test Runner");
+    await expect(rowByText(page, "QA Skill")).toContainText("1 association");
 
     await spaNavigate(page, "/agents");
     await openRowActions(page, "Test Runner");
@@ -204,7 +264,8 @@ test.describe("Skill form", () => {
 test.describe("Import skill", () => {
   test.beforeEach(async ({ page }) => {
     await openSkills(page);
-    await page.getByRole("button", { name: "Import skill file" }).click();
+    await page.getByRole("button", { name: "Skill actions" }).click();
+    await page.getByRole("menuitem", { name: "Import skill file" }).click();
   });
 
   test("import is disabled until a file is loaded, then creates a skill", async ({
@@ -329,7 +390,8 @@ test.describe("Skill collections", () => {
   // Regression guard: skill-collection-form.tsx has no duplicateNameCheck or max length
   test("duplicate collection names are rejected", async ({ page }) => {
     await openSkills(page);
-    await page.getByRole("button", { name: /^Create collection/ }).click();
+    await page.getByRole("tab", { name: "Skill collections" }).click();
+    await page.getByRole("button", { name: "Create skill collection" }).click();
     await field(dialog(page), "Name").fill("Security and compliance");
     await pickMulti(page, "skill-collection-skills-select", [
       "Corporate coding standards",
@@ -366,7 +428,8 @@ test.describe("Skill cross-entity consistency", () => {
   }) => {
     await openSkills(page);
     await createInlineSkill(page, "Orphan Skill");
-    await page.getByRole("button", { name: /^Create collection/ }).click();
+    await page.getByRole("tab", { name: "Skill collections" }).click();
+    await page.getByRole("button", { name: "Create skill collection" }).click();
     await field(dialog(page), "Name").fill("Orphan Collection");
     await pickMulti(page, "skill-collection-skills-select", ["Orphan Skill"]);
     // Close the skills menu so it does not cover the footer buttons.
@@ -375,6 +438,7 @@ test.describe("Skill cross-entity consistency", () => {
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill collection created")).toBeVisible();
 
+    await page.getByRole("tab", { name: "Skills" }).click();
     await filterByName(page, "Orphan Skill");
     await openRowActions(page, "Orphan Skill");
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();

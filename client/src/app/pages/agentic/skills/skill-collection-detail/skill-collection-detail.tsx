@@ -272,11 +272,10 @@ const SkillCollectionDetail: React.FC = () => {
 
       {isDeleteOpen && (
         <ConfirmDialog
-          title={t("agentic.skillCollection.deleteTitle", {
-            collection: skillCollection.name,
+          title={t("agentic.skillCollection.deleteTitle")}
+          message={t("agentic.skillCollection.deleteDescription", {
+            name: skillCollection.name,
           })}
-          titleIconVariant="warning"
-          message={t("agentic.skillCollection.deleteDescription")}
           isOpen
           confirmBtnVariant={ButtonVariant.danger}
           confirmBtnLabel={t("actions.delete")}
