@@ -18,7 +18,11 @@ import { RunStatus } from "@app/pages/agentic/components/agentic-status";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
 import { formatTableDate } from "@app/utils/utils";
 
-import { DetailSection, DetailSections, SectionEmpty } from "./detail-section";
+import {
+  DetailSection,
+  DetailSections,
+  SectionEmpty,
+} from "../../components/detail-section";
 
 /** One stage this agent runs in one plan run. */
 interface AgentStageRow {
