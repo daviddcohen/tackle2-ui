@@ -274,6 +274,24 @@ describe("AgentForm model", () => {
     expect(screen.queryByText("agentic.agent.modelHelp")).toBeNull();
   });
 
+  it("says the models could not be loaded instead of none verified (X6)", async () => {
+    useModels([]);
+    server.use(
+      rest.get(hub`/prototype/agentic/models`, (_req, res, ctx) =>
+        res(ctx.status(500))
+      )
+    );
+    renderInRouter(<AgentForm agent={null} onClose={jest.fn()} />);
+    expect(
+      await screen.findByText("agentic.agent.modelsUnavailable", undefined, {
+        timeout: 5000,
+      })
+    ).toBeInTheDocument();
+    expect(modelInput()).toBeDisabled();
+    expect(screen.queryByText("agentic.agent.noVerifiedModels")).toBeNull();
+    expect(screen.queryByText("agentic.agent.modelHelp")).toBeNull();
+  });
+
   it("warns when the agent's current model is not verified (A6)", async () => {
     useModels([model("1", "unreachable"), model("2", "verified", true)]);
     renderInRouter(<AgentForm agent={agent} onClose={jest.fn()} />);

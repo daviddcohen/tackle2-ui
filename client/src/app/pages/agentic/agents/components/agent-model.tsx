@@ -1,10 +1,18 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Content, Flex, FlexItem, Icon, Tooltip } from "@patternfly/react-core";
+import {
+  Content,
+  Flex,
+  FlexItem,
+  Icon,
+  Skeleton,
+  Tooltip,
+} from "@patternfly/react-core";
 import { ExclamationTriangleIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { EntityRef, Gateway } from "@app/agentic";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 
 export interface AgentModelProps {
   /** The agent's model reference: its name is always shown. */
@@ -13,6 +21,10 @@ export interface AgentModelProps {
   gateway?: Gateway;
   /** Provider inline after the name (a fact) instead of stacked under it (a table cell). */
   isInline?: boolean;
+  /** The models query failed: say so instead of looking verified (X6). */
+  isGatewayUnavailable?: boolean;
+  /** The models query is still loading: a skeleton holds the provider's place (X6). */
+  isGatewayLoading?: boolean;
 }
 
 /**
@@ -25,6 +37,8 @@ export const AgentModel: React.FC<AgentModelProps> = ({
   model,
   gateway,
   isInline = false,
+  isGatewayUnavailable = false,
+  isGatewayLoading = false,
 }) => {
   const { t } = useTranslation();
   const isUnverified =
@@ -53,6 +67,21 @@ export const AgentModel: React.FC<AgentModelProps> = ({
     model.name
   );
   const provider = gateway?.provider.name;
+  // Until the models are known the name alone would read as verified (X6).
+  let unavailable: React.ReactNode = null;
+  if (provider == null && isGatewayLoading) {
+    unavailable = (
+      <Skeleton
+        width="8rem"
+        fontSize="sm"
+        screenreaderText={t("terms.loading")}
+      />
+    );
+  } else if (provider == null && isGatewayUnavailable) {
+    unavailable = (
+      <EmptyTextMessage message={t("agentic.agent.modelDetailsUnavailable")} />
+    );
+  }
 
   if (isInline) {
     return (
@@ -63,6 +92,7 @@ export const AgentModel: React.FC<AgentModelProps> = ({
             <span className={textStyles.textColorSubtle}>{provider}</span>
           </FlexItem>
         )}
+        {unavailable && <FlexItem>{unavailable}</FlexItem>}
       </Flex>
     );
   }
@@ -74,6 +104,7 @@ export const AgentModel: React.FC<AgentModelProps> = ({
           {provider}
         </Content>
       )}
+      {unavailable}
     </div>
   );
 };

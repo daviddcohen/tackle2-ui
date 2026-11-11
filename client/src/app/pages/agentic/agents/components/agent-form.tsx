@@ -122,7 +122,11 @@ export const AgentForm: React.FC<AgentFormProps> = ({
   const { pushNotification } = React.useContext(NotificationsContext);
 
   const { agents } = useFetchAgents();
-  const { gateways, isSuccess: hasGateways } = useFetchGateways();
+  const {
+    gateways,
+    isSuccess: hasGateways,
+    fetchError: gatewaysError,
+  } = useFetchGateways();
   const canViewModels = useHasSomeScopes(adminViewScopes);
   const { skills: availableSkills } = useFetchSkills();
   const { skillCollections: availableSkillCollections } =
@@ -192,6 +196,8 @@ export const AgentForm: React.FC<AgentFormProps> = ({
   );
   // Nothing to choose until a model is verified (A5); never while loading.
   const hasNoUsableModel = hasGateways && usableGateways.length === 0;
+  // A failed read is not "no verified models" (X6): it says so instead.
+  const isGatewayUnavailable = gatewaysError != null && gateways.length === 0;
   const defaultGateway = gateways.find(
     (gateway) =>
       gateway.isOrganizationDefault && gateway.verificationStatus === "verified"
@@ -406,14 +412,16 @@ export const AgentForm: React.FC<AgentFormProps> = ({
               fieldId="agent-gateways"
               isRequired
               helperText={
-                hasNoUsableModel || isSelectedModelUnverified
+                hasNoUsableModel ||
+                isGatewayUnavailable ||
+                isSelectedModelUnverified
                   ? undefined
                   : t("agentic.agent.modelHelp")
               }
               renderInput={() => (
                 <>
                   <TypeaheadSelect
-                    isDisabled={hasNoUsableModel}
+                    isDisabled={hasNoUsableModel || isGatewayUnavailable}
                     toggleId="gateway-select-toggle"
                     toggleAriaLabel={t("agentic.agent.modelSelect")}
                     ariaLabel={t("agentic.agent.model")}
@@ -427,7 +435,15 @@ export const AgentForm: React.FC<AgentFormProps> = ({
                     }
                     placeholderText={t("agentic.agent.selectModel")}
                   />
-                  {hasNoUsableModel ? (
+                  {isGatewayUnavailable ? (
+                    <FormHelperText>
+                      <HelperText>
+                        <HelperTextItem variant="error">
+                          {t("agentic.agent.modelsUnavailable")}
+                        </HelperTextItem>
+                      </HelperText>
+                    </FormHelperText>
+                  ) : hasNoUsableModel ? (
                     <FormHelperText>
                       <HelperText>
                         <HelperTextItem>
