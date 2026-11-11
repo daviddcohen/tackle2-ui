@@ -2,9 +2,6 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
 import {
-  Alert,
-  Button,
-  ButtonVariant,
   Content,
   ExpandableSection,
   ExpandableSectionToggle,
@@ -32,10 +29,6 @@ interface StageRunSectionProps {
   stage: PlanStage;
   stageRun: StageRun;
   runId: EntityId;
-  /** Whether the user may approve; the Approve action is hidden otherwise. */
-  canApprove: boolean;
-  isApproving: boolean;
-  onApprove: () => void;
   runChildCrumbs: BreadcrumbEntry[];
 }
 
@@ -110,12 +103,8 @@ export const StageRunSection: React.FC<StageRunSectionProps> = ({
   stage,
   stageRun,
   runId,
-  canApprove,
-  isApproving,
-  onApprove,
   runChildCrumbs,
 }) => {
-  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = React.useState(
     needsAttention(stageRun.status)
   );
@@ -182,48 +171,6 @@ export const StageRunSection: React.FC<StageRunSectionProps> = ({
         contentId={contentId}
       >
         <Stack hasGutter>
-          {stageRun.status === "AwaitingApproval" && (
-            <StackItem>
-              <Alert
-                variant="warning"
-                isInline
-                title={t("agentic.planRun.approveTitle")}
-              >
-                <Stack hasGutter>
-                  <StackItem>
-                    {t("agentic.planRun.approveDescription", {
-                      agentName: stage.agent.name,
-                    })}
-                  </StackItem>
-                  {canApprove && (
-                    <StackItem>
-                      <Button
-                        variant={ButtonVariant.primary}
-                        isLoading={isApproving}
-                        isDisabled={isApproving}
-                        onClick={onApprove}
-                      >
-                        {t("agentic.planRun.approve")}
-                      </Button>
-                    </StackItem>
-                  )}
-                </Stack>
-              </Alert>
-            </StackItem>
-          )}
-
-          {stageRun.status === "Failed" && stageRun.output && (
-            <StackItem>
-              <Alert
-                variant="danger"
-                isInline
-                title={t("agentic.runStatus.failed")}
-              >
-                {stageRun.output}
-              </Alert>
-            </StackItem>
-          )}
-
           <StackItem>
             <StageRunContent
               status={stageRun.status}

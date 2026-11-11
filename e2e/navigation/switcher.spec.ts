@@ -5,6 +5,7 @@ import {
   PERSONA_START,
   type Persona,
   SCENARIOS_BY_PERSONA,
+  approveStage,
   breadcrumb,
   errorBoundary,
   expect,
@@ -240,7 +241,8 @@ test.describe("reset and URL validation", () => {
         stage: 3,
       })
     );
-    await page.getByRole("button", { name: /Approve and continue/ }).click();
+    // Approve always confirms first (guide 4.3).
+    await approveStage(page);
     await expect(mainHeading(page)).toHaveText(/^Run #1/);
     await expect(
       page.getByRole("main").locator(AGENTIC_STATUS).first()

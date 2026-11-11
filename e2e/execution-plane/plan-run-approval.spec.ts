@@ -2,10 +2,17 @@
  * Run #2 (Spring Boot to Quarkus: Analyze -> Migrate -> Validate) in the actionRequired scenario.
  * Stage 1 (Analyze) requires approval; stages 2-3 do not.
  */
-import { approveButton, expect, protoUrl, stageStatus, test } from "../support";
+import {
+  approveButton,
+  approveStage,
+  expect,
+  protoUrl,
+  stageStatus,
+  test,
+} from "../support";
 
 test.describe("Plan run approval", () => {
-  test("awaiting stage is expanded with an approval call to action", async ({
+  test("awaiting stage leads the run with an approval call to action", async ({
     page,
   }) => {
     await page.goto(protoUrl("/plan-runs", { scenario: "actionRequired" }));
@@ -14,7 +21,7 @@ test.describe("Plan run approval", () => {
       "Run #2 — Spring Boot to Quarkus"
     );
     await expect(
-      page.getByText("This stage requires your approval")
+      page.getByRole("heading", { name: /Analyze needs approval/ })
     ).toBeVisible();
     await expect(stageStatus(page, "Analyze")).toHaveText("Action required");
     await expect(stageStatus(page, "Migrate")).toHaveText("Pending");
@@ -27,7 +34,7 @@ test.describe("Plan run approval", () => {
     await page.goto(
       protoUrl("/plan-runs/2", { scenario: "actionRequired", stage: 1 })
     );
-    await approveButton(page).click();
+    await approveStage(page);
     // The server advances the run; the global prototype scenario is not touched.
     await expect(stageStatus(page, "Analyze")).toHaveText("Succeeded");
     await expect(stageStatus(page, "Migrate")).toHaveText("Running");
@@ -75,7 +82,7 @@ test.describe("Plan run approval", () => {
         body: JSON.stringify({ interactionMode: "interactive" }),
       })
     );
-    await approveButton(page).click();
+    await approveStage(page);
     await expect(stageStatus(page, "Containerize")).toHaveText("Running");
     // Next approval gate on the same, already-mounted page.
     await expect(stageStatus(page, "Review security")).toHaveText(
@@ -98,7 +105,7 @@ test.describe("Plan run approval", () => {
         stage: 1,
       })
     );
-    await approveButton(page).click();
+    await approveStage(page);
     await expect(
       page.getByRole("definition").filter({ hasText: /^Running$|^Succeeded$/ })
     ).toBeVisible();
@@ -130,9 +137,13 @@ test.describe("Plan run approval", () => {
       page.getByText(/Unable to resolve dependency tree/).first()
     ).toBeVisible();
     await expect(stageStatus(page, "Analyze")).toHaveText("Failed");
-    // Recovery: a failed run offers "Start new run" (preflight prefilled with its apps, Plan and branch).
+    // Recovery: the failed alert offers "Run migration plan" (preflight
+    // prefilled with the run's apps, plan and branch).
     await expect(
-      page.getByRole("button", { name: /retry|start new run|new run/i })
+      page.getByRole("heading", { name: /Analyze failed/ })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Run migration plan" })
     ).toBeVisible();
   });
 });

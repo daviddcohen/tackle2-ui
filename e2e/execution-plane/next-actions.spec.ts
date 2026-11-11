@@ -7,6 +7,7 @@ import type { Page } from "@playwright/test";
 
 import {
   AGENTIC_STATUS,
+  approveButton,
   expect,
   migrationCell,
   protoUrl,
@@ -93,16 +94,16 @@ test.describe("Migration next actions", () => {
     await expect(
       page.getByRole("tab", { name: "Migration", selected: true })
     ).toBeVisible();
-    await page.getByRole("button", { name: "Approve and Continue" }).click();
-    // The decision belongs to the shared plan run: the confirmation names
-    // every application in it.
+    await approveButton(page).click();
+    // The decision belongs to the shared plan run: the confirmation says
+    // it applies to every application in it.
     const confirm = page.getByRole("dialog");
-    await expect(confirm).toContainText("Customer Management");
-    await confirm.getByRole("button", { name: "Approve and Continue" }).click();
+    await expect(confirm).toContainText(
+      /This decision applies to all \d+ applications in Run #/
+    );
+    await confirm.getByRole("button", { name: "Approve and continue" }).click();
     await expect(page.getByText("Migration request resolved")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Approve and Continue" })
-    ).toHaveCount(0);
+    await expect(approveButton(page)).toHaveCount(0);
   });
 
   test("Review N Requests lists each request and opens its Migration tab", async ({
@@ -123,11 +124,11 @@ test.describe("Migration next actions", () => {
       page.getByRole("tab", { name: "Migration", selected: true })
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Reject Request" })
+      page.getByRole("button", { name: "Reject", exact: true })
     ).toBeVisible();
   });
 
-  test("Review failure and retry: evidence and Start New Run on the Migration tab", async ({
+  test("Review failure and retry: evidence and Run migration plan on the Migration tab", async ({
     page,
   }) => {
     await page.goto(protoUrl("/applications", { scenario: "failed" }));
@@ -137,23 +138,27 @@ test.describe("Migration next actions", () => {
       "Customer Management",
       "Review failure and retry"
     ).click();
-    await expect(page.getByText(/Stage failed/).first()).toBeVisible();
-    await page.getByRole("button", { name: "Start New Run" }).click();
+    await expect(
+      page.getByRole("heading", { name: /^Danger alert: .+ failed$/ })
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Run migration plan" }).click();
     const dialog = page.getByRole("dialog", { name: "Run migration plan" });
     await expect(
       dialog.getByRole("row", { name: /Customer Management/ })
     ).toBeVisible();
+    // The application still resolves to the run's plan (R5), even though
+    // the run covers other applications this tab does not load.
+    await expect(dialog.getByLabel("Use recommended Plan")).toBeChecked();
   });
 
   test("a failed plan run starts a new run prefilled with its Plan and branch", async ({
     page,
   }) => {
     await page.goto(protoUrl("/plan-runs/2", { scenario: "failed" }));
-    await page.getByRole("button", { name: "Start new run" }).click();
+    await page.getByRole("button", { name: "Run migration plan" }).click();
     const dialog = page.getByRole("dialog", { name: "Run migration plan" });
-    await expect(
-      dialog.getByLabel("Override with a specific Plan")
-    ).toBeChecked();
+    // Every application still resolves to the run's plan: keep their own.
+    await expect(dialog.getByLabel("Use recommended Plan")).toBeChecked();
     await expect(
       dialog.getByRole("textbox", { name: /Target branch/ })
     ).toHaveValue("mta/spring-quarkus");

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, generatePath, useParams } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
@@ -28,6 +28,7 @@ import {
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
 import {
   ControllerRunPhase,
+  StageRun,
   getOrderedStageRuns,
   getStageDefinition,
 } from "@app/agentic";
@@ -40,14 +41,14 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import { MigrationPreflightModal } from "@app/pages/applications/components/agentic-migration/migration-preflight-modal";
-import { useStartMigrations } from "@app/pages/applications/components/agentic-migration/use-start-migrations";
 import { useApproveStageMutation, useFetchPlanRun } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { RunStatus } from "../../components/agentic-status";
+import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
+import { StageAttentionAlert } from "../../components/stage-attention-alert";
 
 import { StageRunSection } from "./components/stage-run-section";
 
@@ -74,7 +75,6 @@ const PlanRunDetail: React.FC = () => {
   const { pushNotification } = React.useContext(NotificationsContext);
 
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
-  const [isNewRunOpen, setIsNewRunOpen] = React.useState(false);
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
   // Stages render from the run's own snapshot, never from the current Plan.
@@ -86,18 +86,14 @@ const PlanRunDetail: React.FC = () => {
     pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
   };
 
-  const { mutate: approveStage, isPending: isApproving } =
+  const { mutateAsync: approveStage, isPending: isApproving } =
     useApproveStageMutation(() => undefined, onApproveError);
-  const approve = (stageId: string, stageName: string) =>
-    approveStage(
-      { runId: runId, stageId },
-      {
-        onSuccess: () =>
-          pushNotification({
-            title: t("agentic.planRun.stageApproved", { stage: stageName }),
-            variant: "success",
-          }),
-      }
+  const approve = (stageRun: StageRun) =>
+    approveStage({ runId: runId, stageId: stageRun.stageId }).then(() =>
+      pushNotification({
+        title: t("agentic.planRun.stageApproved", { stage: stageRun.name }),
+        variant: "success",
+      })
     );
 
   const { breadcrumbs, linkCrumbs: runChildCrumbs } = useEntityBreadcrumbs(
@@ -105,10 +101,10 @@ const PlanRunDetail: React.FC = () => {
     [{ title: t("sidebar.planRuns"), path: DevPaths.planRuns }]
   );
 
-  const { startMigrations, isStarting } = useStartMigrations(
-    runChildCrumbs,
-    () => setIsNewRunOpen(false)
-  );
+  const runMigrationPlan = useRunMigrationPlanLauncher({
+    rerunOf: planRun,
+    linkCrumbs: runChildCrumbs,
+  });
 
   if (!planRun) {
     if (isLoading) {
@@ -132,28 +128,30 @@ const PlanRunDetail: React.FC = () => {
         <PageHeader
           title={planRun.name}
           breadcrumbs={breadcrumbs}
-          btnActions={
-            <Flex
-              alignItems={{ default: "alignItemsCenter" }}
-              gap={{ default: "gapMd" }}
-            >
-              <FlexItem>
-                <RunStatus status={planRun.status} />
-              </FlexItem>
-              {planRun.status === "Failed" && canManageRun && (
-                <FlexItem>
-                  <Button
-                    variant={ButtonVariant.primary}
-                    onClick={() => setIsNewRunOpen(true)}
-                  >
-                    {t("agentic.planRun.startNewRun")}
-                  </Button>
-                </FlexItem>
-              )}
-            </Flex>
-          }
+          btnActions={<RunStatus status={planRun.status} />}
         />
       </PageSection>
+
+      <StageAttentionAlert
+        surface="run"
+        planRun={planRun}
+        reviewStageTo={(stageRun) =>
+          breadcrumbTo(
+            generatePath(DevPaths.stageRunDetails, {
+              runId: planRun.id,
+              stageId: stageRun.stageId,
+            }),
+            "",
+            runChildCrumbs
+          )
+        }
+        onApprove={canManageRun ? approve : undefined}
+        isDeciding={isApproving}
+        onRunMigrationPlan={runMigrationPlan.open}
+        wrapper={(alert) => (
+          <PageSection hasBodyWrapper={false}>{alert}</PageSection>
+        )}
+      />
 
       {/* Summary card */}
       <PageSection hasBodyWrapper={false}>
@@ -277,9 +275,6 @@ const PlanRunDetail: React.FC = () => {
                 stage={getStageDefinition(stageRun)}
                 stageRun={stageRun}
                 runId={planRun.id}
-                canApprove={canManageRun}
-                isApproving={isApproving}
-                onApprove={() => approve(stageRun.stageId, stageRun.name)}
                 runChildCrumbs={runChildCrumbs}
               />
             </StackItem>
@@ -328,22 +323,7 @@ const PlanRunDetail: React.FC = () => {
         </PageSection>
       )}
 
-      {isNewRunOpen && (
-        <MigrationPreflightModal
-          applications={planRun.applications}
-          initialValues={{
-            planSelection: "single",
-            planId: planRun.planId,
-            targetBranch: planRun.targetBranch,
-          }}
-          isStarting={isStarting}
-          linkTo={(pathname, search = "") =>
-            breadcrumbTo(pathname, search, runChildCrumbs)
-          }
-          onClose={() => setIsNewRunOpen(false)}
-          onStartReady={startMigrations}
-        />
-      )}
+      {runMigrationPlan.modal}
     </>
   );
 };

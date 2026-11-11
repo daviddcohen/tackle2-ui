@@ -1,11 +1,9 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, generatePath } from "react-router-dom";
 import {
   Alert,
-  Button,
-  ButtonVariant,
   Card,
   CardBody,
   CardTitle,
@@ -30,7 +28,6 @@ import {
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
-import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
@@ -39,6 +36,11 @@ import {
   RunStatus,
   statusPresentation,
 } from "@app/pages/agentic/components/agentic-status";
+import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
+import {
+  StageAttentionAlert,
+  getStageAttention,
+} from "@app/pages/agentic/components/stage-attention-alert";
 import {
   useFetchApplicationMigrations,
   useFetchPlanRun,
@@ -48,13 +50,11 @@ import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { MigrationNextAction } from "../../components/agentic-migration/migration-next-action";
-import { MigrationPreflightModal } from "../../components/agentic-migration/migration-preflight-modal";
 import {
   MigrationNextActionKey,
   getMigrationNextAction,
 } from "../../components/agentic-migration/next-action";
 import { planRunPath } from "../../components/agentic-migration/paths";
-import { useStartMigrations } from "../../components/agentic-migration/use-start-migrations";
 import { DecoratedApplication } from "../../useDecoratedApplications";
 
 const phaseVariant = (
@@ -77,8 +77,6 @@ const phaseVariant = (
 /** Section ids the next action moves focus to when it is on this tab. */
 const sectionIds: Partial<Record<MigrationNextActionKey, string>> = {
   resolve: "application-migration-preflight",
-  review: "application-migration-request",
-  correct: "application-migration-failure",
 };
 
 interface MigrationTabProps {
@@ -101,10 +99,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
-  const [isPreflightOpen, setIsPreflightOpen] = React.useState(false);
-  const [decisionToConfirm, setDecisionToConfirm] = React.useState<
-    "approve" | "reject" | null
-  >(null);
   const linkTo = (pathname: string, search = "") =>
     breadcrumbTo(pathname, search, linkCrumbs);
 
@@ -114,35 +108,31 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   // An application the aggregate omits has no Plan: not configured.
   const migration = migrations[applicationId] ?? UNCONFIGURED_MIGRATION;
 
-  // A pending decision belongs to the plan run, which can cover several
-  // applications: deciding here decides for all of them.
-  const isAwaitingDecision = migration.intervention === "actionRequired";
-  const { planRun: decisionRun } = useFetchPlanRun(
-    isAwaitingDecision ? migration.planRun?.id : undefined
-  );
-  const affectedApplicationNames = decisionRun?.applications.map(
-    (ref) => ref.name
-  ) ?? [application.name];
+  // The attention alert reads the run's own stages, like the run page. A
+  // decision belongs to the run, which can cover several applications:
+  // deciding here decides for all of them.
+  const { planRun } = useFetchPlanRun(migration.planRun?.id);
 
   const resolveRequest = useResolveApplicationMigrationRequestMutation(
-    () => {
-      setDecisionToConfirm(null);
+    () =>
       pushNotification({
         title: t("agentic.execution.requestResolved"),
         variant: "success",
-      });
-    },
-    (error: AxiosError) => {
-      setDecisionToConfirm(null);
+      }),
+    (error: AxiosError) =>
       pushNotification({
         title: getAxiosErrorMessage(error),
         variant: "danger",
-      });
-    }
+      })
   );
-  const { startMigrations, isStarting } = useStartMigrations(linkCrumbs, () =>
-    setIsPreflightOpen(false)
-  );
+  const decide = (decision: "approve" | "reject") => () =>
+    resolveRequest.mutateAsync({ applicationId, decision });
+  const runMigrationPlan = useRunMigrationPlanLauncher({
+    applications: [{ id: applicationId, name: application.name }],
+    migrations,
+    rerunOf: planRun?.status === "Failed" ? planRun : undefined,
+    linkCrumbs,
+  });
 
   if (isLoading) {
     return (
@@ -176,13 +166,31 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
     section?.scrollIntoView({ block: "center" });
     section?.focus({ preventScroll: true });
   };
-  const openPreflight = canManageRun
-    ? () => setIsPreflightOpen(true)
-    : undefined;
 
   return (
     <DrawerTabContent>
       <Stack hasGutter>
+        {planRun != null && getStageAttention(planRun) && (
+          <StackItem>
+            <StageAttentionAlert
+              surface="application"
+              planRun={planRun}
+              reviewStageTo={(stageRun) =>
+                linkTo(
+                  generatePath(DevPaths.stageRunDetails, {
+                    runId: planRun.id,
+                    stageId: stageRun.stageId,
+                  })
+                )
+              }
+              onApprove={canManageRun ? decide("approve") : undefined}
+              onReject={canManageRun ? decide("reject") : undefined}
+              isDeciding={resolveRequest.isPending}
+              onRunMigrationPlan={runMigrationPlan.open}
+              failureDetails={failedStage}
+            />
+          </StackItem>
+        )}
         <StackItem>
           <DescriptionList isHorizontal isCompact>
             <DescriptionListGroup>
@@ -205,7 +213,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                   applicationId={applicationId}
                   archetypeId={application.archetypes?.[0]?.id}
                   linkTo={linkTo}
-                  onStart={openPreflight}
+                  onStart={runMigrationPlan.open}
                   onOpenMigrationTab={focusSection}
                 />
               </DescriptionListDescription>
@@ -240,92 +248,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
               </Alert>
             </StackItem>
           )}
-
-        {migration.intervention === "actionRequired" && migration.action && (
-          <StackItem>
-            <Alert
-              id={sectionIds.review}
-              tabIndex={-1}
-              isInline
-              variant="warning"
-              component="h3"
-              title={migration.action.title}
-            >
-              <Stack hasGutter>
-                <StackItem>{migration.action.description}</StackItem>
-                {affectedApplicationNames.length > 1 && (
-                  <StackItem>
-                    {t("agentic.execution.decisionAppliesToRun", {
-                      run: decisionRun?.name,
-                      applications: affectedApplicationNames.join(", "),
-                    })}
-                  </StackItem>
-                )}
-                {canManageRun && (
-                  <StackItem>
-                    <Button
-                      variant={ButtonVariant.primary}
-                      onClick={() => setDecisionToConfirm("approve")}
-                      isLoading={
-                        resolveRequest.isPending &&
-                        decisionToConfirm === "approve"
-                      }
-                      isDisabled={resolveRequest.isPending}
-                    >
-                      {t("agentic.execution.approveAndContinue")}
-                    </Button>{" "}
-                    <Button
-                      variant={ButtonVariant.link}
-                      onClick={() => setDecisionToConfirm("reject")}
-                      isDisabled={resolveRequest.isPending}
-                    >
-                      {t("agentic.execution.rejectRequest")}
-                    </Button>
-                  </StackItem>
-                )}
-              </Stack>
-            </Alert>
-          </StackItem>
-        )}
-
-        {failedStage && (
-          <StackItem>
-            <Alert
-              id={sectionIds.correct}
-              tabIndex={-1}
-              isInline
-              variant="danger"
-              component="h3"
-              title={t("agentic.execution.stageFailed", {
-                stage: failedStage.stageName,
-              })}
-            >
-              {failedStage.summary && (
-                <Content component="p">{failedStage.summary}</Content>
-              )}
-              {failedStage.evidence?.length ? (
-                <Content component="ul">
-                  {failedStage.evidence.map((evidence) => (
-                    <Content component="li" key={evidence}>
-                      {evidence}
-                    </Content>
-                  ))}
-                </Content>
-              ) : null}
-              <Content component="p">
-                {t("agentic.execution.recoveryDescription")}
-              </Content>
-              {canManageRun && (
-                <Button
-                  variant={ButtonVariant.primary}
-                  onClick={() => setIsPreflightOpen(true)}
-                >
-                  {t("agentic.execution.startNewRun")}
-                </Button>
-              )}
-            </Alert>
-          </StackItem>
-        )}
 
         <StackItem>
           <Divider />
@@ -506,70 +428,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         )}
       </Stack>
 
-      {isPreflightOpen && (
-        <MigrationPreflightModal
-          applications={[{ id: applicationId, name: application.name }]}
-          migrations={migrations}
-          isStarting={isStarting}
-          linkTo={linkTo}
-          onClose={() => setIsPreflightOpen(false)}
-          onStartReady={startMigrations}
-        />
-      )}
-
-      <ConfirmDialog
-        isOpen={decisionToConfirm != null}
-        title={
-          decisionToConfirm === "reject"
-            ? t("agentic.execution.confirmRejectTitle")
-            : t("agentic.execution.confirmApproveTitle")
-        }
-        titleIconVariant="warning"
-        message={
-          <Stack hasGutter>
-            <StackItem>
-              {decisionToConfirm === "reject"
-                ? t("agentic.execution.confirmRejectMessage", {
-                    count: affectedApplicationNames.length,
-                  })
-                : t("agentic.execution.confirmApproveMessage", {
-                    count: affectedApplicationNames.length,
-                  })}
-            </StackItem>
-            <StackItem>
-              <Content component="ul" aria-label={t("terms.applications")}>
-                {affectedApplicationNames.map((name) => (
-                  <Content component="li" key={name}>
-                    {name}
-                  </Content>
-                ))}
-              </Content>
-            </StackItem>
-          </Stack>
-        }
-        confirmBtnLabel={
-          decisionToConfirm === "reject"
-            ? t("agentic.execution.rejectRequest")
-            : t("agentic.execution.approveAndContinue")
-        }
-        cancelBtnLabel={t("actions.cancel")}
-        confirmBtnVariant={
-          decisionToConfirm === "reject"
-            ? ButtonVariant.danger
-            : ButtonVariant.primary
-        }
-        inProgress={resolveRequest.isPending}
-        onCancel={() => setDecisionToConfirm(null)}
-        onClose={() => setDecisionToConfirm(null)}
-        onConfirm={() => {
-          if (decisionToConfirm != null) {
-            resolveRequest.mutate({
-              applicationId,
-              decision: decisionToConfirm,
-            });
-          }
-        }}
-      />
+      {runMigrationPlan.modal}
     </DrawerTabContent>
   );
 };

@@ -3,9 +3,6 @@ import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
-  Alert,
-  Button,
-  ButtonVariant,
   Card,
   CardBody,
   CardTitle,
@@ -17,8 +14,6 @@ import {
   Label,
   LabelGroup,
   PageSection,
-  Stack,
-  StackItem,
   Title,
 } from "@patternfly/react-core";
 
@@ -42,6 +37,8 @@ import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { RunStatus } from "../../components/agentic-status";
+import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
+import { StageAttentionAlert } from "../../components/stage-attention-alert";
 import { StageRunContent } from "../components/stage-run-content";
 
 const StageRunDetail: React.FC = () => {
@@ -63,7 +60,7 @@ const StageRunDetail: React.FC = () => {
     pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
   };
 
-  const { mutate: approveStage, isPending: isApproving } =
+  const { mutateAsync: approveStage, isPending: isApproving } =
     useApproveStageMutation(
       () =>
         pushNotification({
@@ -90,6 +87,11 @@ const StageRunDetail: React.FC = () => {
         : []),
     ]
   );
+
+  const runMigrationPlan = useRunMigrationPlanLauncher({
+    rerunOf: planRun,
+    linkCrumbs: stageChildCrumbs,
+  });
 
   if (!planRun || !stageRun || !stage) {
     if (planRun == null && isLoading) {
@@ -126,6 +128,26 @@ const StageRunDetail: React.FC = () => {
       <PageSection hasBodyWrapper={false}>
         <PageHeader title={title} breadcrumbs={breadcrumbs} />
       </PageSection>
+
+      <StageAttentionAlert
+        surface="stage"
+        planRun={planRun}
+        stageRun={stageRun}
+        onApprove={
+          canManageRun
+            ? () =>
+                approveStage({
+                  runId: planRun.id,
+                  stageId: stageRun.stageId,
+                })
+            : undefined
+        }
+        isDeciding={isApproving}
+        onRunMigrationPlan={runMigrationPlan.open}
+        wrapper={(alert) => (
+          <PageSection hasBodyWrapper={false}>{alert}</PageSection>
+        )}
+      />
 
       {/* Metadata */}
       <PageSection hasBodyWrapper={false}>
@@ -275,42 +297,6 @@ const StageRunDetail: React.FC = () => {
         </Card>
       </PageSection>
 
-      {/* Approval action */}
-      {stageRun.status === "AwaitingApproval" && (
-        <PageSection hasBodyWrapper={false}>
-          <Alert
-            variant="warning"
-            isInline
-            title={t("agentic.planRun.approveTitle")}
-          >
-            <Stack hasGutter>
-              <StackItem>
-                {t("agentic.planRun.approveDescription", {
-                  agentName: stage.agent.name,
-                })}
-              </StackItem>
-              {canManageRun && (
-                <StackItem>
-                  <Button
-                    variant={ButtonVariant.primary}
-                    isLoading={isApproving}
-                    isDisabled={isApproving}
-                    onClick={() =>
-                      approveStage({
-                        runId: planRun.id,
-                        stageId: stageRun.stageId,
-                      })
-                    }
-                  >
-                    {t("agentic.planRun.approve")}
-                  </Button>
-                </StackItem>
-              )}
-            </Stack>
-          </Alert>
-        </PageSection>
-      )}
-
       {/* Activities and commits */}
       {stageRun.status !== "Pending" && (
         <PageSection hasBodyWrapper={false}>
@@ -365,6 +351,8 @@ const StageRunDetail: React.FC = () => {
           </Card>
         </PageSection>
       )}
+
+      {runMigrationPlan.modal}
     </>
   );
 };
