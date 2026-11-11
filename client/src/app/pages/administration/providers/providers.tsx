@@ -54,7 +54,7 @@ import {
   useFetchProviders,
 } from "@app/queries/agentic";
 import { providersWriteScopes } from "@app/scopes";
-import { disabledActionProps } from "@app/utils/agentic";
+import { deleteActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
@@ -256,7 +256,7 @@ const ProvidersPage: React.FC = () => {
           >
             <Toolbar {...toolbarProps}>
               <ToolbarContent>
-                <FilterToolbar {...filterToolbarProps} />
+                <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
                 {canManageProviders && (
                   <ToolbarGroup variant="action-group">
                     <ToolbarItem>
@@ -383,11 +383,7 @@ const ProvidersPage: React.FC = () => {
                                       openModalAfterMenuClose(() =>
                                         setProviderToDelete(provider)
                                       ),
-                                    isDanger: deleteBlocker == null,
-                                    ...disabledActionProps(
-                                      deleteBlocker,
-                                      "left"
-                                    ),
+                                    ...deleteActionProps(deleteBlocker),
                                   },
                                 ]}
                               />
