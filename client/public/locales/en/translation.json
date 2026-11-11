@@ -1813,7 +1813,14 @@
       "backToPlanRuns": "Back to plan runs",
       "stageApproved": "{{stage}} approved",
       "skillsTitle": "Skills ({{count}})",
-      "skillsDescription": "Skills given to the agents when this run started."
+      "skillsDescription": "Skills given to the agents when this run started.",
+      "skillsTitleEmpty": "Skills",
+      "skillsEmpty": "No skills were given to the agents when this run started.",
+      "duration": "Duration",
+      "waitingToStart": "Waiting to start. {{stage}} runs first.",
+      "stageAndStarted": "{{stage}} · Started {{started}}",
+      "startedAt": "Started {{started}}",
+      "startedAndCompleted": "Started {{started}} · Completed {{completed}}"
     },
     "stageRun": {
       "plan": "Migration Plan",
