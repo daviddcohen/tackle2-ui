@@ -89,7 +89,7 @@ beforeEach(() => {
 });
 
 describe("SkillForm", () => {
-  it("creates with a description, two sections and the associations collapsed", async () => {
+  it("creates with a description and the association fields visible", async () => {
     render(<SkillForm skill={null} onClose={jest.fn()} />);
 
     expect(screen.getByText("Create skill")).toBeInTheDocument();
@@ -99,16 +99,22 @@ describe("SkillForm", () => {
       )
     ).toBeInTheDocument();
     expect(screen.getByText("General")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Associations/ })
-    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Associations")).toBeInTheDocument();
+    for (const id of [
+      "skill-agents",
+      "skill-archetypes",
+      "skill-target-profiles",
+      "skill-applications",
+    ]) {
+      expect(document.querySelector(`#${id}-input`)).toBeVisible();
+    }
     expect(
       screen.queryByText(/Changes apply wherever it is used/)
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
   });
 
-  it("warns on edit and opens the associations with one chip per value", async () => {
+  it("warns on edit and shows the associations with one chip per value", async () => {
     render(<SkillForm skill={skill} onClose={jest.fn()} />);
 
     expect(
@@ -116,9 +122,6 @@ describe("SkillForm", () => {
         "This skill has 2 associations and is in 1 skill collection. Changes apply wherever it is used."
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Associations/ })
-    ).toHaveAttribute("aria-expanded", "true");
     expect(
       await screen.findByText("Quarkus 3.x (Spring Boot Application)")
     ).toBeInTheDocument();

@@ -9,8 +9,6 @@ import {
   Button,
   ButtonVariant,
   Form,
-  FormFieldGroupExpandable,
-  FormFieldGroupHeader,
   FormSection,
   Modal,
   ModalBody,
@@ -507,20 +505,8 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
             )}
           </FormSection>
 
-          {/* Collapsed when the skill has no associations (guide 4.4). */}
-          <FormFieldGroupExpandable
-            isExpanded={(skill?.associations?.length ?? 0) > 0}
-            toggleAriaLabel={t("agentic.skill.associations")}
-            header={
-              <FormFieldGroupHeader
-                titleText={{
-                  text: t("agentic.skill.associations"),
-                  id: "skill-associations",
-                }}
-                titleDescription={t("agentic.skill.associationsDescription")}
-              />
-            }
-          >
+          {/* Always visible on create and edit (user decision U1). */}
+          <FormSection title={t("agentic.skill.associations")}>
             {ASSOCIATION_FIELDS.map(({ field, toggleId }) => {
               const isDisabled = field === "agents" && !canManageAgents;
               return (
@@ -575,7 +561,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
                 />
               );
             })}
-          </FormFieldGroupExpandable>
+          </FormSection>
         </Form>
       </ModalBody>
       <ModalFooter>

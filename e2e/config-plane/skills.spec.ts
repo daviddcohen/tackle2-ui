@@ -242,8 +242,7 @@ test.describe("Skill form", () => {
     page,
   }) => {
     await field(dialog(page), "Content").fill("# QA Skill\nGuidance.");
-    // The Associations group is collapsed while the skill has none.
-    await dialog(page).getByRole("button", { name: "Associations" }).click();
+    // The Associations fields are always visible (user decision U1).
     await pickMulti(page, "skill-agents", ["Test Runner"]);
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill created")).toBeVisible();
