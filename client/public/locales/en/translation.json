@@ -599,7 +599,6 @@
     "password": "Password",
     "path": "Path",
     "priority": "Priority",
-    "profiles": "Profiles",
     "proposedAction": "Proposed action",
     "providerType": "Provider",
     "proxyConfig": "Proxy configuration",
@@ -1916,6 +1915,8 @@
       "noneSelected": "No archetype selected",
       "notAssigned": "Not assigned",
       "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications.",
+      "targetProfileCount_one": "{{count}} target profile",
+      "targetProfileCount_other": "{{count}} target profiles",
       "targetProfilesTabDescription": "Applications in this archetype are migrated with the plan assigned to their target profile."
     },
     "provider": {
