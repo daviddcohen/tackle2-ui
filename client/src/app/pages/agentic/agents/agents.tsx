@@ -14,7 +14,6 @@ import {
   ToolbarGroup,
   ToolbarItem,
 } from "@patternfly/react-core";
-import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
   IAction,
@@ -46,7 +45,6 @@ import {
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
-import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
   useDeleteAgentMutation,
   useFetchAgents,
@@ -54,11 +52,13 @@ import {
   useFetchMigrationPlans,
 } from "@app/queries/agentic";
 import { agenticAgentRunsWriteScopes, agentsWriteScopes } from "@app/scopes";
-import { disabledActionProps, managedActionProps } from "@app/utils/agentic";
+import { deleteActionProps, disabledActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
 } from "@app/utils/utils";
+
+import { CountLink } from "../components/count-link";
 
 import { useAgentSkillsSummary } from "./agent-skills-summary";
 import { getPlansUsingAgent, useAgentDeleteBlockedReason } from "./agent-usage";
@@ -67,24 +67,6 @@ import { AgentModel } from "./components/agent-model";
 import { AgentTestModal } from "./components/agent-test-modal";
 
 type LinkTo = (pathname: string, search?: string) => LocationDescriptor;
-
-/** A count summary that opens the page listing the objects (guide 4.10). */
-const CountLink: React.FC<{ to: LocationDescriptor; children: string }> = ({
-  to,
-  children,
-}) => {
-  const link = useLinkComponent(to);
-  return (
-    <Button
-      variant="link"
-      isInline
-      className={textStyles.textNowrap}
-      component={link}
-    >
-      {children}
-    </Button>
-  );
-};
 
 /**
  * One skill and no collection is the skill's name (C1); otherwise the count
@@ -216,19 +198,16 @@ export const AgentsPage: React.FC = () => {
 
   /** Edit, Test agent, separator, Delete, each with its own scope (A1, guide 4.1). */
   const rowActions = (agent: Agent): IAction[] => {
-    const managed = (position?: "left") =>
-      managedActionProps(
-        agent.operatorManaged,
-        t("agentic.common.managedByKonveyor"),
-        position
-      );
+    const managedReason = agent.operatorManaged
+      ? t("agentic.common.managedByKonveyor")
+      : undefined;
     const edit: IAction[] = canManageAgents
       ? [
           {
             title: t("actions.edit"),
             onClick: () =>
               openModalAfterMenuClose(() => setCreateUpdateModalState(agent)),
-            ...managed(),
+            ...disabledActionProps(managedReason),
           },
         ]
       : [];
@@ -243,17 +222,6 @@ export const AgentsPage: React.FC = () => {
     if (!canManageAgents) {
       return test;
     }
-    const managedDelete = managed("left");
-    const blocked = managedDelete.isAriaDisabled
-      ? managedDelete
-      : disabledActionProps(
-          deleteBlockedReason(
-            hasPlans
-              ? getPlansUsingAgent(agent.id, migrationPlans).length
-              : undefined
-          ),
-          "left"
-        );
     return [
       ...edit,
       ...test,
@@ -261,8 +229,14 @@ export const AgentsPage: React.FC = () => {
       {
         title: t("actions.delete"),
         onClick: () => openModalAfterMenuClose(() => deleteRow(agent)),
-        isDanger: !blocked.isAriaDisabled,
-        ...blocked,
+        ...deleteActionProps(
+          managedReason ??
+            deleteBlockedReason(
+              hasPlans
+                ? getPlansUsingAgent(agent.id, migrationPlans).length
+                : undefined
+            )
+        ),
       },
     ];
   };
@@ -354,7 +328,7 @@ export const AgentsPage: React.FC = () => {
           >
             <Toolbar {...toolbarProps}>
               <ToolbarContent>
-                <FilterToolbar {...filterToolbarProps} />
+                <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
                 <ToolbarGroup variant="action-group">
                   {canManageAgents && (
                     <ToolbarItem>
