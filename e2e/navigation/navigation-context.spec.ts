@@ -413,6 +413,9 @@ test("cold links use the canonical hierarchy and a new tab has its own history",
 test("application details handle delayed, failed and missing entity reads without a broken page", async ({
   page,
 }) => {
+  // Two waits of up to 20s each (apiError retries, loading delay) do not fit
+  // the default 30s test timeout under parallel workers.
+  test.setTimeout(60_000);
   await page.goto(view("/applications/999999"));
   // A missing application (404) is "not found", not an API error.
   await expect(
