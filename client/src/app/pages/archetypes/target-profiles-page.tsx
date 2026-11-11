@@ -45,7 +45,7 @@ import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchSkills } from "@app/queries/agentic";
 import { useFetchArchetypeById } from "@app/queries/archetypes";
 import { archetypesWriteScopes, plansWriteScopes } from "@app/scopes";
-import { disabledActionProps } from "@app/utils/agentic";
+import { deleteActionProps, disabledActionProps } from "@app/utils/agentic";
 import { openModalAfterMenuClose } from "@app/utils/utils";
 
 import { AssignMigrationPlanModal } from "./components/assign-migration-plan-modal";
@@ -257,7 +257,7 @@ const TargetProfilesPage: React.FC = () => {
               {isAgenticEnabled && (
                 <>
                   <Th>{t("agentic.entity.migrationPlan")}</Th>
-                  <Th modifier="fitContent">{t("agentic.skill.title")}</Th>
+                  <Th modifier="fitContent">{t("agentic.archetype.skills")}</Th>
                 </>
               )}
               {hasRowActions && (
@@ -349,8 +349,7 @@ const TargetProfilesPage: React.FC = () => {
                             openModalAfterMenuClose(() =>
                               setProfileToDelete(profile)
                             ),
-                          isDanger: deleteBlocker == null,
-                          ...disabledActionProps(deleteBlocker, "left"),
+                          ...deleteActionProps(deleteBlocker),
                         },
                       ]
                     : []),
@@ -379,7 +378,7 @@ const TargetProfilesPage: React.FC = () => {
                           />
                         </Td>
                         <Td
-                          dataLabel={t("agentic.skill.title")}
+                          dataLabel={t("agentic.archetype.skills")}
                           modifier="nowrap"
                         >
                           <TargetProfileSkills
