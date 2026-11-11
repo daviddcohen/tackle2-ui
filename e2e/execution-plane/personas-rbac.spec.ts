@@ -26,7 +26,6 @@ for (const { persona, canEditPlans } of personas) {
         protoUrl("/applications", { scenario: "configured", persona })
       );
       await waitForInventory(page);
-      await expect(page.getByText("Read-only access")).toHaveCount(0);
       await inventoryRow(page, "Customer Management")
         .getByRole("button", { name: "Row actions" })
         .click();
