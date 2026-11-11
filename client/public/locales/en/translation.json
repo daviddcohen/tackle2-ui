@@ -86,8 +86,7 @@
     "addAll": "Add all",
     "removeSelected": "Remove selected",
     "removeAll": "Remove all",
-    "selectionOptions": "Selection options",
-    "viewDetails": "View details"
+    "selectionOptions": "Selection options"
   },
   "analysisProfiles": {
     "none": "None",
@@ -1387,12 +1386,6 @@
       "selectArchetype": "Select an archetype",
       "selectPlan": "Select a Plan",
       "selectTargetProfiles": "Select target profiles",
-      "skillScopes": {
-        "agent": "Agent",
-        "application": "Application",
-        "archetype": "Archetype",
-        "targetProfile": "Target profile"
-      },
       "stages": "Stages",
       "stagesDescription": "Stages run in order. Each stage is run by one agent, using that agent's model and skills.",
       "stageName": "Stage name",
