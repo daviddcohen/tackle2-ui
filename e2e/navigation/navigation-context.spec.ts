@@ -127,6 +127,8 @@ test("returning through an Agent association restores the saved runs tab and tru
 }) => {
   await page.goto(view("/agents/2?tab=runs"));
   await page.locator('main a[href^="/plan-runs/1/stages/2"]').click();
+  // The stage page reaches skills through its run (the run's Skills section).
+  await page.locator('main a[href="/plan-runs/1"]').click();
   await page.locator('main a[href^="/skills/2?"]').click();
   await associationsTab(page).click();
   await page
@@ -417,8 +419,10 @@ test("cold links use the canonical hierarchy and a new tab has its own history",
   await expect(
     breadcrumb(page).getByRole("link", { name: "Code Migrator", exact: true })
   ).toBeVisible();
+  // The stage page reaches skills through its run (addenda R1).
+  await page.locator('main a[href="/plan-runs/1"]').click();
   await page.locator('main a[href^="/skills/"]').first().click();
-  await expect(crumbItems(page)).toHaveCount(4);
+  await expect(crumbItems(page)).toHaveCount(5);
   const href = page.url();
   const newTab = await context.newPage();
   await newTab.goto(href);

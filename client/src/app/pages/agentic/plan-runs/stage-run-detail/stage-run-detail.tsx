@@ -2,15 +2,9 @@ import * as React from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
-  Card,
-  CardBody,
-  CardTitle,
   Content,
   ExpandableSection,
-  Label,
-  LabelGroup,
   PageSection,
-  Title,
 } from "@patternfly/react-core";
 
 import { DevPaths, StageRunDetailsRoute } from "@app/Paths";
@@ -24,7 +18,7 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import { useFetchAgentById, useFetchPlanRun } from "@app/queries/agentic";
+import { useFetchPlanRun } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
 import { formatDate } from "@app/utils/utils";
@@ -54,8 +48,6 @@ const StageRunDetail: React.FC = () => {
   // The stage definition comes from the run's snapshot, not the current Plan.
   const stageRun = planRun?.stageRuns.find((sr) => sr.stageId === stageId);
   const stage = stageRun ? getStageDefinition(stageRun) : undefined;
-
-  const { agent } = useFetchAgentById(stage?.agent.id);
 
   const { approve, isApproving } = useApproveStage(runId);
 
@@ -253,46 +245,6 @@ const StageRunDetail: React.FC = () => {
         {stageRun.status !== "Pending" && <StageActivity stageRun={stageRun} />}
         {stageRun.status !== "Pending" && <StageCommits stageRun={stageRun} />}
       </RunPageBody>
-
-      {/* Agent skills */}
-      {agent && agent.skills.length > 0 && (
-        <PageSection hasBodyWrapper={false}>
-          <Card>
-            <CardTitle>
-              <Title headingLevel="h2" size="md">
-                {t("agentic.stageRun.agentSkills")}
-              </Title>
-            </CardTitle>
-            <CardBody>
-              <LabelGroup numLabels={10}>
-                {agent.skills.map((skill) => (
-                  <Label
-                    key={skill.id}
-                    isCompact
-                    variant="outline"
-                    render={({ className, content }) => (
-                      <Link
-                        className={className}
-                        to={breadcrumbTo(
-                          generatePath(DevPaths.skillDetails, {
-                            skillId: String(skill.id),
-                          }),
-                          `?from=run-${runId}`,
-                          stageChildCrumbs
-                        )}
-                      >
-                        {content}
-                      </Link>
-                    )}
-                  >
-                    {skill.name}
-                  </Label>
-                ))}
-              </LabelGroup>
-            </CardBody>
-          </Card>
-        </PageSection>
-      )}
 
       {runMigrationPlan.modal}
     </>
