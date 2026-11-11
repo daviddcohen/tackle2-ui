@@ -1,7 +1,8 @@
 import * as React from "react";
 import { AxiosError } from "axios";
+import { LocationDescriptor } from "history";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, generatePath } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
@@ -35,6 +36,7 @@ import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { NotificationsContext } from "@app/components/NotificationsContext";
@@ -47,6 +49,7 @@ import {
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
   useDeleteAgentMutation,
   useFetchAgents,
@@ -58,9 +61,61 @@ import {
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
+import { useAgentSkillsSummary } from "./agent-skills-summary";
 import { getPlansUsingAgent } from "./agent-usage";
 import { AgentForm } from "./components/agent-form";
 import { AgentTestModal } from "./components/agent-test-modal";
+
+type LinkTo = (pathname: string, search?: string) => LocationDescriptor;
+
+/** A count summary that opens the page listing the objects (guide 4.10). */
+const CountLink: React.FC<{ to: LocationDescriptor; children: string }> = ({
+  to,
+  children,
+}) => {
+  const link = useLinkComponent(to);
+  return (
+    <Button
+      variant="link"
+      isInline
+      className="pf-v6-u-text-nowrap"
+      component={link}
+    >
+      {children}
+    </Button>
+  );
+};
+
+/**
+ * One skill and no collection is the skill's name (C1); otherwise the count
+ * summary opens the agent, whose Details tab lists them (A12).
+ */
+const AgentSkillsCell: React.FC<{ agent: Agent; to: LinkTo }> = ({
+  agent,
+  to,
+}) => {
+  const { t } = useTranslation();
+  const skillsSummary = useAgentSkillsSummary();
+  const summary = skillsSummary(agent);
+  if (summary == null) {
+    return <EmptyTextMessage message={t("terms.none")} />;
+  }
+  if (agent.skills.length === 1 && !agent.skillCollections?.length) {
+    const [skill] = agent.skills;
+    return (
+      <Link to={to(generatePath(DevPaths.skillDetails, { skillId: skill.id }))}>
+        {skill.name}
+      </Link>
+    );
+  }
+  return (
+    <CountLink
+      to={to(generatePath(DevPaths.agentDetails, { agentId: agent.id }))}
+    >
+      {summary}
+    </CountLink>
+  );
+};
 
 export const AgentsPage: React.FC = () => {
   const { t } = useTranslation();
@@ -287,7 +342,7 @@ export const AgentsPage: React.FC = () => {
                           width={10}
                           {...getTdProps({ columnKey: "skillsCount" })}
                         >
-                          {agent.skills?.length ?? 0}
+                          <AgentSkillsCell agent={agent} to={to} />
                         </Td>
                         <Td isActionCell>
                           {(canManageAgents || canTestAgents) && (

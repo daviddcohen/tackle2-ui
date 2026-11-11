@@ -1214,6 +1214,13 @@
       "selectModel": "Select a Model...",
       "removeParameter": "Remove Parameter",
       "skillsSelect": "Skills select dropdown",
+      "skillsSummary": {
+        "skills_one": "{{count}} skill",
+        "skills_other": "{{count}} skills",
+        "collections_one": "{{count}} collection",
+        "collections_other": "{{count}} collections",
+        "both": "{{skills}}, {{collections}}"
+      },
       "tableLabel": "Agents table",
       "title": "Agents",
       "updated": "Agent updated",
