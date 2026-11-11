@@ -333,6 +333,26 @@ AgentRuns created for workflow stages carry the label `konveyor.io/agentworkflow
 | `operatorManaged`                                       | label `app.kubernetes.io/managed-by`                                | the shipped `java-ee-to-quarkus` workflow                                                 |
 | (none)                                                  | `spec.guide`, `spec.params`, stage `execution` limits and `askUser` | kept from `base`                                                                          |
 
+How the migration plan pages read these fields:
+
+- **Assigned means the default plan.** A plan is _assigned_ to a target profile when its `migrationPath.isDefault` is true
+  and the profile is in its path; only assigned plans resolve to applications (`resolvePlanFor`). The plan page lists every
+  target profile of the path and, when `isDefault` is false, says "Not assigned. Applications get this plan once it is
+  assigned." with a link to the archetype's target profiles page. Archetype surfaces show only the assigned plan.
+- **Server-derived fields need Hub support.** With the real adapters `migrationPath`, `effectiveSkills` and
+  `applicationImpact` are undefined, and `runCount` is undefined unless runs are passed. The UI treats undefined as unknown,
+  never as empty: Archetype, Target profiles, Applications, Runs and the Skills section read "Unavailable", and Delete is
+  disabled with "Usage could not be checked. Try again later." The path check still counts a missing `migrationPath` as an
+  issue, so every such plan shows the "No migration path assigned" alert on its page, a warning marker after its name in
+  the list (tooltip "No migration path assigned") and Configuration "1 issue"; a missing `effectiveSkills` makes the Skills
+  check "Not evaluated" (an empty list passes). The path alert, the list marker and the Skills section therefore only work
+  once the Hub serves these fields (7.2, 7.7).
+- **Open questions, not designed around:** plan names are immutable in the Hub (`assertNotRenamed`, [C](#c-names-are-immutable))
+  but the wizard keeps Name editable; "Require approval after this stage" maps to `execution.mode: approve`, which gates
+  tool calls inside the stage rather than the stage boundary ([A](#a-approvals-happen-inside-a-live-session-and-are-denied-when-nobody-is-watching)),
+  and the checkbox copy stays; whether editing a plan changes runs already in progress (Q2) is unanswered, so the delete
+  confirm and the edit Review say nothing about it.
+
 ### Plan run ↔ AgentWorkflowRun (`/agentic/workflowruns`), Stage run ↔ run stage + AgentRun
 
 | Domain                                                     | Source                                                                                            | Notes                                                                                                                                                                                                                                        |
