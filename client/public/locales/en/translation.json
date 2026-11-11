@@ -1806,8 +1806,6 @@
       "activities": "Activities",
       "activitiesEmpty": "No activity recorded for this stage.",
       "activitiesRunning": "Agent is working — activity will appear here.",
-      "saveLessonsLearned": "Save as lessons learned",
-      "saveLessonsLearnedTooltip": "Knowledge Base capture is coming soon.",
       "notFoundTitle": "Plan run not found",
       "notFoundBody": "This plan run may have been deleted, or the link is out of date.",
       "backToPlanRuns": "Back to plan runs",

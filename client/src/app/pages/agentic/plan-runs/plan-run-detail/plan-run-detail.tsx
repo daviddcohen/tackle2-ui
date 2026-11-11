@@ -3,8 +3,6 @@ import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
-  Button,
-  ButtonVariant,
   Card,
   CardBody,
   Content,
@@ -12,8 +10,6 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  Flex,
-  FlexItem,
   Label,
   LabelGroup,
   PageSection,
@@ -251,24 +247,6 @@ const PlanRunDetail: React.FC = () => {
               />
             </StackItem>
           </Stack>
-        </PageSection>
-      )}
-
-      {/* Save lessons learned — placeholder */}
-      {planRun.status === "Succeeded" && (
-        <PageSection hasBodyWrapper={false}>
-          <Flex>
-            <FlexItem>
-              <Button
-                variant={ButtonVariant.secondary}
-                isDisabled
-                aria-disabled
-                title={t("agentic.planRun.saveLessonsLearnedTooltip")}
-              >
-                {t("agentic.planRun.saveLessonsLearned")}
-              </Button>
-            </FlexItem>
-          </Flex>
         </PageSection>
       )}
 
