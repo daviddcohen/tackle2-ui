@@ -10,6 +10,9 @@ import {
   FileUpload,
   Form,
   FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   Modal,
   ModalBody,
   ModalFooter,
@@ -21,6 +24,9 @@ import { HookFormPFTextInput } from "@app/components/HookFormPFFields";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { useCreateSkillMutation, useFetchSkills } from "@app/queries/agentic";
 import { duplicateNameCheck, getAxiosErrorMessage } from "@app/utils/utils";
+
+const FORM_ID = "import-skill-form";
+const TITLE_ID = "import-skill-modal-title";
 
 interface ImportSkillModalProps {
   isOpen: boolean;
@@ -50,21 +56,18 @@ export const parseSkillName = (filename: string, content: string): string => {
 export const ImportSkillModal: React.FC<ImportSkillModalProps> = ({
   isOpen,
   onClose,
-}) => {
-  const { t } = useTranslation();
-  return (
-    <Modal
-      id="import-skill-modal"
-      variant="medium"
-      isOpen={isOpen}
-      onClose={onClose}
-      aria-label={t("agentic.skill.importFile")}
-    >
-      {/* mounted only while open, so every opening starts empty */}
-      {isOpen && <ImportSkillModalContent onClose={onClose} />}
-    </Modal>
-  );
-};
+}) => (
+  <Modal
+    id="import-skill-modal"
+    variant="medium"
+    isOpen={isOpen}
+    onClose={onClose}
+    aria-labelledby={TITLE_ID}
+  >
+    {/* mounted only while open, so every opening starts empty */}
+    {isOpen && <ImportSkillModalContent onClose={onClose} />}
+  </Modal>
+);
 
 const ImportSkillModalContent: React.FC<{ onClose: () => void }> = ({
   onClose,
@@ -142,13 +145,17 @@ const ImportSkillModalContent: React.FC<{ onClose: () => void }> = ({
 
   return (
     <>
-      <ModalHeader title={t("agentic.skill.importFile")} />
+      <ModalHeader
+        title={t("agentic.skill.importFile")}
+        description={t("agentic.skill.importDescription")}
+        labelId={TITLE_ID}
+      />
       <ModalBody>
-        <Form id="import-skill-form" onSubmit={handleSubmit(onSubmit)}>
+        <Form id={FORM_ID} onSubmit={handleSubmit(onSubmit)}>
           <FormGroup
             label={t("agentic.skill.importFileUpload")}
             isRequired
-            fieldId="skill-file-upload"
+            fieldId="skill-file-upload-filename"
           >
             <FileUpload
               id="skill-file-upload"
@@ -179,13 +186,20 @@ const ImportSkillModalContent: React.FC<{ onClose: () => void }> = ({
               browseButtonText={t("agentic.skill.importFileUploadBrowse")}
               allowEditingUploadedText
             />
+            {/* Read before Name: it says where the name comes from. */}
+            <FormHelperText>
+              <HelperText>
+                <HelperTextItem>
+                  {t("agentic.skill.importFileHelp")}
+                </HelperTextItem>
+              </HelperText>
+            </FormHelperText>
           </FormGroup>
           <HookFormPFTextInput
             control={control}
             name="name"
             label={t("terms.name")}
             fieldId="import-skill-name"
-            helperText={t("agentic.skill.importFileDescription")}
             isRequired
           />
         </Form>
@@ -193,14 +207,14 @@ const ImportSkillModalContent: React.FC<{ onClose: () => void }> = ({
       <ModalFooter>
         <Button
           type="submit"
-          form="import-skill-form"
+          form={FORM_ID}
           variant={ButtonVariant.primary}
           isDisabled={!isValid || isFileLoading || isImporting}
-          isLoading={isImporting}
+          isLoading={isImporting || undefined}
         >
           {t("agentic.skill.importConfirm")}
         </Button>
-        <Button variant={ButtonVariant.link} onClick={onClose}>
+        <Button type="button" variant={ButtonVariant.link} onClick={onClose}>
           {t("actions.cancel")}
         </Button>
       </ModalFooter>

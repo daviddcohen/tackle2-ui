@@ -285,7 +285,7 @@ test.describe("Import skill", () => {
     });
     await expect(importBtn).toBeEnabled();
     await importBtn.click();
-    await expect(toast(page, "Skill imported successfully")).toBeVisible();
+    await expect(toast(page, "Skill imported")).toBeVisible();
     await filterByName(page, "Unique imported skill");
     await expect(dataRows(page)).toHaveCount(1);
   });
@@ -313,7 +313,7 @@ test.describe("Import skill", () => {
     await dialog(page)
       .getByRole("button", { name: "Import", exact: true })
       .click();
-    await expect(toast(page, "Skill imported successfully")).toBeVisible();
+    await expect(toast(page, "Skill imported")).toBeVisible();
     await filterByName(page, "Corporate coding standards");
     await expect(dataRows(page)).toHaveCount(2);
   });
