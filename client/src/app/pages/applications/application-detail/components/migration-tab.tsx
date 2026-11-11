@@ -7,16 +7,13 @@ import {
   Alert,
   AlertActionLink,
   Button,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
   EmptyState,
   EmptyStateActions,
   EmptyStateBody,
   EmptyStateFooter,
 } from "@patternfly/react-core";
 import { RouteIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
@@ -39,13 +36,22 @@ import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { MigrationStatus } from "@app/pages/agentic/components/agentic-status";
+import {
+  DetailFacts,
+  DetailSection,
+  DetailSections,
+  SectionEmpty,
+} from "@app/pages/agentic/components/detail-section";
 import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
 import {
   StageAttentionAlert,
   getStageAttention,
 } from "@app/pages/agentic/components/stage-attention-alert";
 import { StageRunsTable } from "@app/pages/agentic/components/stage-runs-table";
-import { targetProfileOwnerPath } from "@app/pages/agentic/entity-paths";
+import {
+  targetProfileOwnerPath,
+  targetProfilesPath,
+} from "@app/pages/agentic/entity-paths";
 import {
   useFetchApplicationMigrations,
   useFetchPlanRun,
@@ -57,8 +63,6 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { planRunPath } from "../../components/agentic-migration/paths";
 import { DecoratedApplication } from "../../useDecoratedApplications";
-
-import { TabSection, TabSections } from "./tab-sections";
 
 interface MigrationTabProps {
   application: DecoratedApplication;
@@ -211,14 +215,14 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
 
   return (
     <>
-      <TabSections>
+      <DetailSections>
         {alert}
         <MigrationFacts
           migration={migration}
           planRun={planRun}
           linkTo={linkTo}
         />
-        <TabSection title={t("agentic.stageRunsTable.label")}>
+        <DetailSection title={t("agentic.stageRunsTable.label")}>
           {hasRun && stages.length > 0 ? (
             <StageRunsTable stages={stages} />
           ) : status === "preflightReady" && runMigrationPlan.open != null ? (
@@ -236,15 +240,13 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
               </EmptyStateFooter>
             </EmptyState>
           ) : (
-            <EmptyState variant="xs">
-              <EmptyStateBody>
-                {t("agentic.execution.stagesAppearHere")}
-              </EmptyStateBody>
-            </EmptyState>
+            <SectionEmpty>
+              {t("agentic.execution.stagesAppearHere")}
+            </SectionEmpty>
           )}
-        </TabSection>
+        </DetailSection>
         {migration.result && <CommitsSection result={migration.result} />}
-      </TabSections>
+      </DetailSections>
 
       {runMigrationPlan.modal}
     </>
@@ -280,97 +282,103 @@ const MigrationFacts: React.FC<{
   );
   const targetBranch = migration.result?.targetBranch ?? planRun?.targetBranch;
 
-  const fact = (term: string, description: React.ReactNode) => (
-    <DescriptionListGroup>
-      <DescriptionListTerm>{term}</DescriptionListTerm>
-      <DescriptionListDescription>{description}</DescriptionListDescription>
-    </DescriptionListGroup>
+  const monospace = (value: string) => (
+    <span className={textStyles.fontFamilyMonospace}>{value}</span>
   );
+  const facts: [string, React.ReactNode][] = [
+    [
+      t("agentic.execution.statusLabel"),
+      <MigrationStatus
+        key="status"
+        status={getMigrationDisplayStatus(migration)}
+      />,
+    ],
+    [
+      t("agentic.entity.migrationPlan"),
+      migration.plan ? (
+        <Link
+          key="plan"
+          to={linkTo(
+            generatePath(DevPaths.migrationPlanDetails, {
+              planId: migration.plan.id,
+            })
+          )}
+        >
+          {migration.plan.name}
+        </Link>
+      ) : (
+        <EmptyTextMessage
+          key="plan"
+          message={t("agentic.execution.notAssigned")}
+        />
+      ),
+    ],
+    ...(migration.planRun
+      ? ([
+          [
+            t("agentic.entity.planRun"),
+            <Link key="run" to={linkTo(planRunPath(migration.planRun.id))}>
+              {migration.planRun.name}
+            </Link>,
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+    [
+      t("agentic.execution.targetProfile"),
+      migration.targetProfile ? (
+        <TargetProfileLink
+          key="profile"
+          profile={migration.targetProfile}
+          linkTo={linkTo}
+        />
+      ) : (
+        <EmptyTextMessage key="profile" message={t("agentic.execution.none")} />
+      ),
+    ],
+    ...(migration.planRun
+      ? ([
+          [
+            t("agentic.execution.targetBranch"),
+            // The tab waits for the run, so no branch here means the run
+            // could not be read: unknown (addenda X6).
+            targetBranch == null ? (
+              unavailable
+            ) : migration.result?.branchUrl ? (
+              <ExternalLink
+                key="branch"
+                href={migration.result.branchUrl}
+                isInline
+              >
+                {monospace(targetBranch)}
+              </ExternalLink>
+            ) : (
+              monospace(targetBranch)
+            ),
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+    [
+      t("agentic.applicationDetail.tabSkills"),
+      skillCount == null ? (
+        // The server did not say: unknown, never "None" (addenda X6).
+        unavailable
+      ) : skillCount === 0 ? (
+        <EmptyTextMessage key="skills" message={t("agentic.execution.none")} />
+      ) : (
+        <Button
+          key="skills"
+          variant="link"
+          isInline
+          className={textStyles.textNowrap}
+          component={skillsLink}
+        >
+          {t("agentic.execution.skillCount", { count: skillCount })}
+        </Button>
+      ),
+    ],
+  ];
 
-  return (
-    <DescriptionList
-      isHorizontal
-      isCompact
-      horizontalTermWidthModifier={{ default: "18ch" }}
-      columnModifier={{ lg: "2Col" }}
-    >
-      {fact(
-        t("agentic.execution.statusLabel"),
-        <MigrationStatus status={getMigrationDisplayStatus(migration)} />
-      )}
-      {fact(
-        t("agentic.entity.migrationPlan"),
-        migration.plan ? (
-          <Link
-            to={linkTo(
-              generatePath(DevPaths.migrationPlanDetails, {
-                planId: migration.plan.id,
-              })
-            )}
-          >
-            {migration.plan.name}
-          </Link>
-        ) : (
-          <EmptyTextMessage message={t("agentic.execution.notAssigned")} />
-        )
-      )}
-      {migration.planRun &&
-        fact(
-          t("agentic.entity.planRun"),
-          <Link to={linkTo(planRunPath(migration.planRun.id))}>
-            {migration.planRun.name}
-          </Link>
-        )}
-      {fact(
-        t("agentic.execution.targetProfile"),
-        migration.targetProfile ? (
-          <TargetProfileLink
-            profile={migration.targetProfile}
-            linkTo={linkTo}
-          />
-        ) : (
-          <EmptyTextMessage message={t("agentic.execution.none")} />
-        )
-      )}
-      {migration.planRun &&
-        fact(
-          t("agentic.execution.targetBranch"),
-          // The tab waits for the run, so no branch here means the run
-          // could not be read: unknown (addenda X6).
-          targetBranch == null ? (
-            unavailable
-          ) : migration.result?.branchUrl ? (
-            <ExternalLink href={migration.result.branchUrl} isInline>
-              <span className="pf-v6-u-font-family-monospace">
-                {targetBranch}
-              </span>
-            </ExternalLink>
-          ) : (
-            <span className="pf-v6-u-font-family-monospace">
-              {targetBranch}
-            </span>
-          )
-        )}
-      {fact(
-        t("agentic.applicationDetail.tabSkills"),
-        skillCount == null ? (
-          // The server did not say: unknown, never "None" (addenda X6).
-          unavailable
-        ) : skillCount === 0 ? (
-          <EmptyTextMessage message={t("agentic.execution.none")} />
-        ) : (
-          <Button
-            variant="link"
-            isInline
-            className="pf-v6-u-text-nowrap"
-            component={skillsLink}
-          >
-            {t("agentic.execution.skillCount", { count: skillCount })}
-          </Button>
-        )
-      )}
-    </DescriptionList>
-  );
+  return <DetailFacts facts={facts} isTwoColumn />;
 };
 
 /**
@@ -423,15 +431,13 @@ const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
   };
   if (result.commits.length === 0) {
     return (
-      <TabSection title={t("agentic.execution.commits")}>
-        <EmptyState variant="xs">
-          <EmptyStateBody>{t("agentic.execution.commitsEmpty")}</EmptyStateBody>
-        </EmptyState>
-      </TabSection>
+      <DetailSection title={t("agentic.execution.commits")}>
+        <SectionEmpty>{t("agentic.execution.commitsEmpty")}</SectionEmpty>
+      </DetailSection>
     );
   }
   return (
-    <TabSection
+    <DetailSection
       title={t("agentic.execution.commitsTitle", {
         count: result.commits.length,
       })}
@@ -452,12 +458,12 @@ const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
                   // Git URLs open outside the app (guide 4.11), like the
                   // Target branch fact.
                   <ExternalLink href={commit.url} isInline>
-                    <span className="pf-v6-u-font-family-monospace">
+                    <span className={textStyles.fontFamilyMonospace}>
                       {commit.hash}
                     </span>
                   </ExternalLink>
                 ) : (
-                  <span className="pf-v6-u-font-family-monospace">
+                  <span className={textStyles.fontFamilyMonospace}>
                     {commit.hash}
                   </span>
                 )}
@@ -467,7 +473,7 @@ const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
           ))}
         </Tbody>
       </Table>
-    </TabSection>
+    </DetailSection>
   );
 };
 
@@ -485,11 +491,7 @@ const NoMigrationPath: React.FC<{
   const { t } = useTranslation();
   const link = useLinkComponent(
     linkTo(
-      archetype != null
-        ? generatePath(DevPaths.archetypeTargetProfiles, {
-            archetypeId: String(archetype.id),
-          })
-        : DevPaths.archetypes
+      archetype != null ? targetProfilesPath(archetype.id) : DevPaths.archetypes
     )
   );
   return (

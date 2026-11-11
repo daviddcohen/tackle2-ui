@@ -16,6 +16,10 @@ import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
+  DetailSection,
+  DetailSections,
+} from "@app/pages/agentic/components/detail-section";
+import {
   SkillsTable,
   groupSkillSources,
   skillAssociationSources,
@@ -24,8 +28,6 @@ import {
   useFetchApplicationMigrations,
   useFetchSkills,
 } from "@app/queries/agentic";
-
-import { TabSection, TabSections } from "./tab-sections";
 
 interface SkillsTabProps {
   linkCrumbs: BreadcrumbEntry[];
@@ -89,13 +91,13 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
   }
 
   return (
-    <TabSections>
+    <DetailSections>
       {rows == null ? (
-        <TabSection title={t("agentic.applicationDetail.tabSkills")}>
+        <DetailSection title={t("agentic.applicationDetail.tabSkills")}>
           <EmptyTextMessage message={t("agentic.common.unavailable")} />
-        </TabSection>
+        </DetailSection>
       ) : rows.length === 0 ? (
-        <TabSection title={t("agentic.applicationDetail.tabSkills")}>
+        <DetailSection title={t("agentic.applicationDetail.tabSkills")}>
           <EmptyState variant="xs">
             <EmptyStateBody>
               {t("agentic.applicationDetail.skillsEmpty")}
@@ -108,9 +110,9 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
               </EmptyStateActions>
             </EmptyStateFooter>
           </EmptyState>
-        </TabSection>
+        </DetailSection>
       ) : (
-        <TabSection
+        <DetailSection
           title={t("agentic.applicationDetail.skillsTitle", {
             count: rows.length,
           })}
@@ -121,8 +123,8 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
           }
         >
           <SkillsTable rows={rows} linkTo={linkTo} />
-        </TabSection>
+        </DetailSection>
       )}
-    </TabSections>
+    </DetailSections>
   );
 };
