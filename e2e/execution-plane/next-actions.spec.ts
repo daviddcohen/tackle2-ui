@@ -151,6 +151,32 @@ test.describe("Migration next actions", () => {
     await expect(dialog.getByLabel("Use recommended Plan")).toBeChecked();
   });
 
+  for (const [scenario, label, title] of [
+    ["actionRequired", "Review pending request", /needs approval$/],
+    ["failed", "Review failure and retry", / failed$/],
+  ] as const) {
+    test(`${label} on the Migration tab moves focus to the alert`, async ({
+      page,
+    }) => {
+      await page.goto(
+        protoUrl("/applications/1", {
+          scenario,
+          params: { tab: "migration" },
+        })
+      );
+      await page
+        .getByRole("main")
+        .getByRole("button", { name: label, exact: true })
+        .click();
+      const focused = page.locator(":focus");
+      await expect(focused).toHaveAttribute(
+        "id",
+        "application-migration-attention"
+      );
+      await expect(focused.getByRole("heading")).toHaveText(title);
+    });
+  }
+
   test("a failed plan run starts a new run prefilled with its Plan and branch", async ({
     page,
   }) => {
