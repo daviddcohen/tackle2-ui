@@ -1909,6 +1909,7 @@
       "goToSkills": "Go to skills"
     },
     "archetype": {
+      "noneSelected": "No archetype selected",
       "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
     },
     "provider": {
