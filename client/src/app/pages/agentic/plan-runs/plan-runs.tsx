@@ -1,36 +1,46 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Content,
-  EmptyState,
-  EmptyStateBody,
-  PageSection,
-} from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
+import { Button, Content, PageSection } from "@patternfly/react-core";
 
+import { DevPaths } from "@app/Paths";
 import { ControllerRunPhase, PlanRun } from "@app/agentic";
+import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
 import { FilterType } from "@app/components/FilterToolbar";
 import { FilterCategory } from "@app/components/FilterToolbar/FilterToolbar";
+import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
+import { PageHeader } from "@app/components/PageHeader";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { useFetchPlanRuns } from "@app/queries/agentic";
+import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 
 import { statusPresentation } from "../components/agentic-status";
 import { PlanRunsTable } from "../components/plan-runs-table";
 
-/** Status filter options, in lifecycle order. */
+/** Status filter options: the runs that need a person first (guide 7.4). */
 const runStatusFilterOrder: ControllerRunPhase[] = [
-  "Pending",
-  "Running",
   "AwaitingApproval",
-  "Succeeded",
   "Failed",
+  "Running",
+  "Pending",
+  "Succeeded",
 ];
+
+/** One option per migration plan that has runs, by name. */
+const planFilterOptions = (runs: PlanRun[]) =>
+  [...new Map(runs.map((run) => [run.planId, run.planName])).entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
 const PlanRunsPage: React.FC = () => {
   const { t } = useTranslation();
   const { to } = useBreadcrumbs(t("sidebar.planRuns"), []);
+  // Runs are started from the application inventory, so the empty list
+  // points there; without the scope to run a plan it only says what appears.
+  const canRunPlans = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
+  const inventoryLink = useLinkComponent(DevPaths.applications);
 
   const { planRuns, isFetching, isLoading, fetchError } = useFetchPlanRuns();
 
@@ -39,12 +49,12 @@ const PlanRunsPage: React.FC = () => {
       categoryKey: "name",
       title: t("terms.name"),
       type: FilterType.search,
-      placeholderText: t("agentic.agent.filterByName"),
+      placeholderText: t("agentic.planRun.filterByName"),
       getItemValue: (item) => item.name,
     },
     {
       categoryKey: "status",
-      title: t("agentic.planRun.status"),
+      title: t("terms.status"),
       type: FilterType.multiselect,
       placeholderText: t("agentic.planRun.filterByStatus"),
       selectOptions: runStatusFilterOrder.map((status) => ({
@@ -55,25 +65,29 @@ const PlanRunsPage: React.FC = () => {
     },
     {
       categoryKey: "plan",
-      title: t("agentic.planRun.plan"),
-      type: FilterType.search,
-      placeholderText: t("agentic.planRun.filterByPlan"),
-      getItemValue: (item) => item.planName,
+      title: t("agentic.entity.migrationPlan"),
+      type: FilterType.multiselect,
+      placeholderText: t("agentic.planRun.filterByMigrationPlan"),
+      selectOptions: planFilterOptions(planRuns),
+      matcher: (filter: string, item: PlanRun) => item.planId === filter,
     },
   ];
 
   return (
     <>
       <PageSection hasBodyWrapper={false}>
-        <Content>
-          <Content component="h1">{t("agentic.planRun.title")}</Content>
-          <Content component="p">{t("agentic.planRun.description")}</Content>
-        </Content>
+        <PageHeader
+          title={t("agentic.planRun.title")}
+          description={
+            <Content component="p">{t("agentic.planRun.description")}</Content>
+          }
+          breadcrumbs={[]}
+        />
       </PageSection>
 
       <PageSection hasBodyWrapper={false}>
         <ConditionalRender
-          when={isFetching && !(planRuns.length || fetchError)}
+          when={isFetching && !(planRuns || fetchError)}
           then={<AppPlaceholder />}
         >
           <div
@@ -88,16 +102,21 @@ const PlanRunsPage: React.FC = () => {
               fetchError={fetchError}
               filterCategories={filterCategories}
               emptyState={
-                <EmptyState
-                  headingLevel="h2"
-                  icon={CubesIcon}
-                  titleText={t("agentic.planRun.emptyTitle")}
-                  variant="sm"
-                >
-                  <EmptyStateBody>
-                    {t("agentic.planRun.emptyDescription")}
-                  </EmptyStateBody>
-                </EmptyState>
+                <NoDataEmptyState
+                  title={t("agentic.planRun.emptyTitle")}
+                  description={
+                    canRunPlans
+                      ? t("agentic.planRun.emptyDescription")
+                      : t("agentic.planRun.emptyDescriptionReadOnly")
+                  }
+                  actions={
+                    canRunPlans && (
+                      <Button variant="primary" component={inventoryLink}>
+                        {t("agentic.planRun.goToApplicationInventory")}
+                      </Button>
+                    )
+                  }
+                />
               }
               linkTo={to}
             />
