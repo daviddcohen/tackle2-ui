@@ -1,4 +1,5 @@
 import { rest } from "msw";
+import { MemoryRouter } from "react-router-dom";
 
 import { Agent, MigrationPlan } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
@@ -48,7 +49,9 @@ describe("AgentFormModal", () => {
 
   it("creates with a description, no warning and the actions in the footer", async () => {
     render(
-      <AgentFormModal agent={null} isOpen formKey={1} onClose={jest.fn()} />
+      <MemoryRouter>
+        <AgentFormModal agent={null} isOpen formKey={1} onClose={jest.fn()} />
+      </MemoryRouter>
     );
     const modal = await screen.findByRole("dialog");
     expect(
@@ -69,7 +72,9 @@ describe("AgentFormModal", () => {
 
   it("warns that an edit applies to the plans using the agent", async () => {
     render(
-      <AgentFormModal agent={agent} isOpen formKey={1} onClose={jest.fn()} />
+      <MemoryRouter>
+        <AgentFormModal agent={agent} isOpen formKey={1} onClose={jest.fn()} />
+      </MemoryRouter>
     );
     expect(
       await screen.findByText(
@@ -89,7 +94,9 @@ describe("AgentFormModal", () => {
       )
     );
     render(
-      <AgentFormModal agent={agent} isOpen formKey={1} onClose={jest.fn()} />
+      <MemoryRouter>
+        <AgentFormModal agent={agent} isOpen formKey={1} onClose={jest.fn()} />
+      </MemoryRouter>
     );
     expect(await screen.findByText("Loading")).toBeInTheDocument();
     expect(

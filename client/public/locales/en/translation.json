@@ -1201,11 +1201,14 @@
       "emptyTitle": "No agents yet",
       "filterByName": "Filter by name",
       "formDescription": "An agent runs migration plan stages using one model and its skills.",
+      "goToModels": "Go to models",
       "migrationPlans": "Migration plans",
       "model": "Model",
+      "modelDefault": "Default",
       "modelHelp": "Only verified models are listed.",
       "modelNotVerified": "Agents cannot use this model until it is verified.",
       "modelNotVerifiedLabel": "Model not verified",
+      "modelNotVerifiedHelp": "Agents cannot use it until it is verified.",
       "modelSelect": "Model select dropdown",
       "parameterDefault": "Default value",
       "parameterName": "Parameter name",
@@ -1270,6 +1273,7 @@
       "notFoundBody": "This agent may have been deleted, or the link is out of date.",
       "backToAgents": "Back to agents",
       "modelOption": "{{model}} ({{provider}})",
+      "noVerifiedModels": "No verified models yet. Agents can use a model once it is verified.",
       "testRunNotice": "A test run executes this Agent against a single application. Results are informational and do not affect the application repository."
     },
     "model": {
