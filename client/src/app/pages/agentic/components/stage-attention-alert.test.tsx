@@ -398,6 +398,54 @@ describe("StageAttentionAlert, failure", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("says what blocks a new run before the next step (AP8)", () => {
+    renderAlert({
+      surface: "application",
+      planRun: failed,
+      failureDetails: { summary: "Validation failed." },
+      restartBlockedReason: "Run #2 is already running for this application.",
+      onRunMigrationPlan: jest.fn(),
+    });
+
+    expect(
+      Array.from(alertBox().querySelectorAll("p")).map((p) => p.textContent)
+    ).toEqual([
+      "Validation failed.",
+      "Before it can run again: Run #2 is already running for this application.",
+      "Fix the cause in the application repositories, then run the migration plan again.",
+    ]);
+    // Still one alert.
+    expect(document.querySelectorAll(".pf-v6-c-alert")).toHaveLength(1);
+  });
+
+  it("links the plan run when the failure names no stage", () => {
+    const failedRun = planRun("Failed", [stage(1, "Migrate", "Succeeded")]);
+    const { unmount } = renderAlert({
+      surface: "application",
+      planRun: failedRun,
+      planRunTo: "/plan-runs/1",
+    });
+    expect(
+      screen.getByRole("heading", { name: /Plan run failed/ })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View plan run" })).toHaveAttribute(
+      "href",
+      "/plan-runs/1"
+    );
+    unmount();
+
+    renderAlert({
+      surface: "application",
+      planRun: failedRun,
+      planRunTo: "/plan-runs/1",
+      onRunMigrationPlan: jest.fn(),
+    });
+    // With a button, the link sits beside it as a link-variant button.
+    expect(
+      within(alertBox()).getByRole("link", { name: "View plan run" })
+    ).toHaveClass("pf-v6-c-button", "pf-m-link");
+  });
+
   it("omits paragraph 1 when the application reports no summary or evidence", () => {
     renderAlert({
       surface: "application",

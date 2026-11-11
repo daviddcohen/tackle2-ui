@@ -172,6 +172,12 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
             isDeciding={resolveRequest.isPending}
             onRunMigrationPlan={runMigrationPlan.open}
             failureDetails={failedStage}
+            restartBlockedReason={
+              migration.preflight != null && migration.preflight !== "ready"
+                ? migration.preflightReason
+                : undefined
+            }
+            planRunTo={linkTo(planRunPath(planRun.id))}
             wrapper={(alert) => (
               // The next action ("Review pending request", "Review failure
               // and retry") moves focus here.
