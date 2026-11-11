@@ -20,6 +20,7 @@ import {
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
+  IAction,
   Table,
   Tbody,
   Td,
@@ -56,13 +57,14 @@ import {
   useFetchMigrationPlans,
 } from "@app/queries/agentic";
 import { agenticAgentRunsWriteScopes, agentsWriteScopes } from "@app/scopes";
+import { disabledActionProps, managedActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
 import { useAgentSkillsSummary } from "./agent-skills-summary";
-import { getPlansUsingAgent } from "./agent-usage";
+import { getPlansUsingAgent, useAgentDeleteBlockedReason } from "./agent-usage";
 import { AgentForm } from "./components/agent-form";
 import { AgentModel } from "./components/agent-model";
 import { AgentTestModal } from "./components/agent-test-modal";
@@ -164,9 +166,8 @@ const AgentPlansCell: React.FC<{
 export const AgentsPage: React.FC = () => {
   const { t } = useTranslation();
   const { to } = useBreadcrumbs(t("sidebar.agents"), []);
-  const hasManageAgentsScope = useHasSomeScopes(agentsWriteScopes);
+  const canManageAgents = useHasSomeScopes(agentsWriteScopes);
   const canTestAgents = useHasSomeScopes(agenticAgentRunsWriteScopes);
-  const canManageAgents = hasManageAgentsScope;
   const { pushNotification } = React.useContext(NotificationsContext);
 
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] =
@@ -208,8 +209,61 @@ export const AgentsPage: React.FC = () => {
   } = useFetchMigrationPlans();
   const { gateways } = useFetchGateways();
 
-  const getAgentPlanCount = (agent: Agent) =>
-    getPlansUsingAgent(agent.id, migrationPlans).length;
+  const deleteBlockedReason = useAgentDeleteBlockedReason();
+  const hasRowActions = canManageAgents || canTestAgents;
+
+  /** Edit, Test agent, separator, Delete, each with its own scope (A1, guide 4.1). */
+  const rowActions = (agent: Agent): IAction[] => {
+    const managed = (position?: "left") =>
+      managedActionProps(
+        agent.operatorManaged,
+        t("agentic.common.managedByKonveyor"),
+        position
+      );
+    const edit: IAction[] = canManageAgents
+      ? [
+          {
+            title: t("actions.edit"),
+            onClick: () =>
+              openModalAfterMenuClose(() => setCreateUpdateModalState(agent)),
+            ...managed(),
+          },
+        ]
+      : [];
+    const test: IAction[] = canTestAgents
+      ? [
+          {
+            title: t("agentic.agent.test"),
+            onClick: () => openModalAfterMenuClose(() => setAgentToTest(agent)),
+          },
+        ]
+      : [];
+    if (!canManageAgents) {
+      return test;
+    }
+    const managedDelete = managed("left");
+    const blocked = managedDelete.isAriaDisabled
+      ? managedDelete
+      : disabledActionProps(
+          deleteBlockedReason(
+            hasPlans
+              ? getPlansUsingAgent(agent.id, migrationPlans).length
+              : undefined
+          ),
+          "left"
+        );
+    return [
+      ...edit,
+      ...test,
+      { isSeparator: true },
+      {
+        title: t("actions.delete"),
+        onClick: () => openModalAfterMenuClose(() => deleteRow(agent)),
+        isDanger: !blocked.isAriaDisabled,
+        ...blocked,
+      },
+    ];
+  };
 
   const tableControls = useLocalTableControls({
     persistTo: "urlParams",
@@ -228,7 +282,7 @@ export const AgentsPage: React.FC = () => {
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    hasActionsColumn: true,
+    hasActionsColumn: hasRowActions,
     filterCategories: [
       {
         categoryKey: "name",
@@ -338,7 +392,9 @@ export const AgentsPage: React.FC = () => {
                       {...getThProps({ columnKey: "plans" })}
                       modifier="wrap"
                     />
-                    <Th screenReaderText={t("actions.rowActions")} />
+                    {hasRowActions && (
+                      <Th screenReaderText={t("actions.rowActions")} />
+                    )}
                   </TableHeaderContentWithControls>
                 </Tr>
               </Thead>
@@ -426,59 +482,11 @@ export const AgentsPage: React.FC = () => {
                             to={to}
                           />
                         </Td>
-                        <Td isActionCell>
-                          {(canManageAgents || canTestAgents) && (
-                            <ActionsColumn
-                              items={[
-                                ...(canTestAgents
-                                  ? [
-                                      {
-                                        title: t("agentic.agent.test"),
-                                        onClick: () =>
-                                          openModalAfterMenuClose(() =>
-                                            setAgentToTest(agent)
-                                          ),
-                                      },
-                                    ]
-                                  : []),
-                                ...(canManageAgents
-                                  ? [
-                                      {
-                                        title: t("actions.edit"),
-                                        onClick: () =>
-                                          openModalAfterMenuClose(() =>
-                                            setCreateUpdateModalState(agent)
-                                          ),
-                                      },
-                                      { isSeparator: true },
-                                      {
-                                        title: t("actions.delete"),
-                                        onClick: () =>
-                                          openModalAfterMenuClose(() =>
-                                            deleteRow(agent)
-                                          ),
-                                        isDanger: true,
-                                        isAriaDisabled:
-                                          getAgentPlanCount(agent) > 0,
-                                        tooltipProps:
-                                          getAgentPlanCount(agent) > 0
-                                            ? {
-                                                content: t(
-                                                  "agentic.agent.deleteInUse",
-                                                  {
-                                                    count:
-                                                      getAgentPlanCount(agent),
-                                                  }
-                                                ),
-                                              }
-                                            : undefined,
-                                      },
-                                    ]
-                                  : []),
-                              ]}
-                            />
-                          )}
-                        </Td>
+                        {hasRowActions && (
+                          <Td isActionCell>
+                            <ActionsColumn items={rowActions(agent)} />
+                          </Td>
+                        )}
                       </TableRowContentWithControls>
                     </Tr>
                   </Tbody>
