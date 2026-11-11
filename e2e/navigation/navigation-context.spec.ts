@@ -54,8 +54,9 @@ test("deep application, run, skill and association journeys retain tabs, survive
     .click();
   await expect(page).toHaveURL(skillURL);
   await expect(associationsTab(page)).toHaveAttribute("aria-selected", "true");
+  // Target profiles keep their owning archetype before the leaf.
   await page.locator('main a[href*="/target-profiles"]').first().click();
-  await expect(crumbItems(page)).toHaveCount(5);
+  await expect(crumbItems(page)).toHaveCount(6);
   await expect(page.locator("tr:focus")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(skillURL);
@@ -396,10 +397,11 @@ for (const [name, viewport] of [
       "true"
     );
     await expect(crumbItems(page)).toHaveCount(4);
-    // The drawer trail lists ancestors only. Both trails end at the skill.
+    // The drawer trail lists ancestors only; the target profiles trail adds
+    // the owning archetype before its leaf. Both end at the skill.
     for (const [selector, crumbs] of [
       ['main a[href^="/archetypes?"]', 4],
-      ['main a[href*="/target-profiles"]', 5],
+      ['main a[href*="/target-profiles"]', 6],
     ] as const) {
       await page.locator(selector).first().click();
       await expect(crumbItems(page)).toHaveCount(crumbs);
@@ -441,7 +443,7 @@ test("cold links use the canonical hierarchy and a new tab has its own history",
   ).toBeVisible();
   await newTab.goto(view("/archetypes/1/target-profiles#target-profile-11"));
   await expect(crumbItems(newTab)).toHaveCount(3);
-  await expect(currentCrumb(newTab)).toHaveText("Quarkus 3.x");
+  await expect(currentCrumb(newTab)).toHaveText("Target profiles");
   await newTab.close();
 });
 

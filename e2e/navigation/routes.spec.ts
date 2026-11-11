@@ -102,7 +102,7 @@ const routes: RouteCase[] = [
   { path: "/archetypes", heading: "Archetypes", nav: "Archetypes" },
   {
     path: "/archetypes/1/target-profiles",
-    heading: "Target profiles for Java EE Application",
+    heading: "Target profiles",
     nav: "Archetypes",
     crumbs: ["Archetypes", "Java EE Application", "Target profiles"],
   },
