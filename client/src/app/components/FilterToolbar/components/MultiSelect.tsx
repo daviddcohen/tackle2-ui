@@ -52,6 +52,8 @@ export interface MultiSelectProps {
   showSelectedInToggle?: boolean;
   closeMenuOnSelect?: boolean;
   hasChips?: boolean;
+  /** Maximum height of the open menu (PF `Select` `maxMenuHeight`), for example "24rem". */
+  maxMenuHeight?: string;
 }
 
 export const MultiSelect: FC<MultiSelectProps> = ({
@@ -72,6 +74,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
   showSelectedInToggle,
   closeMenuOnSelect,
   hasChips = false,
+  maxMenuHeight,
   onClear,
 }: MultiSelectProps): JSX.Element | null => {
   const { t } = useTranslation();
@@ -316,6 +319,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
   return (
     <Select
       isScrollable={isScrollable}
+      maxMenuHeight={maxMenuHeight}
       aria-label={ariaLabel || htmlAriaLabel}
       toggle={toggle}
       selected={values}
