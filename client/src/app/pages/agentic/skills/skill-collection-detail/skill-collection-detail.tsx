@@ -1,5 +1,6 @@
 import * as React from "react";
 import { AxiosError } from "axios";
+import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   Link,
@@ -85,7 +86,9 @@ const SkillCollectionDetail: React.FC = () => {
         title: t("agentic.skillCollection.deleted"),
         variant: "success",
       });
-      history.push(COLLECTIONS_LIST_PATH);
+      // Leave before the invalidated queries re-render this page, which
+      // would refetch the deleted collection and log a 404.
+      flushSync(() => history.push(COLLECTIONS_LIST_PATH));
     },
     (error: AxiosError) =>
       pushNotification({
