@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import {
   Alert,
+  AlertActionLink,
   Button,
   ButtonVariant,
   Content,
@@ -746,6 +747,15 @@ export const ApplicationsTable: FC = () => {
   } = tableControls;
   const showMigrationColumn =
     isAgenticEnabled && getColumnVisibility("agenticMigration");
+  // Every application, not only the current page or filter (guide 7.6).
+  const actionRequiredCount =
+    isAgenticEnabled && areMigrationsAvailable
+      ? applications.filter(
+          (application) =>
+            getMigrationDisplayStatus(getMigration(application)) ===
+            "actionRequired"
+        ).length
+      : 0;
   // Without the agentic API the Migration column is not offered at all.
   const manageableColumns = (columns: typeof columnState.columns) =>
     isAgenticEnabled
@@ -1118,6 +1128,36 @@ export const ApplicationsTable: FC = () => {
           >
             {t("agentic.execution.readOnlyDescription")}
           </Alert>
+        )}
+        {isAgenticEnabled && migrationsFetchError != null && (
+          <Alert
+            isInline
+            variant="warning"
+            className="pf-v6-u-mb-md"
+            title={t("agentic.execution.statusUnavailable")}
+          />
+        )}
+        {actionRequiredCount > 0 && (
+          <Alert
+            isInline
+            variant="warning"
+            className="pf-v6-u-mb-md"
+            title={t("agentic.execution.needAction", {
+              count: actionRequiredCount,
+            })}
+            actionLinks={
+              <AlertActionLink
+                onClick={() =>
+                  filterToolbarProps.setFilterValues({
+                    ...filterToolbarProps.filterValues,
+                    agenticMigration: ["actionRequired"],
+                  })
+                }
+              >
+                {t("agentic.execution.showApplications")}
+              </AlertActionLink>
+            }
+          />
         )}
         {isAgenticEnabled &&
           areMigrationsAvailable &&
