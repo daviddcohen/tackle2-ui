@@ -1,7 +1,9 @@
 # Handoff: Prototype Switcher × Plan Runs
 
 **Date:** 2026-10-04  
-**Author:** David Cohen + Claude
+**Author:** David Cohen + Claude  
+**Commit:** ae084da  
+**Branch:** main
 
 ---
 

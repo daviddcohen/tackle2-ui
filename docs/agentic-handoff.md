@@ -4,7 +4,7 @@ For the frontend developer who connects this prototype to the real Konveyor back
 
 Facts were checked against:
 
-- this repository on top of `a7554896` (with every fix wave merged) plus the hand-off review fixes;
+- this repository on top of `3ab37e5e` (the final tip of `design/agentic-prototype-v2`, with every fix wave merged) plus the hand-off review fixes;
 - konveyor/tackle2-hub `main` @ `fabeb1e3` (`internal/api/agentic.go`, `internal/api/base.go`, `internal/api/error.go`, `shared/api/pkg.go`, `internal/auth/seed/roles.yaml`, `go.mod`);
 - konveyor/agentic-controller `main` @ `369070c6` (`api/v1alpha1/*`, `internal/controller/{doc,gateway_controller,agentrun_controller,agentworkflowrun_controller}.go`, `harness/` and `config/{defaults,samples}`);
 - konveyor/tackle2-ui `main` @ `a7554896` (`upstream/main`) for the dev-preview console this branch removed. Read a removed file with `git show upstream/main:<path>`.

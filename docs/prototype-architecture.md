@@ -6,7 +6,7 @@ This repository is a functional MVP prototype on top of tackle2-ui. Its agentic 
 
 ## Shared prototype state
 
-The switcher adapts the global state contract from an earlier prototype's `PrototypeScopeSwitcher`. It is the only source of truth for persona, scenario, and stage (`protoPersona`, `protoScenario`, `protoStage`). State is encoded in URL query parameters so a view is bookmarkable and survives refresh. Only the switcher and the mock server (`client/src/mocks/stub-new-work/agentic/prototype-state.ts`) read this state. Production-facing pages render from routes, scopes, and query data.
+The switcher adapts the global state contract from the integrated `mta-for-rhdh` `PrototypeScopeSwitcher`. It is the only source of truth for persona, scenario, and stage (`protoPersona`, `protoScenario`, `protoStage`). State is encoded in URL query parameters so a view is bookmarkable and survives refresh. Only the switcher and the mock server (`client/src/mocks/stub-new-work/agentic/prototype-state.ts`) read this state. Production-facing pages render from routes, scopes, and query data.
 
 The switcher is mounted only in development bundles with `AUTH_REQUIRED=false` and `MOCK` stubbing the agentic endpoints (`isPrototypeEnabled`): `client/src/index.tsx` loads `client/src/app/layout/PrototypeShell/` and hands it to `App`. No production module imports `client/src/app/prototype/**`.
 
@@ -87,4 +87,4 @@ Changing persona is an explicit demo action that opens the recommended starting 
 
 ## Integration boundary
 
-The controller is domain agnostic. The Hub must own product vocabulary, application-to-Plan resolution, portfolio authorization, audit, credential mediation, and application-specific result presentation. The Migration Tab, IDE, and CLI consume governed policy and execution results. They do not manage Hub Models, Agents, Plans, Stages, or Skills.
+The controller is domain agnostic. The Hub must own product vocabulary, application-to-Plan resolution, portfolio authorization, audit, credential mediation, and application-specific result presentation. The RHDH Migration Tab, IDE, and CLI consume governed policy and execution results. They do not manage Hub Models, Agents, Plans, Stages, or Skills.
