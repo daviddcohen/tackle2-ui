@@ -25,7 +25,7 @@ const ARCHITECT = "enterpriseArchitect" as const;
 
 const openCreate = async (page: Page) => {
   await page.getByRole("button", { name: "Create agent" }).click();
-  await expect(dialog(page)).toContainText("Create Agent");
+  await expect(dialog(page)).toContainText("Create agent");
 };
 
 const fillMinimalAgent = async (page: Page, name: string) => {
@@ -39,27 +39,32 @@ test.describe("Agents list", () => {
     await expect(dataRows(page)).toHaveCount(8);
   });
 
-  test("renders agents with model and skill counts", async ({
+  test("renders agents with model and skills summary", async ({
     page,
     diagnostics,
   }) => {
     const codeMigrator = rowByText(page, "Code Migrator");
     await expect(codeMigrator).toContainText("Claude 3.7 Sonnet");
     await expect(
-      codeMigrator.getByRole("button", { name: /Code Migrator/ })
-    ).toHaveText("4");
+      codeMigrator.getByRole("link", { name: "4 skills, 1 collection" })
+    ).toBeVisible();
     expectHealthy(diagnostics);
   });
 
-  test("skill count opens the associated skills modal with links", async ({
+  test("skills summary opens the agent; a single skill opens the skill", async ({
     page,
   }) => {
-    await rowByText(page, "Code Migrator")
-      .getByRole("button", { name: /Code Migrator/ })
+    await rowByText(page, "Test Runner")
+      .getByRole("link", { name: "Database migration patterns" })
       .click();
-    await expect(dialog(page).getByRole("link")).toHaveCount(4);
-    await dialog(page).getByRole("link").first().click();
     await expect(page).toHaveURL(/\/skills\/\d+/);
+    await page.goBack();
+    await rowByText(page, "Code Migrator")
+      .getByRole("link", { name: "4 skills, 1 collection" })
+      .click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Code Migrator" })
+    ).toBeVisible();
   });
 
   test("agent used by plans cannot be deleted from the list (with reason)", async ({
@@ -68,13 +73,16 @@ test.describe("Agents list", () => {
     await openRowActions(page, "Migration Proposal Agent");
     const del = page.getByRole("menuitem", { name: "Delete" });
     await expect(del).toHaveAttribute("aria-disabled", "true");
-    await expectTooltipOnHover(page, del, "Used by 8 Plans");
+    await expectTooltipOnHover(page, del, "Used by 8 migration plans");
   });
 
   test("unused agent can be deleted after confirmation", async ({ page }) => {
     await openRowActions(page, "Test Runner");
     await page.getByRole("menuitem", { name: "Delete" }).click();
-    await expect(dialog(page)).toContainText('Delete Agent "Test Runner"?');
+    await expect(dialog(page)).toContainText("Delete agent?");
+    await expect(dialog(page)).toContainText(
+      "Test Runner will be deleted. It can no longer be assigned to migration plan stages. This action cannot be undone."
+    );
     await dialog(page).getByRole("button", { name: "Delete" }).click();
     await expect(toast(page, "Agent deleted")).toBeVisible();
     await expect(dataRows(page)).toHaveCount(7);
@@ -96,7 +104,7 @@ test.describe("Agents list", () => {
       persona: ARCHITECT,
       scenario: "initial",
     });
-    await expect(page.getByText("No Agents yet")).toBeVisible();
+    await expect(page.getByText("No agents yet")).toBeVisible();
   });
 });
 
@@ -117,7 +125,7 @@ test.describe("Agent form", () => {
     );
     await field(dialog(page), "Name").fill("Code Migrator");
     await expect(dialog(page)).toContainText(
-      "An Agent with this name already exists."
+      "An agent with this name already exists."
     );
     await field(dialog(page), "Name").fill("QA Agent");
     await field(dialog(page), "Description").fill("d".repeat(501));
@@ -126,13 +134,18 @@ test.describe("Agent form", () => {
     );
   });
 
-  test("only verified models are offered", async ({ page }) => {
-    await page.locator("#gateway-select-toggle-input").click();
+  test("only verified models are offered, the default preselected", async ({
+    page,
+  }) => {
+    const input = page.locator("#gateway-select-toggle-input");
+    await expect(input).toHaveValue("Claude 3.7 Sonnet (Anthropic Production)");
+    await input.click();
     await expect(page.getByRole("option")).toHaveText([
-      // Labels show the Model's Provider record (models reference providers by id).
-      "Claude 3.7 Sonnet (Anthropic Production)",
-      "GPT-4o (Azure OpenAI Corp)",
-      "Llama 3.3 70B (Internal Ollama)",
+      // Labels show the Model's Provider record (models reference providers by id);
+      // the organization default is marked with the option description.
+      /Claude 3\.7 Sonnet \(Anthropic Production\)\s*Default$/,
+      /GPT-4o \(Azure OpenAI Corp\)$/,
+      /Llama 3\.3 70B \(Internal Ollama\)$/,
     ]);
   });
 
@@ -189,9 +202,7 @@ test.describe("Agent form", () => {
       page.getByRole("link", { name: "Security and compliance" })
     ).toBeVisible();
     await expect(
-      page.getByText(
-        "This agent is not assigned to any migration plan stage yet."
-      )
+      page.getByText("This agent is not used in any migration plan yet.")
     ).toBeVisible();
     expectHealthy(diagnostics);
   });
@@ -226,6 +237,22 @@ test.describe("Agent form", () => {
   });
 });
 
+test("with no verified model, Model is disabled and points to the models", async ({
+  page,
+}) => {
+  await gotoProto(page, "/agents", {
+    persona: "platformEngineer",
+    scenario: "partialConfiguration",
+  });
+  await openCreate(page);
+  await expect(page.locator("#gateway-select-toggle-input")).toBeDisabled();
+  await expect(dialog(page)).toContainText(
+    "No verified models yet. Agents can use a model once it is verified."
+  );
+  await dialog(page).getByRole("link", { name: "Go to models" }).click();
+  await expect(page).toHaveURL(/\/models/);
+});
+
 test.describe("Agent test modal", () => {
   test.beforeEach(async ({ page }) => {
     await gotoProto(page, "/agents", { persona: ARCHITECT });
@@ -236,8 +263,11 @@ test.describe("Agent test modal", () => {
     page,
   }) => {
     await openRowActions(page, "Test Runner");
-    await page.getByRole("menuitem", { name: "Test" }).click();
-    await expect(dialog(page)).toContainText("Test Test Runner");
+    await page.getByRole("menuitem", { name: "Test agent" }).click();
+    await expect(dialog(page)).toContainText("Test agent");
+    await expect(dialog(page)).toContainText(
+      "Runs Test Runner once on one application. Results are for review only; the repository is not changed."
+    );
     const start = dialog(page).getByRole("button", { name: "Start test run" });
     await expect(start).toBeDisabled();
     await pickTypeahead(
@@ -245,13 +275,26 @@ test.describe("Agent test modal", () => {
       "agent-test-application-select",
       "Customer Management"
     );
-    await field(dialog(page), "Task description").fill("Run the unit tests");
+    await field(dialog(page), "Task").fill("Run the unit tests");
     await start.click();
     await expect(toast(page, "Test run for Test Runner queued")).toBeVisible();
-    await rowByText(page, "Test Runner").getByRole("link").click();
-    await page.getByRole("tab", { name: "Agent runs" }).click();
-    const runRow = page.getByRole("row", { name: /Run the unit tests/ });
-    await expect(runRow).toContainText("Test");
+    await page
+      .locator(".pf-v6-c-alert-group")
+      .getByRole("link", { name: "View runs" })
+      .click();
+    // The prototype bar may reorder the query, so check the parts.
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === "/agents/4" && url.searchParams.get("tab") === "runs"
+    );
+    await expect(page.getByRole("tab", { name: "Runs" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    // Test runs are their own section, so the row needs no type label.
+    const runRow = page
+      .getByRole("grid", { name: "Test runs" })
+      .getByRole("row", { name: /Run the unit tests/ });
     await expect(runRow).toContainText("Customer Management");
   });
 
@@ -260,19 +303,17 @@ test.describe("Agent test modal", () => {
     page,
   }) => {
     await openRowActions(page, "Build Validator");
-    await page.getByRole("menuitem", { name: "Test" }).click();
+    await page.getByRole("menuitem", { name: "Test agent" }).click();
     await pickTypeahead(
       page,
       "agent-test-application-select",
       "Customer Management"
     );
-    await field(dialog(page), "Task description").fill(
-      "Task for build validator"
-    );
+    await field(dialog(page), "Task").fill("Task for build validator");
     await dialog(page).getByRole("button", { name: "Cancel" }).click();
     await openRowActions(page, "Test Runner");
-    await page.getByRole("menuitem", { name: "Test" }).click();
-    await expect(field(dialog(page), "Task description")).toHaveValue("");
+    await page.getByRole("menuitem", { name: "Test agent" }).click();
+    await expect(field(dialog(page), "Task")).toHaveValue("");
     await expect(
       page.locator("#agent-test-application-select-input")
     ).toHaveValue("");
@@ -302,13 +343,20 @@ test.describe("Agent detail", () => {
 
   test("runs tab is deep-linkable", async ({ page }) => {
     await gotoProto(page, "/agents/3?tab=runs", { persona: ARCHITECT });
-    await expect(page.getByRole("tab", { name: "Agent runs" })).toHaveAttribute(
+    await expect(page.getByRole("tab", { name: "Runs" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    for (const column of ["Started", "Completed"])
+    await expect(
+      page.getByRole("heading", { name: /^Migration plan stages/ })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /^Test runs/ })
+    ).toBeVisible();
+    const stages = page.getByRole("grid", { name: "Migration plan stages" });
+    for (const column of ["Run", "Stage", "Status", "Started", "Duration"])
       await expect(
-        page.getByRole("columnheader", { name: column })
+        stages.getByRole("columnheader", { name: column, exact: true })
       ).toBeVisible();
   });
 
@@ -358,7 +406,7 @@ test.describe("Agent detail", () => {
   }) => {
     await gotoProto(page, "/agents/99999", { persona: ARCHITECT });
     await expect(page.getByText(/not found/i)).toBeVisible({ timeout: 20000 });
-    await expect(page.getByText("No Agents yet")).toHaveCount(0);
+    await expect(page.getByText("No agents yet")).toHaveCount(0);
   });
 
   // Regression guard: agent-detail.tsx casts searchParams.get('tab') without validation; ?tab=foo renders no tab content (skill-detail validates)
