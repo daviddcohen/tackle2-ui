@@ -68,6 +68,8 @@ export interface IMultiselectFilterCategory<
   placeholderText?: string;
   /** How to connect multiple selected options together. Defaults to "AND". */
   logicOperator?: "AND" | "OR";
+  /** Maximum height of the open options menu, for example "24rem". */
+  maxMenuHeight?: string;
 }
 
 export interface ISelectFilterCategory<TItem, TFilterCategoryKey extends string>

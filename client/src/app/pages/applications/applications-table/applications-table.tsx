@@ -4,18 +4,15 @@ import { Trans, useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import {
   Alert,
+  AlertActionLink,
   Button,
   ButtonVariant,
   Content,
   Divider,
   DividerVariant,
-  Dropdown,
   DropdownItem,
-  DropdownList,
   FormSelect,
   FormSelectOption,
-  MenuToggle,
-  MenuToggleElement,
   Modal,
   ModalBody,
   ModalFooter,
@@ -30,6 +27,7 @@ import {
   TagIcon,
   WarningTriangleIcon,
 } from "@patternfly/react-icons";
+import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DEFAULT_REFETCH_INTERVAL, isAgenticEnabled } from "@app/Constants";
@@ -96,6 +94,7 @@ import {
   tasksReadScopes,
   tasksWriteScopes,
 } from "@app/scopes";
+import { disabledActionProps } from "@app/utils/agentic";
 import {
   addSeparatorForOverflow,
   filterAndAddSeparator,
@@ -127,19 +126,18 @@ import { ColumnApplicationName } from "./components/column-application-name";
 import { ColumnAssessmentStatus } from "./components/column-assessment-status";
 import { ColumnReviewStatus } from "./components/column-review-status";
 import { ManageColumnsToolbar } from "./components/manage-columns-toolbar";
-import { MigrationAttentionModal } from "./components/migration-attention-modal";
-import { MigrationPortfolioOverview } from "./components/migration-portfolio-overview";
 
+/** Migration status filter options, in the guide 5.2 order (most urgent first). */
 const agenticMigrationStatuses: ApplicationMigrationDisplayStatus[] = [
-  "notConfigured",
-  "preflightReady",
+  "actionRequired",
+  "failed",
+  "running",
+  "pending",
   "preflightBlocked",
   "reviewRequired",
-  "pending",
-  "running",
-  "actionRequired",
+  "preflightReady",
+  "notConfigured",
   "succeeded",
-  "failed",
 ];
 
 export const ApplicationsTable: FC = () => {
@@ -177,7 +175,6 @@ export const ApplicationsTable: FC = () => {
     useState<DecoratedApplication | null>(null);
 
   const [isAnalyzeModalOpen, setAnalyzeModalOpen] = useState(false);
-  const [isActionsDropdownOpen, setIsActionsDropdownOpen] = useState(false);
   const [retrieveConfigApplications, setRetrieveConfigApplications] = useState<
     DecoratedApplication[] | null
   >(null);
@@ -192,7 +189,6 @@ export const ApplicationsTable: FC = () => {
   const isDependenciesModalOpen = applicationDependenciesToManage !== null;
 
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-  const [isAttentionModalOpen, setIsAttentionModalOpen] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string>("json");
 
   const [assessmentToEdit, setAssessmentToEdit] = useState<Assessment | null>(
@@ -677,16 +673,22 @@ export const ApplicationsTable: FC = () => {
         ? [
             {
               categoryKey: "agenticMigration",
-              title: t("agentic.execution.columnTitle"),
+              title: t("agentic.execution.statusFilter"),
               type: FilterType.multiselect,
               placeholderText:
                 t("actions.filterBy", {
-                  what: t("agentic.execution.columnTitle").toLowerCase(),
+                  what: t("agentic.execution.statusFilter").toLowerCase(),
                 }) + "...",
-              selectOptions: agenticMigrationStatuses.map((status) => ({
-                value: status,
-                label: t(statusPresentation.migration[status].labelKey),
-              })),
+              // Without the statuses there is nothing to filter: no options
+              // disables the control (ADDENDA AP1).
+              selectOptions:
+                migrationsFetchError != null
+                  ? []
+                  : agenticMigrationStatuses.map((status) => ({
+                      value: status,
+                      label: t(statusPresentation.migration[status].labelKey),
+                    })),
+              maxMenuHeight: "24rem",
               getItemValue: (item: DecoratedApplication) =>
                 getMigrationDisplayStatus(getMigration(item)),
             },
@@ -739,6 +741,15 @@ export const ApplicationsTable: FC = () => {
   } = tableControls;
   const showMigrationColumn =
     isAgenticEnabled && getColumnVisibility("agenticMigration");
+  // Every application, not only the current page or filter (guide 7.6).
+  const actionRequiredCount =
+    isAgenticEnabled && areMigrationsAvailable
+      ? applications.filter(
+          (application) =>
+            getMigrationDisplayStatus(getMigration(application)) ===
+            "actionRequired"
+        ).length
+      : 0;
   // Without the agentic API the Migration column is not offered at all.
   const manageableColumns = (columns: typeof columnState.columns) =>
     isAgenticEnabled
@@ -802,6 +813,18 @@ export const ApplicationsTable: FC = () => {
           : []
       )
     );
+  // A row that cannot start says why (guide 4.12): the server's reason, or
+  // its status. While the statuses load or after they failed, the dialog
+  // reads them and reports that itself.
+  const startRowProps = (application: DecoratedApplication) => {
+    const migration = getMigration(application);
+    if (!areMigrationsAvailable || migration.preflight === "ready") return {};
+    // The server's reason, else why the action is off (guide 4.12), never a
+    // bare status word.
+    const reason =
+      migration.preflightReason || t("agentic.execution.readyOnly");
+    return disabledActionProps(reason, "left");
+  };
 
   const clearFilters = () => {
     const currentPath = history.location.pathname;
@@ -875,6 +898,15 @@ export const ApplicationsTable: FC = () => {
         ),
       ],
       [
+        canStartMigrations && (
+          <DropdownItem
+            key="run-migration-plan"
+            isDisabled={selectedRows.length < 1}
+            onClick={() => startMigrationsFor(selectedRows)}
+          >
+            {t("agentic.execution.startMigration")}
+          </DropdownItem>
+        ),
         applicationWriteAccess && tasksReadAccess && tasksWriteAccess && (
           <DropdownItem
             key="applications-bulk-cancel"
@@ -1103,25 +1135,36 @@ export const ApplicationsTable: FC = () => {
             "var(--pf-t--global--background--color--primary--default)",
         }}
       >
-        {isAgenticEnabled && !agenticWorkflowRunWriteAccess && (
+        {isAgenticEnabled && migrationsFetchError != null && (
           <Alert
             isInline
-            variant="info"
-            title={t("agentic.execution.readOnlyTitle")}
-          >
-            {t("agentic.execution.readOnlyDescription")}
-          </Alert>
+            variant="warning"
+            className={spacing.mbMd}
+            title={t("agentic.execution.statusUnavailable")}
+          />
         )}
-        {isAgenticEnabled &&
-          areMigrationsAvailable &&
-          applications.length > 0 && (
-            <div style={{ paddingBottom: "var(--pf-t--global--spacer--lg)" }}>
-              <MigrationPortfolioOverview
-                migrations={applications.map(getMigration)}
-                onReviewAttention={() => setIsAttentionModalOpen(true)}
-              />
-            </div>
-          )}
+        {actionRequiredCount > 0 && (
+          <Alert
+            isInline
+            variant="warning"
+            className={spacing.mbMd}
+            title={t("agentic.execution.needAction", {
+              count: actionRequiredCount,
+            })}
+            actionLinks={
+              <AlertActionLink
+                onClick={() =>
+                  filterToolbarProps.setFilterValues({
+                    ...filterToolbarProps.filterValues,
+                    agenticMigration: ["actionRequired"],
+                  })
+                }
+              >
+                {t("agentic.execution.showApplications")}
+              </AlertActionLink>
+            }
+          />
+        )}
         <Toolbar {...toolbarProps} clearAllFilters={clearFilters}>
           <ToolbarContent>
             <ToolbarBulkSelector {...toolbarBulkSelectorProps} />
@@ -1174,36 +1217,6 @@ export const ApplicationsTable: FC = () => {
                   </ToolbarItem>
                 </ScopeGate>
               </ToolbarItem>
-              {canStartMigrations && selectedRows.length > 0 && (
-                <ToolbarItem>
-                  <Dropdown
-                    isOpen={isActionsDropdownOpen}
-                    onOpenChange={setIsActionsDropdownOpen}
-                    toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
-                      <MenuToggle
-                        ref={toggleRef}
-                        variant="secondary"
-                        onClick={() => setIsActionsDropdownOpen((o) => !o)}
-                        isExpanded={isActionsDropdownOpen}
-                      >
-                        {t("agentic.applicationDetail.actions")}
-                      </MenuToggle>
-                    )}
-                  >
-                    <DropdownList>
-                      <DropdownItem
-                        key="run-migration-plan"
-                        onClick={() => {
-                          setIsActionsDropdownOpen(false);
-                          startMigrationsFor(selectedRows);
-                        }}
-                      >
-                        {t("agentic.execution.startMigration")}
-                      </DropdownItem>
-                    </DropdownList>
-                  </Dropdown>
-                </ToolbarItem>
-              )}
             </ToolbarGroup>
             <ToolbarGroup variant="action-group-plain">
               {toolbarKebabItems.length ? (
@@ -1378,6 +1391,7 @@ export const ApplicationsTable: FC = () => {
                     {showMigrationColumn && (
                       <Td
                         width={35}
+                        modifier="wrap"
                         {...getTdProps({ columnKey: "agenticMigration" })}
                       >
                         {application.id != null && (
@@ -1389,13 +1403,7 @@ export const ApplicationsTable: FC = () => {
                             }
                             isLoading={isLoadingMigrations}
                             applicationId={application.id}
-                            archetypeId={application.archetypes?.[0]?.id}
                             linkTo={to}
-                            onStart={
-                              canStartMigrations
-                                ? () => startMigrationsFor([application])
-                                : undefined
-                            }
                           />
                         )}
                       </Td>
@@ -1455,9 +1463,7 @@ export const ApplicationsTable: FC = () => {
                                 itemKey: "startAgenticMigration",
                                 onClick: () =>
                                   startMigrationsFor([application]),
-                                isDisabled:
-                                  getMigration(application).preflight !==
-                                  "ready",
+                                ...startRowProps(application),
                               },
                             ],
                             [
@@ -1581,16 +1587,6 @@ export const ApplicationsTable: FC = () => {
       </div>
 
       {canStartMigrations && migrationLauncher.modal}
-
-      {isAgenticEnabled && (
-        <MigrationAttentionModal
-          applications={applications}
-          migrations={migrations}
-          isOpen={isAttentionModalOpen}
-          onClose={() => setIsAttentionModalOpen(false)}
-          linkTo={to}
-        />
-      )}
 
       {isAnalyzeModalOpen && (
         <AnalysisWizard

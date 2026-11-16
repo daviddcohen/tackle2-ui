@@ -17,7 +17,20 @@ export const targetProfilesPath = (archetypeId: number) =>
 export const targetProfilePath = (archetypeId: number, profileId: number) =>
   `${targetProfilesPath(archetypeId)}#target-profile-${profileId}`;
 
-/** Target profiles are owned by archetypes, so their route must include that owner. */
+/**
+ * Target profiles are owned by archetypes, so their route must include that
+ * owner. Undefined while the owner is unknown.
+ */
+export const targetProfileOwnerPath = (
+  profileId: number,
+  archetypes: Archetype[]
+) => {
+  const owner = archetypes.find((archetype) =>
+    archetype.profiles?.some((profile) => profile.id === profileId)
+  );
+  return owner ? targetProfilePath(owner.id, profileId) : undefined;
+};
+
 export const skillAssociationPath = (
   association: SkillAssociation,
   archetypes: Archetype[]
@@ -33,12 +46,7 @@ export const skillAssociationPath = (
       });
     case "archetype":
       return archetypePath(association.resource.id);
-    case "targetProfile": {
-      const id = association.resource.id;
-      const owner = archetypes.find((archetype) =>
-        archetype.profiles?.some((profile) => profile.id === id)
-      );
-      return owner ? targetProfilePath(owner.id, id) : undefined;
-    }
+    case "targetProfile":
+      return targetProfileOwnerPath(association.resource.id, archetypes);
   }
 };

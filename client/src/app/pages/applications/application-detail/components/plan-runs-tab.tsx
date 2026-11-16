@@ -1,25 +1,46 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { EmptyState, EmptyStateBody } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
+import {
+  Button,
+  EmptyState,
+  EmptyStateActions,
+  EmptyStateBody,
+  EmptyStateFooter,
+} from "@patternfly/react-core";
 
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import {
+  DetailSection,
+  DetailSections,
+} from "@app/pages/agentic/components/detail-section";
 import { PlanRunsTable } from "@app/pages/agentic/components/plan-runs-table";
+import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
 import { useFetchPlanRuns } from "@app/queries/agentic";
 
 interface PlanRunsTabProps {
   applicationId: number;
+  applicationName: string;
   linkCrumbs: BreadcrumbEntry[];
 }
 
+/**
+ * The plan runs that include the application (guide 7.6, C3): the shared
+ * plan runs table under "Plan runs (n)", or a one-sentence empty section that
+ * offers to run the migration plan (applications AP5).
+ */
 export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
   applicationId,
+  applicationName,
   linkCrumbs,
 }) => {
   const { t } = useTranslation();
   const { planRuns, isLoading, fetchError } = useFetchPlanRuns();
+  const runMigrationPlan = useRunMigrationPlanLauncher({
+    applications: [{ id: applicationId, name: applicationName }],
+    linkCrumbs,
+  });
 
   const appRuns = planRuns.filter((run) =>
     run.applications.some((app) => app.id === applicationId)
@@ -33,29 +54,48 @@ export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
     return <StateError />;
   }
 
-  if (appRuns.length === 0) {
-    return (
-      <EmptyState
-        headingLevel="h3"
-        icon={CubesIcon}
-        titleText={t("agentic.applicationDetail.planRunsEmptyTitle")}
-        variant="sm"
-      >
-        <EmptyStateBody>
-          {t("agentic.applicationDetail.planRunsEmptyDescription")}
-        </EmptyStateBody>
-      </EmptyState>
-    );
-  }
-
   return (
-    <PlanRunsTable
-      runs={appRuns}
-      linkTo={(pathname, search = "") =>
-        breadcrumbTo(pathname, search, linkCrumbs)
-      }
-      origin={`?from=app-${applicationId}`}
-      currentApplicationId={applicationId}
-    />
+    <>
+      <DetailSections>
+        {appRuns.length === 0 ? (
+          <DetailSection title={t("agentic.applicationDetail.tabPlanRuns")}>
+            <EmptyState variant="xs">
+              <EmptyStateBody>
+                {t("agentic.applicationDetail.planRunsEmpty")}
+              </EmptyStateBody>
+              {runMigrationPlan.open != null && (
+                <EmptyStateFooter>
+                  <EmptyStateActions>
+                    <Button
+                      variant="link"
+                      onClick={() => runMigrationPlan.open?.()}
+                    >
+                      {t("agentic.execution.startMigration")}
+                    </Button>
+                  </EmptyStateActions>
+                </EmptyStateFooter>
+              )}
+            </EmptyState>
+          </DetailSection>
+        ) : (
+          <DetailSection
+            title={t("agentic.applicationDetail.planRunsTitle", {
+              count: appRuns.length,
+            })}
+            description={t("agentic.applicationDetail.planRunsDescription")}
+          >
+            <PlanRunsTable
+              runs={appRuns}
+              linkTo={(pathname, search = "") =>
+                breadcrumbTo(pathname, search, linkCrumbs)
+              }
+              origin={`?from=app-${applicationId}`}
+              currentApplicationId={applicationId}
+            />
+          </DetailSection>
+        )}
+      </DetailSections>
+      {runMigrationPlan.modal}
+    </>
   );
 };

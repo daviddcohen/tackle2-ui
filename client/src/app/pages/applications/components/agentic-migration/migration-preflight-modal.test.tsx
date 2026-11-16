@@ -46,17 +46,18 @@ const migrations: ApplicationMigrationMap = {
   3: view({ preflight: "reviewRequired" }),
 };
 
-const plans = [
-  { id: "1", name: "Java EE to Quarkus", stages: [] },
-  { id: "2", name: "Spring Boot to Quarkus", stages: [] },
-] as unknown as MigrationPlan[];
+const plans: MigrationPlan[] = [
+  { id: "1", name: "Java EE to Quarkus", description: "", stages: [] },
+  { id: "2", name: "Spring Boot to Quarkus", description: "", stages: [] },
+];
 
 const renderModal = (
-  props: Partial<ComponentProps<typeof MigrationPreflightModal>> = {}
+  props: Partial<ComponentProps<typeof MigrationPreflightModal>> = {},
+  currentPath = "/"
 ) => {
   const onStartReady = jest.fn();
   render(
-    <Router history={createMemoryHistory()}>
+    <Router history={createMemoryHistory({ initialEntries: [currentPath] })}>
       <MigrationPreflightModal
         applications={applications}
         migrations={migrations}
@@ -159,8 +160,164 @@ describe("MigrationPreflightModal", () => {
     );
   });
 
-  it("cannot start when no selected application is ready", async () => {
+  it("is a dialog named by its title", () => {
+    renderModal();
+    expect(
+      screen.getByRole("dialog", { name: "agentic.execution.startMigration" })
+    ).toBeInTheDocument();
+  });
+
+  it("shows the readiness first, by name, with the ready count", () => {
+    renderModal();
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Branch Operations"),
+      expect.stringContaining("Customer Management"),
+      expect.stringContaining("Inventory Service"),
+    ]);
+    // 1 of 3: the caption adds that only ready applications start.
+    expect(
+      screen.getByText(/agentic\.execution\.readyCaption/)
+    ).toHaveTextContent(
+      "agentic.execution.readyCaption agentic.execution.readyOnly"
+    );
+  });
+
+  it("shows Not selected for the plan until one plan for all is picked", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    expect(screen.getAllByText("Java EE to Quarkus")).toHaveLength(3);
+    await user.click(
+      screen.getByRole("radio", { name: /agentic\.execution\.singlePlan/ })
+    );
+    expect(screen.getAllByText("agentic.execution.notSelected")).toHaveLength(
+      3
+    );
+    expect(screen.queryByText("Java EE to Quarkus")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("agentic.execution.overrideCaution")
+    ).toBeInTheDocument();
+  });
+
+  it("hides the override caution only while the rerun's own plan is picked", async () => {
+    const user = userEvent.setup();
+    renderModal({
+      rerunPlanId: "1",
+      initialValues: { planSelection: "single", planId: "1" },
+    });
+    await screen.findAllByText("Java EE to Quarkus");
+    expect(
+      screen.queryByText("agentic.execution.overrideCaution")
+    ).not.toBeInTheDocument();
+    // Another plan is a real override.
+    await user.click(
+      screen.getByRole("button", { name: "agentic.execution.planOverride" })
+    );
+    await user.click(await screen.findByText("Spring Boot to Quarkus"));
+    expect(
+      await screen.findByText("agentic.execution.overrideCaution")
+    ).toBeInTheDocument();
+  });
+
+  it("links the run a reason names, and offers the run otherwise", () => {
+    const run = { id: "1", name: "Run #1 — Java EE to Quarkus" };
+    renderModal({
+      migrations: {
+        ...migrations,
+        2: view({
+          preflight: "blocked",
+          planRun: run,
+          preflightReason: `${run.name} already migrated this application.`,
+        }),
+        3: view({
+          preflight: "blocked",
+          planRun: run,
+          preflightReason: "A source control credential reference is missing.",
+        }),
+      },
+    });
+    expect(screen.getByRole("link", { name: run.name })).toHaveAttribute(
+      "href",
+      "/plan-runs/1"
+    );
+    expect(
+      screen.getByText("already migrated this application.", { exact: false })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "agentic.execution.viewPlanRun" })
+    ).toHaveAttribute("href", "/plan-runs/1");
+  });
+
+  it("does not link the page it was opened from", () => {
+    const run = { id: "1", name: "Run #1 — Java EE to Quarkus" };
+    renderModal(
+      {
+        migrations: {
+          ...migrations,
+          2: view({
+            preflight: "blocked",
+            planRun: run,
+            preflightReason: `${run.name} already migrated this application.`,
+          }),
+        },
+      },
+      "/applications/1"
+    );
+    expect(
+      screen.queryByRole("link", { name: "Customer Management" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Customer Management")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Branch Operations" })
+    ).toHaveAttribute("href", "/applications/2");
+    expect(screen.getByRole("link", { name: run.name })).toBeInTheDocument();
+  });
+
+  it("does not link the run it was opened from", () => {
+    const run = { id: "1", name: "Run #1 — Java EE to Quarkus" };
+    renderModal(
+      {
+        migrations: {
+          ...migrations,
+          2: view({
+            preflight: "blocked",
+            planRun: run,
+            preflightReason: `${run.name} already migrated this application.`,
+          }),
+          3: view({
+            preflight: "blocked",
+            planRun: run,
+            preflightReason:
+              "A source control credential reference is missing.",
+          }),
+        },
+      },
+      "/plan-runs/1"
+    );
+    expect(
+      screen.queryByRole("link", { name: run.name })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(`${run.name} already migrated this application.`)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "agentic.execution.viewPlanRun" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers only Close when no selected application is ready", () => {
     renderModal({ applications: applications.slice(1) });
-    expect(startButton()).toBeDisabled();
+    expect(
+      screen.getByText("agentic.execution.noneReadyTitle")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "agentic.execution.startReady" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /agentic\.execution\.singlePlan/ })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "actions.close" })).toHaveClass(
+      "pf-m-secondary"
+    );
   });
 });

@@ -237,13 +237,19 @@ for (const group of GROUPS) {
               /#target-profile-\d+$/.test(href) &&
               label.startsWith(`${expected} (`) &&
               label.endsWith(")");
+            // The inventory Migration status links to the application's
+            // Migration tab; its words are the status (guide 4.8, 7.6).
+            const isMigrationStatusLink =
+              /^\/applications\/\d+$/.test(destination.pathname) &&
+              destination.searchParams.get("tab") === "migration";
             if (
               !/\/stages\//.test(href) &&
               !isRunCountLink &&
               !isAgentCountLink &&
               !isPlanRunsCountLink &&
               !isSkillsCountLink &&
-              !isQualifiedTargetProfile
+              !isQualifiedTargetProfile &&
+              !isMigrationStatusLink
             )
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected

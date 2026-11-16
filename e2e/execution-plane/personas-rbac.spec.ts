@@ -26,7 +26,6 @@ for (const { persona, canEditPlans } of personas) {
         protoUrl("/applications", { scenario: "configured", persona })
       );
       await waitForInventory(page);
-      await expect(page.getByText("Read-only access")).toHaveCount(0);
       await inventoryRow(page, "Customer Management")
         .getByRole("button", { name: "Row actions" })
         .click();
@@ -37,10 +36,10 @@ for (const { persona, canEditPlans } of personas) {
       await inventoryRow(page, "Customer Management")
         .getByRole("checkbox")
         .check();
-      await page.getByRole("button", { name: "Actions", exact: true }).click();
+      await page.getByRole("button", { name: "Application actions" }).click();
       await expect(
         page.getByRole("menuitem", { name: "Run migration plan" })
-      ).toBeVisible();
+      ).toBeEnabled();
     });
 
     test(`plan configuration is ${canEditPlans ? "editable" : "read only"}`, async ({

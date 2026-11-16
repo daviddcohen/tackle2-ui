@@ -24,13 +24,13 @@
 ## Enterprise Architect portfolio execution
 
 1. Select Enterprise Architect and Preflight blocked.
-2. Open Application Inventory, select applications, and choose Actions > Run migration plan to open preflight. A single application can also be started from its row actions or from the "Next: Start migration" link in the Migration column.
-3. Review ready, blocked, and review-required outcomes. Blocked applications are excluded from the start. "Next: Resolve blockers" opens the application's Migration tab with the blocker.
-4. Change the scenario to Running and inspect current operational counts plus application and Stage progress. "Next: Monitor progress" opens the application's plan run.
-5. Change the scenario to Action required and choose "Review N Requests" in Migration activity (or "Next: Review pending request" on a row). Each request opens the application's Migration tab, where it is approved or rejected individually. On a plan run, the alert under the title names the stage awaiting approval and offers "Approve and continue", which asks for confirmation first.
+2. Open Application Inventory, select applications, and choose Run migration plan in the toolbar kebab to open preflight. A single application can also be started from its row actions.
+3. Review ready, blocked, and review-required outcomes. Blocked applications are excluded from the start. In the Migration column, Blocked and Review before start show the reason under the status, and the status opens the application's Migration tab with the blocker.
+4. Change the scenario to Running and inspect application and stage progress in the Migration column. A running row shows its plan and current stage under the status; the status opens the application's Migration tab, which links to the plan run.
+5. Change the scenario to Action required. The alert above the inventory counts the applications that need action; "Show applications" filters the inventory to them. Each Action required status opens the application's Migration tab, where the request is approved or rejected. On a plan run, the alert under the title names the stage awaiting approval and offers "Approve and continue", which asks for confirmation first.
 6. Change the scenario to Failed. On the application's Migration tab, inspect the failure evidence in the alert and choose Run migration plan; on the failed plan run, choose Run migration plan in the alert (preflight is prefilled with the run's applications and target branch, and keeps each application's own Plan when it is still the run's Plan). In-place retry and resume are not claimed.
 7. Start a ready application and observe Pending, Running, and Succeeded through polling.
-8. Change the scenario to Completed. "Next: Review migration results" opens the plan run; the application's Migration tab shows the target branch and commits.
+8. Change the scenario to Completed. The Succeeded status opens the application's Migration tab, which shows the target branch and commits and links to the plan run.
 
 ## Hub Migrator
 

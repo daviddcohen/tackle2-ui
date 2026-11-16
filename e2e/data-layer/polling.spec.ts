@@ -8,10 +8,12 @@
 import type { Page } from "@playwright/test";
 
 import {
+  AGENTIC_STATUS,
   dialog,
   expect,
   gotoProto,
   main,
+  migrationCell,
   rowActions,
   rowByText,
   test,
@@ -93,11 +95,15 @@ test("the inventory polls application migrations only while runs are active", as
 }) => {
   const migrations = recordRequests(page, /\/application-migrations/);
   await gotoProto(page, "/applications", { scenario: "running" });
-  await expect(main(page).getByText("Running: ").first()).toBeVisible();
+  await expect(
+    migrationCell(page, "Customer Management").locator(AGENTIC_STATUS)
+  ).toHaveText("Running");
   await expectPolling(page, migrations);
 
   await gotoProto(page, "/applications", { scenario: "completed" });
-  await expect(main(page).getByText("Succeeded: ").first()).toBeVisible();
+  await expect(
+    migrationCell(page, "Customer Management").locator(AGENTIC_STATUS)
+  ).toHaveText("Succeeded");
   await expectNoPolling(page, migrations);
 });
 

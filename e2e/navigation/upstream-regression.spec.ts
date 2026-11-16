@@ -47,7 +47,7 @@ test.describe("Application inventory", () => {
       .first()
       .click();
     await expect(
-      page.getByRole("menuitem", { name: "Migration", exact: true })
+      page.getByRole("menuitem", { name: "Migration status", exact: true })
     ).toBeVisible();
     const categories = await page.getByRole("menuitem").allInnerTexts();
     for (const upstreamCategory of [

@@ -6,7 +6,6 @@ import {
   ModelProjection,
   PlanRun,
   getMigrationDisplayStatus,
-  getNextActionKey,
   getOrderedStageRuns,
   getPlanConfigurationChecks,
   getStageDefinition,
@@ -181,22 +180,6 @@ describe("getMigrationDisplayStatus", () => {
     [{ preflight: "ready" }, "preflightReady"],
   ])("%j -> %s", (overrides, expected) => {
     expect(getMigrationDisplayStatus(view(overrides))).toBe(expected);
-  });
-});
-
-describe("getNextActionKey", () => {
-  it.each<[ApplicationMigrationDisplayStatus, string]>([
-    ["notConfigured", "configure"],
-    ["preflightReady", "start"],
-    ["preflightBlocked", "resolve"],
-    ["reviewRequired", "resolve"],
-    ["pending", "monitor"],
-    ["running", "monitor"],
-    ["actionRequired", "review"],
-    ["failed", "correct"],
-    ["succeeded", "reviewResults"],
-  ])("%s -> %s", (status, expected) => {
-    expect(getNextActionKey(status)).toBe(expected);
   });
 });
 
