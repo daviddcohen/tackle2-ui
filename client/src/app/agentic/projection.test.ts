@@ -10,6 +10,7 @@ import {
   getOrderedStageRuns,
   getPlanConfigurationChecks,
   getStageDefinition,
+  getStagesWithUnverifiedModel,
   isActivePlanRun,
   isTerminalRunPhase,
 } from "@app/agentic";
@@ -94,7 +95,74 @@ describe("getPlanConfigurationChecks", () => {
     );
     expect(checks.find((c) => c.id === "path")?.status).toBe("issue");
     expect(checks.find((c) => c.id === "stages")?.status).toBe("issue");
-    expect(checks.find((c) => c.id === "skills")?.status).toBe("notEvaluated");
+  });
+
+  it("evaluates Skills only when the server reported them", () => {
+    const skillsStatus = (effectiveSkills: MigrationPlan["effectiveSkills"]) =>
+      getPlanConfigurationChecks({ ...plan, effectiveSkills }, [], []).find(
+        (c) => c.id === "skills"
+      )?.status;
+    expect(skillsStatus(undefined)).toBe("notEvaluated");
+    expect(skillsStatus([])).toBe("passed");
+  });
+});
+
+describe("getStagesWithUnverifiedModel", () => {
+  const stage = (id: string, order: number, agentId: string) => ({
+    ...plan.stages[0],
+    id,
+    name: `Stage ${id}`,
+    order,
+    agent: { id: agentId, name: `Agent ${agentId}` },
+  });
+  const pending: ModelProjection = {
+    ...model,
+    id: "2",
+    name: "Pending Model",
+    verificationStatus: "pending",
+  };
+  const pendingAgent: Agent = {
+    ...agent,
+    id: "2",
+    model: { id: "2", name: "Pending Model" },
+  };
+
+  it("lists the stages, in order, whose agent's model is not verified", () => {
+    const affected = getStagesWithUnverifiedModel(
+      {
+        ...plan,
+        stages: [stage("b", 3, "2"), stage("a", 1, "1"), stage("c", 2, "2")],
+      },
+      [agent, pendingAgent],
+      [model, pending]
+    );
+    expect(affected.map((item) => item.stage.id)).toEqual(["c", "b"]);
+    expect(affected[0].agent).toBe(pendingAgent);
+    expect(affected[0].model).toBe(pending);
+  });
+
+  it("counts a stage whose agent or model is missing", () => {
+    const affected = getStagesWithUnverifiedModel(
+      { ...plan, stages: [stage("a", 1, "9"), stage("b", 2, "2")] },
+      [agent, pendingAgent],
+      [model]
+    );
+    expect(affected).toEqual([
+      expect.objectContaining({ agent: undefined, model: undefined }),
+      expect.objectContaining({ agent: pendingAgent, model: undefined }),
+    ]);
+  });
+
+  it("gives the Models check its count", () => {
+    const checks = getPlanConfigurationChecks(
+      { ...plan, stages: [stage("a", 1, "2"), stage("b", 2, "2")] },
+      [pendingAgent],
+      [pending]
+    );
+    expect(checks.find((check) => check.id === "models")).toMatchObject({
+      status: "issue",
+      detailValues: { count: 2 },
+    });
   });
 });
 

@@ -9,8 +9,19 @@ import { server } from "@mocks/server";
 import { PlanWizard } from "./plan-wizard";
 
 const agents = [
-  { id: "1", name: "Migration Proposal Agent", skills: [] },
-  { id: "2", name: "Code Migrator", skills: [] },
+  {
+    id: "1",
+    name: "Migration Proposal Agent",
+    model: { id: "m1", name: "Claude" },
+    skills: [],
+  },
+  {
+    id: "2",
+    name: "Code Migrator",
+    model: { id: "m1", name: "Claude" },
+    skills: [{ id: "9", name: "Skill" }],
+    skillCollections: [{ id: "1", name: "Collection" }],
+  },
 ] as unknown as Agent[];
 
 const archetypes = [
@@ -72,6 +83,18 @@ describe("PlanWizard", () => {
       rest.get("/hub/archetypes", (_req, res, ctx) =>
         res(ctx.json(archetypes))
       ),
+      rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
+        res(
+          ctx.json([
+            {
+              id: "m1",
+              name: "Claude",
+              provider: { id: "p", name: "Anthropic" },
+              verificationStatus: "pending",
+            },
+          ])
+        )
+      ),
       rest.put(`${AGENTIC_ENDPOINTS.plans}/:id`, async (req, res, ctx) => {
         updates.push(await req.json());
         return res(ctx.status(204));
@@ -112,8 +135,10 @@ describe("PlanWizard", () => {
     await user.click(nextButton());
     await waitFor(() => expect(nextButton()).toBeEnabled());
     await user.click(nextButton());
+    await waitFor(() => expect(nextButton()).toBeEnabled());
+    await user.click(nextButton());
     await user.click(
-      await screen.findByRole("button", { name: "agentic.plan.saveChanges" })
+      await screen.findByRole("button", { name: "actions.save" })
     );
 
     await waitFor(() => expect(updates).toHaveLength(1));
@@ -143,5 +168,180 @@ describe("PlanWizard", () => {
       ],
     });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("opens every step in edit mode, with the stages collapsed", async () => {
+    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.stages" })
+    );
+    expect(
+      await screen.findAllByText("agentic.plan.runBy", { exact: false })
+    ).toHaveLength(2);
+    expect(screen.queryByRole("textbox", { name: /stageName/ })).toBeNull();
+  });
+
+  it("describes each agent option and warns about an unverified model", async () => {
+    const user = userEvent.setup();
+    render(<PlanWizard isOpen plan={null} onClose={jest.fn()} />);
+    await user.type(nameInput(), "New plan");
+    await waitFor(() => expect(nextButton()).toBeEnabled());
+    await user.click(nextButton());
+    // Target profiles wait for an archetype.
+    expect(
+      screen.getByText("agentic.plan.selectArchetypeFirst")
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /terms\.archetype/ }));
+    await user.click(
+      await screen.findByRole("option", { name: "Java EE Application" })
+    );
+    expect(
+      screen.getByText("agentic.plan.targetProfilesHelper")
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByText("Quarkus 3.x"));
+    await waitFor(() => expect(nextButton()).toBeEnabled());
+    await user.click(nextButton());
+
+    await user.click(
+      screen.getByRole("button", { name: /agentic\.entity\.agent/ })
+    );
+    const option = await screen.findByRole("option", { name: /Code Migrator/ });
+    expect(option).toHaveTextContent("agentic.plan.agentOption");
+    await user.click(option);
+    expect(
+      screen.getByText("agentic.plan.agentModelNotVerified")
+    ).toBeInTheDocument();
+  });
+
+  it("warns when the chosen agent's model is not among the models", async () => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) => res(ctx.json([])))
+    );
+    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.stages" })
+    );
+    const [firstToggle] = await screen.findAllByRole("button", {
+      name: "agentic.plan.stageDetails",
+      expanded: false,
+    });
+    await user.click(firstToggle);
+    expect(
+      await screen.findByText("agentic.plan.agentModelNotVerified")
+    ).toBeInTheDocument();
+  });
+
+  it("keeps unsaved edits when the plan refetches while the wizard is open", async () => {
+    const { rerender } = render(
+      <PlanWizard isOpen plan={plan} onClose={jest.fn()} />
+    );
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+    const user = userEvent.setup();
+    await user.clear(nameInput());
+    await user.type(nameInput(), "Renamed plan");
+    rerender(<PlanWizard isOpen plan={{ ...plan }} onClose={jest.fn()} />);
+    expect(nameInput()).toHaveValue("Renamed plan");
+
+    rerender(<PlanWizard isOpen={false} plan={plan} onClose={jest.fn()} />);
+    rerender(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+  });
+
+  it("says when the path applies, by whether the edited plan is assigned", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <PlanWizard isOpen plan={plan} onClose={jest.fn()} />
+    );
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.pathStep" })
+    );
+    expect(
+      screen.getByText("agentic.plan.pathIntroAssigned")
+    ).toBeInTheDocument();
+    unmount();
+
+    render(
+      <PlanWizard
+        isOpen
+        plan={{
+          ...plan,
+          migrationPath: { ...plan.migrationPath!, isDefault: false },
+        }}
+        onClose={jest.fn()}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.pathStep" })
+    );
+    expect(screen.getByText("agentic.plan.pathIntro")).toBeInTheDocument();
+  });
+
+  it("keeps Next and Save disabled in edit mode while agents fail to load", async () => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
+        res(ctx.status(500))
+      )
+    );
+    const user = userEvent.setup();
+    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.stages" })
+    );
+    // Each closed card says why.
+    expect(
+      await screen.findAllByText("agentic.plan.agentsLoadFailed", undefined, {
+        timeout: 5000,
+      })
+    ).toHaveLength(2);
+    expect(nextButton()).toBeDisabled();
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.reviewStep" })
+    );
+    expect(screen.getByRole("button", { name: "actions.save" })).toBeDisabled();
+  }, 10000);
+
+  it("keeps Next and Save disabled in edit mode while archetypes fail to load", async () => {
+    server.use(
+      rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.status(500)))
+    );
+    const user = userEvent.setup();
+    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.pathStep" })
+    );
+    expect(
+      await screen.findByText("agentic.plan.archetypesLoadFailed", undefined, {
+        timeout: 5000,
+      })
+    ).toBeInTheDocument();
+    expect(nextButton()).toBeDisabled();
+    // Review cannot name the saved archetype and profiles it did not load.
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.reviewStep" })
+    );
+    expect(screen.getAllByText("agentic.common.unavailable")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "actions.save" })).toBeDisabled();
+  });
+
+  it("keeps Next disabled until migration plans load, to check the name", async () => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
+        res(ctx.status(500))
+      )
+    );
+    const user = userEvent.setup();
+    render(<PlanWizard isOpen plan={null} onClose={jest.fn()} />);
+    await user.type(nameInput(), "New plan");
+    expect(
+      await screen.findByText("agentic.plan.plansLoadFailed", undefined, {
+        timeout: 5000,
+      })
+    ).toBeInTheDocument();
+    expect(nextButton()).toBeDisabled();
   });
 });

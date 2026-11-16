@@ -8,58 +8,69 @@ import {
 } from "../support";
 
 test.describe("Plan impact and lifecycle", () => {
-  // Regression guard: applicationImpact.matching is a fixture constant (18); the button filters the inventory
-  // by archetype only and returns 4 apps, 2 of which resolve to a different Plan.
-  test("'View N applications' count matches the applications shown", async ({
+  // Regression guard: applicationImpact.matching is a fixture constant (18); the link filtered the inventory
+  // by archetype only and returned 4 apps, 2 of which resolve to a different Plan.
+  test("the Applications count matches the applications shown", async ({
     page,
   }) => {
     await page.goto(protoUrl("/migration-plans/1", { scenario: "configured" }));
-    const button = page.getByRole("button", {
-      name: /^View \d+ applications?$/,
-    });
-    const expected = Number((await button.innerText()).match(/\d+/)![0]);
-    await button.click();
+    const link = page
+      .getByRole("main")
+      .locator("dl")
+      .getByRole("link", { name: /^\d+ applications?$/ });
+    const expected = Number((await link.innerText()).match(/\d+/)![0]);
+    await link.click();
     await waitForInventory(page);
     await expect(
       page.getByRole("button", { name: new RegExp(`of ${expected}$`) }).first()
     ).toBeVisible();
   });
 
-  // Guide 5.4 / kit-status per-check rows: the check name is its own cell, never
-  // the status label, and an issue shows its detail under the status.
-  test("configuration checks name each check apart from its status", async ({
+  // Guide 5.4 / 7.3: the Configuration fact counts failing checks, and one alert
+  // names the problem and lists each affected stage with its agent and model.
+  test("an unverified model is named with the stages it affects", async ({
     page,
   }) => {
     await page.goto(
       protoUrl("/migration-plans/1", { scenario: "partialConfiguration" })
     );
-    const checks = page.getByRole("grid", { name: "Configuration checks" });
-    const models = checks
-      .getByRole("row")
-      .filter({ hasText: "Approved Models" });
-    await expect(models.getByRole("gridcell").first()).toHaveText(
-      "Approved Models"
+    const configuration = page
+      .getByRole("main")
+      .locator("dl")
+      .locator(".pf-v6-c-description-list__group")
+      .filter({
+        has: page.getByRole("term").getByText("Configuration", { exact: true }),
+      });
+    await expect(configuration).toContainText("1 issue");
+    const alert = page.locator(".pf-v6-c-alert.pf-m-warning");
+    await expect(alert).toContainText(
+      "3 stages use a model that is not verified"
     );
-    await expect(models.getByRole("gridcell").nth(1)).toHaveText(
-      /^Issue\s*\d+ Stage Agent assignments? ha(s|ve) no connected Model option\.$/
+    await expect(alert.getByRole("listitem")).toHaveText([
+      "Prepare proposal: Migration Proposal Agent uses Claude 3.7 Sonnet (Pending)",
+      "Migrate: Code Migrator uses Claude 3.7 Sonnet (Pending)",
+      "Validate: Build Validator uses GPT-4o (Pending)",
+    ]);
+    // Architects cannot open Models (the route needs the admin view scopes), so no link.
+    await expect(alert.getByRole("link", { name: "View models" })).toHaveCount(
+      0
     );
+
+    await page.goto(
+      protoUrl("/migration-plans/1", {
+        persona: "platformEngineer",
+        scenario: "partialConfiguration",
+      })
+    );
+    await alert.getByRole("link", { name: "View models" }).click();
+    await expect(page).toHaveURL(/\/models(\?|$)/);
     await expect(
-      checks
-        .getByRole("row")
-        .filter({ hasText: "Migration path" })
-        .getByRole("gridcell")
-        .nth(1)
-    ).toHaveText("Passed");
+      page.getByRole("heading", { level: 1, name: "Models" })
+    ).toBeVisible();
 
     await page.goto(protoUrl("/migration-plans/1", { scenario: "configured" }));
-    await expect(
-      page
-        .getByRole("grid", { name: "Configuration checks" })
-        .getByRole("row")
-        .filter({ hasText: "Approved Models" })
-        .getByRole("gridcell")
-        .nth(1)
-    ).toHaveText("Passed");
+    await expect(configuration).toContainText("Checks passed");
+    await expect(page.locator(".pf-v6-c-alert.pf-m-warning")).toHaveCount(0);
   });
 
   test("all fixture plans are protected from deletion while in use", async ({
@@ -78,28 +89,28 @@ test.describe("Plan impact and lifecycle", () => {
   // Plan used by a run flips the run to Pending and its Plan link to "Plan not found".
   test("a Plan used by a plan run cannot be deleted", async ({ page }) => {
     await page.goto(protoUrl("/migration-plans", { scenario: "configured" }));
-    await page.getByRole("button", { name: "Create Plan" }).click();
+    await page
+      .getByRole("main")
+      .getByRole("button", { name: "Create migration plan" })
+      .click();
     const dialog = page.getByRole("dialog");
     await dialog
       .getByRole("textbox", { name: /^Name/ })
       .fill("Plan in use by a run");
-    await dialog.getByRole("button", { name: "Select an archetype" }).click();
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
+    await dialog.getByRole("button", { name: /^Archetype/ }).click();
     await pickMenuOption(page, "Node.js Service");
-    await dialog
-      .getByRole("button", { name: "Select target profiles" })
-      .click();
+    await dialog.locator("#plan-target-profiles-input").click();
     await pickMenuOption(page, "Node.js 22 on OpenShift");
-    await dialog
-      .getByRole("button", { name: "1 target profile selected" })
-      .click();
-    await dialog.getByRole("button", { name: "Next" }).click();
+    await dialog.getByText(/^Applications in this archetype/).click();
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await dialog
       .getByRole("textbox", { name: "Stage name" })
       .fill("Only stage");
-    await dialog.getByRole("button", { name: "Select an Agent" }).click();
+    await dialog.getByRole("button", { name: /^Agent/ }).click();
     await pickMenuOption(page, "Code Migrator");
-    await dialog.getByRole("button", { name: "Next" }).click();
-    await dialog.getByRole("button", { name: "Create Plan" }).click();
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
+    await dialog.getByRole("button", { name: "Create", exact: true }).click();
     await expect(dialog).toBeHidden();
 
     await page.getByRole("link", { name: "Application inventory" }).click();

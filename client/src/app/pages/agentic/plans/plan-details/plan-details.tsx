@@ -1,43 +1,43 @@
-import "./plan-details.css";
-
 import * as React from "react";
-import { useTranslation } from "react-i18next";
+import { flushSync } from "react-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, generatePath, useHistory, useParams } from "react-router-dom";
 import {
-  Alert,
   Button,
   Content,
   EmptyState,
+  EmptyStateActions,
   EmptyStateBody,
-  Flex,
-  FlexItem,
-  Label,
+  EmptyStateFooter,
   PageSection,
+  Skeleton,
   Tab,
   TabTitleText,
   Tabs,
-  Title,
+  Tooltip,
 } from "@patternfly/react-core";
-import { BookOpenIcon, LockIcon } from "@patternfly/react-icons";
-import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
+import { CubesIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths } from "@app/Paths";
-import { Agent, MigrationPlan, getPlanConfigurationChecks } from "@app/agentic";
+import { MigrationPlan, getPlanConfigurationChecks } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
-import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
-import { StateError } from "@app/components/StateError";
-import { serializeFilterUrlParams } from "@app/hooks/table-controls";
+import { adminViewScopes } from "@app/auth/roles-to-scopes";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
+import { PageHeader } from "@app/components/PageHeader";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
   DetailTabPanel,
+  EntityDetailActions,
   EntityDetailLoading,
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import {
   archetypePath,
   targetProfilePath,
+  targetProfilesPath,
 } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
@@ -46,118 +46,99 @@ import {
   useFetchMigrationPlanById,
   useFetchPlanRuns,
 } from "@app/queries/agentic";
-import { plansWriteScopes } from "@app/scopes";
+import { agenticWorkflowRunsWriteScopes, plansWriteScopes } from "@app/scopes";
 
 import { ConfigurationStatus } from "../../components/agentic-status";
+import { CountLink } from "../../components/count-link";
+import {
+  DetailFacts,
+  DetailSection,
+  DetailSections,
+  LinkLabels,
+} from "../../components/detail-section";
 import { PlanRunsTable } from "../../components/plan-runs-table";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
+import { PlanConfigurationAlert } from "../components/plan-configuration-alert";
+import {
+  getPlanDeleteBlocker,
+  useDeletePlanDialog,
+} from "../components/plan-delete";
+import { planApplicationsLocation } from "../components/plan-paths";
+import { StagesTable } from "../components/stages-table";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
 interface PlanDetailsRouteParams {
   planId: string;
 }
 
-const PlanStageCard: React.FC<{
-  plan: MigrationPlan;
-  stageIndex: number;
-  agents: Agent[];
-  planChildCrumbs: BreadcrumbEntry[];
-}> = ({ plan, stageIndex, agents, planChildCrumbs }) => {
-  const { t } = useTranslation();
-  const stage = plan.stages[stageIndex];
-  const agent = agents.find((item) => item.id === stage.agent.id);
-  const isApproval = stage.requiresApproval;
+/**
+ * "View models" appears only for users who can open Models (guide 7.3): the route needs `adminViewScopes`
+ * (`Routes.tsx`) and the page reads gateways. Architects hold neither admin view scope, so they get no link.
+ */
+const modelsReadScopes = ["agentic.gateways:get"];
 
-  return (
-    <div className="plan-stage-card">
-      <div className="plan-stage-card-header">
-        <div className="plan-stage-card-header-left">
-          <div
-            className={`plan-stage-number ${isApproval ? "plan-stage-number--approval" : "plan-stage-number--auto"}`}
-            aria-hidden="true"
-          >
-            {stageIndex + 1}
-          </div>
-          <Title headingLevel="h3" size="md">
-            {stage.name}
-          </Title>
-        </div>
-        {isApproval && (
-          <Label color="orange" isCompact icon={<LockIcon />}>
-            {t("agentic.plan.approvalRequired")}
-          </Label>
-        )}
-      </div>
-      <div className="plan-stage-card-body">
-        <dl className="plan-stage-meta-grid">
-          <dt>{t("agentic.plan.agent")}</dt>
-          <dd>
-            <Link
-              to={breadcrumbTo(
-                generatePath(DevPaths.agentDetails, {
-                  agentId: String(stage.agent.id),
-                }),
-                `?from=plan-${plan.id}`,
-                planChildCrumbs
-              )}
-            >
-              {stage.agent.name}
-            </Link>
-          </dd>
-          <dt>{t("agentic.plan.model")}</dt>
-          <dd>{agent?.model.name || t("agentic.plan.notConfigured")}</dd>
-          {(agent?.skills?.length ?? 0) > 0 && (
-            <>
-              <dt>{t("agentic.plan.skills")}</dt>
-              <dd>
-                {agent?.skills.map((s, i) => (
-                  <React.Fragment key={s.id}>
-                    {i > 0 && ", "}
-                    <Link
-                      to={breadcrumbTo(
-                        generatePath(DevPaths.skillDetails, {
-                          skillId: String(s.id),
-                        }),
-                        `?from=plan-${plan.id}`,
-                        planChildCrumbs
-                      )}
-                    >
-                      {s.name}
-                    </Link>
-                  </React.Fragment>
-                ))}
-              </dd>
-            </>
-          )}
-        </dl>
-        {stage.instructions && (
-          <div
-            className={`plan-stage-instructions ${isApproval ? "plan-stage-instructions--approval" : ""}`}
-          >
-            {stage.instructions}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const PLAN_DETAIL_TABS = ["overview", "runs", "knowledge-base"] as const;
+const PLAN_DETAIL_TABS = ["details", "runs"] as const;
 type PlanDetailTab = (typeof PLAN_DETAIL_TABS)[number];
 
 const tabTitleKeys: Record<PlanDetailTab, string> = {
-  overview: "agentic.planDetail.tabOverview",
+  details: "agentic.planDetail.tabDetails",
   runs: "agentic.planDetail.tabRuns",
-  "knowledge-base": "agentic.planDetail.tabKnowledgeBase",
 };
 
 const PANEL_PREFIX = "plan-detail";
 const panelId = (tab: PlanDetailTab) => tabPanelId(PANEL_PREFIX, tab);
 
+/** The plan's target profiles as link labels, plus the unassigned cue (addenda P3, X11). */
+const TargetProfilesFact: React.FC<{
+  plan: MigrationPlan;
+  linkCrumbs: BreadcrumbEntry[];
+}> = ({ plan, linkCrumbs }) => {
+  const { t } = useTranslation();
+  const path = plan.migrationPath;
+  const profilesLink = useLinkComponent(
+    path == null
+      ? undefined
+      : breadcrumbTo(targetProfilesPath(path.archetype.id), "", linkCrumbs)
+  );
+  if (path == null) {
+    // The real adapters do not report the path yet: unknown, not empty (X6).
+    return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+  }
+  if (path.targetProfiles.length === 0) {
+    return <EmptyTextMessage message={t("terms.none")} />;
+  }
+  return (
+    <>
+      <LinkLabels
+        items={path.targetProfiles.map((profile) => ({
+          id: profile.id,
+          name: profile.name,
+          to: breadcrumbTo(
+            targetProfilePath(path.archetype.id, profile.id),
+            "",
+            linkCrumbs
+          ),
+        }))}
+      />
+      {!path.isDefault && (
+        <Content component="small" className={textStyles.textColorSubtle}>
+          {t("agentic.plan.notAssignedCue")}{" "}
+          <Button variant="link" isInline component={profilesLink}>
+            {t("agentic.plan.viewTargetProfiles")}
+          </Button>
+        </Content>
+      )}
+    </>
+  );
+};
+
 const PlanDetailsPage: React.FC = () => {
   const { t } = useTranslation();
-  const hasManagePlansScope = useHasSomeScopes(plansWriteScopes);
-  const canManagePlans = hasManagePlansScope;
+  const canManagePlans = useHasSomeScopes(plansWriteScopes);
+  const canRunPlans = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
+  const canOpenAdministration = useHasSomeScopes(adminViewScopes);
+  const canReadModels = useHasSomeScopes(modelsReadScopes);
+  const canViewModels = canOpenAdministration && canReadModels;
   const history = useHistory();
   const { planId } = useParams<PlanDetailsRouteParams>();
   const { migrationPlan, isLoading, fetchError, isNotFound } =
@@ -178,8 +159,12 @@ const PlanDetailsPage: React.FC = () => {
     fetchError: runsFetchError,
   } = useFetchPlanRuns(planId);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
+  // Leave before the next render: this page would refetch the deleted plan (404).
+  const { requestDelete, dialog: deleteDialog } = useDeletePlanDialog(() =>
+    flushSync(() => history.push(DevPaths.migrationPlans))
+  );
 
-  const [activeTab, setActiveTab] = useUrlTab(PLAN_DETAIL_TABS, "overview");
+  const [activeTab, setActiveTab] = useUrlTab(PLAN_DETAIL_TABS, "details");
 
   const { breadcrumbs, linkCrumbs: planChildCrumbs } = useEntityBreadcrumbs(
     migrationPlan?.name ?? t("agentic.entity.migrationPlan"),
@@ -189,6 +174,9 @@ const PlanDetailsPage: React.FC = () => {
         path: DevPaths.migrationPlans,
       },
     ]
+  );
+  const inventoryLink = useLinkComponent(
+    breadcrumbTo(DevPaths.applications, "", planChildCrumbs)
   );
 
   if (!migrationPlan) {
@@ -209,104 +197,132 @@ const PlanDetailsPage: React.FC = () => {
 
   const path = migrationPlan.migrationPath;
   const impact = migrationPlan.applicationImpact;
-  const skillRows = groupSkillSources(migrationPlan.effectiveSkills ?? []);
+  const runCount = migrationPlan.runCount;
+  const isLoadingConfiguration = isLoadingAgents || isLoadingModels;
+  const loadedAgents =
+    isLoadingAgents || agentsFetchError != null ? undefined : agents;
+  const loadedModels =
+    isLoadingModels || modelsFetchError != null ? undefined : gateways;
   const configurationChecks = getPlanConfigurationChecks(
     migrationPlan,
-    isLoadingAgents || agentsFetchError != null ? undefined : agents,
-    isLoadingModels || modelsFetchError != null ? undefined : gateways
+    loadedAgents,
+    loadedModels
   );
-  const hasConfigIssue = configurationChecks.some((c) => c.status === "issue");
-  // Per-check rows (guide 5.4): the check name is plain text, never the
-  // status label, and an issue always shows its detail under the status.
-  const checkList = (
-    <Table aria-label={t("agentic.plan.configurationChecks")} variant="compact">
-      <Thead>
-        <Tr>
-          <Th>{t("agentic.plan.checkColumnName")}</Th>
-          <Th>{t("terms.status")}</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {configurationChecks.map((check) => (
-          <Tr key={check.id}>
-            <Td dataLabel={t("agentic.plan.checkColumnName")}>
-              {t(check.labelKey)}
-            </Td>
-            <Td dataLabel={t("terms.status")}>
-              <ConfigurationStatus
-                status={check.status}
-                supportingText={
-                  check.status === "issue"
-                    ? t(check.detailKey, check.detailValues)
-                    : undefined
-                }
-              />
-            </Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
+  const notEvaluatedDetails = configurationChecks
+    .filter((check) => check.status === "notEvaluated")
+    .map((check) => t(check.detailKey, check.detailValues))
+    .join(" ");
+  const configurationStatus = (
+    <ConfigurationStatus checks={configurationChecks} />
   );
+  const childLink = (pathname: string) =>
+    breadcrumbTo(pathname, `?from=plan-${migrationPlan.id}`, planChildCrumbs);
+
+  const skillRows =
+    migrationPlan.effectiveSkills == null
+      ? undefined
+      : groupSkillSources(migrationPlan.effectiveSkills);
+
+  const facts: [string, React.ReactNode][] = [
+    [
+      t("terms.archetype"),
+      path ? (
+        <Link
+          to={breadcrumbTo(
+            archetypePath(path.archetype.id),
+            "",
+            planChildCrumbs
+          )}
+        >
+          {path.archetype.name}
+        </Link>
+      ) : (
+        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+      ),
+    ],
+    [
+      t("terms.targetProfiles"),
+      <TargetProfilesFact
+        key="profiles"
+        plan={migrationPlan}
+        linkCrumbs={planChildCrumbs}
+      />,
+    ],
+    [
+      t("terms.applications"),
+      impact == null ? (
+        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+      ) : impact.matching === 0 ? (
+        <EmptyTextMessage message={t("terms.none")} />
+      ) : (
+        <CountLink
+          to={planApplicationsLocation(migrationPlan.id, planChildCrumbs)}
+        >
+          {t("agentic.plan.applicationCount", { count: impact.matching })}
+        </CountLink>
+      ),
+    ],
+    [
+      t("agentic.plan.runs"),
+      runCount == null ? (
+        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+      ) : runCount === 0 ? (
+        <EmptyTextMessage message={t("terms.none")} />
+      ) : (
+        // The Runs tab of this page: switch tabs, do not navigate.
+        <Button
+          variant="link"
+          isInline
+          className={textStyles.textNowrap}
+          onClick={() => setActiveTab("runs")}
+        >
+          {t("agentic.plan.runCount", { count: runCount })}
+        </Button>
+      ),
+    ],
+    [
+      t("agentic.plan.configuration"),
+      isLoadingConfiguration ? (
+        <Skeleton width="8rem" screenreaderText={t("terms.loading")} />
+      ) : notEvaluatedDetails &&
+        !configurationChecks.some((check) => check.status === "issue") ? (
+        <Tooltip content={notEvaluatedDetails}>
+          <span tabIndex={0}>{configurationStatus}</span>
+        </Tooltip>
+      ) : (
+        configurationStatus
+      ),
+    ],
+  ];
 
   return (
     <>
-      {/* Header */}
-      <PageSection hasBodyWrapper={false} className="plan-details-header">
-        <BreadCrumbPath breadcrumbs={breadcrumbs} />
-        <Flex
-          justifyContent={{ default: "justifyContentSpaceBetween" }}
-          alignItems={{ default: "alignItemsFlexStart" }}
-          spaceItems={{ default: "spaceItemsLg" }}
-          className="plan-heading"
-        >
-          <FlexItem>
-            <Content component="h1">{migrationPlan.name}</Content>
-            <Content component="p">{migrationPlan.description}</Content>
-          </FlexItem>
-          <FlexItem>
-            <Flex spaceItems={{ default: "spaceItemsSm" }}>
-              {canManagePlans && (
-                <FlexItem>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setIsEditOpen(true)}
-                  >
-                    {t("agentic.plan.editPlan")}
-                  </Button>
-                </FlexItem>
-              )}
-              <FlexItem>
-                <Button
-                  variant="primary"
-                  onClick={() =>
-                    history.push({
-                      ...breadcrumbTo(
-                        DevPaths.applications,
-                        "",
-                        planChildCrumbs
-                      ),
-                      // The inventory's Migration plan filter shows exactly
-                      // the applications counted in `applicationImpact`.
-                      search: new URLSearchParams({
-                        filters:
-                          serializeFilterUrlParams({
-                            migrationPlan: [migrationPlan.id],
-                          }).filters ?? "",
-                      }).toString(),
-                    })
-                  }
-                >
-                  {t("agentic.plan.viewApplicationsCount", {
-                    count: impact?.matching ?? 0,
-                  })}
-                </Button>
-              </FlexItem>
-            </Flex>
-          </FlexItem>
-        </Flex>
+      <PageSection hasBodyWrapper={false}>
+        <PageHeader
+          title={migrationPlan.name}
+          breadcrumbs={breadcrumbs}
+          description={
+            migrationPlan.description ? (
+              <Content component="p">{migrationPlan.description}</Content>
+            ) : undefined
+          }
+          btnActions={
+            canManagePlans ? (
+              <EntityDetailActions
+                onEdit={() => setIsEditOpen(true)}
+                onDelete={() => requestDelete(migrationPlan)}
+                deleteDisabledReason={getPlanDeleteBlocker(migrationPlan, t)}
+                managedReason={
+                  migrationPlan.operatorManaged
+                    ? t("agentic.common.managedByKonveyor")
+                    : undefined
+                }
+              />
+            ) : undefined
+          }
+        />
       </PageSection>
 
-      {/* Tabs */}
       <PageSection hasBodyWrapper={false} type="tabs">
         <Tabs
           activeKey={activeTab}
@@ -325,167 +341,149 @@ const PlanDetailsPage: React.FC = () => {
         </Tabs>
       </PageSection>
 
-      {/* Tab: Overview */}
       <DetailTabPanel
         prefix={PANEL_PREFIX}
-        eventKey="overview"
+        eventKey="details"
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          {path ? (
-            <Content component="p" className="plan-migration-path-line">
-              {t("agentic.plan.migrationPathFor")}{" "}
-              <Link
-                to={breadcrumbTo(
-                  archetypePath(path.archetype.id),
-                  "",
-                  planChildCrumbs
-                )}
-              >
-                {path.archetype.name}
-              </Link>{" "}
-              {t("agentic.plan.migrationPathTargeting")}{" "}
-              {path.targetProfiles.map((profile, index) => (
-                <React.Fragment key={profile.id}>
-                  {index > 0 && ", "}
-                  <Link
-                    to={breadcrumbTo(
-                      targetProfilePath(path.archetype.id, profile.id),
-                      "",
-                      planChildCrumbs
-                    )}
-                  >
-                    {profile.name}
-                  </Link>
-                </React.Fragment>
-              ))}
-            </Content>
-          ) : (
-            <Alert
-              isInline
-              variant="warning"
-              title={t("agentic.plan.noPathTitle")}
-            >
-              {t("agentic.plan.noPathBody")}
-            </Alert>
-          )}
-          {hasConfigIssue ? (
-            <Alert
-              isInline
-              isPlain
-              variant="warning"
-              title={t("agentic.plan.checksHaveIssues")}
-            >
-              {checkList}
-            </Alert>
-          ) : (
-            <Alert
-              isInline
-              isPlain
-              variant="success"
-              title={t("agentic.plan.allChecksPassed")}
-            >
-              {checkList}
-            </Alert>
-          )}
-        </PageSection>
-        <PageSection hasBodyWrapper={false}>
-          <Title headingLevel="h2" size="xl">
-            {t("agentic.plan.stages")}
-          </Title>
-          <Content component="p">{t("agentic.plan.stagesDescription")}</Content>
-          <div className="plan-stage-list">
-            {migrationPlan.stages.map((_stage, index) => (
-              <PlanStageCard
-                key={_stage.id}
+          <DetailSections>
+            {configurationChecks.some((check) => check.status === "issue") && (
+              <PlanConfigurationAlert
                 plan={migrationPlan}
-                stageIndex={index}
-                agents={agents}
-                planChildCrumbs={planChildCrumbs}
+                checks={configurationChecks}
+                agents={loadedAgents ?? []}
+                models={loadedModels ?? []}
+                canViewModels={canViewModels}
+                onEdit={canManagePlans ? () => setIsEditOpen(true) : undefined}
               />
-            ))}
-          </div>
-        </PageSection>
-        <PageSection hasBodyWrapper={false}>
-          <Title headingLevel="h2" size="xl">
-            {skillRows.length > 0
-              ? t("agentic.planDetail.skillsTitle", { count: skillRows.length })
-              : t("agentic.planDetail.skillsTitleEmpty")}
-          </Title>
-          {skillRows.length > 0 ? (
-            <>
-              <Content component="p">
-                {t("agentic.planDetail.skillsDescription")}
-              </Content>
-              <SkillsTable
-                rows={skillRows}
-                linkTo={(pathname) =>
-                  breadcrumbTo(
-                    pathname,
-                    `?from=plan-${planId}`,
-                    planChildCrumbs
-                  )
+            )}
+            <DetailFacts facts={facts} />
+            <DetailSection
+              title={t("agentic.plan.stages")}
+              description={t("agentic.plan.stagesDescription")}
+            >
+              <StagesTable
+                aria-label={t("agentic.plan.stages")}
+                rows={[...migrationPlan.stages]
+                  .sort((a, b) => a.order - b.order)
+                  .map((stage) => ({
+                    key: stage.id,
+                    name: stage.name,
+                    agentId: stage.agent.id,
+                    agentName: stage.agent.name,
+                    instructions: stage.instructions,
+                    requiresApproval: stage.requiresApproval,
+                  }))}
+                agents={loadedAgents}
+                models={loadedModels}
+                isLoading={isLoadingConfiguration}
+                agentLinkTo={(agentId) =>
+                  childLink(generatePath(DevPaths.agentDetails, { agentId }))
                 }
               />
-            </>
-          ) : (
-            <Content component="p">{t("agentic.plan.notConfigured")}</Content>
-          )}
+            </DetailSection>
+            {skillRows == null ? (
+              <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
+                <EmptyTextMessage message={t("agentic.common.unavailable")} />
+              </DetailSection>
+            ) : skillRows.length === 0 ? (
+              <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
+                <EmptyState
+                  variant="xs"
+                  headingLevel="h3"
+                  titleText={t("agentic.planDetail.skillsEmpty")}
+                />
+              </DetailSection>
+            ) : (
+              <DetailSection
+                title={t("agentic.planDetail.skillsTitle", {
+                  count: skillRows.length,
+                })}
+                description={t("agentic.planDetail.skillsDescription")}
+              >
+                <SkillsTable rows={skillRows} linkTo={childLink} />
+              </DetailSection>
+            )}
+          </DetailSections>
         </PageSection>
       </DetailTabPanel>
 
-      {/* Tab: Runs */}
       <DetailTabPanel
         prefix={PANEL_PREFIX}
         eventKey="runs"
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          {isLoadingRuns ? (
-            <AppPlaceholder />
-          ) : runsFetchError != null ? (
-            <StateError />
+          {isLoadingRuns || runsFetchError != null ? (
+            // The spinner and error rows of the table (addenda X6).
+            <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
+              <PlanRunsTable
+                runs={[]}
+                isLoading={isLoadingRuns}
+                fetchError={runsFetchError}
+                showPlan={false}
+                linkTo={(pathname, search = "") =>
+                  breadcrumbTo(pathname, search, planChildCrumbs)
+                }
+              />
+            </DetailSection>
           ) : planRuns.length === 0 ? (
-            <EmptyState
-              headingLevel="h2"
-              icon={BookOpenIcon}
-              titleText={t("agentic.planDetail.runsEmptyTitle")}
-              variant="sm"
-            >
-              <EmptyStateBody>
-                {t("agentic.planDetail.runsEmptyDescription")}
-              </EmptyStateBody>
-            </EmptyState>
+            <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
+              <EmptyState
+                headingLevel="h3"
+                icon={CubesIcon}
+                titleText={t("agentic.planDetail.runsEmptyTitle")}
+                variant="sm"
+              >
+                <EmptyStateBody>
+                  {t("agentic.planDetail.runsEmptyDescription")}
+                </EmptyStateBody>
+                <EmptyStateFooter>
+                  <EmptyStateActions>
+                    <Button variant="link" component={inventoryLink}>
+                      {t("agentic.planDetail.goToInventory")}
+                    </Button>
+                  </EmptyStateActions>
+                </EmptyStateFooter>
+              </EmptyState>
+            </DetailSection>
           ) : (
-            <PlanRunsTable
-              runs={planRuns}
-              showPlan={false}
-              linkTo={(pathname, search = "") =>
-                breadcrumbTo(pathname, search, planChildCrumbs)
+            <DetailSection
+              title={t("agentic.planDetail.runsTitle", {
+                count: planRuns.length,
+              })}
+              description={
+                canRunPlans ? (
+                  <Trans
+                    i18nKey="agentic.planDetail.runsDescriptionWithStart"
+                    components={{
+                      inventoryLink: (
+                        <Link
+                          to={breadcrumbTo(
+                            DevPaths.applications,
+                            "",
+                            planChildCrumbs
+                          )}
+                        />
+                      ),
+                    }}
+                  />
+                ) : (
+                  t("agentic.planDetail.runsDescription")
+                )
               }
-              origin={`?from=plan-${migrationPlan.id}`}
-            />
+            >
+              <PlanRunsTable
+                runs={planRuns}
+                showPlan={false}
+                linkTo={(pathname, search = "") =>
+                  breadcrumbTo(pathname, search, planChildCrumbs)
+                }
+                origin={`?from=plan-${migrationPlan.id}`}
+              />
+            </DetailSection>
           )}
-        </PageSection>
-      </DetailTabPanel>
-
-      {/* Tab: Knowledge Base */}
-      <DetailTabPanel
-        prefix={PANEL_PREFIX}
-        eventKey="knowledge-base"
-        activeKey={activeTab}
-      >
-        <PageSection hasBodyWrapper={false}>
-          <EmptyState
-            headingLevel="h2"
-            icon={BookOpenIcon}
-            titleText={t("agentic.planDetail.knowledgeBaseEmptyTitle")}
-            variant="sm"
-          >
-            <EmptyStateBody>
-              {t("agentic.planDetail.knowledgeBaseEmptyDescription")}
-            </EmptyStateBody>
-          </EmptyState>
         </PageSection>
       </DetailTabPanel>
 
@@ -494,6 +492,7 @@ const PlanDetailsPage: React.FC = () => {
         plan={migrationPlan}
         onClose={() => setIsEditOpen(false)}
       />
+      {deleteDialog}
     </>
   );
 };

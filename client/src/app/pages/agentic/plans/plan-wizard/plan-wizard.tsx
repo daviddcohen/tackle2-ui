@@ -7,22 +7,22 @@ import { array, boolean, number, object, string } from "yup";
 import {
   Alert,
   Button,
+  Content,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
+  Form,
   FormGroup,
   FormHelperText,
   HelperText,
   HelperTextItem,
-  Label,
-  List,
-  ListItem,
   MenuToggle,
   Modal,
   Select,
   SelectList,
   SelectOption,
+  Skeleton,
   Stack,
   StackItem,
   TextArea,
@@ -33,19 +33,27 @@ import {
   useWizardContext,
 } from "@patternfly/react-core";
 import { PlusCircleIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { MigrationPlan, MigrationPlanRequest } from "@app/agentic";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
+import { MultiSelect } from "@app/components/FilterToolbar/components/MultiSelect";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
+import { targetProfilesPath } from "@app/pages/agentic/entity-paths";
 import {
   useCreateMigrationPlanMutation,
   useFetchAgents,
+  useFetchGateways,
   useFetchMigrationPlans,
   useUpdateMigrationPlanMutation,
 } from "@app/queries/agentic";
 import { useFetchArchetypes } from "@app/queries/archetypes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
+import { DetailSection, DetailSections } from "../../components/detail-section";
 import { StageCard, StageFormData } from "../components/stage-card";
+import { StagesTable } from "../components/stages-table";
 
 interface PlanWizardProps {
   isOpen: boolean;
@@ -64,20 +72,26 @@ interface PlanFormValues {
 const NAME_MAX_LENGTH = 120;
 const DESCRIPTION_MAX_LENGTH = 500;
 
+/** The menus inside the wizard are appended here (addenda P12). */
+const MODAL_ID = "plan-wizard";
+
 const DETAILS_STEP_ID = "step-plan-details";
+const PATH_STEP_ID = "step-migration-path";
 const STAGES_STEP_ID = "step-stages";
+type EditableStepId =
+  | typeof DETAILS_STEP_ID
+  | typeof PATH_STEP_ID
+  | typeof STAGES_STEP_ID;
 
 /** The first wizard step that holds an invalid field, if any. */
 const firstInvalidStep = (
   errors: FieldErrors<PlanFormValues>
-): typeof DETAILS_STEP_ID | typeof STAGES_STEP_ID | undefined => {
-  if (
-    errors.name != null ||
-    errors.description != null ||
-    errors.archetypeId != null ||
-    errors.targetProfileIds != null
-  ) {
+): EditableStepId | undefined => {
+  if (errors.name != null || errors.description != null) {
     return DETAILS_STEP_ID;
+  }
+  if (errors.archetypeId != null || errors.targetProfileIds != null) {
+    return PATH_STEP_ID;
   }
   return errors.stages != null ? STAGES_STEP_ID : undefined;
 };
@@ -88,7 +102,7 @@ const firstInvalidStep = (
  * can use the wizard context).
  */
 const InvalidStepAlert: React.FC<{
-  stepId: typeof DETAILS_STEP_ID | typeof STAGES_STEP_ID;
+  stepId: EditableStepId;
   stepName: string;
 }> = ({ stepId, stepName }) => {
   const { t } = useTranslation();
@@ -97,7 +111,6 @@ const InvalidStepAlert: React.FC<{
     <Alert
       isInline
       variant="danger"
-      className="pf-v6-u-mb-md"
       title={t("agentic.plan.validation.invalidStep", { step: stepName })}
       actionLinks={
         <Button variant="link" isInline onClick={() => goToStepById(stepId)}>
@@ -108,7 +121,24 @@ const InvalidStepAlert: React.FC<{
   );
 };
 
+/** "View target profiles" in the create toast (addenda P3): a new plan is not assigned yet. */
+const TargetProfilesToastLink: React.FC<{ archetypeId: number }> = ({
+  archetypeId,
+}) => {
+  const { t } = useTranslation();
+  const link = useLinkComponent(targetProfilesPath(archetypeId));
+  return (
+    <Button variant="link" isInline component={link}>
+      {t("agentic.plan.viewTargetProfiles")}
+    </Button>
+  );
+};
+
+let nextStageKey = 0;
+const newStageKey = () => `new-${(nextStageKey += 1)}`;
+
 const emptyStage = (order: number): StageFormData => ({
+  formKey: newStageKey(),
   name: "",
   agentId: null,
   instructions: "",
@@ -116,6 +146,23 @@ const emptyStage = (order: number): StageFormData => ({
   order,
 });
 
+const helper = (
+  text: string,
+  variant?: "error" | "warning" | "default"
+): React.ReactNode => (
+  <FormHelperText>
+    <HelperText>
+      <HelperTextItem variant={variant}>{text}</HelperTextItem>
+    </HelperText>
+  </FormHelperText>
+);
+
+/**
+ * Create or edit a migration plan in four steps (guide 4.5, 7.3, plans
+ * amendment 2): Plan details, Migration path, Stages, Review. Next stays
+ * disabled until the step is valid, and every control that blocks it says
+ * why. Creating visits the steps in order; editing can open any step.
+ */
 export const PlanWizard: React.FC<PlanWizardProps> = ({
   isOpen,
   plan,
@@ -123,9 +170,44 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
 }) => {
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
-  const { agents } = useFetchAgents();
-  const { migrationPlans } = useFetchMigrationPlans();
-  const { archetypes } = useFetchArchetypes(false);
+  const {
+    agents,
+    isLoading: isLoadingAgents,
+    fetchError: agentsFetchError,
+  } = useFetchAgents();
+  const {
+    gateways,
+    isLoading: isLoadingModels,
+    fetchError: modelsFetchError,
+  } = useFetchGateways();
+  const {
+    migrationPlans,
+    isLoading: isLoadingPlans,
+    fetchError: plansFetchError,
+  } = useFetchMigrationPlans();
+  const {
+    archetypes,
+    isFetching: isLoadingArchetypes,
+    error: archetypesFetchError,
+  } = useFetchArchetypes(false);
+  const loadedAgents =
+    isLoadingAgents || agentsFetchError != null ? undefined : agents;
+  const loadedModels =
+    isLoadingModels || modelsFetchError != null ? undefined : gateways;
+  const arePlansLoaded = !isLoadingPlans && plansFetchError == null;
+  const areArchetypesLoaded =
+    !isLoadingArchetypes && archetypesFetchError == null;
+
+  const isDuplicateName = React.useCallback(
+    (value: string | undefined) =>
+      migrationPlans.some(
+        (migrationPlan) =>
+          migrationPlan.id !== plan?.id &&
+          migrationPlan.name.trim().toLocaleLowerCase() ===
+            (value || "").trim().toLocaleLowerCase()
+      ),
+    [migrationPlans, plan]
+  );
 
   const validationSchema = React.useMemo(
     () =>
@@ -137,13 +219,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           .test(
             "duplicate-name",
             t("agentic.plan.validation.nameDuplicate"),
-            (value) =>
-              !migrationPlans.some(
-                (migrationPlan) =>
-                  migrationPlan.id !== plan?.id &&
-                  migrationPlan.name.trim().toLocaleLowerCase() ===
-                    (value || "").trim().toLocaleLowerCase()
-              )
+            (value) => !isDuplicateName(value)
           ),
         description: string()
           .defined()
@@ -158,6 +234,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
             object({
               name: string().trim().required(),
               id: string().optional(),
+              formKey: string().required(),
               agentId: string().nullable().required(),
               instructions: string().defined(),
               requiresApproval: boolean().required(),
@@ -167,7 +244,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           .min(1)
           .required(),
       }),
-    [migrationPlans, plan, t]
+    [isDuplicateName, t]
   );
 
   const {
@@ -197,13 +274,25 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
   const [isArchetypeSelectOpen, setIsArchetypeSelectOpen] =
     React.useState(false);
   // Step that blocked the last submit; cleared when the wizard reopens.
-  const [invalidStepId, setInvalidStepId] = React.useState<
-    typeof DETAILS_STEP_ID | typeof STAGES_STEP_ID | undefined
-  >();
-  const [isTargetProfileSelectOpen, setIsTargetProfileSelectOpen] =
-    React.useState(false);
+  const [invalidStepId, setInvalidStepId] = React.useState<EditableStepId>();
+  // Stage cards that are open: new stages open, existing ones start closed (4.5).
+  const [expandedStageKeys, setExpandedStageKeys] = React.useState<string[]>(
+    []
+  );
 
+  // The plan the form was last filled from while open: a refetch hands a new
+  // object for the same plan and must not discard unsaved edits.
+  const filledFromRef = React.useRef<string>();
   React.useEffect(() => {
+    if (!isOpen) {
+      filledFromRef.current = undefined;
+      return;
+    }
+    const filledFrom = plan?.id ?? "";
+    if (filledFromRef.current === filledFrom) {
+      return;
+    }
+    filledFromRef.current = filledFrom;
     setInvalidStepId(undefined);
     if (plan) {
       reset({
@@ -212,31 +301,40 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
         archetypeId: plan.migrationPath?.archetype.id ?? null,
         targetProfileIds:
           plan.migrationPath?.targetProfiles.map((profile) => profile.id) ?? [],
-        stages: plan.stages.map((s) => ({
-          id: s.id,
-          name: s.name,
-          agentId: s.agent?.id ?? null,
-          instructions: s.instructions,
-          requiresApproval: s.requiresApproval,
-          order: s.order,
-        })),
+        stages: [...plan.stages]
+          .sort((a, b) => a.order - b.order)
+          .map((s) => ({
+            id: s.id,
+            formKey: `stage-${s.id}`,
+            name: s.name,
+            agentId: s.agent?.id ?? null,
+            instructions: s.instructions,
+            requiresApproval: s.requiresApproval,
+            order: s.order,
+          })),
       });
+      setExpandedStageKeys([]);
     } else {
+      const first = emptyStage(1);
       reset({
         name: "",
         description: "",
         archetypeId: null,
         targetProfileIds: [],
-        stages: [emptyStage(1)],
+        stages: [first],
       });
+      setExpandedStageKeys([first.formKey]);
     }
   }, [plan, isOpen, reset]);
 
   const onSuccess = () => {
     pushNotification({
-      title: plan
-        ? t("agentic.plan.updated", { plan: name })
-        : t("agentic.plan.created", { plan: name }),
+      title: plan ? t("agentic.plan.updated") : t("agentic.plan.created"),
+      // The form still holds the submitted values when the save answers.
+      message:
+        !plan && archetypeId != null ? (
+          <TargetProfilesToastLink archetypeId={archetypeId} />
+        ) : undefined,
       variant: "success",
     });
     onClose();
@@ -260,7 +358,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     const {
       name: submittedName,
       description: submittedDescription,
-      archetypeId: submittedArchetypeId,
+      archetypeId: archetype,
       targetProfileIds: submittedTargetProfileIds,
       stages: submittedStages,
     } = formValues;
@@ -272,9 +370,9 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
       // Built from the form's ids, not the loaded archetypes, so a slow or
       // failed archetypes query cannot drop the path; the server validates them.
       migrationPath:
-        submittedArchetypeId != null && submittedTargetProfileIds.length > 0
+        archetype != null && submittedTargetProfileIds.length > 0
           ? {
-              archetype: { id: submittedArchetypeId },
+              archetype: { id: archetype },
               targetProfiles: submittedTargetProfileIds.map((id) => ({ id })),
               isDefault: plan?.migrationPath?.isDefault ?? false,
             }
@@ -297,29 +395,17 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     }
   };
 
-  const addStage = () => {
-    setValue("stages", [...stages, emptyStage(stages.length + 1)], {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  };
-
-  const removeStage = (index: number) => {
-    const updated = stages.filter((_, i) => i !== index);
+  const setStages = (updated: StageFormData[]) =>
     setValue(
       "stages",
-      updated.map((s, i) => ({ ...s, order: i + 1 })),
+      updated.map((stage, index) => ({ ...stage, order: index + 1 })),
       { shouldDirty: true, shouldValidate: true }
     );
-  };
 
-  const updateStage = (index: number, data: StageFormData) => {
-    const updated = [...stages];
-    updated[index] = data;
-    setValue("stages", updated, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
+  const addStage = () => {
+    const added = emptyStage(stages.length + 1);
+    setStages([...stages, added]);
+    setExpandedStageKeys((keys) => [...keys, added.formKey]);
   };
 
   const moveStage = (index: number, destination: number) => {
@@ -327,47 +413,68 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     const updated = [...stages];
     const [movedStage] = updated.splice(index, 1);
     updated.splice(destination, 0, movedStage);
-    setValue(
-      "stages",
-      updated.map((stage, stageIndex) => ({
-        ...stage,
-        order: stageIndex + 1,
-      })),
-      { shouldDirty: true, shouldValidate: true }
-    );
+    setStages(updated);
   };
 
-  const hasDuplicateName = migrationPlans.some(
-    (migrationPlan) =>
-      migrationPlan.id !== plan?.id &&
-      migrationPlan.name.trim().toLocaleLowerCase() ===
-        (name || "").trim().toLocaleLowerCase()
-  );
-  const isStep1Valid =
-    (name || "").trim().length > 0 &&
-    (name || "").trim().length <= NAME_MAX_LENGTH &&
+  const toggleStage = (formKey: string) =>
+    setExpandedStageKeys((keys) =>
+      keys.includes(formKey)
+        ? keys.filter((key) => key !== formKey)
+        : [...keys, formKey]
+    );
+
+  const trimmedName = (name || "").trim();
+  const isDetailsValid =
+    trimmedName.length > 0 &&
+    trimmedName.length <= NAME_MAX_LENGTH &&
     (description || "").length <= DESCRIPTION_MAX_LENGTH &&
-    !hasDuplicateName &&
-    archetypeId != null &&
-    targetProfileIds.length > 0;
-  const isStep2Valid =
+    // The duplicate check needs every plan (P8).
+    arePlansLoaded &&
+    !isDuplicateName(name);
+  // A saved path or stage agent is only confirmed once its options load (P8).
+  const isPathValid =
+    areArchetypesLoaded && archetypeId != null && targetProfileIds.length > 0;
+  const isStagesValid =
+    loadedAgents != null &&
     (stages || []).length > 0 &&
     stages.every((s) => s.name.trim() && s.agentId != null);
+  // Editing can open Review directly: it cannot state names it has not loaded.
+  const areOptionsLoaded =
+    arePlansLoaded && areArchetypesLoaded && loadedAgents != null;
 
   const selectedArchetype = archetypes.find((a) => a.id === archetypeId);
   const targetProfiles = selectedArchetype?.profiles ?? [];
   const selectedTargetProfiles = targetProfiles.filter((profile) =>
     targetProfileIds.includes(profile.id)
   );
+  const isPathAssigned = plan?.migrationPath?.isDefault === true;
+  // Review names come from the archetypes query (X6).
+  const archetypesState = isLoadingArchetypes ? (
+    <Skeleton width="8rem" screenreaderText={t("terms.loading")} />
+  ) : (
+    <EmptyTextMessage message={t("agentic.common.unavailable")} />
+  );
+
+  const stepNames: Record<EditableStepId, string> = {
+    [DETAILS_STEP_ID]: t("agentic.plan.detailsStep"),
+    [PATH_STEP_ID]: t("agentic.plan.pathStep"),
+    [STAGES_STEP_ID]: t("agentic.plan.stages"),
+  };
 
   if (!isOpen) {
     return null;
   }
 
+  const appendToModal = () =>
+    document.getElementById(MODAL_ID) ?? document.body;
+
   return (
     <Modal
+      id={MODAL_ID}
       isOpen={isOpen}
-      aria-label={t("agentic.plan.wizardAriaLabel")}
+      aria-label={
+        plan ? t("agentic.plan.editPlan") : t("agentic.plan.createTitle")
+      }
       onEscapePress={(event: KeyboardEvent) => {
         // Escape in an open select closes that select, not the wizard.
         if (
@@ -394,88 +501,85 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
             description={t("agentic.plan.wizardDescription")}
           />
         }
-        isVisitRequired
+        isVisitRequired={!plan}
       >
-        {/* Step 1: Plan Details */}
         <WizardStep
           id={DETAILS_STEP_ID}
-          name={t("agentic.plan.detailsStep")}
-          footer={{
-            isBackHidden: true,
-            isNextDisabled: !isStep1Valid,
-          }}
+          name={stepNames[DETAILS_STEP_ID]}
+          footer={{ isBackHidden: true, isNextDisabled: !isDetailsValid }}
         >
-          <Stack hasGutter>
-            <StackItem>
-              <FormGroup label={t("terms.name")} isRequired fieldId="plan-name">
-                <TextInput
-                  id="plan-name"
-                  isRequired
-                  value={name}
-                  onChange={(_event, value) =>
-                    setValue("name", value, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                  placeholder={t("agentic.plan.namePlaceholder")}
-                  validated={errors.name ? "error" : "default"}
-                />
-                {errors.name?.message && (
-                  <FormHelperText>
-                    <HelperText>
-                      <HelperTextItem variant="error">
-                        {errors.name.message}
-                      </HelperTextItem>
-                    </HelperText>
-                  </FormHelperText>
-                )}
-              </FormGroup>
-            </StackItem>
-            <StackItem>
-              <FormGroup
-                label={t("terms.description")}
-                fieldId="plan-description"
-              >
-                <TextArea
-                  id="plan-description"
-                  value={description}
-                  onChange={(_event, value) =>
-                    setValue("description", value, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                  placeholder={t("agentic.plan.descriptionPlaceholder")}
-                  rows={3}
-                  validated={errors.description ? "error" : "default"}
-                />
-                {errors.description?.message && (
-                  <FormHelperText>
-                    <HelperText>
-                      <HelperTextItem variant="error">
-                        {errors.description.message}
-                      </HelperTextItem>
-                    </HelperText>
-                  </FormHelperText>
-                )}
-              </FormGroup>
-            </StackItem>
-            <StackItem>
-              <FormGroup
-                label={t("agentic.plan.archetype")}
+          <Form onSubmit={(event) => event.preventDefault()}>
+            <FormGroup label={t("terms.name")} isRequired fieldId="plan-name">
+              <TextInput
+                id="plan-name"
                 isRequired
-                fieldId="plan-archetype"
-              >
-                <Select
-                  id="plan-archetype"
-                  // Inline, so the menu stays inside the modal (PF marks the rest of
-                  // <body> aria-hidden while a modal is open).
-                  popperProps={{ appendTo: "inline" }}
-                  isOpen={isArchetypeSelectOpen}
-                  onOpenChange={setIsArchetypeSelectOpen}
-                  selected={archetypeId?.toString()}
-                  onSelect={(_event, value) => {
+                value={name}
+                onChange={(_event, value) =>
+                  setValue("name", value, {
+                    shouldDirty: true,
+                    shouldValidate: arePlansLoaded,
+                  })
+                }
+                validated={arePlansLoaded && errors.name ? "error" : "default"}
+              />
+              {plansFetchError != null
+                ? helper(t("agentic.plan.plansLoadFailed"), "error")
+                : isLoadingPlans
+                  ? helper(t("agentic.plan.loadingPlans"))
+                  : errors.name?.message
+                    ? helper(errors.name.message, "error")
+                    : null}
+            </FormGroup>
+            <FormGroup
+              label={t("terms.description")}
+              fieldId="plan-description"
+            >
+              <TextArea
+                id="plan-description"
+                value={description}
+                onChange={(_event, value) =>
+                  setValue("description", value, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                rows={3}
+                resizeOrientation="vertical"
+                validated={errors.description ? "error" : "default"}
+              />
+              {errors.description?.message
+                ? helper(errors.description.message, "error")
+                : helper(t("agentic.plan.descriptionHelper"))}
+            </FormGroup>
+          </Form>
+        </WizardStep>
+
+        <WizardStep
+          id={PATH_STEP_ID}
+          name={stepNames[PATH_STEP_ID]}
+          footer={{ isNextDisabled: !isPathValid }}
+        >
+          <Form onSubmit={(event) => event.preventDefault()}>
+            <Content component="p" className={textStyles.textColorSubtle}>
+              {plan && isPathAssigned
+                ? t("agentic.plan.pathIntroAssigned")
+                : t("agentic.plan.pathIntro")}
+            </Content>
+            <FormGroup
+              label={t("terms.archetype")}
+              isRequired
+              fieldId="plan-archetype"
+            >
+              <Select
+                id="plan-archetype-select"
+                popperProps={{ appendTo: appendToModal }}
+                isScrollable
+                maxMenuHeight="16rem"
+                isOpen={isArchetypeSelectOpen}
+                onOpenChange={setIsArchetypeSelectOpen}
+                selected={archetypeId?.toString()}
+                onSelect={(_event, value) => {
+                  if (Number(value) !== archetypeId) {
                     setValue("archetypeId", Number(value), {
                       shouldDirty: true,
                       shouldValidate: true,
@@ -484,122 +588,136 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
                       shouldDirty: true,
                       shouldValidate: true,
                     });
-                    setIsArchetypeSelectOpen(false);
-                  }}
-                  toggle={(toggleRef) => (
-                    <MenuToggle
-                      ref={toggleRef}
-                      onClick={() =>
-                        setIsArchetypeSelectOpen(!isArchetypeSelectOpen)
-                      }
-                      isExpanded={isArchetypeSelectOpen}
-                      isFullWidth
-                    >
-                      {selectedArchetype?.name ||
-                        t("agentic.plan.selectArchetype")}
-                    </MenuToggle>
-                  )}
-                >
-                  <SelectList>
-                    {archetypes.map((arch) => (
-                      <SelectOption key={arch.id} value={arch.id.toString()}>
-                        {arch.name}
-                      </SelectOption>
-                    ))}
-                  </SelectList>
-                </Select>
-              </FormGroup>
-            </StackItem>
-            <StackItem>
-              <FormGroup
-                label={t("agentic.plan.targetProfile")}
-                isRequired
-                fieldId="plan-target"
+                  }
+                  setIsArchetypeSelectOpen(false);
+                }}
+                toggle={(toggleRef) => (
+                  <MenuToggle
+                    ref={toggleRef}
+                    id="plan-archetype"
+                    onClick={() =>
+                      setIsArchetypeSelectOpen(!isArchetypeSelectOpen)
+                    }
+                    isExpanded={isArchetypeSelectOpen}
+                    isDisabled={
+                      isLoadingArchetypes || archetypesFetchError != null
+                    }
+                    isFullWidth
+                  >
+                    {selectedArchetype?.name ||
+                      t("agentic.plan.selectArchetype")}
+                  </MenuToggle>
+                )}
               >
-                <Select
-                  id="plan-target"
-                  // Inline, so the menu stays inside the modal (PF marks the rest of
-                  // <body> aria-hidden while a modal is open).
-                  popperProps={{ appendTo: "inline" }}
-                  isOpen={isTargetProfileSelectOpen}
-                  onOpenChange={setIsTargetProfileSelectOpen}
-                  selected={targetProfileIds}
-                  onSelect={(_event, value) => {
-                    const selectedId = Number(value);
-                    setValue(
-                      "targetProfileIds",
-                      targetProfileIds.includes(selectedId)
-                        ? targetProfileIds.filter((id) => id !== selectedId)
-                        : [...targetProfileIds, selectedId],
-                      {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      }
-                    );
-                  }}
-                  toggle={(toggleRef) => (
-                    <MenuToggle
-                      ref={toggleRef}
-                      isFullWidth
-                      isDisabled={!selectedArchetype}
-                      onClick={() =>
-                        setIsTargetProfileSelectOpen(!isTargetProfileSelectOpen)
-                      }
-                      isExpanded={isTargetProfileSelectOpen}
-                    >
-                      {selectedTargetProfiles.length > 0
-                        ? t("agentic.plan.targetProfilesSelected", {
-                            count: selectedTargetProfiles.length,
-                          })
-                        : t("agentic.plan.selectTargetProfiles")}
-                    </MenuToggle>
-                  )}
-                >
-                  <SelectList>
-                    {targetProfiles.map((profile) => (
+                <SelectList aria-label={t("terms.archetypes")}>
+                  {[...archetypes]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((archetype) => (
                       <SelectOption
-                        key={profile.id}
-                        value={profile.id}
-                        hasCheckbox
-                        isSelected={targetProfileIds.includes(profile.id)}
+                        key={archetype.id}
+                        value={archetype.id.toString()}
                       >
-                        {profile.name}
+                        {archetype.name}
                       </SelectOption>
                     ))}
-                  </SelectList>
-                </Select>
-              </FormGroup>
-            </StackItem>
-          </Stack>
+                </SelectList>
+              </Select>
+              {archetypesFetchError != null
+                ? helper(t("agentic.plan.archetypesLoadFailed"), "error")
+                : isLoadingArchetypes
+                  ? helper(t("agentic.plan.loadingArchetypes"))
+                  : archetypeId != null
+                    ? helper(t("agentic.plan.archetypeHelper"))
+                    : null}
+            </FormGroup>
+            <FormGroup
+              label={t("terms.targetProfiles")}
+              isRequired
+              fieldId="plan-target-profiles-input"
+            >
+              <MultiSelect
+                toggleId="plan-target-profiles"
+                toggleAriaLabel={t("agentic.plan.selectTargetProfiles")}
+                ariaLabel={t("terms.targetProfiles")}
+                values={targetProfileIds.map(String)}
+                options={targetProfiles.map((profile) => ({
+                  value: String(profile.id),
+                  label: profile.name,
+                }))}
+                isDisabled={selectedArchetype == null}
+                hasCheckbox
+                hasChips
+                onSelect={(selection) => {
+                  const selectedId = Number(selection);
+                  if (selection == null || Number.isNaN(selectedId)) return;
+                  setValue(
+                    "targetProfileIds",
+                    targetProfileIds.includes(selectedId)
+                      ? targetProfileIds.filter((id) => id !== selectedId)
+                      : [...targetProfileIds, selectedId],
+                    { shouldDirty: true, shouldValidate: true }
+                  );
+                }}
+                onClear={() =>
+                  setValue("targetProfileIds", [], {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                placeholderText={t("agentic.plan.selectTargetProfiles")}
+              />
+              {helper(
+                selectedArchetype == null
+                  ? t("agentic.plan.selectArchetypeFirst")
+                  : t("agentic.plan.targetProfilesHelper")
+              )}
+            </FormGroup>
+          </Form>
         </WizardStep>
 
-        {/* Step 2: Stages */}
         <WizardStep
           id={STAGES_STEP_ID}
-          name={t("agentic.plan.stages")}
-          footer={{
-            isNextDisabled: !isStep2Valid,
-          }}
+          name={stepNames[STAGES_STEP_ID]}
+          footer={{ isNextDisabled: !isStagesValid }}
         >
           <Stack hasGutter>
+            <StackItem>
+              <Content component="p" className={textStyles.textColorSubtle}>
+                {t("agentic.plan.stagesDescription")}
+              </Content>
+            </StackItem>
             {stages.map((stage, index) => (
-              <StackItem key={index}>
+              <StackItem key={stage.formKey}>
                 <StageCard
                   stage={stage}
-                  agents={agents}
-                  onChange={(updated) => updateStage(index, updated)}
-                  onRemove={() => removeStage(index)}
+                  agents={loadedAgents}
+                  isLoadingAgents={isLoadingAgents}
+                  models={loadedModels}
+                  isExpanded={expandedStageKeys.includes(stage.formKey)}
+                  onExpand={() => toggleStage(stage.formKey)}
+                  onChange={(updated) =>
+                    setStages(
+                      stages.map((candidate, candidateIndex) =>
+                        candidateIndex === index ? updated : candidate
+                      )
+                    )
+                  }
+                  onRemove={() =>
+                    setStages(stages.filter((_, i) => i !== index))
+                  }
                   onMoveUp={() => moveStage(index, index - 1)}
                   onMoveDown={() => moveStage(index, index + 1)}
                   canRemove={stages.length > 1}
                   canMoveUp={index > 0}
                   canMoveDown={index < stages.length - 1}
+                  menuAppendTo={appendToModal}
                 />
               </StackItem>
             ))}
             <StackItem>
               <Button
                 variant="link"
+                isInline
                 icon={<PlusCircleIcon />}
                 onClick={addStage}
               >
@@ -609,97 +727,96 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           </Stack>
         </WizardStep>
 
-        {/* Step 3: Review */}
         <WizardStep
           id="step-review"
           name={t("agentic.plan.reviewStep")}
           footer={{
-            nextButtonText: plan
-              ? t("agentic.plan.saveChanges")
-              : t("agentic.plan.createTitle"),
-            isNextDisabled: isSaving,
+            nextButtonText: plan ? t("actions.save") : t("actions.create"),
+            isNextDisabled: isSaving || !areOptionsLoaded,
             onNext: () =>
               void handleSubmit(submitPlan, (invalid) =>
                 setInvalidStepId(firstInvalidStep(invalid) ?? DETAILS_STEP_ID)
               )(),
           }}
         >
-          {invalidStepId != null && (
-            <InvalidStepAlert
-              stepId={invalidStepId}
-              stepName={
-                invalidStepId === DETAILS_STEP_ID
-                  ? t("agentic.plan.detailsStep")
-                  : t("agentic.plan.stages")
-              }
-            />
-          )}
-          <DescriptionList isHorizontal>
-            <DescriptionListGroup>
-              <DescriptionListTerm>{t("terms.name")}</DescriptionListTerm>
-              <DescriptionListDescription>
-                {name || t("agentic.plan.notConfigured")}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>
-                {t("terms.description")}
-              </DescriptionListTerm>
-              <DescriptionListDescription>
-                {description || t("agentic.plan.notConfigured")}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>
-                {t("agentic.plan.archetype")}
-              </DescriptionListTerm>
-              <DescriptionListDescription>
-                {selectedArchetype?.name || t("agentic.plan.notConfigured")}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>
-                {t("agentic.plan.targetProfile")}
-              </DescriptionListTerm>
-              <DescriptionListDescription>
-                {selectedTargetProfiles.length > 0
-                  ? selectedTargetProfiles
+          <DetailSections>
+            {invalidStepId != null && (
+              <InvalidStepAlert
+                stepId={invalidStepId}
+                stepName={stepNames[invalidStepId]}
+              />
+            )}
+            <Content component="p" className={textStyles.textColorSubtle}>
+              {plan
+                ? t("agentic.plan.reviewEdit")
+                : t("agentic.plan.reviewCreate")}
+            </Content>
+            <DescriptionList
+              isHorizontal
+              isCompact
+              horizontalTermWidthModifier={{ default: "18ch" }}
+            >
+              <DescriptionListGroup>
+                <DescriptionListTerm>{t("terms.name")}</DescriptionListTerm>
+                <DescriptionListDescription>
+                  {trimmedName}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>
+                  {t("terms.description")}
+                </DescriptionListTerm>
+                <DescriptionListDescription>
+                  {(description || "").trim() || (
+                    <EmptyTextMessage message={t("terms.none")} />
+                  )}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>
+                  {t("terms.archetype")}
+                </DescriptionListTerm>
+                <DescriptionListDescription>
+                  {!areArchetypesLoaded
+                    ? archetypesState
+                    : (selectedArchetype?.name ?? (
+                        <EmptyTextMessage message={t("terms.none")} />
+                      ))}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>
+                  {t("terms.targetProfiles")}
+                </DescriptionListTerm>
+                <DescriptionListDescription>
+                  {!areArchetypesLoaded ? (
+                    archetypesState
+                  ) : selectedTargetProfiles.length > 0 ? (
+                    selectedTargetProfiles
                       .map((profile) => profile.name)
                       .join(", ")
-                  : t("agentic.plan.notConfigured")}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-            <DescriptionListGroup>
-              <DescriptionListTerm>
-                {t("agentic.plan.stages")}
-              </DescriptionListTerm>
-              <DescriptionListDescription>
-                {stages.length > 0 ? (
-                  <List isPlain>
-                    {stages.map((s, i) => (
-                      <ListItem key={i}>
-                        <Label isCompact>{`${i + 1}`}</Label>{" "}
-                        {s.name || t("agentic.plan.untitledStage")},{" "}
-                        {agents.find((a) => a.id === s.agentId)?.name ||
-                          t("agentic.plan.noAgent")}
-                        {s.requiresApproval && (
-                          <Label
-                            isCompact
-                            color="orange"
-                            className="pf-v6-u-ml-sm"
-                          >
-                            {t("agentic.plan.approvalRequired")}
-                          </Label>
-                        )}
-                      </ListItem>
-                    ))}
-                  </List>
-                ) : (
-                  t("agentic.plan.notConfigured")
-                )}
-              </DescriptionListDescription>
-            </DescriptionListGroup>
-          </DescriptionList>
+                  ) : (
+                    <EmptyTextMessage message={t("terms.none")} />
+                  )}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+            </DescriptionList>
+            <DetailSection title={t("agentic.plan.stages")}>
+              <StagesTable
+                aria-label={t("agentic.plan.stagesToReview")}
+                rows={stages.map((stage) => ({
+                  key: stage.formKey,
+                  name: stage.name,
+                  agentId: stage.agentId,
+                  instructions: stage.instructions,
+                  requiresApproval: stage.requiresApproval,
+                }))}
+                agents={loadedAgents}
+                models={loadedModels}
+                isLoading={isLoadingAgents || isLoadingModels}
+              />
+            </DetailSection>
+          </DetailSections>
         </WizardStep>
       </Wizard>
     </Modal>

@@ -53,7 +53,7 @@ for (const { persona, canEditPlans } of personas) {
         page.getByRole("link", { name: "Java EE to Quarkus" })
       ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: "Create Plan" })
+        page.getByRole("button", { name: "Create migration plan" })
       ).toHaveCount(canEditPlans ? 1 : 0);
       await expect(
         page.getByRole("button", { name: /Kebab toggle/ })
@@ -62,7 +62,7 @@ for (const { persona, canEditPlans } of personas) {
       await expect(
         page.getByRole("heading", { level: 1, name: "Java EE to Quarkus" })
       ).toBeVisible();
-      await expect(page.getByRole("button", { name: "Edit Plan" })).toHaveCount(
+      await expect(page.getByRole("button", { name: "Actions" })).toHaveCount(
         canEditPlans ? 1 : 0
       );
     });

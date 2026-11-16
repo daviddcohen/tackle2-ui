@@ -50,7 +50,7 @@ test("the selected tab controls an existing panel", async ({ page }) => {
 
 for (const [path, firstTab] of [
   ["/agents/3", "Details"],
-  ["/migration-plans/1", "Overview"],
+  ["/migration-plans/1", "Details"],
   ["/applications/1", "Details"],
   ["/skills/1", "Details"],
 ] as const) {
