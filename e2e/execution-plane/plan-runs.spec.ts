@@ -1,6 +1,14 @@
-import { expect, expectNoBrokenText, main, protoUrl, test } from "../support";
+import {
+  AGENTIC_STATUS,
+  expect,
+  expectNoBrokenText,
+  main,
+  protoUrl,
+  stageLinks,
+  test,
+} from "../support";
 
-test.describe("Plan Runs list", () => {
+test.describe("Plan runs list", () => {
   test("lists every run with a known status, sorted by start time", async ({
     page,
     pageErrors,
@@ -12,8 +20,8 @@ test.describe("Plan Runs list", () => {
     await expect(rows).toHaveCount(7);
     const statuses = await page
       .getByRole("gridcell")
-      .filter({ has: page.locator(".pf-v6-c-label") })
-      .locator(".pf-v6-c-label")
+      .filter({ has: page.locator(AGENTIC_STATUS) })
+      .locator(AGENTIC_STATUS)
       .allInnerTexts();
     expect(statuses.length).toBeGreaterThan(0);
     await expect(
@@ -29,7 +37,7 @@ test.describe("Plan Runs list", () => {
     await page.getByRole("menuitem", { name: "Status" }).click();
     await page.getByRole("combobox", { name: "Type to filter" }).click();
     await page
-      .getByRole("menuitem", { name: "Awaiting approval", exact: true })
+      .getByRole("menuitem", { name: "Action required", exact: true })
       .click();
     await page.keyboard.press("Escape");
     const rows = page
@@ -37,7 +45,7 @@ test.describe("Plan Runs list", () => {
       .filter({ has: page.getByRole("link", { name: /^Run #\d+/ }) });
     await expect(rows).toHaveCount(2);
     for (const row of await rows.all())
-      await expect(row).toContainText("Awaiting approval");
+      await expect(row).toContainText("Action required");
   });
 
   test("initial scenario shows the empty state", async ({ page }) => {
@@ -57,7 +65,7 @@ test.describe("Plan run detail", () => {
   for (const [scenario, expected] of [
     ["queued", "Pending"],
     ["running", "Running"],
-    ["actionRequired", "Awaiting approval"],
+    ["actionRequired", "Action required"],
     ["failed", "Failed"],
     ["completed", "Succeeded"],
   ] as const) {
@@ -67,7 +75,7 @@ test.describe("Plan run detail", () => {
         "Run #1 — Java EE to Quarkus"
       );
       await expect(
-        page.getByRole("main").locator(".pf-v6-c-label").first()
+        page.getByRole("main").locator(AGENTIC_STATUS).first()
       ).toHaveText(expected);
       await expectNoBrokenText(main(page));
     });
@@ -77,7 +85,7 @@ test.describe("Plan run detail", () => {
     await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
     const summary = page.getByRole("main").locator("dl").first();
     await expect(summary.getByRole("link")).toHaveCount(4); // plan + 3 applications
-    await page.getByRole("link", { name: "View run" }).first().click();
+    await stageLinks(page).first().click();
     await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/1\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Prepare proposal: Run #1 — Java EE to Quarkus"
@@ -93,7 +101,7 @@ test.describe("Plan run detail", () => {
     await page.goto(
       protoUrl("/plan-runs/2/stages/999", { scenario: "configured" })
     );
-    await expect(page.getByText("Stage run not found").first()).toBeVisible({
+    await expect(page.getByText("Stage not found").first()).toBeVisible({
       timeout: 20000,
     });
   });
@@ -123,20 +131,20 @@ test.describe("Status consistency across surfaces", () => {
       await page.goto(protoUrl("/plan-runs/2", { scenario, stage: 1 }));
       const detail = await page
         .getByRole("main")
-        .locator(".pf-v6-c-label")
+        .locator(AGENTIC_STATUS)
         .first()
         .innerText();
       expect(detail).toMatch(
-        /^(Pending|Running|Succeeded|Failed|Awaiting approval)$/
+        /^(Pending|Running|Succeeded|Failed|Action required)$/
       );
       await page
         .getByRole("navigation", { name: "Breadcrumb" })
-        .getByRole("link", { name: "Plan Runs" })
+        .getByRole("link", { name: "Plan runs" })
         .click();
       await expect(
         page
           .getByRole("row", { name: /Run #2/ })
-          .locator(".pf-v6-c-label")
+          .locator(AGENTIC_STATUS)
           .first()
       ).toHaveText(detail);
       await page.goto(
@@ -145,7 +153,7 @@ test.describe("Status consistency across surfaces", () => {
       await expect(
         page
           .getByRole("row", { name: /Run #2/ })
-          .locator(".pf-v6-c-label")
+          .locator(AGENTIC_STATUS)
           .first()
       ).toHaveText(detail);
     });

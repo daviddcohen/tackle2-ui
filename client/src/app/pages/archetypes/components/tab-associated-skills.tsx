@@ -1,22 +1,34 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Link, generatePath } from "react-router-dom";
-import { Content, EmptyState, EmptyStateBody } from "@patternfly/react-core";
+import {
+  Content,
+  EmptyState,
+  EmptyStateBody,
+  Stack,
+  StackItem,
+} from "@patternfly/react-core";
 import { CubesIcon } from "@patternfly/react-icons";
+import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
 import { DevPaths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { DrawerTabContent } from "@app/components/detail-drawer";
+import {
+  SkillsTable,
+  groupSkillSources,
+  skillAssociationSources,
+} from "@app/pages/agentic/components/skills-table";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchSkills } from "@app/queries/agentic";
 
+/** Skills associated with the archetype and with its target profiles (guide 2.3, sources 3 and 4). */
 export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
   archetype,
 }) => {
   const { t } = useTranslation();
   const { to } = useEntityBreadcrumbs(archetype.name, [
-    { title: t("terms.archetypes"), path: DevPaths.archetypes },
+    { title: t("sidebar.archetypes"), path: DevPaths.archetypes },
   ]);
   const { skills, isLoading } = useFetchSkills();
   if (isLoading) {
@@ -26,32 +38,32 @@ export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
       </DrawerTabContent>
     );
   }
-  const associatedSkills = skills.filter((skill) =>
-    skill.associations?.some(
+  const profileIds = new Set(
+    (archetype.profiles ?? []).map((profile) => profile.id)
+  );
+  const rows = groupSkillSources(
+    skillAssociationSources(
+      skills,
       (association) =>
-        association.scope === "archetype" &&
-        association.resource.id === archetype.id
+        (association.scope === "archetype" &&
+          association.resource.id === archetype.id) ||
+        (association.scope === "targetProfile" &&
+          profileIds.has(association.resource.id))
     )
   );
   return (
     <DrawerTabContent>
-      {associatedSkills.length ? (
-        <Content component="ul">
-          {associatedSkills.map((skill) => (
-            <Content component="li" key={skill.id}>
-              <Link
-                to={to(
-                  generatePath(DevPaths.skillDetails, {
-                    skillId: String(skill.id),
-                  })
-                )}
-              >
-                {skill.name}
-              </Link>
-              <Content component="p">{skill.description}</Content>
+      {rows.length ? (
+        <Stack hasGutter className={spacing.mtLg}>
+          <StackItem>
+            <Content component="p">
+              {t("agentic.archetype.skillsDescription")}
             </Content>
-          ))}
-        </Content>
+          </StackItem>
+          <StackItem>
+            <SkillsTable rows={rows} linkTo={(pathname) => to(pathname)} />
+          </StackItem>
+        </Stack>
       ) : (
         <EmptyState
           headingLevel="h3"

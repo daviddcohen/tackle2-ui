@@ -7,6 +7,7 @@ import {
   main,
   mainHeading,
   protoUrl,
+  stageLinks,
   test,
 } from "../support";
 
@@ -65,7 +66,7 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
   visits.push(await visit(page));
 
   // plan run -> stage run
-  await main(page).getByRole("link", { name: "View run" }).nth(1).click();
+  await stageLinks(page).nth(1).click();
   await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/2/);
   visits.push(await visit(page));
 
@@ -184,7 +185,7 @@ test("cold deep links use the canonical hierarchy and each crumb works", async (
   for (const [path, crumbs] of [
     [
       "/plan-runs/1/stages/2",
-      ["Plan Runs", "Run #1 — Java EE to Quarkus", "Migrate"],
+      ["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"],
     ],
     ["/skills/collections/1", ["Skills", "Java modernization foundation"]],
     [
@@ -235,7 +236,7 @@ test("a not-found detail keeps the trail it was reached from", async ({
   // Simulate the stage disappearing: navigate within the SPA with the run's trail.
   await page.evaluate(() => {
     const crumbs = [
-      { title: "Plan Runs", path: "/plan-runs" },
+      { title: "Plan runs", path: "/plan-runs" },
       { title: "Run #1 — Java EE to Quarkus", path: "/plan-runs/1" },
     ];
     window.history.pushState(
@@ -249,12 +250,29 @@ test("a not-found detail keeps the trail it was reached from", async ({
       })
     );
   });
-  await expect(page.getByText("Stage run not found").first()).toBeVisible();
+  await expect(page.getByText("Stage not found").first()).toBeVisible();
   await expect
     .poll(() => breadcrumbTitles(page))
-    .toEqual([
-      "Plan Runs",
-      "Run #1 — Java EE to Quarkus",
-      "Stage run not found",
-    ]);
+    .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Stage"]);
+});
+
+test("run and stage pages name their nouns in the trail while the run loads", async ({
+  page,
+}) => {
+  // The loading scenario delays every response by 10 s.
+  await page.goto(protoUrl("/plan-runs/1", { scenario: "loading" }));
+  await expect
+    .poll(() => breadcrumbTitles(page))
+    .toEqual(["Plan runs", "Plan run"]);
+
+  await page.goto(protoUrl("/plan-runs/1/stages/2", { scenario: "loading" }));
+  await expect
+    .poll(() => breadcrumbTitles(page))
+    .toEqual(["Plan runs", "Plan run", "Stage"]);
+  await expect(
+    breadcrumb(page).getByRole("link", { name: "Plan run", exact: true })
+  ).toHaveAttribute("href", "/plan-runs/1");
+  await expect
+    .poll(() => breadcrumbTitles(page), { timeout: 20_000 })
+    .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"]);
 });

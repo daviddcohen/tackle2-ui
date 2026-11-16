@@ -12,6 +12,7 @@ import {
   main,
   mainHeading,
   spaNavigate,
+  stageLinks,
   test,
 } from "../support";
 
@@ -56,7 +57,7 @@ test("editing a plan keeps its stage ids, so its runs keep their stage runs", as
 }) => {
   await gotoProto(page, "/plan-runs/2");
   await expect(mainHeading(page)).toHaveText(/^Run #2/);
-  const viewRunLinks = main(page).getByRole("link", { name: "View run" });
+  const viewRunLinks = stageLinks(page);
   await expect(viewRunLinks.first()).toBeVisible();
   const stageRunCount = await viewRunLinks.count();
   const before = await agenticGet<PlanWithSkills>(page, "/plans/2");

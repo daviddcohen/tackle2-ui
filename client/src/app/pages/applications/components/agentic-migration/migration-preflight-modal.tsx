@@ -8,10 +8,8 @@ import { object, string } from "yup";
 import {
   Alert,
   Button,
-  Content,
   Form,
   FormGroup,
-  Label,
   Modal,
   ModalBody,
   ModalFooter,
@@ -37,6 +35,10 @@ import {
   HookFormPFTextInput,
 } from "@app/components/HookFormPFFields";
 import {
+  MigrationStatus,
+  preflightDisplayStatus,
+} from "@app/pages/agentic/components/agentic-status";
+import {
   useFetchApplicationMigrations,
   useFetchMigrationPlans,
 } from "@app/queries/agentic";
@@ -58,6 +60,11 @@ interface MigrationPreflightModalProps {
   migrations?: ApplicationMigrationMap;
   /** Prefills the form, for example to start a new run like a failed one. */
   initialValues?: Partial<MigrationPreflightValues>;
+  /**
+   * Hides the expert override caution under the plan picker. A rerun of a
+   * failed run picks the run's own plan, which is not an override (R5).
+   */
+  hideOverrideCaution?: boolean;
   isStarting?: boolean;
   /** Builds a link that carries the caller's breadcrumb trail. */
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
@@ -76,6 +83,7 @@ export const MigrationPreflightModal: React.FC<
   applications,
   migrations: providedMigrations,
   initialValues,
+  hideOverrideCaution = false,
   isStarting = false,
   linkTo: to,
   onClose,
@@ -224,13 +232,15 @@ export const MigrationPreflightModal: React.FC<
                       />
                     )}
                   />
-                  <Alert
-                    isInline
-                    variant="warning"
-                    title={t("agentic.execution.expertOverrideTitle")}
-                  >
-                    {t("agentic.execution.expertOverrideDescription")}
-                  </Alert>
+                  {!hideOverrideCaution && (
+                    <Alert
+                      isInline
+                      variant="warning"
+                      title={t("agentic.execution.expertOverrideTitle")}
+                    >
+                      {t("agentic.execution.expertOverrideDescription")}
+                    </Alert>
+                  )}
                 </StackItem>
               )}
               <StackItem>
@@ -309,25 +319,14 @@ export const MigrationPreflightModal: React.FC<
                               )}
                             </Td>
                             <Td dataLabel={t("agentic.execution.readiness")}>
-                              <Label
-                                color={
-                                  migration.preflight === "ready"
-                                    ? "green"
-                                    : migration.preflight === "blocked"
-                                      ? "red"
-                                      : "orange"
+                              <MigrationStatus
+                                status={
+                                  preflightDisplayStatus[
+                                    migration.preflight ?? "blocked"
+                                  ]
                                 }
-                                isCompact
-                              >
-                                {t(
-                                  `agentic.execution.preflight.${migration.preflight || "blocked"}`
-                                )}
-                              </Label>
-                              {migration.preflightReason && (
-                                <Content component="small">
-                                  {migration.preflightReason}
-                                </Content>
-                              )}
+                                supportingText={migration.preflightReason}
+                              />
                             </Td>
                           </Tr>
                         )

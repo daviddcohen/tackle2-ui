@@ -405,7 +405,7 @@
       "analysisResults": "Analysis Results",
       "configuration": "Configuration",
       "userManagement": "User Management",
-      "agenticConfiguration": "Agentic Migration"
+      "agenticConfiguration": "Agentic migration"
     },
     "users": "Users",
     "tokens": "Tokens",
@@ -414,9 +414,9 @@
     "agents": "Agents",
     "skills": "Skills",
     "models": "Models",
-    "plans": "Migration Plans",
-    "planRuns": "Plan Runs",
-    "providers": "Providers",
+    "plans": "Migration plans",
+    "planRuns": "Plan runs",
+    "providers": "Model providers",
     "selectPersona": "{{persona}}, select persona"
   },
   "taskState": {
@@ -1136,31 +1136,6 @@
     }
   },
   "agentic": {
-    "agentRuns": {
-      "seededCount_one": "Seeded {{count}} resource",
-      "seededCount_other": "Seeded {{count}} resources",
-      "alreadyExisted": "({{count}} already existed)"
-    },
-    "createRun": {
-      "applicationsFromHub_one": "{{count}} application from Konveyor Hub",
-      "applicationsFromHub_other": "{{count}} applications from Konveyor Hub",
-      "hubUnavailable": "Hub unavailable — showing offline stub",
-      "applicationInventory": "Application inventory"
-    },
-    "agents": {
-      "paramName": "Param name",
-      "paramType": "Param type",
-      "removeParameter": "Remove parameter"
-    },
-    "workflowRuns": {
-      "hubApplicationCount_one": "{{count}} application from Konveyor Hub",
-      "hubApplicationCount_other": "{{count}} applications from Konveyor Hub",
-      "paramNotDeclared_one": "not declared by stage {{stages}} — cannot be set on a workflow run (params forward to every stage)",
-      "paramNotDeclared_other": "not declared by stages {{stages}} — cannot be set on a workflow run (params forward to every stage)"
-    },
-    "skills": {
-      "sourceGitDefinition": "git source"
-    },
     "prototype": {
       "persona": "Persona",
       "personas": {
@@ -1272,8 +1247,8 @@
       "testTaskRequired": "A task description is required.",
       "testTitle": "Test {{agent}}",
       "notFoundTitle": "Agent not found",
-      "notFoundBody": "The Agent may have been deleted or the URL is no longer valid.",
-      "backToAgents": "Back to Agents",
+      "notFoundBody": "This agent may have been deleted, or the link is out of date.",
+      "backToAgents": "Back to agents",
       "modelOption": "{{model}} ({{provider}})",
       "testRunNotice": "A test run executes this Agent against a single application. Results are informational and do not affect the application repository."
     },
@@ -1322,11 +1297,6 @@
         "nameRequired": "Name is required.",
         "providerRequired": "A provider is required."
       },
-      "verificationStatuses": {
-        "pending": "Pending",
-        "unreachable": "Unreachable",
-        "verified": "Verified"
-      },
       "providerOption": "{{provider}} ({{type}})",
       "providerEndpoint": "{{provider}} — {{endpoint}}"
     },
@@ -1340,7 +1310,7 @@
       "assignmentSaved": "Plan association saved",
       "associated": "Associated",
       "associatedPlan": "Associated Plan",
-      "backToPlans": "Back to Plans",
+      "backToPlans": "Back to migration plans",
       "created": "Plan \"{{plan}}\" created",
       "createTitle": "Create Plan",
       "closeWizard": "Close Plan wizard",
@@ -1379,7 +1349,6 @@
       "editPlan": "Edit Plan",
       "emptyDescription": "Create a Plan to define a multi-Stage migration workflow.",
       "emptyTitle": "No Plans yet",
-      "effectiveSkills": "Resolved skills",
       "filterByName": "Filter by name...",
       "descriptionPlaceholder": "Describe the goal of this Plan...",
       "detailsStep": "Plan details",
@@ -1393,11 +1362,10 @@
       "notAssigned": "Not assigned",
       "notConfigured": "Not configured",
       "noAgent": "No Agent",
-      "notFoundBody": "The Plan may have been deleted or the URL is no longer valid.",
-      "notFoundTitle": "Plan not found",
-      "plansBreadcrumb": "Migration Plans",
+      "notFoundBody": "This migration plan may have been deleted, or the link is out of date.",
+      "notFoundTitle": "Migration plan not found",
       "plansDescription": "Define reusable migration workflows and associate them with the application paths they support.",
-      "plansTitle": "Migration Plans",
+      "plansTitle": "Migration plans",
       "namePlaceholder": "For example, Java EE to Quarkus",
       "reviewStep": "Review",
       "removeStage": "Remove {{stage}}",
@@ -1411,9 +1379,7 @@
         "agent": "Agent",
         "application": "Application",
         "archetype": "Archetype",
-        "targetProfile": "Target profile",
-        "scope": "Scope",
-        "scopeName": "Source"
+        "targetProfile": "Target profile"
       },
       "stages": "Stages",
       "stagesDescription": "Each Stage uses one Agent. Models and Skills resolve through the selected Agent and migration context.",
@@ -1439,12 +1405,11 @@
       "wizardAriaLabel": "Plan wizard modal",
       "wizardDescription": "Define a reusable migration workflow with ordered Stages and Agents. Skills resolve from the selected Agents and migration context.",
       "allChecksPassed": "All configuration checks passed",
+      "checkColumnName": "Check",
       "checksHaveIssues": "Configuration issues found",
-      "effectiveSkillsHelp": "Skills resolved from this plan's agents, archetypes, target profiles, and applications. Edit associations on the source entity to change this list.",
+      "configurationChecks": "Configuration checks",
       "migrationPathFor": "For",
       "migrationPathTargeting": "applications targeting",
-      "skillColumnName": "Skill",
-      "skillColumnResolvedFrom": "Resolved from",
       "skills": "Skills",
       "viewApplicationsCount": "View {{count}} applications",
       "deleteUsedByRuns_one": "Used by {{count}} plan run. Plans with runs cannot be deleted.",
@@ -1511,12 +1476,6 @@
       "multipleAssociations": "{{first}} and {{remaining}} more",
       "noArchetypeSkills": "No Skills associated",
       "noArchetypeSkillsDescription": "Skills can be associated with this archetype to provide migration guidance for matching applications.",
-      "associationScope": {
-        "agent": "Agent",
-        "application": "Application",
-        "archetype": "Archetype",
-        "targetProfile": "Target profile"
-      },
       "type": "Type",
       "typeSkill": "Skill",
       "typeCollection": "Collection",
@@ -1536,8 +1495,8 @@
       "createCollectionFromSelected": "Create collection ({{count}} selected)",
       "selectAll": "Select all skills on this page",
       "notFoundTitle": "Skill not found",
-      "notFoundBody": "The Skill may have been deleted or the URL is no longer valid.",
-      "backToSkills": "Back to Skills",
+      "notFoundBody": "This skill may have been deleted, or the link is out of date.",
+      "backToSkills": "Back to skills",
       "deleteInCollection": "Remove this Skill from its Skill collections before deleting it.",
       "targetProfileOption": "{{profile}} ({{archetype}})"
     },
@@ -1570,13 +1529,6 @@
       "skillCount_other": "{{count}} Skills"
     },
     "execution": {
-      "confirmApproveMessage_one": "The run continues with its next stage for this application:",
-      "confirmApproveMessage_other": "The decision applies to the whole plan run. It continues with its next stage for all {{count}} applications in it:",
-      "confirmApproveTitle": "Approve and continue the plan run?",
-      "confirmRejectMessage_one": "The run fails for this application:",
-      "confirmRejectMessage_other": "The decision applies to the whole plan run. It fails for all {{count}} applications in it:",
-      "confirmRejectTitle": "Reject the request and fail the plan run?",
-      "decisionAppliesToRun": "This decision applies to the whole plan run {{run}} and every application in it: {{applications}}.",
       "unavailableDescription": "Migration information could not be loaded. Try again or contact an administrator.",
       "unavailableTitle": "Migration information unavailable",
       "columnTitle": "Migration",
@@ -1594,17 +1546,12 @@
       "readiness": "Readiness",
       "readOnlyDescription": "You can review migration status, but your access does not permit starting or approving migrations.",
       "readOnlyTitle": "Read-only access",
-      "approveAndContinue": "Approve and Continue",
-      "rejectRequest": "Reject Request",
       "requestResolved": "Migration request resolved",
       "resolvedPlan": "Resolved Plan",
       "startMigration": "Run migration plan",
-      "startNewRun": "Start New Run",
       "startReady_one": "Start {{count}} Ready Application",
       "startReady_other": "Start {{count}} Ready Applications",
       "stageProgress": "Stage progress",
-      "stageFailed": "{{stage}} Stage failed",
-      "stagePhase": "{{stage}}: {{phase}}",
       "statusLabel": "Status",
       "attention": {
         "description_one": "Review {{count}} request that is blocking migration progress.",
@@ -1625,20 +1572,8 @@
         "reviewRequests_other": "Review {{count}} Requests",
         "title": "Migration activity"
       },
-      "displayStatus": {
-        "actionRequired": "Action required",
-        "failed": "Failed",
-        "notConfigured": "Not configured",
-        "pending": "Pending",
-        "preflightBlocked": "Blocked before start",
-        "preflightReady": "Ready to start",
-        "reviewRequired": "Review required",
-        "running": "Running",
-        "succeeded": "Succeeded"
-      },
       "preflight": {
         "blocked": "Blocked",
-        "ready": "Ready",
         "reviewRequired": "Review required"
       },
       "commitStage": "({{stage}})",
@@ -1672,7 +1607,6 @@
         "monitor": "Monitor progress"
       },
       "latestPlanRun": "Latest plan run",
-      "recoveryDescription": "Correct the cause of the failure, then start a new run.",
       "planFilter": "Migration plan",
       "loadingMigration": "Loading migration status",
       "migrationUnavailable": "Migration status unavailable",
@@ -1693,7 +1627,7 @@
       "title": "Skill collections",
       "updated": "Skill collection updated",
       "notFoundTitle": "Skill collection not found",
-      "notFoundBody": "The Skill collection may have been deleted or the URL is no longer valid.",
+      "notFoundBody": "This skill collection may have been deleted, or the link is out of date.",
       "validation": {
         "nameDuplicate": "A Skill collection with this name already exists.",
         "nameMaximum": "Name must be at most 120 characters.",
@@ -1705,12 +1639,103 @@
       "running": "Running",
       "succeeded": "Succeeded",
       "failed": "Failed",
-      "awaitingApproval": "Awaiting approval"
+      "awaitingApproval": "Action required"
+    },
+    "configurationStatus": {
+      "passed": "Passed",
+      "issue": "Issue",
+      "notEvaluated": "Not evaluated",
+      "checksPassed": "Checks passed",
+      "issues_one": "{{count}} issue",
+      "issues_other": "{{count}} issues"
+    },
+    "migrationStatus": {
+      "notConfigured": "Not configured",
+      "preflightBlocked": "Blocked",
+      "preflightReady": "Ready to start",
+      "reviewRequired": "Review before start"
+    },
+    "verificationStatus": {
+      "pending": "Pending",
+      "unreachable": "Unreachable",
+      "verified": "Verified"
+    },
+    "entity": {
+      "agent": "Agent",
+      "migrationPlan": "Migration plan",
+      "planRun": "Plan run",
+      "stage": "Stage",
+      "skill": "Skill",
+      "skillCollection": "Skill collection"
+    },
+    "common": {
+      "actions": "Actions",
+      "unavailable": "Unavailable",
+      "usageUnchecked": "Usage could not be checked. Try again later.",
+      "managedByKonveyor": "Managed by Konveyor. Changes are reverted automatically.",
+      "stagePosition": "Stage {{position}} of {{total}}: {{stage}}"
+    },
+    "skillsTable": {
+      "label": "Skills",
+      "source": "{{scope}}: {{name}}",
+      "scope": {
+        "agent": "Agent",
+        "application": "Application",
+        "archetype": "Archetype",
+        "targetProfile": "Target profile"
+      }
+    },
+    "planRunsTable": {
+      "label": "Plan runs",
+      "run": "Run",
+      "duration": "Duration",
+      "approvalNeeded": "Approval needed: {{stage}}",
+      "applicationCount_one": "{{count}} application",
+      "applicationCount_other": "{{count}} applications"
+    },
+    "stageRunsTable": {
+      "label": "Stages",
+      "order": "#",
+      "duration": "Duration",
+      "notFinished": "Not finished"
+    },
+    "stageAttention": {
+      "approvalTitle": "{{stage}} needs approval",
+      "approveBodyRun": "{{agent}} finished {{stage}}. Review it, then approve to start {{next}}.",
+      "approveBodyRunLast": "{{agent}} finished {{stage}}. Review it, then approve to complete the run.",
+      "approveBodyStage": "{{agent}} finished {{stage}}. Check its activity and commits below, then approve to start {{next}}.",
+      "approveBodyStageLast": "{{agent}} finished {{stage}}. Check its activity and commits below, then approve to complete the run.",
+      "decisionBody_one": "{{agent}} finished {{stage}}. Approving starts {{next}} in {{run}}.",
+      "decisionBody_other": "{{agent}} finished {{stage}}. Approving starts {{next}} for all {{count}} applications in {{run}}.",
+      "decisionBodyLast_one": "{{agent}} finished {{stage}}. Approving completes {{run}}.",
+      "decisionBodyLast_other": "{{agent}} finished {{stage}}. Approving completes {{run}} for all {{count}} applications.",
+      "waitingBody": "{{agent}} finished {{stage}}. Waiting for approval.",
+      "approve": "Approve and continue",
+      "reject": "Reject",
+      "reviewStage": "Review stage",
+      "viewPlanRun": "View plan run",
+      "failedTitle": "{{stage}} failed",
+      "runFailedTitle": "Plan run failed",
+      "failedNextStep": "Fix the cause in the application repositories, then run the migration plan again.",
+      "restartBlocked": "Before it can run again: {{reason}}",
+      "runMigrationPlan": "Run migration plan",
+      "startsWithRun": "This stage starts when the run starts.",
+      "startsAfterApproval": "This stage starts after {{stage}} is approved.",
+      "startsAfterStage": "This stage starts after {{stage}} finishes.",
+      "didNotRunStageFailed": "This stage did not run because {{stage}} failed.",
+      "didNotRunRunFailed": "This stage did not run because the plan run failed.",
+      "confirmApproveTitle": "Approve and continue?",
+      "confirmApproveBody": "{{stage}} is approved and {{next}} starts next.",
+      "confirmApproveBodyLast": "{{stage}} is approved and the run completes.",
+      "confirmRejectTitle": "Reject and fail the run?",
+      "confirmRejectBody": "{{stage}} is marked failed and the run stops.",
+      "decisionScope_one": "This decision applies to the only application in {{run}}.",
+      "decisionScope_other": "This decision applies to all {{count}} applications in {{run}}.",
+      "cannotBeUndone": "This action cannot be undone."
     },
     "planRun": {
-      "title": "Plan Runs",
+      "title": "Plan runs",
       "description": "History of all migration plan runs across your application portfolio.",
-      "tableLabel": "Plan runs table",
       "plan": "Migration Plan",
       "applications": "Applications",
       "status": "Status",
@@ -1721,25 +1746,20 @@
       "filterByPlan": "Filter by plan",
       "emptyTitle": "No plan runs yet",
       "emptyDescription": "Start a new run to see agents progress through migration plan stages.",
-      "startNewRun": "Start new run",
-      "resolvedSkills": "Resolved skills",
-      "resolvedSkillsInfo": "Skills active during this run, resolved from all hierarchy levels.",
       "stages": "Stages",
       "commits": "Commits",
       "commitsEmpty": "No commits recorded for this stage.",
       "activities": "Activities",
       "activitiesEmpty": "No activity recorded for this stage.",
       "activitiesRunning": "Agent is working — activity will appear here.",
-      "viewRun": "View run",
-      "approveTitle": "This stage requires your approval",
-      "approveDescription": "{{agentName}} has finished this stage and is waiting for human approval before the migration continues.",
-      "approve": "Approve and continue",
       "saveLessonsLearned": "Save as lessons learned",
       "saveLessonsLearnedTooltip": "Knowledge Base capture is coming soon.",
-      "notFound": "Plan run not found",
-      "notFoundDescription": "This plan run could not be found. It may have been deleted.",
+      "notFoundTitle": "Plan run not found",
+      "notFoundBody": "This plan run may have been deleted, or the link is out of date.",
+      "backToPlanRuns": "Back to plan runs",
       "stageApproved": "Stage \"{{stage}}\" approved",
-      "resolvedSkillsTable": "Resolved skills table"
+      "skillsTitle": "Skills ({{count}})",
+      "skillsDescription": "Skills given to the agents when this run started."
     },
     "stageRun": {
       "plan": "Migration Plan",
@@ -1749,8 +1769,9 @@
       "applications": "Applications",
       "approvedAt": "Approved",
       "output": "Output",
-      "notFound": "Stage run not found",
-      "notFoundDescription": "This stage run could not be found.",
+      "notFoundTitle": "Stage not found",
+      "notFoundBody": "This stage may have been deleted, or the link is out of date.",
+      "backToRun": "Back to {{run}}",
       "title": "{{stage}}: {{run}}"
     },
     "agentDetail": {
@@ -1784,7 +1805,10 @@
       "runsEmptyDescription": "Select applications in Application Inventory and run this plan to see results here.",
       "knowledgeBaseEmptyTitle": "No lessons learned yet",
       "knowledgeBaseEmptyDescription": "Lessons learned from plan runs will appear here. This feature is coming soon.",
-      "tabsLabel": "Plan details"
+      "tabsLabel": "Plan details",
+      "skillsTitle": "Skills ({{count}})",
+      "skillsTitleEmpty": "Skills",
+      "skillsDescription": "Skills from this plan's agents, archetype and target profiles. Collection and application skills are added when the plan runs."
     },
     "applicationDetail": {
       "tabDetails": "Details",
@@ -1799,21 +1823,22 @@
       "planRunsEmptyDescription": "Start a new migration plan run for this application to see its progress and commits here.",
       "skillsEmptyTitle": "No skills associated",
       "skillsEmptyDescription": "No skills are directly associated with this application or its archetypes.",
-      "directSkills": "Directly associated",
-      "directSkillsHelp": "Skills explicitly associated with this application.",
-      "archetypeSkills": "From archetype",
-      "archetypeSkillsHelp": "Skills configured for this application's archetype.",
-      "archetypeColumn": "Archetype",
       "actions": "Actions",
       "loadError": "Error loading application",
       "notFound": "Application not found",
       "notFoundDescription": "This application could not be found. It may have been deleted.",
       "tabsLabel": "Application details",
       "taskCanceled": "Task canceled",
-      "taskCancelFailed": "Task cancelation failed"
+      "taskCancelFailed": "Task cancelation failed",
+      "skillsTitle": "Skills ({{count}})",
+      "skillsDescription": "Skills the agents use when migrating this application, and where each one comes from.",
+      "skillsAssociatedDescription": "Skills associated with this application and its archetypes."
+    },
+    "archetype": {
+      "skillsDescription": "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
     },
     "provider": {
-      "title": "Providers",
+      "title": "Model providers",
       "description": "Manage LLM provider connections. Models are configured from verified providers.",
       "tableLabel": "Providers table",
       "create": "Add provider",

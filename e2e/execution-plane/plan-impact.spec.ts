@@ -25,6 +25,43 @@ test.describe("Plan impact and lifecycle", () => {
     ).toBeVisible();
   });
 
+  // Guide 5.4 / kit-status per-check rows: the check name is its own cell, never
+  // the status label, and an issue shows its detail under the status.
+  test("configuration checks name each check apart from its status", async ({
+    page,
+  }) => {
+    await page.goto(
+      protoUrl("/migration-plans/1", { scenario: "partialConfiguration" })
+    );
+    const checks = page.getByRole("grid", { name: "Configuration checks" });
+    const models = checks
+      .getByRole("row")
+      .filter({ hasText: "Approved Models" });
+    await expect(models.getByRole("gridcell").first()).toHaveText(
+      "Approved Models"
+    );
+    await expect(models.getByRole("gridcell").nth(1)).toHaveText(
+      /^Issue\s*\d+ Stage Agent assignments? ha(s|ve) no connected Model option\.$/
+    );
+    await expect(
+      checks
+        .getByRole("row")
+        .filter({ hasText: "Migration path" })
+        .getByRole("gridcell")
+        .nth(1)
+    ).toHaveText("Passed");
+
+    await page.goto(protoUrl("/migration-plans/1", { scenario: "configured" }));
+    await expect(
+      page
+        .getByRole("grid", { name: "Configuration checks" })
+        .getByRole("row")
+        .filter({ hasText: "Approved Models" })
+        .getByRole("gridcell")
+        .nth(1)
+    ).toHaveText("Passed");
+  });
+
   test("all fixture plans are protected from deletion while in use", async ({
     page,
   }) => {
@@ -81,7 +118,7 @@ test.describe("Plan impact and lifecycle", () => {
       "Plan in use by a run"
     );
 
-    await page.getByRole("link", { name: "Migration Plans" }).click();
+    await page.getByRole("link", { name: "Migration plans" }).click();
     await page
       .getByRole("row", { name: /Plan in use by a run/ })
       .getByRole("button", { name: /Kebab toggle/ })

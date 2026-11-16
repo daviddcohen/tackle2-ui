@@ -4,6 +4,7 @@
  * client/src/app/prototype/agentic/projection.ts (portfolio is fixed at 12 applications).
  */
 import {
+  AGENTIC_STATUS,
   type Scenario,
   expect,
   expectNoBrokenText,
@@ -20,12 +21,12 @@ const expectedStatusByScenario = {
   configured: { "Customer Management": "Ready to start" },
   preflightBlocked: {
     "Advisor Workbench API": "Ready to start",
-    "Branch Operations": "Blocked before start",
-    "Inventory Service": "Review required",
+    "Branch Operations": "Blocked",
+    "Inventory Service": "Review before start",
   },
   partialConfiguration: {
-    "Advisor Workbench API": "Review required",
-    "Order Service": "Blocked before start",
+    "Advisor Workbench API": "Review before start",
+    "Order Service": "Blocked",
   },
   queued: { "Customer Management": "Pending" },
   running: { "Customer Management": "Running" },
@@ -35,8 +36,8 @@ const expectedStatusByScenario = {
 
 const nextActionByStatus: Record<string, string> = {
   "Ready to start": "Next: Start migration",
-  "Blocked before start": "Next: Resolve blockers",
-  "Review required": "Next: Resolve blockers",
+  Blocked: "Next: Resolve blockers",
+  "Review before start": "Next: Resolve blockers",
   Pending: "Next: Monitor progress",
   Running: "Next: Monitor progress",
   Failed: "Next: Review failure and retry",
@@ -57,7 +58,7 @@ test.describe("Inventory migration column", () => {
       await waitForInventory(page);
       for (const [application, status] of Object.entries(expectations)) {
         const cell = migrationCell(page, application);
-        await expect(cell.locator(".pf-v6-c-label")).toHaveText(status);
+        await expect(cell.locator(AGENTIC_STATUS)).toHaveText(status);
         await expect(cell).toContainText(nextActionByStatus[status]);
       }
       await expectNoBrokenText(main(page));
@@ -97,8 +98,8 @@ test.describe("Inventory migration column", () => {
     for (const label of [
       "Not configured",
       "Ready to start",
-      "Blocked before start",
-      "Review required",
+      "Blocked",
+      "Review before start",
       "Pending",
       "Running",
       "Action required",
@@ -109,18 +110,16 @@ test.describe("Inventory migration column", () => {
         page.getByRole("menuitem", { name: label, exact: true })
       ).toBeVisible();
     }
-    await page
-      .getByRole("menuitem", { name: "Blocked before start", exact: true })
-      .click();
+    await page.getByRole("menuitem", { name: "Blocked", exact: true }).click();
     await page.keyboard.press("Escape");
     const labels = page
       .getByRole("gridcell")
       .filter({ hasText: "Next:" })
-      .locator(".pf-v6-c-label");
+      .locator(AGENTIC_STATUS);
     await expect(labels.first()).toBeVisible();
     await expect
       .poll(async () => [...new Set(await labels.allInnerTexts())])
-      .toEqual(["Blocked before start"]);
+      .toEqual(["Blocked"]);
   });
 
   test("row action Start is disabled for blocked applications and enabled for ready ones", async ({
@@ -198,7 +197,7 @@ test.describe("Preflight modal", () => {
     ).toContainText("A source control credential reference is missing.");
     await expect(
       dialog.getByRole("row", { name: /Inventory Service/ })
-    ).toContainText("Review required");
+    ).toContainText("Review before start");
     await expect(
       dialog.getByText("2 applications will not start")
     ).toBeVisible();

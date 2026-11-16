@@ -1,5 +1,10 @@
 # Handoff: Prototype Switcher × Plan Runs
 
+> **Historical.** This records the plan run page as it was on 2026-10-04. The page has changed since: the status
+> "Awaiting approval" is now "Action required", the per-stage accordion is replaced by the Stages table, and approval
+> happens in the attention alert at the top of the run or stage page ("Approve and continue", then a confirm). The
+> switcher behavior described below is unchanged.
+
 **Date:** 2026-10-04  
 **Author:** David Cohen + Claude
 

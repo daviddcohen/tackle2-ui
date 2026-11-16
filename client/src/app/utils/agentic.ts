@@ -1,5 +1,13 @@
 import { AxiosError } from "axios";
+import type { TooltipProps } from "@patternfly/react-core";
 
+import {
+  ControllerRunPhase,
+  PlanRun,
+  StageRun,
+  TERMINAL_RUN_PHASES,
+  getOrderedStageRuns,
+} from "@app/agentic";
 import type {
   AgentResource,
   AgentWorkflow,
@@ -27,17 +35,55 @@ export function isOperatorManaged(resource: {
   );
 }
 
+export interface DisabledActionProps {
+  isAriaDisabled?: boolean;
+  tooltipProps?: { content: string; position?: TooltipProps["position"] };
+}
+
 /**
- * Spread into an edit/delete row action: disables it, with `tooltip` saying
- * why, when the operator owns `resource`.
+ * Spread into a row kebab or detail Actions menu item: aria-disabled with
+ * `reason` as its tooltip when a reason is given, enabled otherwise. A row
+ * kebab's Delete passes `position: "left"` so the tooltip does not cover
+ * Edit (guide 4.1, addenda X12).
  */
-export function operatorManagedActionProps(
-  resource: Parameters<typeof isOperatorManaged>[0],
-  tooltip: string
-): { isAriaDisabled?: boolean; tooltipProps?: { content: string } } {
-  return isOperatorManaged(resource)
-    ? { isAriaDisabled: true, tooltipProps: { content: tooltip } }
+export function disabledActionProps(
+  reason?: string,
+  position?: TooltipProps["position"]
+): DisabledActionProps {
+  return reason != null
+    ? {
+        isAriaDisabled: true,
+        tooltipProps:
+          position != null
+            ? { content: reason, position }
+            : { content: reason },
+      }
     : {};
+}
+
+/**
+ * Spread into a row kebab's Delete: disabled with `reason` as its tooltip on
+ * the left (addenda X12), and danger only while it is enabled. Callers pass
+ * the managed reason first, then the usage blocker
+ * (`managedReason ?? usageReason`).
+ */
+export function deleteActionProps(
+  reason?: string
+): DisabledActionProps & { isDanger: boolean } {
+  return { isDanger: reason == null, ...disabledActionProps(reason, "left") };
+}
+
+/**
+ * `disabledActionProps` for an Edit or Delete action of an operator-managed
+ * object: disabled with `tooltip` saying why. Domain objects pass their
+ * `operatorManaged` flag (addenda X4).
+ */
+export function managedActionProps(
+  isManaged: boolean | undefined,
+  tooltip: string,
+  position?: TooltipProps["position"]
+): DisabledActionProps {
+  return disabledActionProps(isManaged ? tooltip : undefined, position);
 }
 
 /** kubectl-style compact age: 45s, 12m, 3h, 2d. */
@@ -69,6 +115,119 @@ export function workflowRunDuration(run: AgentWorkflowRun): number | undefined {
   const end = run.status?.completionTime;
   const ms = (end ? Date.parse(end) : Date.now()) - Date.parse(start);
   return ms >= 0 ? Math.round(ms / 1000) : undefined;
+}
+
+/**
+ * When a stage awaiting approval stopped: its agent's last message. A
+ * `StageRun` has no completion time until it is approved, but the waiting
+ * is not the agent's work, so its clock stops there (addenda X3).
+ */
+const awaitingSince = (stageRun?: Pick<StageRun, "messages">) => {
+  const times = (stageRun?.messages ?? [])
+    .filter((message) => message.role === "agent")
+    .map((message) => Date.parse(message.timestamp));
+  return times.length > 0 ? Math.max(...times) : Number.NaN;
+};
+
+/** Seconds from `startedAt` to `end`, or undefined when either is unknown. */
+const secondsBetween = (startedAt: string | undefined, end: number) => {
+  if (!startedAt) return undefined;
+  const seconds = Math.round((end - Date.parse(startedAt)) / 1000);
+  return seconds >= 0 ? seconds : undefined;
+};
+
+/**
+ * The end of a run's or stage's clock: its completion, now while it is
+ * running, or `awaiting()` while it waits for approval. NaN for a finished
+ * one without a completion time.
+ */
+const clockEnd = (
+  { status, completedAt }: { status: ControllerRunPhase; completedAt?: string },
+  awaiting: () => number,
+  now: number
+) =>
+  completedAt
+    ? Date.parse(completedAt)
+    : status === "AwaitingApproval"
+      ? awaiting()
+      : TERMINAL_RUN_PHASES.includes(status)
+        ? Number.NaN
+        : now;
+
+/**
+ * Seconds a stage has taken (addenda X3): from start to completion, or to
+ * now while it is running. A stage awaiting approval stops at its agent's
+ * last message. Undefined while Pending, for a finished stage without a
+ * completion time and for an awaiting stage without messages. `StageRun`
+ * carries no duration field; this is the one place it is derived.
+ */
+export function stageRunDurationSeconds(
+  stageRun: Pick<StageRun, "status" | "startedAt" | "completedAt" | "messages">,
+  now: number = Date.now()
+): number | undefined {
+  if (stageRun.status === "Pending") return undefined;
+  return secondsBetween(
+    stageRun.startedAt,
+    clockEnd(stageRun, () => awaitingSince(stageRun), now)
+  );
+}
+
+/**
+ * Seconds a plan run has taken (addenda X3): from start to completion, or to
+ * now while it is running. A run awaiting approval stops where its awaiting
+ * stage stopped, so the wait for a decision does not count. Undefined while
+ * Pending (a pending run's `startedAt` is not a start; see
+ * docs/agentic-handoff.md), for a finished run without a completion time and
+ * for an awaiting run whose stage has no messages. `PlanRun` carries no
+ * duration field; this is the one place it is derived.
+ */
+export function planRunDurationSeconds(
+  planRun: Pick<PlanRun, "status" | "startedAt" | "completedAt"> & {
+    stageRuns: Pick<StageRun, "status" | "messages">[];
+  },
+  now: number = Date.now()
+): number | undefined {
+  if (planRun.status === "Pending") return undefined;
+  return secondsBetween(
+    planRun.startedAt,
+    clockEnd(
+      planRun,
+      () =>
+        awaitingSince(
+          planRun.stageRuns.find((s) => s.status === "AwaitingApproval")
+        ),
+      now
+    )
+  );
+}
+
+/** Where a plan run is: one of its stages and that stage's place in the run. */
+export interface CurrentStage {
+  stageRun: StageRun;
+  /** 1-based position in stage order. */
+  position: number;
+  total: number;
+}
+
+/**
+ * The stage a plan run is at, for the run status line ("Stage n of m:
+ * {stage}", plan-runs amendment 6) and the runs table: the stage awaiting
+ * approval, else the running one, else the failed one. Undefined while no
+ * stage is in one of these states (a pending or succeeded run).
+ */
+export function getCurrentStage(planRun: PlanRun): CurrentStage | undefined {
+  const stageRuns = getOrderedStageRuns(planRun);
+  for (const status of ["AwaitingApproval", "Running", "Failed"] as const) {
+    const index = stageRuns.findIndex((stageRun) => stageRun.status === status);
+    if (index >= 0) {
+      return {
+        stageRun: stageRuns[index],
+        position: index + 1,
+        total: stageRuns.length,
+      };
+    }
+  }
+  return undefined;
 }
 
 export function truncate(text: string, max: number): string {

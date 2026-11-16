@@ -1,25 +1,28 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Link, generatePath } from "react-router-dom";
 import {
   Content,
   EmptyState,
   EmptyStateBody,
-  Label,
   Stack,
   StackItem,
+  Title,
 } from "@patternfly/react-core";
 import { CubesIcon } from "@patternfly/react-icons";
-import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
-import { DevPaths } from "@app/Paths";
-import { HubSkillAssociation } from "@app/agentic";
 import { Ref } from "@app/api/models";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
-import { archetypePath } from "@app/pages/agentic/entity-paths";
-import { useFetchSkills } from "@app/queries/agentic";
+import {
+  SkillsTable,
+  groupSkillSources,
+  skillAssociationSources,
+} from "@app/pages/agentic/components/skills-table";
+import {
+  useFetchApplicationMigrations,
+  useFetchSkills,
+} from "@app/queries/agentic";
 
 interface SkillsTabProps {
   linkCrumbs: BreadcrumbEntry[];
@@ -27,50 +30,55 @@ interface SkillsTabProps {
   archetypes: Ref[];
 }
 
+/**
+ * The skills the agents use for this application (guide 2.3, sources 1-5),
+ * from its migration view. Without a migration plan there are no agents yet,
+ * so the table shows the skills associated with the application and its
+ * archetypes.
+ */
 export const SkillsTab: React.FC<SkillsTabProps> = ({
   applicationId,
   linkCrumbs,
   archetypes,
 }) => {
   const { t } = useTranslation();
-  const { skills, isLoading, fetchError } = useFetchSkills();
+  const {
+    migrations,
+    isLoading: isLoadingMigrations,
+    fetchError: migrationsError,
+  } = useFetchApplicationMigrations([applicationId]);
+  const migration = migrations[applicationId];
+  const hasPlan = migration?.plan != null;
+  const {
+    skills,
+    isLoading: isLoadingSkills,
+    fetchError: skillsError,
+  } = useFetchSkills({ enabled: !isLoadingMigrations && !hasPlan });
 
-  const archetypeIds = React.useMemo(
-    () => new Set(archetypes.map((a) => a.id)),
-    [archetypes]
-  );
+  const rows = React.useMemo(() => {
+    if (hasPlan) return groupSkillSources(migration?.effectiveSkills ?? []);
+    const archetypeIds = new Set(archetypes.map((archetype) => archetype.id));
+    return groupSkillSources(
+      skillAssociationSources(
+        skills,
+        (association) =>
+          (association.scope === "application" &&
+            association.resource.id === applicationId) ||
+          (association.scope === "archetype" &&
+            archetypeIds.has(association.resource.id))
+      )
+    );
+  }, [hasPlan, migration, skills, archetypes, applicationId]);
 
-  const directSkills = React.useMemo(
-    () =>
-      skills.filter((skill) =>
-        (skill.associations ?? []).some(
-          (a) => a.scope === "application" && a.resource.id === applicationId
-        )
-      ),
-    [skills, applicationId]
-  );
-
-  const archetypeSkills = React.useMemo(
-    () =>
-      skills.filter((skill) =>
-        (skill.associations ?? []).some(
-          (a) => a.scope === "archetype" && archetypeIds.has(a.resource.id)
-        )
-      ),
-    [skills, archetypeIds]
-  );
-
-  const hasAnySkills = directSkills.length > 0 || archetypeSkills.length > 0;
-
-  if (isLoading) {
+  if (isLoadingMigrations || (!hasPlan && isLoadingSkills)) {
     return <AppPlaceholder />;
   }
 
-  if (fetchError != null) {
+  if (migrationsError != null || (!hasPlan && skillsError != null)) {
     return <StateError />;
   }
 
-  if (!hasAnySkills) {
+  if (rows.length === 0) {
     return (
       <EmptyState
         headingLevel="h3"
@@ -87,132 +95,22 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
 
   return (
     <Stack hasGutter>
-      {directSkills.length > 0 && (
-        <StackItem>
-          <Content component="h3">
-            {t("agentic.applicationDetail.directSkills")}
-          </Content>
-          <Content component="p">
-            {t("agentic.applicationDetail.directSkillsHelp")}
-          </Content>
-          <Table
-            aria-label={t("agentic.applicationDetail.directSkills")}
-            variant="compact"
-          >
-            <Thead>
-              <Tr>
-                <Th>{t("terms.name")}</Th>
-                <Th modifier="wrap">{t("agentic.skill.sourceType")}</Th>
-                <Th>{t("terms.description")}</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {directSkills.map((skill) => (
-                <Tr key={skill.id}>
-                  <Td dataLabel={t("terms.name")}>
-                    <Link
-                      to={breadcrumbTo(
-                        generatePath(DevPaths.skillDetails, {
-                          skillId: String(skill.id),
-                        }),
-                        "",
-                        linkCrumbs
-                      )}
-                    >
-                      {skill.name}
-                    </Link>
-                  </Td>
-                  <Td dataLabel={t("agentic.skill.sourceType")}>
-                    <Label
-                      isCompact
-                      color={
-                        skill.sourceType === "inline"
-                          ? "blue"
-                          : skill.sourceType === "git"
-                            ? "green"
-                            : "orange"
-                      }
-                    >
-                      {t(`agentic.skill.sourceTypes.${skill.sourceType}`)}
-                    </Label>
-                  </Td>
-                  <Td dataLabel={t("terms.description")}>
-                    {skill.description || "—"}
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        </StackItem>
-      )}
-
-      {archetypeSkills.length > 0 && (
-        <StackItem>
-          <Content component="h3">
-            {t("agentic.applicationDetail.archetypeSkills")}
-          </Content>
-          <Content component="p">
-            {t("agentic.applicationDetail.archetypeSkillsHelp")}
-          </Content>
-          <Table
-            aria-label={t("agentic.applicationDetail.archetypeSkills")}
-            variant="compact"
-          >
-            <Thead>
-              <Tr>
-                <Th>{t("terms.name")}</Th>
-                <Th>{t("agentic.applicationDetail.archetypeColumn")}</Th>
-                <Th>{t("terms.description")}</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {archetypeSkills.map((skill) => {
-                const matchingAssoc = (skill.associations ?? []).find(
-                  (a): a is HubSkillAssociation =>
-                    a.scope === "archetype" && archetypeIds.has(a.resource.id)
-                );
-                return (
-                  <Tr key={skill.id}>
-                    <Td dataLabel={t("terms.name")}>
-                      <Link
-                        to={breadcrumbTo(
-                          generatePath(DevPaths.skillDetails, {
-                            skillId: String(skill.id),
-                          }),
-                          "",
-                          linkCrumbs
-                        )}
-                      >
-                        {skill.name}
-                      </Link>
-                    </Td>
-                    <Td
-                      dataLabel={t("agentic.applicationDetail.archetypeColumn")}
-                    >
-                      {matchingAssoc ? (
-                        <Link
-                          to={breadcrumbTo(
-                            archetypePath(matchingAssoc.resource.id),
-                            "",
-                            linkCrumbs
-                          )}
-                        >
-                          {matchingAssoc.resource.name}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </Td>
-                    <Td dataLabel={t("terms.description")}>
-                      {skill.description || "—"}
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </Tbody>
-          </Table>
-        </StackItem>
-      )}
+      <StackItem>
+        <Title headingLevel="h2" size="lg">
+          {t("agentic.applicationDetail.skillsTitle", { count: rows.length })}
+        </Title>
+        <Content component="p">
+          {hasPlan
+            ? t("agentic.applicationDetail.skillsDescription")
+            : t("agentic.applicationDetail.skillsAssociatedDescription")}
+        </Content>
+      </StackItem>
+      <StackItem>
+        <SkillsTable
+          rows={rows}
+          linkTo={(pathname) => breadcrumbTo(pathname, "", linkCrumbs)}
+        />
+      </StackItem>
     </Stack>
   );
 };

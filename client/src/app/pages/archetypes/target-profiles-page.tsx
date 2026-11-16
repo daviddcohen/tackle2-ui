@@ -109,7 +109,7 @@ const TargetProfilesPage: React.FC = () => {
   const { breadcrumbs, to } = useEntityBreadcrumbs(
     selectedProfile?.name ?? t("terms.targetProfiles"),
     [
-      { title: t("terms.archetypes"), path: DevPaths.archetypes },
+      { title: t("sidebar.archetypes"), path: DevPaths.archetypes },
       ...(archetype
         ? [{ title: archetype.name, path: archetypePath(archetype.id) }]
         : []),

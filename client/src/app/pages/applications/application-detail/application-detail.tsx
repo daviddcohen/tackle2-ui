@@ -163,10 +163,7 @@ const ApplicationDetail: React.FC = () => {
   const { applications } = useDecoratedApplications(baseApplications, tasks);
   const application = applications.find((a) => a.id === applicationId);
   const { breadcrumbs, linkCrumbs } = useEntityBreadcrumbs(
-    application?.name ??
-      (applicationsFetchError != null && !isNotFound
-        ? applicationIdParam
-        : t("agentic.applicationDetail.notFound")),
+    application?.name ?? t("terms.application"),
     [{ title: t("sidebar.applicationInventory"), path: DevPaths.applications }]
   );
 

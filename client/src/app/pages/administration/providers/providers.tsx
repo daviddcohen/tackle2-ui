@@ -7,7 +7,6 @@ import {
   Content,
   EmptyState,
   EmptyStateBody,
-  Label,
   Modal,
   ModalBody,
   ModalHeader,
@@ -44,6 +43,7 @@ import {
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useFormModalState } from "@app/hooks/useFormModalState";
+import { VerificationStatusText } from "@app/pages/agentic/components/agentic-status";
 import {
   useDeleteProviderMutation,
   useFetchGateways,
@@ -56,14 +56,6 @@ import {
 } from "@app/utils/utils";
 
 import { ProviderForm } from "./components/provider-form";
-
-const verificationColor = (
-  status: Provider["verificationStatus"]
-): "green" | "red" | "grey" => {
-  if (status === "verified") return "green";
-  if (status === "unreachable") return "red";
-  return "grey";
-};
 
 const ProvidersPage: React.FC = () => {
   const { t } = useTranslation();
@@ -128,15 +120,15 @@ const ProvidersPage: React.FC = () => {
         selectOptions: [
           {
             value: "verified",
-            label: t("agentic.model.verificationStatuses.verified"),
+            label: t("agentic.verificationStatus.verified"),
           },
           {
             value: "pending",
-            label: t("agentic.model.verificationStatuses.pending"),
+            label: t("agentic.verificationStatus.pending"),
           },
           {
             value: "unreachable",
-            label: t("agentic.model.verificationStatuses.unreachable"),
+            label: t("agentic.verificationStatus.unreachable"),
           },
         ],
         matcher: (filter: string, item: Provider) =>
@@ -289,23 +281,10 @@ const ProvidersPage: React.FC = () => {
                           </Content>
                         </Td>
                         <Td width={15} {...getTdProps({ columnKey: "status" })}>
-                          <Label
-                            color={verificationColor(
-                              provider.verificationStatus
-                            )}
-                            isCompact
-                          >
-                            {t(
-                              `agentic.model.verificationStatuses.${provider.verificationStatus}`,
-                              { defaultValue: provider.verificationStatus }
-                            )}
-                          </Label>
-                          {provider.statusReason && (
-                            <Content component="small">
-                              {" — "}
-                              {provider.statusReason}
-                            </Content>
-                          )}
+                          <VerificationStatusText
+                            status={provider.verificationStatus}
+                            supportingText={provider.statusReason}
+                          />
                         </Td>
                         <Td
                           width={15}

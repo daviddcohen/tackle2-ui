@@ -1,9 +1,11 @@
 import {
+  AGENTIC_STATUS,
   PERSONAS,
   PERSONA_LABEL,
   PERSONA_START,
   type Persona,
   SCENARIOS_BY_PERSONA,
+  approveStage,
   breadcrumb,
   errorBoundary,
   expect,
@@ -70,13 +72,13 @@ test.describe("persona changes", () => {
         scenario: "running",
       })
     );
-    await expect(mainHeading(page)).toHaveText("Plan Runs");
+    await expect(mainHeading(page)).toHaveText("Plan runs");
     await personaSelect(page).selectOption("platformEngineer");
     await expect(mainHeading(page)).toHaveText("Models");
     await expect(perspectiveToggle(page)).toHaveText("Administration");
 
     await page.goBack();
-    await expect(mainHeading(page)).toHaveText("Plan Runs");
+    await expect(mainHeading(page)).toHaveText("Plan runs");
     await expectCanonicalProto(page, "enterpriseArchitect", "running");
     await expect(personaSelect(page)).toHaveValue("enterpriseArchitect");
     await expect(perspectiveToggle(page)).toHaveText("Migration");
@@ -109,7 +111,7 @@ test.describe("every persona x scenario combination", () => {
         // Navigate through the sidebar: prototype state must follow.
         for (const [link, heading] of [
           ["Agents", "Agents"],
-          ["Plan Runs", "Plan Runs"],
+          ["Plan runs", "Plan runs"],
           ["Skills", "Skills"],
           ["Application inventory", "Application inventory"],
         ] as const) {
@@ -201,7 +203,7 @@ test.describe("reset and URL validation", () => {
       pageErrors,
     }) => {
       await page.goto(`/plan-runs?${query}`);
-      await expect(mainHeading(page)).toHaveText("Plan Runs");
+      await expect(mainHeading(page)).toHaveText("Plan runs");
       await expectCanonicalProto(page, persona, scenario);
       expect(searchParam(page, "protoStage")).toBe(stage);
       await expect(scenarioSelect(page)).toHaveValue(scenario);
@@ -239,10 +241,11 @@ test.describe("reset and URL validation", () => {
         stage: 3,
       })
     );
-    await page.getByRole("button", { name: /Approve and continue/ }).click();
+    // Approve always confirms first (guide 4.3).
+    await approveStage(page);
     await expect(mainHeading(page)).toHaveText(/^Run #1/);
     await expect(
-      page.getByRole("main").locator(".pf-v6-c-label").first()
+      page.getByRole("main").locator(AGENTIC_STATUS).first()
     ).toHaveText("Succeeded");
     await expect(
       page.getByRole("button", { name: /Approve and continue/ })

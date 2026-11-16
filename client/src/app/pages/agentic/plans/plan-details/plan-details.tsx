@@ -18,23 +18,11 @@ import {
   Tabs,
   Title,
 } from "@patternfly/react-core";
-import {
-  BookOpenIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  LockIcon,
-  MinusCircleIcon,
-  SearchIcon,
-} from "@patternfly/react-icons";
+import { BookOpenIcon, LockIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
-import {
-  Agent,
-  EffectiveSkillAssociation,
-  MigrationPlan,
-  getPlanConfigurationChecks,
-} from "@app/agentic";
+import { Agent, MigrationPlan, getPlanConfigurationChecks } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
@@ -42,7 +30,11 @@ import { StateError } from "@app/components/StateError";
 import { serializeFilterUrlParams } from "@app/hooks/table-controls";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
-import { DetailTabPanel } from "@app/pages/agentic/entity-detail";
+import {
+  DetailTabPanel,
+  EntityDetailLoading,
+  EntityDetailUnavailable,
+} from "@app/pages/agentic/entity-detail";
 import {
   archetypePath,
   targetProfilePath,
@@ -56,7 +48,9 @@ import {
 } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
 
-import { RunStatusLabel } from "../../components/run-status-label";
+import { ConfigurationStatus } from "../../components/agentic-status";
+import { PlanRunsTable } from "../../components/plan-runs-table";
+import { SkillsTable, groupSkillSources } from "../../components/skills-table";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
 interface PlanDetailsRouteParams {
@@ -148,76 +142,6 @@ const PlanStageCard: React.FC<{
   );
 };
 
-const scopeColor = (scope: string): "blue" | "green" | "orange" | "grey" => {
-  switch (scope) {
-    case "agent":
-      return "blue";
-    case "targetProfile":
-      return "green";
-    case "archetype":
-      return "orange";
-    case "application":
-      return "grey";
-    default:
-      return "grey";
-  }
-};
-
-const EffectiveSkillsTable: React.FC<{
-  skills: EffectiveSkillAssociation[];
-  planId: string;
-  planChildCrumbs: BreadcrumbEntry[];
-}> = ({ skills, planId, planChildCrumbs }) => {
-  const { t } = useTranslation();
-
-  if (skills.length === 0) {
-    return <Content component="p">{t("agentic.plan.notConfigured")}</Content>;
-  }
-
-  return (
-    <Table aria-label={t("agentic.plan.effectiveSkills")} variant="compact">
-      <Thead>
-        <Tr>
-          <Th>{t("agentic.plan.skillColumnName")}</Th>
-          <Th>{t("agentic.plan.skillColumnResolvedFrom")}</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {skills.map((association, index) => (
-          <Tr key={`${association.scope}-${association.skill.id}-${index}`}>
-            <Td dataLabel={t("agentic.plan.skillColumnName")}>
-              <Link
-                to={breadcrumbTo(
-                  generatePath(DevPaths.skillDetails, {
-                    skillId: String(association.skill.id),
-                  }),
-                  `?from=plan-${planId}`,
-                  planChildCrumbs
-                )}
-              >
-                {association.skill.name}
-              </Link>
-            </Td>
-            <Td dataLabel={t("agentic.plan.skillColumnResolvedFrom")}>
-              <Flex
-                spaceItems={{ default: "spaceItemsXs" }}
-                alignItems={{ default: "alignItemsCenter" }}
-              >
-                <FlexItem>
-                  <Label color={scopeColor(association.scope)} isCompact>
-                    {t(`agentic.plan.skillScopes.${association.scope}`)}
-                  </Label>
-                </FlexItem>
-                <FlexItem>{association.scopeName}</FlexItem>
-              </Flex>
-            </Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
-  );
-};
-
 const PLAN_DETAIL_TABS = ["overview", "runs", "knowledge-base"] as const;
 type PlanDetailTab = (typeof PLAN_DETAIL_TABS)[number];
 
@@ -258,56 +182,71 @@ const PlanDetailsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useUrlTab(PLAN_DETAIL_TABS, "overview");
 
   const { breadcrumbs, linkCrumbs: planChildCrumbs } = useEntityBreadcrumbs(
-    migrationPlan?.name ??
-      (fetchError != null && !isNotFound
-        ? planId
-        : t("agentic.plan.notFoundTitle")),
+    migrationPlan?.name ?? t("agentic.entity.migrationPlan"),
     [
       {
-        title: t("agentic.plan.plansBreadcrumb"),
+        title: t("sidebar.plans"),
         path: DevPaths.migrationPlans,
       },
     ]
   );
 
-  if (isLoading) {
-    return <AppPlaceholder />;
-  }
-
   if (!migrationPlan) {
+    if (isLoading) {
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
+    }
     return (
-      <PageSection hasBodyWrapper={false}>
-        <BreadCrumbPath breadcrumbs={breadcrumbs} />
-        {fetchError != null && !isNotFound ? (
-          <StateError />
-        ) : (
-          <EmptyState
-            headingLevel="h1"
-            icon={SearchIcon}
-            titleText={t("agentic.plan.notFoundTitle")}
-          >
-            <EmptyStateBody>{t("agentic.plan.notFoundBody")}</EmptyStateBody>
-            <Button
-              variant="primary"
-              onClick={() => history.push(DevPaths.migrationPlans)}
-            >
-              {t("agentic.plan.backToPlans")}
-            </Button>
-          </EmptyState>
-        )}
-      </PageSection>
+      <EntityDetailUnavailable
+        breadcrumbs={breadcrumbs}
+        isNotFound={isNotFound || fetchError == null}
+        notFoundTitle={t("agentic.plan.notFoundTitle")}
+        notFoundBody={t("agentic.plan.notFoundBody")}
+        backLabel={t("agentic.plan.backToPlans")}
+        backPath={DevPaths.migrationPlans}
+      />
     );
   }
 
   const path = migrationPlan.migrationPath;
   const impact = migrationPlan.applicationImpact;
-  const effectiveSkills = migrationPlan.effectiveSkills || [];
+  const skillRows = groupSkillSources(migrationPlan.effectiveSkills ?? []);
   const configurationChecks = getPlanConfigurationChecks(
     migrationPlan,
     isLoadingAgents || agentsFetchError != null ? undefined : agents,
     isLoadingModels || modelsFetchError != null ? undefined : gateways
   );
   const hasConfigIssue = configurationChecks.some((c) => c.status === "issue");
+  // Per-check rows (guide 5.4): the check name is plain text, never the
+  // status label, and an issue always shows its detail under the status.
+  const checkList = (
+    <Table aria-label={t("agentic.plan.configurationChecks")} variant="compact">
+      <Thead>
+        <Tr>
+          <Th>{t("agentic.plan.checkColumnName")}</Th>
+          <Th>{t("terms.status")}</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {configurationChecks.map((check) => (
+          <Tr key={check.id}>
+            <Td dataLabel={t("agentic.plan.checkColumnName")}>
+              {t(check.labelKey)}
+            </Td>
+            <Td dataLabel={t("terms.status")}>
+              <ConfigurationStatus
+                status={check.status}
+                supportingText={
+                  check.status === "issue"
+                    ? t(check.detailKey, check.detailValues)
+                    : undefined
+                }
+              />
+            </Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
+  );
 
   return (
     <>
@@ -437,30 +376,7 @@ const PlanDetailsPage: React.FC = () => {
               variant="warning"
               title={t("agentic.plan.checksHaveIssues")}
             >
-              <Flex
-                spaceItems={{ default: "spaceItemsLg" }}
-                alignItems={{ default: "alignItemsCenter" }}
-              >
-                {configurationChecks.map((check) => (
-                  <FlexItem key={check.id}>
-                    <Flex
-                      spaceItems={{ default: "spaceItemsXs" }}
-                      alignItems={{ default: "alignItemsCenter" }}
-                    >
-                      <FlexItem>
-                        {check.status === "passed" ? (
-                          <CheckCircleIcon color="var(--pf-t--global--icon--color--severity--success--default)" />
-                        ) : check.status === "issue" ? (
-                          <ExclamationTriangleIcon color="var(--pf-t--global--icon--color--severity--warning--default)" />
-                        ) : (
-                          <MinusCircleIcon color="var(--pf-t--global--icon--color--disabled)" />
-                        )}
-                      </FlexItem>
-                      <FlexItem>{t(check.labelKey)}</FlexItem>
-                    </Flex>
-                  </FlexItem>
-                ))}
-              </Flex>
+              {checkList}
             </Alert>
           ) : (
             <Alert
@@ -469,24 +385,7 @@ const PlanDetailsPage: React.FC = () => {
               variant="success"
               title={t("agentic.plan.allChecksPassed")}
             >
-              <Flex
-                spaceItems={{ default: "spaceItemsLg" }}
-                alignItems={{ default: "alignItemsCenter" }}
-              >
-                {configurationChecks.map((check) => (
-                  <FlexItem key={check.id}>
-                    <Flex
-                      spaceItems={{ default: "spaceItemsXs" }}
-                      alignItems={{ default: "alignItemsCenter" }}
-                    >
-                      <FlexItem>
-                        <CheckCircleIcon color="var(--pf-t--global--icon--color--severity--success--default)" />
-                      </FlexItem>
-                      <FlexItem>{t(check.labelKey)}</FlexItem>
-                    </Flex>
-                  </FlexItem>
-                ))}
-              </Flex>
+              {checkList}
             </Alert>
           )}
         </PageSection>
@@ -509,16 +408,29 @@ const PlanDetailsPage: React.FC = () => {
         </PageSection>
         <PageSection hasBodyWrapper={false}>
           <Title headingLevel="h2" size="xl">
-            {t("agentic.plan.effectiveSkills")}
+            {skillRows.length > 0
+              ? t("agentic.planDetail.skillsTitle", { count: skillRows.length })
+              : t("agentic.planDetail.skillsTitleEmpty")}
           </Title>
-          <Content component="p" className="plan-effective-skills-help">
-            {t("agentic.plan.effectiveSkillsHelp")}
-          </Content>
-          <EffectiveSkillsTable
-            skills={effectiveSkills}
-            planId={planId}
-            planChildCrumbs={planChildCrumbs}
-          />
+          {skillRows.length > 0 ? (
+            <>
+              <Content component="p">
+                {t("agentic.planDetail.skillsDescription")}
+              </Content>
+              <SkillsTable
+                rows={skillRows}
+                linkTo={(pathname) =>
+                  breadcrumbTo(
+                    pathname,
+                    `?from=plan-${planId}`,
+                    planChildCrumbs
+                  )
+                }
+              />
+            </>
+          ) : (
+            <Content component="p">{t("agentic.plan.notConfigured")}</Content>
+          )}
         </PageSection>
       </DetailTabPanel>
 
@@ -545,43 +457,14 @@ const PlanDetailsPage: React.FC = () => {
               </EmptyStateBody>
             </EmptyState>
           ) : (
-            <div>
-              {planRuns.map((run) => (
-                <Flex
-                  key={run.id}
-                  alignItems={{ default: "alignItemsCenter" }}
-                  spaceItems={{ default: "spaceItemsMd" }}
-                  style={{
-                    padding: "var(--pf-t--global--spacer--sm) 0",
-                    borderBottom:
-                      "1px solid var(--pf-t--global--border--color--default)",
-                  }}
-                >
-                  <FlexItem>
-                    <Link
-                      to={breadcrumbTo(
-                        DevPaths.planRunDetails.replace(
-                          ":runId",
-                          run.id.toString()
-                        ),
-                        `?from=plan-${migrationPlan.id}`,
-                        planChildCrumbs
-                      )}
-                    >
-                      {run.name}
-                    </Link>
-                  </FlexItem>
-                  <FlexItem>
-                    <RunStatusLabel status={run.status} />
-                  </FlexItem>
-                  <FlexItem>
-                    <Content component="small">
-                      {new Date(run.startedAt).toLocaleString()}
-                    </Content>
-                  </FlexItem>
-                </Flex>
-              ))}
-            </div>
+            <PlanRunsTable
+              runs={planRuns}
+              showPlan={false}
+              linkTo={(pathname, search = "") =>
+                breadcrumbTo(pathname, search, planChildCrumbs)
+              }
+              origin={`?from=plan-${migrationPlan.id}`}
+            />
           )}
         </PageSection>
       </DetailTabPanel>

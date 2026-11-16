@@ -33,7 +33,6 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { AgentDetailsRoute, DevPaths } from "@app/Paths";
 import { ControllerRunPhase, EntityId } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
@@ -43,6 +42,7 @@ import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
   DetailTabPanel,
   EntityDetailActions,
+  EntityDetailLoading,
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
@@ -56,7 +56,7 @@ import {
 import { agentsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { RunStatusLabel } from "../../components/run-status-label";
+import { RunStatus } from "../../components/agentic-status";
 import { getPlansUsingAgent } from "../agent-usage";
 import { AgentForm } from "../components/agent-form";
 
@@ -142,13 +142,13 @@ const AgentDetail: React.FC = () => {
   }, [agent, planRuns]);
 
   const { breadcrumbs, linkCrumbs: agentChildCrumbs } = useEntityBreadcrumbs(
-    agent?.name ?? agentId,
+    agent?.name ?? t("agentic.entity.agent"),
     [{ title: t("sidebar.agents"), path: DevPaths.agents }]
   );
 
   if (agent == null) {
     if (isLoading) {
-      return <AppPlaceholder />;
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
     }
     return (
       <EntityDetailUnavailable
@@ -511,7 +511,7 @@ const AgentDetail: React.FC = () => {
                       </Label>
                     </Td>
                     <Td dataLabel={t("agentic.planRun.status")}>
-                      <RunStatusLabel status={entry.status} />
+                      <RunStatus status={entry.status} />
                     </Td>
                     <Td dataLabel={t("agentic.planRun.started")}>
                       {entry.startedAt
@@ -553,7 +553,7 @@ const AgentDetail: React.FC = () => {
                       </Label>
                     </Td>
                     <Td dataLabel={t("agentic.planRun.status")}>
-                      <RunStatusLabel status={testRun.phase} />
+                      <RunStatus status={testRun.phase} />
                     </Td>
                     <Td dataLabel={t("agentic.planRun.started")}>
                       {new Date(testRun.startedAt).toLocaleString()}

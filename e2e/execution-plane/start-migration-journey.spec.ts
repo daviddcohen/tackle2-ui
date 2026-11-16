@@ -2,6 +2,9 @@
  * Journey 1 (configured): pick apps -> preflight -> start -> plan run detail, all via clicks.
  */
 import {
+  AGENTIC_STATUS,
+  approveButton,
+  approveStage,
   expect,
   migrationCell,
   openBulkRunMigration,
@@ -114,7 +117,7 @@ test.describe("Start migration journey", () => {
       .click();
     await waitForInventory(page);
     await expect(
-      migrationCell(page, "Order Service").locator(".pf-v6-c-label")
+      migrationCell(page, "Order Service").locator(AGENTIC_STATUS)
     ).toHaveText("Ready to start");
     expect((await portfolioCounts(page)).Running ?? 0).toBeLessThanOrEqual(1);
   });
@@ -134,10 +137,10 @@ test.describe("Start migration journey", () => {
     const title = await page.getByRole("heading", { level: 1 }).innerText();
     const detailStatus = await page
       .getByRole("main")
-      .locator(".pf-v6-c-label")
+      .locator(AGENTIC_STATUS)
       .first()
       .innerText();
-    await page.getByRole("link", { name: "Plan Runs" }).click();
+    await page.getByRole("link", { name: "Plan runs" }).click();
     await expect(
       page.getByRole("row", { name: new RegExp(title.replace(/[#—]/g, ".")) })
     ).toContainText(detailStatus);
@@ -157,8 +160,8 @@ test.describe("Start migration journey", () => {
       .getByRole("button", { name: "Start 1 Ready Application" })
       .click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
-    const status = page.getByRole("main").locator(".pf-v6-c-label").first();
-    const approve = page.getByRole("button", { name: "Approve and continue" });
+    const status = page.getByRole("main").locator(AGENTIC_STATUS).first();
+    const approve = approveButton(page);
     let approvals = 0;
     for (let i = 0; i < 4; i++) {
       await expect
@@ -171,7 +174,7 @@ test.describe("Start migration journey", () => {
         )
         .toMatch(/approve|Succeeded/);
       if ((await approve.count()) === 0) break;
-      await approve.first().click();
+      await approveStage(page);
       approvals++;
       await expect(approve).toHaveCount(0);
     }

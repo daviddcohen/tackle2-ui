@@ -1,4 +1,5 @@
 import { AxiosError } from "axios";
+import dayjs from "dayjs";
 import gitUrlParse from "git-url-parse";
 import { MenuToggleProps, ToolbarLabel } from "@patternfly/react-core";
 
@@ -67,6 +68,10 @@ export const formatDate = (value: Date, includeTime = true) => {
 
   return value.toLocaleDateString("en", options);
 };
+
+/** Compact timestamp for table cells (`YYYY-MM-DD HH:mm`, local time). Facts and status lines use `formatDate`. */
+export const formatTableDate = (value: Date) =>
+  dayjs(value).format("YYYY-MM-DD HH:mm");
 
 export const duplicateFieldCheck = <T>(
   fieldKey: keyof T,

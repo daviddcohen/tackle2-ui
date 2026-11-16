@@ -26,7 +26,6 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths, SkillCollectionDetailsRoute } from "@app/Paths";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
@@ -34,6 +33,7 @@ import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
 import {
   EntityDetailActions,
+  EntityDetailLoading,
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
@@ -86,13 +86,14 @@ const SkillCollectionDetail: React.FC = () => {
   );
 
   const { breadcrumbs, linkCrumbs: collectionChildCrumbs } =
-    useEntityBreadcrumbs(skillCollection?.name ?? collectionId, [
-      { title: t("agentic.skill.title"), path: DevPaths.skills },
-    ]);
+    useEntityBreadcrumbs(
+      skillCollection?.name ?? t("agentic.entity.skillCollection"),
+      [{ title: t("sidebar.skills"), path: DevPaths.skills }]
+    );
 
   if (skillCollection == null) {
     if (isLoading) {
-      return <AppPlaceholder />;
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
     }
     return (
       <EntityDetailUnavailable

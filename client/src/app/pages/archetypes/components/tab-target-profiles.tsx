@@ -22,7 +22,7 @@ export const TabTargetProfiles: React.FC<TabTargetProfilesProps> = ({
 }) => {
   const { t } = useTranslation();
   const { to } = useEntityBreadcrumbs(archetype.name, [
-    { title: t("terms.archetypes"), path: DevPaths.archetypes },
+    { title: t("sidebar.archetypes"), path: DevPaths.archetypes },
   ]);
   const profiles = archetype?.profiles || [];
 

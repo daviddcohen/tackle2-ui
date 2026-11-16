@@ -86,11 +86,14 @@ export const field = (scope: Locator | Page, label: string) =>
     name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
   });
 
-/** PatternFly status label inside `scope` (run, stage, migration status...). */
-export const statusLabel = (scope: Locator) => scope.locator(".pf-v6-c-label");
-
-/** The first status label in the page body: the plan run header status. */
-export const headerStatus = (page: Page) => statusLabel(main(page)).first();
+/**
+ * An agentic status (run, stage, migration, verification, configuration):
+ * `IconedStatus` renders a Flex whose first item is the status `Icon`, and the
+ * Flex text is the status label. Other `IconedStatus` cells (for example the
+ * inventory Analysis column) match too, so always scope it to a cell or row,
+ * or take `.first()` in `main` only on a run page, whose header status leads.
+ */
+export const AGENTIC_STATUS = ".pf-v6-l-flex:has(> div > .pf-v6-c-icon)";
 
 /** Text that must never be rendered to a user. */
 const BROKEN_TEXT = [
@@ -264,14 +267,32 @@ export const openBulkRunMigration = async (
 
 // ── Plan runs ────────────────────────────────────────────────────────────────
 
-/** Status label in a plan-run stage section header. */
-export const stageStatus = (page: Page, stage: string) =>
-  main(page)
-    .locator(".pf-v6-l-flex", {
-      has: page.locator("strong").getByText(stage, { exact: true }),
-    })
-    .last()
-    .locator(".pf-v6-c-label");
+/** The Stages table of a plan run page. */
+export const stagesTable = (page: Page) =>
+  main(page).getByRole("grid", { name: "Stages", exact: true });
 
+/** The links to the stage pages, in stage order. */
+export const stageLinks = (page: Page) =>
+  stagesTable(page).locator('a[href*="/stages/"]');
+
+/** The status of a stage in the Stages table, by stage name. */
+export const stageStatus = (page: Page, stage: string) =>
+  stagesTable(page)
+    .getByRole("row")
+    .filter({ has: page.getByRole("link", { name: stage, exact: true }) })
+    .locator(AGENTIC_STATUS);
+
+/** The decision button in the page's attention alert (not the confirm dialog's). */
 export const approveButton = (page: Page) =>
-  page.getByRole("button", { name: "Approve and continue", exact: true });
+  main(page).getByRole("button", { name: "Approve and continue", exact: true });
+
+/** Approves from the attention alert: Approve always opens a confirm first (guide 4.3). */
+export const approveStage = async (page: Page) => {
+  await approveButton(page).click();
+  const confirm = page.getByRole("dialog");
+  await expect(confirm).toContainText("This decision applies to");
+  await confirm
+    .getByRole("button", { name: "Approve and continue", exact: true })
+    .click();
+  await expect(confirm).toHaveCount(0);
+};

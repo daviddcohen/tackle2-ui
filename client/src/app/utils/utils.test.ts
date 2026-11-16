@@ -6,6 +6,7 @@ import {
   collapseSpacesAndCompare,
   extractFirstSha,
   formatPath,
+  formatTableDate,
   getAxiosErrorMessage,
   getToolbarChipKey,
   getValidatedFromError,
@@ -478,5 +479,19 @@ describe("intersection", () => {
         eqTest
       )
     ).toEqual(["Banana", "Cherry"]);
+  });
+});
+
+describe("formatTableDate", () => {
+  it("formats a timestamp as YYYY-MM-DD HH:mm in local time", () => {
+    expect(formatTableDate(new Date(2026, 10, 10, 10, 6, 42))).toBe(
+      "2026-11-10 10:06"
+    );
+  });
+
+  it("zero-pads single-digit months, days, hours and minutes", () => {
+    expect(formatTableDate(new Date(2026, 0, 2, 3, 4))).toBe(
+      "2026-01-02 03:04"
+    );
   });
 });

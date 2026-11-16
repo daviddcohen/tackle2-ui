@@ -4,68 +4,109 @@
  * entity and keeps a breadcrumb back to the owning list. Request-level checks
  * (no retries on 404, no `/NaN` or `/0` ids) live in data-layer/.
  */
-import { breadcrumb, expect, mainHeading, protoUrl, test } from "../support";
+import {
+  breadcrumb,
+  currentCrumb,
+  expect,
+  mainHeading,
+  protoUrl,
+  test,
+} from "../support";
 
-const cases: [path: string, message: RegExp, list: string, listPath: string][] =
+// The leaf is the missing entity's noun (guide 3.5 rule 2); a stage of a
+// missing run is that run's not found (addenda R3). The archetype page keeps
+// its own alert (archetypes area), so its leaf is not pinned here.
+const cases: [
+  path: string,
+  message: RegExp,
+  list: string,
+  listPath: string,
+  leaf: string | null,
+][] = [
   [
-    [
-      "/migration-plans/99999",
-      /Plan not found/,
-      "Migration Plans",
-      "/migration-plans",
-    ],
-    [
-      "/migration-plans/abc",
-      /Plan not found/,
-      "Migration Plans",
-      "/migration-plans",
-    ],
-    ["/plan-runs/99999", /Plan run not found/, "Plan Runs", "/plan-runs"],
-    ["/plan-runs/abc", /Plan run not found/, "Plan Runs", "/plan-runs"],
-    [
-      "/plan-runs/1/stages/99999",
-      /Stage run not found/,
-      "Plan Runs",
-      "/plan-runs",
-    ],
-    [
-      "/plan-runs/abc/stages/xyz",
-      /Stage run not found/,
-      "Plan Runs",
-      "/plan-runs",
-    ],
-    ["/plan-runs/99999/stages/1", /not found/i, "Plan Runs", "/plan-runs"],
-    ["/agents/99999", /Agent not found/, "Agents", "/agents"],
-    ["/agents/abc", /Agent not found/, "Agents", "/agents"],
-    ["/skills/99999", /Skill not found/, "Skills", "/skills"],
-    ["/skills/abc", /Skill not found/, "Skills", "/skills"],
-    [
-      "/skills/collections/99999",
-      /Skill collection not found/,
-      "Skills",
-      "/skills",
-    ],
-    [
-      "/skills/collections/abc",
-      /Skill collection not found/,
-      "Skills",
-      "/skills",
-    ],
-    [
-      "/applications/99999",
-      /Application not found/,
-      "Application inventory",
-      "/applications",
-    ],
-    [
-      "/archetypes/99999/target-profiles",
-      /not found/i,
-      "Archetypes",
-      "/archetypes",
-    ],
-  ];
+    "/migration-plans/99999",
+    /Migration plan not found/,
+    "Migration plans",
+    "/migration-plans",
+    "Migration plan",
+  ],
+  [
+    "/migration-plans/abc",
+    /Migration plan not found/,
+    "Migration plans",
+    "/migration-plans",
+    "Migration plan",
+  ],
+  [
+    "/plan-runs/99999",
+    /Plan run not found/,
+    "Plan runs",
+    "/plan-runs",
+    "Plan run",
+  ],
+  [
+    "/plan-runs/abc",
+    /Plan run not found/,
+    "Plan runs",
+    "/plan-runs",
+    "Plan run",
+  ],
+  [
+    "/plan-runs/1/stages/99999",
+    /Stage not found/,
+    "Plan runs",
+    "/plan-runs",
+    "Stage",
+  ],
+  [
+    "/plan-runs/abc/stages/xyz",
+    /Plan run not found/,
+    "Plan runs",
+    "/plan-runs",
+    "Plan run",
+  ],
+  [
+    "/plan-runs/99999/stages/1",
+    /Plan run not found/,
+    "Plan runs",
+    "/plan-runs",
+    "Plan run",
+  ],
+  ["/agents/99999", /Agent not found/, "Agents", "/agents", "Agent"],
+  ["/agents/abc", /Agent not found/, "Agents", "/agents", "Agent"],
+  ["/skills/99999", /Skill not found/, "Skills", "/skills", "Skill"],
+  ["/skills/abc", /Skill not found/, "Skills", "/skills", "Skill"],
+  [
+    "/skills/collections/99999",
+    /Skill collection not found/,
+    "Skills",
+    "/skills",
+    "Skill collection",
+  ],
+  [
+    "/skills/collections/abc",
+    /Skill collection not found/,
+    "Skills",
+    "/skills",
+    "Skill collection",
+  ],
+  [
+    "/applications/99999",
+    /Application not found/,
+    "Application inventory",
+    "/applications",
+    "Application",
+  ],
+  [
+    "/archetypes/99999/target-profiles",
+    /not found/i,
+    "Archetypes",
+    "/archetypes",
+    null,
+  ],
+];
 
-for (const [path, message, list, listPath] of cases) {
+for (const [path, message, list, listPath, leaf] of cases) {
   test(`${path} settles into a not-found state with a way back`, async ({
     page,
     pageErrors,
@@ -73,6 +114,7 @@ for (const [path, message, list, listPath] of cases) {
     await page.goto(protoUrl(path));
     await expect(page.getByText(message).first()).toBeVisible();
     await expect(page.getByText("Loading...")).toHaveCount(0);
+    if (leaf != null) await expect(currentCrumb(page)).toHaveText(leaf);
     await breadcrumb(page)
       .getByRole("link", { name: list, exact: true })
       .click();
@@ -82,6 +124,17 @@ for (const [path, message, list, listPath] of cases) {
   });
 }
 
+test("a missing stage of a known run goes back to that run by name", async ({
+  page,
+}) => {
+  await page.goto(protoUrl("/plan-runs/1/stages/99999"));
+  await expect(mainHeading(page)).toHaveText("Stage not found");
+  await page
+    .getByRole("button", { name: "Back to Run #1 — Java EE to Quarkus" })
+    .click();
+  await expect(page).toHaveURL(/\/plan-runs\/1(\?|$)/);
+});
+
 test("/applications/abc is not an application id: the inventory is shown", async ({
   page,
 }) => {
@@ -90,3 +143,33 @@ test("/applications/abc is not an application id: the inventory is shown", async
   await expect(mainHeading(page)).toHaveText("Application inventory");
   await expect(page.getByText("Loading...")).toHaveCount(0);
 });
+
+// A failed fetch (every call returns 503) is the error branch, never "not
+// found": the trail keeps the entity noun as its leaf above the shared error.
+const errorCases: [path: string, leaf: string][] = [
+  ["/agents/2", "Agent"],
+  ["/migration-plans/1", "Migration plan"],
+  ["/plan-runs/1", "Plan run"],
+  ["/plan-runs/1/stages/1", "Stage"],
+  ["/skills/1", "Skill"],
+  ["/skills/collections/1", "Skill collection"],
+];
+
+for (const [path, leaf] of errorCases) {
+  test(`${path} reports an API failure as an error, not as not found`, async ({
+    page,
+  }) => {
+    await page.goto(protoUrl(path, { scenario: "apiError" }));
+    await expect(page.getByText("Unable to connect")).toBeVisible({
+      timeout: 20000,
+    });
+    await expect(page.getByText(/not found/i)).toHaveCount(0);
+    await expect(currentCrumb(page)).toHaveText(leaf);
+    // A stage keeps its run's noun crumb, the same trail as while it loads.
+    if (path.includes("/stages/")) {
+      await expect(
+        breadcrumb(page).getByRole("link", { name: "Plan run", exact: true })
+      ).toBeVisible();
+    }
+  });
+}

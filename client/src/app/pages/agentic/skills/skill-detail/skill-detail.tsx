@@ -30,12 +30,12 @@ import {
   Tabs,
 } from "@patternfly/react-core";
 import { CubesIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths, SkillDetailsRoute } from "@app/Paths";
 import { SkillAssociationScope, SkillSourceType } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
@@ -43,8 +43,13 @@ import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
+  SkillSources,
+  groupSkillSources,
+} from "@app/pages/agentic/components/skills-table";
+import {
   DetailTabPanel,
   EntityDetailActions,
+  EntityDetailLoading,
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { skillAssociationPath } from "@app/pages/agentic/entity-paths";
@@ -70,16 +75,6 @@ const sourceTypeColor: Record<SkillSourceType, "blue" | "green" | "orange"> = {
   inline: "blue",
   git: "green",
   oci: "orange",
-};
-
-const scopeColor: Record<
-  SkillAssociationScope,
-  "blue" | "orange" | "green" | "grey"
-> = {
-  agent: "blue",
-  archetype: "orange",
-  targetProfile: "green",
-  application: "grey",
 };
 
 const SKILL_DETAIL_TABS = ["details", "associations"] as const;
@@ -151,8 +146,8 @@ const SkillDetail: React.FC = () => {
   );
 
   const { breadcrumbs, linkCrumbs: childLinkCrumbs } = useEntityBreadcrumbs(
-    skill?.name ?? skillId,
-    [{ title: t("agentic.skill.title"), path: DevPaths.skills }]
+    skill?.name ?? t("agentic.entity.skill"),
+    [{ title: t("sidebar.skills"), path: DevPaths.skills }]
   );
 
   const scopeLabel = (scope: SkillAssociationScope): string =>
@@ -160,7 +155,7 @@ const SkillDetail: React.FC = () => {
 
   if (skill == null) {
     if (isLoading) {
-      return <AppPlaceholder />;
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
     }
     return (
       <EntityDetailUnavailable
@@ -392,13 +387,8 @@ const SkillDetail: React.FC = () => {
                                   "1px solid var(--pf-t--global--border--color--subtle)",
                               }}
                             >
-                              <FlexItem>
-                                <Label
-                                  isCompact
-                                  color={scopeColor[assoc.scope]}
-                                >
-                                  {scopeLabel(assoc.scope)}
-                                </Label>
+                              <FlexItem className={textStyles.textColorSubtle}>
+                                {scopeLabel(assoc.scope)}
                               </FlexItem>
                               <FlexItem>
                                 {destination != null ? (
@@ -487,30 +477,11 @@ const SkillDetail: React.FC = () => {
                                 "agentic.skillDetail.resolvedFromColumn"
                               )}
                             >
-                              <Stack hasGutter>
-                                {entries.map((es, i) => (
-                                  <StackItem key={i}>
-                                    <Flex
-                                      spaceItems={{
-                                        default: "spaceItemsSm",
-                                      }}
-                                      alignItems={{
-                                        default: "alignItemsCenter",
-                                      }}
-                                    >
-                                      <FlexItem>
-                                        <Label
-                                          isCompact
-                                          color={scopeColor[es.scope]}
-                                        >
-                                          {scopeLabel(es.scope)}
-                                        </Label>
-                                      </FlexItem>
-                                      <FlexItem>{es.scopeName}</FlexItem>
-                                    </Flex>
-                                  </StackItem>
-                                ))}
-                              </Stack>
+                              <SkillSources
+                                sources={
+                                  groupSkillSources(entries)[0]?.sources ?? []
+                                }
+                              />
                             </Td>
                           </Tr>
                         ))}

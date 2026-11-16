@@ -3,10 +3,6 @@ import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
 import {
-  Alert,
-  AlertVariant,
-  Button,
-  ButtonVariant,
   Card,
   CardBody,
   CardTitle,
@@ -18,20 +14,19 @@ import {
   Label,
   LabelGroup,
   PageSection,
-  Stack,
-  StackItem,
   Title,
 } from "@patternfly/react-core";
 
 import { DevPaths, StageRunDetailsRoute } from "@app/Paths";
 import { getStageDefinition } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
-import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
-import { StateError } from "@app/components/StateError";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import {
+  EntityDetailLoading,
+  EntityDetailUnavailable,
+} from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
   useApproveStageMutation,
@@ -41,7 +36,9 @@ import {
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
-import { RunStatusLabel } from "../../components/run-status-label";
+import { RunStatus } from "../../components/agentic-status";
+import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
+import { StageAttentionAlert } from "../../components/stage-attention-alert";
 import { StageRunContent } from "../components/stage-run-content";
 
 const StageRunDetail: React.FC = () => {
@@ -63,7 +60,7 @@ const StageRunDetail: React.FC = () => {
     pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
   };
 
-  const { mutate: approveStage, isPending: isApproving } =
+  const { mutateAsync: approveStage, isPending: isApproving } =
     useApproveStageMutation(
       () =>
         pushNotification({
@@ -75,43 +72,60 @@ const StageRunDetail: React.FC = () => {
       onApproveError
     );
 
+  // The run itself is missing (addenda R3): the page is the run's not found.
+  const isRunMissing =
+    planRun == null && !isLoading && (isNotFound || fetchError == null);
   const { breadcrumbs, linkCrumbs: stageChildCrumbs } = useEntityBreadcrumbs(
-    stage?.name ??
-      (fetchError != null && !isNotFound
-        ? stageId
-        : t("agentic.stageRun.notFound")),
+    isRunMissing
+      ? t("agentic.entity.planRun")
+      : (stage?.name ?? t("agentic.entity.stage")),
     [
-      { title: t("agentic.planRun.title"), path: DevPaths.planRuns },
-      ...(planRun
-        ? [
+      { title: t("sidebar.planRuns"), path: DevPaths.planRuns },
+      // While the run loads or fails, its crumb is the noun (guide 3.5 rule 2).
+      ...(isRunMissing
+        ? []
+        : [
             {
-              title: planRun.name,
+              title: planRun?.name ?? t("agentic.entity.planRun"),
               path: generatePath(DevPaths.planRunDetails, { runId }),
             },
-          ]
-        : []),
+          ]),
     ]
   );
 
-  if (isLoading) {
-    return <AppPlaceholder />;
-  }
+  const runMigrationPlan = useRunMigrationPlanLauncher({
+    rerunOf: planRun,
+    linkCrumbs: stageChildCrumbs,
+  });
 
   if (!planRun || !stageRun || !stage) {
+    if (planRun == null && isLoading) {
+      return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
+    }
+    if (planRun == null) {
+      // A missing run is the run's not found; any other failure is the
+      // error branch under the full trail (addenda X7).
+      return (
+        <EntityDetailUnavailable
+          breadcrumbs={breadcrumbs}
+          isNotFound={isRunMissing}
+          notFoundTitle={t("agentic.planRun.notFoundTitle")}
+          notFoundBody={t("agentic.planRun.notFoundBody")}
+          backLabel={t("agentic.planRun.backToPlanRuns")}
+          backPath={DevPaths.planRuns}
+        />
+      );
+    }
+    // A missing stage of a known run goes back to that run.
     return (
-      <PageSection hasBodyWrapper={false}>
-        <BreadCrumbPath breadcrumbs={breadcrumbs} />
-        {fetchError != null && !isNotFound ? (
-          <StateError />
-        ) : (
-          <Alert
-            variant={AlertVariant.warning}
-            title={t("agentic.stageRun.notFound")}
-          >
-            {t("agentic.stageRun.notFoundDescription")}
-          </Alert>
-        )}
-      </PageSection>
+      <EntityDetailUnavailable
+        breadcrumbs={breadcrumbs}
+        isNotFound
+        notFoundTitle={t("agentic.stageRun.notFoundTitle")}
+        notFoundBody={t("agentic.stageRun.notFoundBody")}
+        backLabel={t("agentic.stageRun.backToRun", { run: planRun.name })}
+        backPath={generatePath(DevPaths.planRunDetails, { runId })}
+      />
     );
   }
 
@@ -125,6 +139,26 @@ const StageRunDetail: React.FC = () => {
       <PageSection hasBodyWrapper={false}>
         <PageHeader title={title} breadcrumbs={breadcrumbs} />
       </PageSection>
+
+      <StageAttentionAlert
+        surface="stage"
+        planRun={planRun}
+        stageRun={stageRun}
+        onApprove={
+          canManageRun
+            ? () =>
+                approveStage({
+                  runId: planRun.id,
+                  stageId: stageRun.stageId,
+                })
+            : undefined
+        }
+        isDeciding={isApproving}
+        onRunMigrationPlan={runMigrationPlan.open}
+        wrapper={(alert) => (
+          <PageSection hasBodyWrapper={false}>{alert}</PageSection>
+        )}
+      />
 
       {/* Metadata */}
       <PageSection hasBodyWrapper={false}>
@@ -185,7 +219,7 @@ const StageRunDetail: React.FC = () => {
                   {t("agentic.planRun.status")}
                 </DescriptionListTerm>
                 <DescriptionListDescription>
-                  <RunStatusLabel status={stageRun.status} isCompact={false} />
+                  <RunStatus status={stageRun.status} />
                 </DescriptionListDescription>
               </DescriptionListGroup>
 
@@ -274,42 +308,6 @@ const StageRunDetail: React.FC = () => {
         </Card>
       </PageSection>
 
-      {/* Approval action */}
-      {stageRun.status === "AwaitingApproval" && (
-        <PageSection hasBodyWrapper={false}>
-          <Alert
-            variant="warning"
-            isInline
-            title={t("agentic.planRun.approveTitle")}
-          >
-            <Stack hasGutter>
-              <StackItem>
-                {t("agentic.planRun.approveDescription", {
-                  agentName: stage.agent.name,
-                })}
-              </StackItem>
-              {canManageRun && (
-                <StackItem>
-                  <Button
-                    variant={ButtonVariant.primary}
-                    isLoading={isApproving}
-                    isDisabled={isApproving}
-                    onClick={() =>
-                      approveStage({
-                        runId: planRun.id,
-                        stageId: stageRun.stageId,
-                      })
-                    }
-                  >
-                    {t("agentic.planRun.approve")}
-                  </Button>
-                </StackItem>
-              )}
-            </Stack>
-          </Alert>
-        </PageSection>
-      )}
-
       {/* Activities and commits */}
       {stageRun.status !== "Pending" && (
         <PageSection hasBodyWrapper={false}>
@@ -364,6 +362,8 @@ const StageRunDetail: React.FC = () => {
           </Card>
         </PageSection>
       )}
+
+      {runMigrationPlan.modal}
     </>
   );
 };

@@ -67,6 +67,8 @@ import { OverflowActionMenu } from "@app/components/overflow-action-menu";
 import { useBulkSelection } from "@app/hooks/selection/useBulkSelection";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { BreadcrumbState, useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
+import { statusPresentation } from "@app/pages/agentic/components/agentic-status";
+import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
 import { useFetchApplicationMigrations } from "@app/queries/agentic";
 import {
   useBulkDeleteApplicationMutation,
@@ -108,8 +110,6 @@ import {
 import { AnalysisWizard } from "../analysis-wizard/analysis-wizard";
 import { ApplicationFormModal } from "../application-form";
 import { ApplicationIdentityModal } from "../application-identity-form/application-identity-modal";
-import { MigrationPreflightModal } from "../components/agentic-migration/migration-preflight-modal";
-import { useStartMigrations } from "../components/agentic-migration/use-start-migrations";
 import { ImportApplicationsForm } from "../components/import-applications-form";
 import { GenerateAssetsWizard } from "../generate-assets-wizard";
 import { RetrieveConfigWizard } from "../retrieve-config-wizard";
@@ -192,9 +192,6 @@ export const ApplicationsTable: FC = () => {
   const isDependenciesModalOpen = applicationDependenciesToManage !== null;
 
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-  const [migrationRowsToStart, setMigrationRowsToStart] = useState<
-    DecoratedApplication[] | null
-  >(null);
   const [isAttentionModalOpen, setIsAttentionModalOpen] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<string>("json");
 
@@ -688,7 +685,7 @@ export const ApplicationsTable: FC = () => {
                 }) + "...",
               selectOptions: agenticMigrationStatuses.map((status) => ({
                 value: status,
-                label: t(`agentic.execution.displayStatus.${status}`),
+                label: t(statusPresentation.migration[status].labelKey),
               })),
               getItemValue: (item: DecoratedApplication) =>
                 getMigrationDisplayStatus(getMigration(item)),
@@ -790,10 +787,21 @@ export const ApplicationsTable: FC = () => {
     currentPageItems,
   });
 
-  const { startMigrations, isStarting } = useStartMigrations(linkCrumbs, () => {
-    toolbarBulkSelectorProps.onSelectNone();
-    setMigrationRowsToStart(null);
+  const migrationLauncher = useRunMigrationPlanLauncher({
+    // While the inventory's query is loading or failed, the dialog fetches
+    // (and reports errors) itself.
+    migrations: areMigrationsAvailable ? migrations : undefined,
+    linkCrumbs,
+    onStarted: () => toolbarBulkSelectorProps.onSelectNone(),
   });
+  const startMigrationsFor = (rows: DecoratedApplication[]) =>
+    migrationLauncher.open?.(
+      rows.flatMap((application) =>
+        application.id != null
+          ? [{ id: application.id, name: application.name }]
+          : []
+      )
+    );
 
   const clearFilters = () => {
     const currentPath = history.location.pathname;
@@ -1187,7 +1195,7 @@ export const ApplicationsTable: FC = () => {
                         key="run-migration-plan"
                         onClick={() => {
                           setIsActionsDropdownOpen(false);
-                          setMigrationRowsToStart(selectedRows);
+                          startMigrationsFor(selectedRows);
                         }}
                       >
                         {t("agentic.execution.startMigration")}
@@ -1385,7 +1393,7 @@ export const ApplicationsTable: FC = () => {
                             linkTo={to}
                             onStart={
                               canStartMigrations
-                                ? () => setMigrationRowsToStart([application])
+                                ? () => startMigrationsFor([application])
                                 : undefined
                             }
                           />
@@ -1446,7 +1454,7 @@ export const ApplicationsTable: FC = () => {
                                 title: t("agentic.execution.startMigration"),
                                 itemKey: "startAgenticMigration",
                                 onClick: () =>
-                                  setMigrationRowsToStart([application]),
+                                  startMigrationsFor([application]),
                                 isDisabled:
                                   getMigration(application).preflight !==
                                   "ready",
@@ -1572,22 +1580,7 @@ export const ApplicationsTable: FC = () => {
         />
       </div>
 
-      {canStartMigrations && migrationRowsToStart != null && (
-        <MigrationPreflightModal
-          applications={migrationRowsToStart.flatMap((application) =>
-            application.id != null
-              ? [{ id: application.id, name: application.name }]
-              : []
-          )}
-          // While the inventory's query is loading or failed, the dialog
-          // fetches (and reports errors) itself.
-          migrations={areMigrationsAvailable ? migrations : undefined}
-          isStarting={isStarting}
-          linkTo={to}
-          onClose={() => setMigrationRowsToStart(null)}
-          onStartReady={startMigrations}
-        />
-      )}
+      {canStartMigrations && migrationLauncher.modal}
 
       {isAgenticEnabled && (
         <MigrationAttentionModal
