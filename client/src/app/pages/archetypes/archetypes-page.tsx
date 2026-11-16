@@ -5,7 +5,6 @@ import { useHistory } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
-  Content,
   EmptyState,
   EmptyStateBody,
   Modal,
@@ -56,6 +55,7 @@ import { ArchetypeForm } from "./components/archetype-form";
 import ArchetypeMaintainersColumn from "./components/archetype-maintainers-column";
 import ArchetypeTagsColumn from "./components/archetype-tags-column";
 import LinkToArchetypeApplications from "./components/link-to-archetype-applications";
+import LinkToArchetypeTargetProfiles from "./components/link-to-archetype-target-profiles";
 import { useArchetypeMutations } from "./hooks/useArchetypeMutations";
 
 const Archetypes: React.FC = () => {
@@ -109,7 +109,7 @@ const Archetypes: React.FC = () => {
       tags: t("terms.tags"),
       maintainers: t("terms.maintainers"),
       applications: t("terms.applications"),
-      profiles: t("terms.profiles"),
+      profiles: t("terms.targetProfiles"),
       assessment: t("terms.assessment"),
       review: t("terms.review"),
     },
@@ -300,7 +300,10 @@ const Archetypes: React.FC = () => {
                     <Th {...getThProps({ columnKey: "tags" })} />
                     <Th {...getThProps({ columnKey: "maintainers" })} />
                     <Th {...getThProps({ columnKey: "applications" })} />
-                    <Th {...getThProps({ columnKey: "profiles" })} />
+                    <Th
+                      {...getThProps({ columnKey: "profiles" })}
+                      modifier="wrap"
+                    />
                     <Th
                       {...getThProps({ columnKey: "assessment" })}
                       width={10}
@@ -355,9 +358,10 @@ const Archetypes: React.FC = () => {
                           <LinkToArchetypeApplications archetype={archetype} />
                         </Td>
                         <Td {...getTdProps({ columnKey: "profiles" })}>
-                          <Content component="p">
-                            {archetype.profiles?.length || 0}
-                          </Content>
+                          <LinkToArchetypeTargetProfiles
+                            archetype={archetype}
+                            linkTo={(pathname) => to(pathname)}
+                          />
                         </Td>
                         <Td
                           width={15}

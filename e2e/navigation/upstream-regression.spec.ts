@@ -231,11 +231,9 @@ test.describe("Archetypes", () => {
 
   test("target profiles page opens the create form", async ({ page }) => {
     await page.goto(protoUrl("/archetypes/1/target-profiles"));
-    await expect(mainHeading(page)).toHaveText(
-      "Target profiles for Java EE Application"
-    );
+    await expect(mainHeading(page)).toHaveText("Target profiles");
     await main(page)
-      .getByRole("button", { name: "Create New Target Profile" })
+      .getByRole("button", { name: "Create target profile" })
       .click();
     await expect(page.getByRole("dialog")).toBeVisible();
   });
