@@ -55,6 +55,7 @@ const surfaces = (graph: FixtureGraph, group: Group): string[] => {
         "/migration-plans",
         "/plan-runs",
         "/skills?skills:itemsPerPage=100&skills:pageNumber=1",
+        "/skills?tab=collections",
       ];
     case "skills":
       return graph.skills.flatMap((skill) => [
@@ -223,15 +224,45 @@ for (const group of GROUPS) {
               /^\d+ runs?$/.test(label) &&
               /^\/migration-plans\/\d+$/.test(destination.pathname) &&
               destination.searchParams.get("tab") === "runs";
+            // So do the Skills page counts ("6 associations", "3 skills",
+            // "2 agents"): they open the skill or collection that lists them.
+            const isSkillsCountLink =
+              /^\d+ (associations?|skills|agents)$/.test(label) &&
+              /^\/skills\//.test(destination.pathname);
+            // A skill's "Associated with" table names each target profile
+            // with its archetype, "{profile} ({archetype})" (skills amendment
+            // 6): profile names repeat across archetypes.
+            const isQualifiedTargetProfile =
+              /^\/skills\/\d+$/.test(new URL(sourceURL).pathname) &&
+              /#target-profile-\d+$/.test(href) &&
+              label.startsWith(`${expected} (`) &&
+              label.endsWith(")");
             if (
               !/\/stages\//.test(href) &&
               !isRunCountLink &&
               !isAgentCountLink &&
-              !isPlanRunsCountLink
+              !isPlanRunsCountLink &&
+              !isSkillsCountLink &&
+              !isQualifiedTargetProfile
             )
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected
               );
+          }
+          if (destination.pathname === new URL(sourceURL).pathname) {
+            // A link to another tab of the same page (the skill's "6
+            // associations" fact opens its Associations tab) switches tabs:
+            // the trail stays the source's, and Back returns to the source.
+            expect(
+              await breadcrumbTitles(page),
+              `${source} -> ${href}: same page trail`
+            ).toEqual(sourceTitles);
+            await page.goBack();
+            await expect(page).toHaveURL(sourceURL);
+            await ready(page);
+            expect(await breadcrumbTitles(page)).toEqual(sourceTitles);
+            checked++;
+            return;
           }
           const ancestor = ancestorPaths.indexOf(destination.pathname);
           if (ancestor >= 0) {

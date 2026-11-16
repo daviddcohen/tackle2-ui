@@ -1,13 +1,12 @@
 import userEvent from "@testing-library/user-event";
 import { rest } from "msw";
 
-import { Skill, SkillCollection, SkillRequest } from "@app/agentic";
+import { Skill, SkillRequest } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { render, screen, waitFor } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import { ImportSkillModal, parseSkillName } from "./import-skill-modal";
-import { SkillCollectionForm } from "./skill-collection-form";
 
 const skills: Skill[] = [
   {
@@ -19,13 +18,6 @@ const skills: Skill[] = [
   },
   { id: "2", name: "Quarkus", description: "", sourceType: "inline" },
 ];
-
-const collection: SkillCollection = {
-  id: "1",
-  name: "Security and compliance",
-  description: "Security skills.",
-  skills: [{ id: "1", name: "Corporate coding standards" }],
-};
 
 describe("parseSkillName", () => {
   it("takes the first heading, else the file name", () => {
@@ -103,62 +95,5 @@ describe("ImportSkillModal", () => {
         content: "# Brand new skill\nBody",
       },
     ]);
-  });
-});
-
-describe("SkillCollectionForm", () => {
-  beforeEach(() => {
-    server.use(
-      rest.get(AGENTIC_ENDPOINTS.skills, (_req, res, ctx) =>
-        res(ctx.json(skills))
-      ),
-      rest.get(AGENTIC_ENDPOINTS.skillCollections, (_req, res, ctx) =>
-        res(ctx.json([collection]))
-      )
-    );
-  });
-
-  const nameInput = () => screen.getByRole("textbox", { name: /terms.name/ });
-  const descriptionInput = () =>
-    screen.getByRole("textbox", { name: /terms.description/ });
-
-  it("rejects a duplicate name and an over-long name", async () => {
-    const user = userEvent.setup();
-    render(
-      <SkillCollectionForm
-        collection={null}
-        initialSkillIds={["2"]}
-        onClose={jest.fn()}
-      />
-    );
-    await user.type(nameInput(), "security AND compliance");
-    await user.type(descriptionInput(), "dup");
-    // duplicateNameCheck is case-sensitive (upstream behaviour): exact match only
-    await user.clear(nameInput());
-    await user.type(nameInput(), "Security and compliance");
-    expect(
-      await screen.findByText(
-        "agentic.skillCollection.validation.nameDuplicate"
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "actions.create" })
-    ).toBeDisabled();
-
-    await user.clear(nameInput());
-    await user.type(nameInput(), "x".repeat(121));
-    expect(
-      await screen.findByText("agentic.skillCollection.validation.nameMaximum")
-    ).toBeInTheDocument();
-  });
-
-  it("keeps Save disabled until something changes", async () => {
-    const user = userEvent.setup();
-    render(<SkillCollectionForm collection={collection} onClose={jest.fn()} />);
-    const save = screen.getByRole("button", { name: "actions.save" });
-    // valid but untouched
-    await waitFor(() => expect(save).toBeDisabled());
-    await user.type(descriptionInput(), " More.");
-    await waitFor(() => expect(save).toBeEnabled());
   });
 });

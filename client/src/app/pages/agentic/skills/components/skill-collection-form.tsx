@@ -5,17 +5,19 @@ import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { array, object, string } from "yup";
 import {
-  ActionGroup,
+  Alert,
   Button,
   ButtonVariant,
   Form,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  Skeleton,
 } from "@patternfly/react-core";
+import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
-import {
-  EntityId,
-  SkillCollection,
-  SkillCollectionRequest,
-} from "@app/agentic";
+import { SkillCollection, SkillCollectionRequest } from "@app/agentic";
 import { FilterSelectOptionProps } from "@app/components/FilterToolbar/FilterToolbar";
 import { MultiSelect } from "@app/components/FilterToolbar/components/MultiSelect";
 import {
@@ -26,11 +28,17 @@ import {
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import {
   useCreateSkillCollectionMutation,
+  useFetchAgents,
   useFetchSkillCollections,
   useFetchSkills,
   useUpdateSkillCollectionMutation,
 } from "@app/queries/agentic";
 import { duplicateNameCheck, getAxiosErrorMessage } from "@app/utils/utils";
+
+import { getAgentsUsingCollection } from "../skill-usage";
+
+const FORM_ID = "skill-collection-form";
+const TITLE_ID = "skill-collection-modal-title";
 
 interface FormValues {
   name: string;
@@ -40,20 +48,59 @@ interface FormValues {
 
 export interface SkillCollectionFormProps {
   collection: SkillCollection | null;
-  /** Pre-selected skill ids for the "create from selection" flow. */
-  initialSkillIds?: EntityId[];
   onClose: () => void;
 }
 
+export interface SkillCollectionModalProps {
+  isOpen: boolean;
+  /** The collection to edit; create when null. */
+  collection: SkillCollection | null;
+  onClose: () => void;
+}
+
+/** Create or edit a skill collection (guide 4.4, collection-create). */
+export const SkillCollectionModal: React.FC<SkillCollectionModalProps> = ({
+  isOpen,
+  collection,
+  onClose,
+}) => (
+  <Modal
+    id="skill-collection-modal"
+    variant="medium"
+    isOpen={isOpen}
+    onClose={onClose}
+    aria-labelledby={TITLE_ID}
+  >
+    {/* mounted only while open, so every opening starts from the collection */}
+    {isOpen && (
+      <SkillCollectionForm collection={collection} onClose={onClose} />
+    )}
+  </Modal>
+);
+
+/** The modal's header, body and footer. */
 export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
   collection,
-  initialSkillIds,
   onClose,
 }) => {
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const { skills } = useFetchSkills();
   const { skillCollections } = useFetchSkillCollections();
+  const {
+    agents,
+    isLoading: isLoadingAgents,
+    fetchError: agentsError,
+  } = useFetchAgents();
+  // The edit warning counts the agents the same way as the delete reason
+  // (S3). Until the agents are known it never looks like "not used" (X6): a
+  // skeleton while they load, a usage-unchecked warning if they fail.
+  const agentsUsingCollection =
+    collection == null || isLoadingAgents || agentsError != null
+      ? 0
+      : getAgentsUsingCollection(collection.id, agents).length;
+  const isUsageUnchecked =
+    collection != null && !isLoadingAgents && agentsError != null;
 
   const options: FilterSelectOptionProps[] = skills.map((skill) => ({
     value: skill.id,
@@ -63,7 +110,7 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
   const schema = object({
     name: string()
       .trim()
-      .required(t("agentic.skillCollection.nameRequired"))
+      .required(t("agentic.skillCollection.validation.nameRequired"))
       .max(120, t("agentic.skillCollection.validation.nameMaximum"))
       .test(
         "duplicate-name",
@@ -76,7 +123,7 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
       .max(500, t("agentic.skillCollection.validation.descriptionMaximum")),
     skills: array()
       .of(string().required())
-      .min(1, t("agentic.skillCollection.skillsRequired"))
+      .min(1, t("agentic.skillCollection.validation.skillsRequired"))
       .defined(),
   });
 
@@ -89,7 +136,7 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
     defaultValues: {
       name: collection?.name ?? "",
       description: collection?.description ?? "",
-      skills: collection?.skills.map((s) => s.id) ?? initialSkillIds ?? [],
+      skills: collection?.skills.map((s) => s.id) ?? [],
     },
     mode: "all",
     resolver: yupResolver(schema),
@@ -130,72 +177,110 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
     }
   };
 
+  const isSaving = isSubmitting || isCreating || isUpdating;
+
   return (
-    <Form id="skill-collection-form" onSubmit={handleSubmit(onSubmit)}>
-      <HookFormPFTextInput
-        control={control}
-        name="name"
-        label={t("terms.name")}
-        fieldId="skill-collection-name"
-        isRequired
+    <>
+      <ModalHeader
+        title={
+          collection
+            ? t("agentic.skillCollection.edit")
+            : t("agentic.skillCollection.create")
+        }
+        description={t("agentic.skillCollection.formDescription")}
+        labelId={TITLE_ID}
       />
-      <HookFormPFTextArea
-        control={control}
-        name="description"
-        label={t("terms.description")}
-        fieldId="skill-collection-description"
-      />
-      <HookFormPFGroupController
-        control={control}
-        name="skills"
-        label={t("agentic.skillCollection.members")}
-        fieldId="skill-collection-skills"
-        isRequired
-        renderInput={() => (
-          <MultiSelect
-            toggleId="skill-collection-skills-select"
-            toggleAriaLabel={t("agentic.skillCollection.selectSkills")}
-            ariaLabel={t("agentic.skillCollection.members")}
-            values={selectedSkills}
-            options={options}
-            hasCheckbox
-            hasBadge
-            hasChips
-            onSelect={(selection) => {
-              if (!selection) return;
-              setValue(
-                "skills",
-                selectedSkills.includes(selection)
-                  ? selectedSkills.filter((s) => s !== selection)
-                  : [...selectedSkills, selection],
-                { shouldDirty: true, shouldValidate: true }
-              );
-            }}
-            onClear={() =>
-              setValue("skills", [], {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-            placeholderText={t("agentic.skillCollection.addSkills")}
+      <ModalBody>
+        {collection != null && isLoadingAgents ? (
+          <Skeleton
+            width="50%"
+            className={spacing.mbLg}
+            screenreaderText={t("terms.loading")}
           />
-        )}
-      />
-      <ActionGroup>
+        ) : isUsageUnchecked || agentsUsingCollection > 0 ? (
+          <Alert
+            variant="warning"
+            isInline
+            isPlain
+            title={
+              isUsageUnchecked
+                ? t("agentic.skillCollection.editUsageUnchecked")
+                : t("agentic.skillCollection.editWarning", {
+                    count: agentsUsingCollection,
+                  })
+            }
+            className={spacing.mbLg}
+          />
+        ) : null}
+        <Form id={FORM_ID} onSubmit={handleSubmit(onSubmit)}>
+          <HookFormPFTextInput
+            control={control}
+            name="name"
+            label={t("terms.name")}
+            fieldId="skill-collection-name"
+            isRequired
+          />
+          <HookFormPFTextArea
+            control={control}
+            name="description"
+            label={t("terms.description")}
+            fieldId="skill-collection-description"
+            rows={2}
+            resizeOrientation="vertical"
+          />
+          <HookFormPFGroupController
+            control={control}
+            name="skills"
+            label={t("agentic.skillCollection.members")}
+            fieldId="skill-collection-skills"
+            helperText={t("agentic.skillCollection.skillsHelper")}
+            isRequired
+            renderInput={() => (
+              <MultiSelect
+                toggleId="skill-collection-skills-select"
+                toggleAriaLabel={t("agentic.skillCollection.selectSkills")}
+                ariaLabel={t("agentic.skillCollection.members")}
+                values={selectedSkills}
+                options={options}
+                hasCheckbox
+                hasBadge
+                hasChips
+                onSelect={(selection) => {
+                  if (!selection) return;
+                  setValue(
+                    "skills",
+                    selectedSkills.includes(selection)
+                      ? selectedSkills.filter((s) => s !== selection)
+                      : [...selectedSkills, selection],
+                    { shouldDirty: true, shouldValidate: true }
+                  );
+                }}
+                onClear={() =>
+                  setValue("skills", [], {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                placeholderText={t("agentic.skillCollection.selectSkills")}
+              />
+            )}
+          />
+        </Form>
+      </ModalBody>
+      <ModalFooter>
         <Button
           type="submit"
+          form={FORM_ID}
           variant={ButtonVariant.primary}
-          isDisabled={
-            !isDirty || !isValid || isSubmitting || isCreating || isUpdating
-          }
-          isLoading={isSubmitting || isCreating || isUpdating}
+          isDisabled={!isDirty || !isValid || isSaving}
+          isLoading={isSaving || undefined}
         >
           {collection ? t("actions.save") : t("actions.create")}
         </Button>
         <Button type="button" variant={ButtonVariant.link} onClick={onClose}>
           {t("actions.cancel")}
         </Button>
-      </ActionGroup>
-    </Form>
+      </ModalFooter>
+    </>
   );
 };

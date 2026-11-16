@@ -111,7 +111,7 @@ Read this first. These four are product, UX or backend decisions, not wiring tas
 3. Remove `isPrototypeEnabled` from `client/src/app/Constants.ts`, and its two users:
    - `client/src/app/auth/masquerade/MasqueradeAuthStrategy.tsx` (import, and `ToolbarContent: isPrototypeEnabled ? null : MasqueradeDevPanel` becomes `MasqueradeDevPanel`);
    - `client/src/app/__tests__/App.test.tsx` (the `isPrototypeEnabled` assertion).
-4. Remove `<PrototypeAnnotation>` call sites (`pages/agentic/skills/skills.tsx`, the associations inspector), then `client/src/app/components/PrototypeAnnotation.tsx` and its test, and the `agentic.prototype` translation keys.
+4. Delete `client/src/app/components/PrototypeAnnotation.tsx` (it has no call sites left; step 1 removes the shell that provides its context) and its test, and the `agentic.prototype` translation keys.
 5. Mocks: remove the `agentic` and `prototype-support` groups from `client/src/mocks/stub-new-work/index.ts`, delete `client/src/mocks/stub-new-work/agentic/` and `prototype-support.ts`, and edit the upstream stub `client/src/mocks/stub-new-work/applications.ts`, which imports `./agentic/portfolio` (`selectPortfolio`) and `./agentic/prototype-state` (`getPrototypeScenario`): go back to upstream's application fixtures. Or keep the agentic mock as a CRD-shaped mock (checklist step 9).
 6. `AGENTIC_ENABLED`: drop the MOCK-derived branch in `server/src/serverConfig.js` and `client/config/rspack.dev.mts`, so the default is plain `"false"` (it already is `"false"` unless `MOCK` stubs `agentic`).
 7. Optional: delete `Dockerfile.prototype`, `build:prototype`, `client/config/rspack.prototype.mts`, and the Playwright suite in `e2e/` with `playwright.config.cjs` (`npm run test:e2e:prototype`): it drives the mock through `protoScenario` / `protoPersona` and cannot run against a real cluster.
@@ -316,6 +316,9 @@ AgentRuns created for workflow stages carry the label `konveyor.io/agentworkflow
 | `skills: EntityRef[]` | `spec.skills[].skillCardRef` + `status.resolvedSkills` | Existing entries keep their position and fields, including their `name` (the list-map key, which can differ from the card); a `skillCardRef` entry is dropped when its card leaves the list; a new card is appended as `{ name, skillCardRef }`, named after the card and made unique among entry names; `image`/`source` entries are always kept; at least one entry is required. Pass `controllerOwnedSkills(current)` as the third argument of `toSkillCollectionSpec`: the resolved cards that `image`/`source` entries own are listed as members, and would otherwise be written back as duplicate `skillCardRef` entries. `image`/`source` entries themselves are not visible in the domain |
 | (none)                | `spec.image` (enumerate mode)                          | members are controller-owned; `toSkillCollectionSpec` throws                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
+The collection description is mock-only: the UI shows it in the collection page header and the Skill collections list
+when it is set, and omits it when it is empty, which is what the adapter returns.
+
 ### Plan ↔ AgentWorkflow (`/agentic/workflows`), Stage ↔ workflow stage
 
 | Domain                                                  | AgentWorkflow                                                       | Notes                                                                                     |
@@ -432,6 +435,13 @@ Not checked yet: approving through ACP needs `agentic.agentruns.acp:post` (`agen
 5. **Organization default Model** (`isOrganizationDefault`, `setDefaultModel`).
 6. **Execution policy** (org-wide unattended / interactive). The controller only has per-stage / per-run `execution.mode`.
 7. **Hub-scope Skill associations** (archetype, target profile, application) and effective-skill provenance.
+   `EffectiveSkillAssociation` carries only `scope` and `scopeName`, no source id (design question Q7), so a
+   source cannot link and two target profiles with the same name read the same: on the skill page, "Target
+   profile: OpenShift lift and shift" appears on two plans for two different profiles. The UI renders
+   `scopeName` verbatim and never looks the archetype up by name; the "Associated with" table, which has
+   `SkillAssociation.resource.id`, names each target profile with its archetype. The skill page's "Used in
+   migration plans" rows come from `MigrationPlan.effectiveSkills` only, without collection skills (Q1); when the
+   plan projection includes them, the rows change by themselves and the section sentence drops "collections and".
 8. **Run results** (`ApplicationMigrationResult`, stage `commits`). Part of this is in ACP plan-entry `_meta` (`konveyor.io/plan`, see `acp.ts` `PlanRungMeta`).
 9. **Descriptions and display names** for Agent, Gateway, AgentWorkflow and SkillCollection (no CRD field; the forms have free-text names such as "Java EE to Quarkus"). Options: slug names (`toResourceName`) plus a display-name annotation, or new spec fields.
 10. **Rename**: `metadata.name` is immutable and the Hub copies only `spec` on PUT, so editing a name is impossible except a SkillCard's `displayName`. The forms allow renaming; the adapters refuse it (`assertNotRenamed`). See [C](#c-names-are-immutable).
