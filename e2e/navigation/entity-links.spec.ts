@@ -156,6 +156,15 @@ for (const group of GROUPS) {
       const sourceTitles = await breadcrumbTitles(page);
       const sourceTitle =
         sourceTitles.at(-1) ?? (await mainHeading(page).innerText()).trim();
+      // Ancestor crumbs of the source page, by path: a link to one of them
+      // (the stage page's run link, addenda R1) returns to it, like the crumb.
+      const ancestorPaths = await breadcrumb(page)
+        .getByRole("link")
+        .evaluateAll((elements) =>
+          elements.map(
+            (element) => new URL((element as HTMLAnchorElement).href).pathname
+          )
+        );
       const links = await page
         .locator("main a[href], #page-drawer-content a[href]")
         .evaluateAll((elements) => [
@@ -223,6 +232,20 @@ for (const group of GROUPS) {
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(
                 expected
               );
+          }
+          const ancestor = ancestorPaths.indexOf(destination.pathname);
+          if (ancestor >= 0) {
+            // Returning to an ancestor drops its descendants (useBreadcrumbs).
+            expect(
+              await breadcrumbTitles(page),
+              `${source} -> ${href}: ancestor trail`
+            ).toEqual(sourceTitles.slice(0, ancestor + 1));
+            await page.goBack();
+            await expect(page).toHaveURL(sourceURL);
+            await ready(page);
+            expect(await breadcrumbTitles(page)).toEqual(sourceTitles);
+            checked++;
+            return;
           }
           expect(
             (await breadcrumbTitles(page)).slice(0, -1),

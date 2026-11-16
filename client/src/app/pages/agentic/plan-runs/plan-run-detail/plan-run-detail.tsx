@@ -1,31 +1,13 @@
 import * as React from "react";
-import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
-import {
-  Button,
-  ButtonVariant,
-  Card,
-  CardBody,
-  Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
-  Flex,
-  FlexItem,
-  Label,
-  LabelGroup,
-  PageSection,
-  Stack,
-  StackItem,
-  Title,
-} from "@patternfly/react-core";
+import { PageSection } from "@patternfly/react-core";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
-import { StageRun } from "@app/agentic";
+import { PlanRun, getOrderedStageRuns } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
-import { NotificationsContext } from "@app/components/NotificationsContext";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { PageHeader } from "@app/components/PageHeader";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import {
@@ -33,40 +15,92 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import { useApproveStageMutation, useFetchPlanRun } from "@app/queries/agentic";
+import { useFetchPlanRun } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
-import { getAxiosErrorMessage } from "@app/utils/utils";
+import {
+  formatDuration,
+  getCurrentStage,
+  planRunDurationSeconds,
+} from "@app/utils/agentic";
+import { formatDate } from "@app/utils/utils";
 
-import { RunStatus } from "../../components/agentic-status";
+import {
+  DetailFacts,
+  DetailSection,
+  LinkLabels,
+  SectionEmpty,
+} from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import { SkillsTable, groupSkillSources } from "../../components/skills-table";
-import { StageAttentionAlert } from "../../components/stage-attention-alert";
+import {
+  StageAttentionAlert,
+  getStageAttention,
+} from "../../components/stage-attention-alert";
 import { StageRunsTable } from "../../components/stage-runs-table";
+import { RunPageBody, RunStatusLine } from "../components/run-page-layout";
+import { useApproveStage } from "../components/use-approve-stage";
+
+/**
+ * Where the run is (plan-runs amendment 6): a pending run waits for its
+ * first stage, a succeeded one says when it started and completed, any
+ * other names its current stage and its start. A pending run's `startedAt`
+ * is not a start (docs/agentic-handoff.md), so it is not shown.
+ */
+const PlanRunStatusLine: React.FC<{ planRun: PlanRun }> = ({ planRun }) => {
+  const { t } = useTranslation();
+  const started = formatDate(new Date(planRun.startedAt));
+  if (planRun.status === "Pending") {
+    const first = getOrderedStageRuns(planRun)[0];
+    return (
+      <RunStatusLine status={planRun.status}>
+        {first != null
+          ? t("agentic.planRun.waitingToStart", { stage: first.name })
+          : undefined}
+      </RunStatusLine>
+    );
+  }
+  if (planRun.status === "Succeeded" && planRun.completedAt) {
+    return (
+      <RunStatusLine status={planRun.status}>
+        {t("agentic.planRun.startedAndCompleted", {
+          started,
+          completed: formatDate(new Date(planRun.completedAt)),
+        })}
+      </RunStatusLine>
+    );
+  }
+  const current = getCurrentStage(planRun);
+  return (
+    <RunStatusLine status={planRun.status}>
+      {current != null
+        ? t("agentic.planRun.stageAndStarted", {
+            stage: t("agentic.common.stagePosition", {
+              position: current.position,
+              total: current.total,
+              stage: current.stageRun.name,
+            }),
+            started,
+          })
+        : t("agentic.planRun.startedAt", { started })}
+    </RunStatusLine>
+  );
+};
 
 const PlanRunDetail: React.FC = () => {
   const { t } = useTranslation();
   const { runId } = useParams<PlanRunDetailsRoute>();
-  const { pushNotification } = React.useContext(NotificationsContext);
 
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
-  // The run's snapshot of skills: render what the server returns, never more.
-  const skillRows = groupSkillSources(planRun?.resolvedSkills ?? []);
+  // The run's snapshot of skills: render what the server returns, never
+  // more. Undefined is unknown, not "no skills" (addenda X6).
+  const skillRows =
+    planRun?.resolvedSkills != null
+      ? groupSkillSources(planRun.resolvedSkills)
+      : undefined;
 
-  const onApproveError = (error: AxiosError) => {
-    pushNotification({ title: getAxiosErrorMessage(error), variant: "danger" });
-  };
-
-  const { mutateAsync: approveStage, isPending: isApproving } =
-    useApproveStageMutation(() => undefined, onApproveError);
-  const approve = (stageRun: StageRun) =>
-    approveStage({ runId: runId, stageId: stageRun.stageId }).then(() =>
-      pushNotification({
-        title: t("agentic.planRun.stageApproved", { stage: stageRun.name }),
-        variant: "success",
-      })
-    );
+  const { approve, isApproving } = useApproveStage(runId);
 
   const { breadcrumbs, linkCrumbs: runChildCrumbs } = useEntityBreadcrumbs(
     planRun?.name ?? t("agentic.entity.planRun"),
@@ -94,183 +128,140 @@ const PlanRunDetail: React.FC = () => {
     );
   }
 
+  const duration = planRunDurationSeconds(planRun);
+  const commitCount = planRun.stageRuns.reduce(
+    (count, stageRun) => count + (stageRun.commits?.length ?? 0),
+    0
+  );
+  const runLink = (pathname: string, search = "") =>
+    breadcrumbTo(pathname, search, runChildCrumbs);
+  const facts: [string, React.ReactNode][] = [
+    [
+      t("agentic.entity.migrationPlan"),
+      <Link
+        key="plan"
+        to={runLink(
+          generatePath(DevPaths.migrationPlanDetails, {
+            planId: planRun.planId,
+          }),
+          `?from=run-${runId}`
+        )}
+      >
+        {planRun.planName}
+      </Link>,
+    ],
+    [
+      t("agentic.planRun.applications"),
+      planRun.applications.length > 0 ? (
+        <LinkLabels
+          items={planRun.applications.map((application) => ({
+            id: application.id,
+            name: application.name,
+            to: runLink(
+              generatePath(DevPaths.applicationDetails, {
+                applicationId: String(application.id),
+              })
+            ),
+          }))}
+        />
+      ) : (
+        <EmptyTextMessage message={t("terms.none")} />
+      ),
+    ],
+    [
+      t("agentic.planRun.targetBranch"),
+      <span key="branch" className={textStyles.fontFamilyMonospace}>
+        {planRun.targetBranch}
+      </span>,
+    ],
+    [
+      t("agentic.planRun.duration"),
+      duration != null ? (
+        formatDuration(duration)
+      ) : (
+        <EmptyTextMessage
+          message={
+            planRun.status === "Pending"
+              ? t("terms.notStarted")
+              : t("agentic.common.unavailable")
+          }
+        />
+      ),
+    ],
+    [
+      t("agentic.planRun.commits"),
+      commitCount > 0 ? (
+        commitCount
+      ) : (
+        <EmptyTextMessage message={t("terms.none")} />
+      ),
+    ],
+  ];
+
   return (
     <>
       <PageSection hasBodyWrapper={false}>
         <PageHeader
           title={planRun.name}
           breadcrumbs={breadcrumbs}
-          btnActions={<RunStatus status={planRun.status} />}
+          description={<PlanRunStatusLine planRun={planRun} />}
         />
       </PageSection>
 
-      <StageAttentionAlert
-        surface="run"
-        planRun={planRun}
-        reviewStageTo={(stageRun) =>
-          breadcrumbTo(
-            generatePath(DevPaths.stageRunDetails, {
-              runId: planRun.id,
-              stageId: stageRun.stageId,
-            }),
-            "",
-            runChildCrumbs
-          )
-        }
-        onApprove={canManageRun ? approve : undefined}
-        isDeciding={isApproving}
-        onRunMigrationPlan={runMigrationPlan.open}
-        wrapper={(alert) => (
-          <PageSection hasBodyWrapper={false}>{alert}</PageSection>
+      <RunPageBody>
+        {getStageAttention(planRun) != null && (
+          <StageAttentionAlert
+            surface="run"
+            planRun={planRun}
+            reviewStageTo={(stageRun) =>
+              runLink(
+                generatePath(DevPaths.stageRunDetails, {
+                  runId: planRun.id,
+                  stageId: stageRun.stageId,
+                })
+              )
+            }
+            onApprove={canManageRun ? approve : undefined}
+            isDeciding={isApproving}
+            onRunMigrationPlan={runMigrationPlan.open}
+          />
         )}
-      />
 
-      {/* Summary card */}
-      <PageSection hasBodyWrapper={false}>
-        <Card>
-          <CardBody>
-            <DescriptionList isHorizontal>
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.stageRun.plan")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <Link
-                    to={breadcrumbTo(
-                      DevPaths.migrationPlanDetails.replace(
-                        ":planId",
-                        planRun.planId.toString()
-                      ),
-                      `?from=run-${runId}`,
-                      runChildCrumbs
-                    )}
-                  >
-                    {planRun.planName}
-                  </Link>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
+        <DetailFacts facts={facts} isTwoColumn />
 
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.applications")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <LabelGroup numLabels={5}>
-                    {planRun.applications.map((app) => (
-                      <Label key={app.id} isCompact>
-                        <Link
-                          to={breadcrumbTo(
-                            DevPaths.applicationDetails.replace(
-                              ":applicationId",
-                              String(app.id)
-                            ),
-                            "",
-                            runChildCrumbs
-                          )}
-                        >
-                          {app.name}
-                        </Link>
-                      </Label>
-                    ))}
-                  </LabelGroup>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
+        <DetailSection title={t("agentic.planRun.stages")}>
+          <StageRunsTable
+            stageRuns={planRun.stageRuns}
+            runId={planRun.id}
+            linkTo={runLink}
+            origin={`?from=run-${runId}`}
+          />
+        </DetailSection>
 
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.targetBranch")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  <Label isCompact color="blue">
-                    {planRun.targetBranch}
-                  </Label>
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.started")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {new Date(planRun.startedAt).toLocaleString()}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("agentic.planRun.completed")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {planRun.completedAt
-                    ? new Date(planRun.completedAt).toLocaleString()
-                    : "—"}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-            </DescriptionList>
-          </CardBody>
-        </Card>
-      </PageSection>
-
-      <PageSection hasBodyWrapper={false}>
-        <Stack hasGutter>
-          <StackItem>
-            <Title headingLevel="h2" size="md">
-              {t("agentic.planRun.stages")}
-            </Title>
-          </StackItem>
-          <StackItem>
-            <StageRunsTable
-              stageRuns={planRun.stageRuns}
-              runId={planRun.id}
-              linkTo={(pathname, search = "") =>
-                breadcrumbTo(pathname, search, runChildCrumbs)
-              }
-              origin={`?from=run-${runId}`}
+        <DetailSection
+          title={
+            skillRows?.length
+              ? t("agentic.planRun.skillsTitle", { count: skillRows.length })
+              : t("agentic.planRun.skillsTitleEmpty")
+          }
+          description={
+            skillRows?.length
+              ? t("agentic.planRun.skillsDescription")
+              : undefined
+          }
+        >
+          {skillRows == null ? (
+            <EmptyTextMessage message={t("agentic.common.unavailable")} />
+          ) : skillRows.length > 0 ? (
+            <SkillsTable
+              rows={skillRows}
+              linkTo={(pathname) => runLink(pathname, `?from=run-${runId}`)}
             />
-          </StackItem>
-        </Stack>
-      </PageSection>
-
-      {skillRows.length > 0 && (
-        <PageSection hasBodyWrapper={false}>
-          <Stack hasGutter>
-            <StackItem>
-              <Title headingLevel="h2" size="md">
-                {t("agentic.planRun.skillsTitle", { count: skillRows.length })}
-              </Title>
-              <Content component="p">
-                {t("agentic.planRun.skillsDescription")}
-              </Content>
-            </StackItem>
-            <StackItem>
-              <SkillsTable
-                rows={skillRows}
-                linkTo={(pathname) =>
-                  breadcrumbTo(pathname, `?from=run-${runId}`, runChildCrumbs)
-                }
-              />
-            </StackItem>
-          </Stack>
-        </PageSection>
-      )}
-
-      {/* Save lessons learned — placeholder */}
-      {planRun.status === "Succeeded" && (
-        <PageSection hasBodyWrapper={false}>
-          <Flex>
-            <FlexItem>
-              <Button
-                variant={ButtonVariant.secondary}
-                isDisabled
-                aria-disabled
-                title={t("agentic.planRun.saveLessonsLearnedTooltip")}
-              >
-                {t("agentic.planRun.saveLessonsLearned")}
-              </Button>
-            </FlexItem>
-          </Flex>
-        </PageSection>
-      )}
+          ) : (
+            <SectionEmpty>{t("agentic.planRun.skillsEmpty")}</SectionEmpty>
+          )}
+        </DetailSection>
+      </RunPageBody>
 
       {runMigrationPlan.modal}
     </>

@@ -3,9 +3,11 @@
  * Stage 1 (Analyze) requires approval; stages 2-3 do not.
  */
 import {
+  AGENTIC_STATUS,
   approveButton,
   approveStage,
   expect,
+  main,
   protoUrl,
   stageLinks,
   stageStatus,
@@ -51,12 +53,11 @@ test.describe("Plan run approval", () => {
     );
     await stageLinks(page).first().click();
     await expect(page).toHaveURL(/\/plan-runs\/2\/stages\/4\?/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Analyze: Run #2 — Spring Boot to Quarkus"
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Analyze");
+    // The stage status is in the status line under the title (guide 4.3).
+    await expect(main(page).locator(AGENTIC_STATUS).first()).toHaveText(
+      "Action required"
     );
-    await expect(
-      page.getByRole("definition").filter({ hasText: "Action required" })
-    ).toBeVisible();
     await expect(approveButton(page)).toBeVisible();
     await page
       .getByRole("navigation", { name: "Breadcrumb" })
@@ -107,9 +108,9 @@ test.describe("Plan run approval", () => {
       })
     );
     await approveStage(page);
-    await expect(
-      page.getByRole("definition").filter({ hasText: /^Running$|^Succeeded$/ })
-    ).toBeVisible();
+    await expect(main(page).locator(AGENTIC_STATUS).first()).toHaveText(
+      /^(Running|Succeeded)$/
+    );
   });
 
   // Regression guard: plan-run-detail offers Approve for any AwaitingApproval stage, stage-run-detail only
