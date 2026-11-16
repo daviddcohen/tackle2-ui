@@ -5,15 +5,19 @@ import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { object, string } from "yup";
 import {
-  ActionGroup,
   Alert,
   Button,
   ButtonVariant,
+  Content,
   Form,
-  FormGroup,
-  Spinner,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  Skeleton,
+  Stack,
 } from "@patternfly/react-core";
 
+import { AdminPaths } from "@app/Paths";
 import { ModelProjection, ModelRequest } from "@app/agentic";
 import { IdentityKind } from "@app/api/models";
 import { FilterSelectOptionProps } from "@app/components/FilterToolbar/FilterToolbar";
@@ -24,8 +28,11 @@ import {
   HookFormPFTextInput,
 } from "@app/components/HookFormPFFields";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
+import { statusPresentation } from "@app/pages/agentic/components/agentic-status";
 import {
   useCreateGatewayMutation,
+  useFetchAgents,
   useFetchAvailableModels,
   useFetchGateways,
   useFetchProviders,
@@ -33,6 +40,10 @@ import {
 } from "@app/queries/agentic";
 import { useFetchIdentities } from "@app/queries/identities";
 import { duplicateNameCheck, getAxiosErrorMessage } from "@app/utils/utils";
+
+/** Ids of the form's modal title and description, for the Modal that hosts the form. */
+export const MODEL_FORM_TITLE_ID = "model-form-title";
+export const MODEL_FORM_DESCRIPTION_ID = "model-form-description";
 
 /** Hub identity kinds that can hold a model provider's API key. */
 export const MODEL_CREDENTIAL_KINDS: readonly IdentityKind[] = ["bearer"];
@@ -54,8 +65,33 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const { gateways } = useFetchGateways();
-  const { providers, isLoading: isLoadingProviders } = useFetchProviders();
-  const { identities, isFetching: isLoadingIdentities } = useFetchIdentities();
+  const { providers } = useFetchProviders();
+  const { identities, isSuccess: isIdentitiesLoaded } = useFetchIdentities();
+  const credentialsLink = useLinkComponent(AdminPaths.identities);
+  // The in-use sentence counts agents only once they are known (X6): a
+  // skeleton while they load, a usage-unchecked sentence if they fail.
+  const {
+    agents,
+    isSuccess: isAgentsLoaded,
+    fetchError: agentsError,
+  } = useFetchAgents();
+  const usedByCount =
+    model != null && isAgentsLoaded
+      ? agents.filter((agent) => agent.model.id === model.id).length
+      : 0;
+  const isUsageLoading =
+    model != null && !isAgentsLoaded && agentsError == null;
+  const inUse =
+    model == null || isUsageLoading
+      ? undefined
+      : !isAgentsLoaded
+        ? t("agentic.model.editUsageUnchecked")
+        : usedByCount > 0
+          ? t("agentic.model.inUse", { count: usedByCount })
+          : undefined;
+  const usageSkeleton = (
+    <Skeleton width="50%" screenreaderText={t("terms.loading")} />
+  );
 
   // Credentials are Hub identities that hold an API key. The Model's current
   // credential stays selectable even when the Hub no longer lists it.
@@ -78,14 +114,26 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
   // Gateway references a Secret, see adapters/models.ts) can be edited
   // without choosing one; a new Model needs one.
   const isCredentialRequired = model == null || model.credential != null;
+  // Without any API-key credential the next step is to create one (AD9). The
+  // group renders one helper item and an error would replace it, so the link
+  // stays and "A credential is required." is not shown: Create stays disabled.
+  const hasNoCredentials = isIdentitiesLoaded && credentialOptions.length === 0;
 
-  const providerOptions: FilterSelectOptionProps[] = providers.map((p) => ({
-    value: p.id,
-    label: t("agentic.model.providerOption", {
-      provider: p.name,
-      type: t(`agentic.provider.types.${p.providerType}`),
-    }),
-  }));
+  // Sorted by name; each option says its type and verification status (MF1).
+  const providerOptions: FilterSelectOptionProps[] = [...providers]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) => ({
+      value: p.id,
+      label: p.name,
+      optionProps: {
+        description: t("agentic.model.providerOptionDescription", {
+          type: t(`agentic.provider.types.${p.providerType}`),
+          status: t(
+            statusPresentation.verification[p.verificationStatus].labelKey
+          ),
+        }),
+      },
+    }));
 
   const onSuccess = () => {
     pushNotification({
@@ -154,11 +202,12 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
   const selectedProviderId = useWatch({ control, name: "providerId" });
   const selectedProvider = providers.find((p) => p.id === selectedProviderId);
 
-  const { availableModels, isFetching: isFetchingModels } =
-    useFetchAvailableModels(selectedProviderId || undefined);
+  const { availableModels } = useFetchAvailableModels(
+    selectedProviderId || undefined
+  );
   const modelOptions: FilterSelectOptionProps[] = availableModels.map((m) => ({
     value: m.id,
-    label: m.displayName,
+    label: t("agentic.model.modelIdOption", { name: m.displayName, id: m.id }),
   }));
   // Keep the saved Model ID selectable even when the provider no longer lists it.
   const currentModelId = useWatch({ control, name: "model" });
@@ -195,8 +244,37 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
     else createModel(payload);
   };
 
-  return (
-    <Form onSubmit={handleSubmit(onSubmit)}>
+  const statusAlert =
+    model != null && model.verificationStatus !== "verified" ? (
+      <Alert
+        isInline
+        isPlain
+        variant={model.verificationStatus === "unreachable" ? "danger" : "info"}
+        title={
+          model.verificationStatus === "unreachable"
+            ? t("agentic.model.unreachableTitle")
+            : t("agentic.model.pendingTitle")
+        }
+      >
+        <Content>
+          <Content component="p">
+            {[model.statusReason, t("agentic.model.statusAlertAction")]
+              .filter(Boolean)
+              .join(" ")}
+          </Content>
+          {isUsageLoading
+            ? usageSkeleton
+            : inUse != null && <Content component="p">{inUse}</Content>}
+        </Content>
+      </Alert>
+    ) : isUsageLoading ? (
+      usageSkeleton
+    ) : inUse != null ? (
+      <Alert isInline isPlain variant="warning" title={inUse} />
+    ) : null;
+
+  const form = (
+    <Form id="model-form" onSubmit={handleSubmit(onSubmit)}>
       <HookFormPFTextInput
         control={control}
         name="name"
@@ -216,99 +294,114 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
         label={t("agentic.model.provider")}
         fieldId="model-provider"
         isRequired
-        helperText={t("agentic.model.providerHelp")}
-        renderInput={({ field: { value, name, onChange } }) =>
-          // TypeaheadSelect reads its display text once on mount, so wait for the options.
-          isLoadingProviders ? (
-            <Spinner size="md" />
-          ) : (
-            <TypeaheadSelect
-              toggleId="model-provider-select"
-              toggleAriaLabel={t("agentic.model.providerSelect")}
-              ariaLabel={name}
-              value={value}
-              options={providerOptions}
-              onSelect={(selection) => {
-                onProviderChange(selection ?? "");
-                onChange(selection ?? "");
-              }}
-              placeholderText={t("agentic.model.providerPlaceholder")}
-            />
-          )
+        helperText={
+          selectedProvider
+            ? t("agentic.model.providerEndpoint", {
+                endpoint: selectedProvider.endpoint,
+              })
+            : t("agentic.model.providerHelp")
         }
+        renderInput={({ field: { value, name, onChange } }) => (
+          <TypeaheadSelect
+            toggleId="model-provider-select"
+            toggleAriaLabel={t("agentic.model.providerSelect")}
+            ariaLabel={name}
+            value={value}
+            options={providerOptions}
+            onSelect={(selection) => {
+              onProviderChange(selection ?? "");
+              onChange(selection ?? "");
+            }}
+            placeholderText={t("agentic.model.providerPlaceholder")}
+          />
+        )}
       />
-      {selectedProvider && (
-        <Alert
-          isInline
-          variant="info"
-          title={t("agentic.model.providerEndpoint", {
-            provider: selectedProvider.name,
-            endpoint: selectedProvider.endpoint,
-          })}
-        />
-      )}
-      {selectedProvider && (
-        <HookFormPFGroupController
-          control={control}
-          name="model"
-          label={t("agentic.model.modelId")}
-          fieldId="model-id"
-          isRequired
-          renderInput={({ field: { value, name, onChange } }) =>
-            isFetchingModels ? (
-              <FormGroup fieldId="model-id-loading">
-                <Spinner size="md" />
-              </FormGroup>
-            ) : (
-              <TypeaheadSelect
-                toggleId="model-id-select"
-                toggleAriaLabel={t("agentic.model.modelSelect")}
-                ariaLabel={name}
-                value={value}
-                options={modelOptions}
-                onSelect={(selection) => onChange(selection ?? "")}
-                placeholderText={t("agentic.model.modelPlaceholder")}
-              />
-            )
-          }
-        />
-      )}
-      {!selectedProvider && (
-        <HookFormPFTextInput
-          control={control}
-          name="model"
-          label={t("agentic.model.modelId")}
-          fieldId="model-id"
-          isRequired
-          helperText={t("agentic.model.modelHelp")}
-        />
-      )}
+      <HookFormPFGroupController
+        control={control}
+        name="model"
+        label={t("agentic.model.modelId")}
+        fieldId="model-id"
+        isRequired
+        helperText={
+          selectedProvider
+            ? t("agentic.model.modelOffered", {
+                provider: selectedProvider.name,
+              })
+            : t("agentic.model.modelHelp")
+        }
+        renderInput={({ field: { value, name, onChange } }) => (
+          <TypeaheadSelect
+            toggleId="model-id-select"
+            toggleAriaLabel={t("agentic.model.modelSelect")}
+            ariaLabel={name}
+            value={value}
+            options={modelOptions}
+            onSelect={(selection) => onChange(selection ?? "")}
+            placeholderText={t("agentic.model.modelPlaceholder")}
+            isDisabled={!selectedProvider}
+          />
+        )}
+      />
       <HookFormPFGroupController
         control={control}
         name="credentialId"
         label={t("agentic.model.credential")}
         fieldId="model-credential"
-        helperText={t("agentic.model.credentialHelp")}
-        isRequired={isCredentialRequired}
-        renderInput={({ field: { value, name, onChange } }) =>
-          isLoadingIdentities ? (
-            <Spinner size="md" />
+        errorsSuppressed={hasNoCredentials}
+        helperText={
+          hasNoCredentials ? (
+            <>
+              {t("agentic.model.credentialHelp")}{" "}
+              <Button variant="link" isInline component={credentialsLink}>
+                {t("agentic.model.credentialNone")}
+              </Button>
+            </>
           ) : (
-            <TypeaheadSelect
-              toggleId="model-credential-select"
-              toggleAriaLabel={t("agentic.model.credentialSelect")}
-              ariaLabel={name}
-              value={value}
-              options={credentialOptions}
-              onSelect={(selection) => onChange(selection ?? "")}
-              placeholderText={t("agentic.model.credentialPlaceholder")}
-            />
+            t("agentic.model.credentialHelp")
           )
         }
+        isRequired={isCredentialRequired}
+        renderInput={({ field: { value, name, onChange } }) => (
+          <TypeaheadSelect
+            toggleId="model-credential-select"
+            toggleAriaLabel={t("agentic.model.credentialSelect")}
+            ariaLabel={name}
+            value={value}
+            options={credentialOptions}
+            onSelect={(selection) => onChange(selection ?? "")}
+            placeholderText={t("agentic.model.credentialPlaceholder")}
+          />
+        )}
       />
-      <ActionGroup>
+    </Form>
+  );
+
+  return (
+    <>
+      <ModalHeader
+        labelId={MODEL_FORM_TITLE_ID}
+        descriptorId={MODEL_FORM_DESCRIPTION_ID}
+        title={model ? t("agentic.model.edit") : t("agentic.model.create")}
+        description={
+          model
+            ? t("agentic.model.editDescription")
+            : t("agentic.model.createDescription")
+        }
+      />
+      <ModalBody>
+        {statusAlert ? (
+          <Stack hasGutter>
+            {statusAlert}
+            {form}
+          </Stack>
+        ) : (
+          form
+        )}
+      </ModalBody>
+      <ModalFooter>
         <Button
           type="submit"
+          form="model-form"
           variant={ButtonVariant.primary}
           isDisabled={
             !isDirty || !isValid || isSubmitting || isValidating || isSaving
@@ -316,10 +409,10 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
         >
           {model ? t("actions.save") : t("actions.create")}
         </Button>
-        <Button type="button" variant={ButtonVariant.link} onClick={onClose}>
+        <Button variant={ButtonVariant.link} onClick={onClose}>
           {t("actions.cancel")}
         </Button>
-      </ActionGroup>
-    </Form>
+      </ModalFooter>
+    </>
   );
 };

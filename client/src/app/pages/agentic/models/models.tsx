@@ -1,25 +1,27 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
+import { Link, generatePath } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
   Content,
-  EmptyState,
-  EmptyStateBody,
+  Flex,
+  FlexItem,
   Label,
+  List,
+  ListItem,
   Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
-  Stack,
-  StackItem,
+  Popover,
+  Skeleton,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem,
+  Tooltip,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
   Table,
@@ -30,14 +32,17 @@ import {
   Tr,
 } from "@patternfly/react-table";
 
-import { ModelProjection } from "@app/agentic";
+import { AdminPaths, DevPaths } from "@app/Paths";
+import { Agent, ModelProjection } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { PageHeader } from "@app/components/PageHeader";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -45,33 +50,63 @@ import {
   TableRowContentWithControls,
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
+import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { useFormModalState } from "@app/hooks/useFormModalState";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { VerificationStatusText } from "@app/pages/agentic/components/agentic-status";
 import {
   useDeleteGatewayMutation,
   useFetchAgents,
   useFetchGateways,
+  useFetchProviders,
   useSetDefaultModelMutation,
 } from "@app/queries/agentic";
 import { modelsWriteScopes } from "@app/scopes";
+import { deleteActionProps, disabledActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
-import { ModelForm } from "./components/model-form";
+import {
+  MODEL_FORM_DESCRIPTION_ID,
+  MODEL_FORM_TITLE_ID,
+  ModelForm,
+} from "./components/model-form";
 
 const ModelsPage: React.FC = () => {
   const { t } = useTranslation();
   const canManageModels = useHasSomeScopes(modelsWriteScopes);
   const { pushNotification } = React.useContext(NotificationsContext);
-  const { gateways, isLoading, fetchError, refetch } = useFetchGateways();
-  const { agents } = useFetchAgents();
+  const { gateways, isFetching, isLoading, fetchError, refetch } =
+    useFetchGateways();
+  // Usage comes from the agents query: never "Not used" or an enabled Delete before it succeeded (X6).
+  const {
+    agents,
+    isSuccess: isAgentsLoaded,
+    fetchError: agentsError,
+  } = useFetchAgents();
+  // Every model needs a provider: only a loaded, empty list says so (X6).
+  const {
+    providers,
+    isLoading: isLoadingProviders,
+    fetchError: providersError,
+  } = useFetchProviders();
+  const hasNoProviders =
+    !isLoadingProviders && !providersError && providers.length === 0;
+  // An empty model list offers its next step only once that count is known.
+  const isEmptyStateWaiting = gateways.length === 0 && isLoadingProviders;
+  const providersLink = useLinkComponent(AdminPaths.providers);
+  // Agent links from the Used by popover return here (AD7).
+  const { to } = useBreadcrumbs(t("sidebar.models"), []);
   const [modalState, setModalState, formKey] = useFormModalState<
     "create" | ModelProjection
   >();
   const [modelToDelete, setModelToDelete] =
     React.useState<ModelProjection | null>(null);
+  const [modelToSetDefault, setModelToSetDefault] =
+    React.useState<ModelProjection | null>(null);
+  const currentDefault = gateways.find((model) => model.isOrganizationDefault);
 
   const handleError = (error: AxiosError) => {
     pushNotification({
@@ -101,13 +136,14 @@ const ModelsPage: React.FC = () => {
       name: t("terms.name"),
       provider: t("agentic.model.provider"),
       model: t("agentic.model.modelId"),
-      connection: t("agentic.model.connection"),
+      status: t("agentic.model.status"),
       usage: t("agentic.model.usage"),
     },
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    hasActionsColumn: true,
+    // No actions column at all for a user who has no actions (guide 4.1).
+    hasActionsColumn: canManageModels,
     filterCategories: [
       {
         categoryKey: "name",
@@ -144,20 +180,93 @@ const ModelsPage: React.FC = () => {
     expansionDerivedState: { isCellExpanded },
   } = tableControls;
 
-  const getUsageCount = (model: ModelProjection) =>
-    agents.filter((agent) => agent.model.id === model.id).length;
+  const getUsers = (model: ModelProjection) =>
+    agents
+      .filter((agent) => agent.model.id === model.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+  const renderUsedBy = (users: Agent[]) => {
+    if (agentsError) {
+      return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+    }
+    if (!isAgentsLoaded)
+      return <Skeleton screenreaderText={t("terms.loading")} />;
+    if (users.length === 0) {
+      return <EmptyTextMessage message={t("agentic.model.notUsed")} />;
+    }
+    return (
+      <Popover
+        headerContent={t("agentic.model.usedByTitle", { count: users.length })}
+        bodyContent={
+          <List isPlain>
+            {users.map((agent) => (
+              <ListItem key={agent.id}>
+                <Link
+                  to={to(
+                    generatePath(DevPaths.agentDetails, { agentId: agent.id })
+                  )}
+                >
+                  {agent.name}
+                </Link>
+              </ListItem>
+            ))}
+          </List>
+        }
+      >
+        <Button variant="link" isInline>
+          {t("agentic.model.usedByAgents", { count: users.length })}
+        </Button>
+      </Popover>
+    );
+  };
+
+  /** Why Set as default is disabled; usage does not matter here (AD4). */
+  const getSetDefaultBlocker = (model: ModelProjection) => {
+    if (model.isOrganizationDefault)
+      return t("agentic.model.setDefaultAlready");
+    if (model.verificationStatus !== "verified") {
+      return t("agentic.model.setDefaultUnverified");
+    }
+    return undefined;
+  };
+
+  /** Why Delete is disabled: the default first, then unknown or actual usage. */
+  const getDeleteBlocker = (model: ModelProjection, users: Agent[]) => {
+    if (model.isOrganizationDefault) return t("agentic.model.deleteDefault");
+    if (!isAgentsLoaded) return t("agentic.common.usageUnchecked");
+    if (users.length > 0) {
+      return t("agentic.model.deleteInUse", { count: users.length });
+    }
+    return undefined;
+  };
+
+  /** The server's reason, then what it means for agents or what to check (guide 5.3). */
+  const getStatusText = (model: ModelProjection) => {
+    const effect =
+      model.verificationStatus === "pending"
+        ? t("agentic.model.pendingEffect")
+        : model.verificationStatus === "unreachable"
+          ? t("agentic.model.unreachableEffect")
+          : undefined;
+    return [model.statusReason, effect].filter(Boolean).join(" ");
+  };
 
   return (
     <>
       <PageSection hasBodyWrapper={false}>
-        <Content>
-          <Content component="h1">{t("agentic.model.title")}</Content>
-          <Content component="p">{t("agentic.model.description")}</Content>
-          <Content component="small">{t("agentic.model.defaultHelp")}</Content>
-        </Content>
+        <PageHeader
+          title={t("agentic.model.title")}
+          description={
+            <Content component="p">{t("agentic.model.description")}</Content>
+          }
+          breadcrumbs={[]}
+        />
       </PageSection>
       <PageSection hasBodyWrapper={false}>
-        <ConditionalRender when={isLoading} then={<AppPlaceholder />}>
+        <ConditionalRender
+          when={isFetching && !(gateways || fetchError)}
+          then={<AppPlaceholder />}
+        >
           <div
             style={{
               backgroundColor:
@@ -166,16 +275,29 @@ const ModelsPage: React.FC = () => {
           >
             <Toolbar {...toolbarProps}>
               <ToolbarContent>
-                <FilterToolbar {...filterToolbarProps} />
+                <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
                 {canManageModels && (
                   <ToolbarGroup variant="action-group">
                     <ToolbarItem>
-                      <Button
-                        variant={ButtonVariant.primary}
-                        onClick={() => setModalState("create")}
-                      >
-                        {t("agentic.model.create")}
-                      </Button>
+                      {hasNoProviders ? (
+                        <Tooltip
+                          content={t("agentic.model.createProviderFirst")}
+                        >
+                          <Button
+                            variant={ButtonVariant.primary}
+                            isAriaDisabled
+                          >
+                            {t("agentic.model.create")}
+                          </Button>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          variant={ButtonVariant.primary}
+                          onClick={() => setModalState("create")}
+                        >
+                          {t("agentic.model.create")}
+                        </Button>
+                      )}
                     </ToolbarItem>
                   </ToolbarGroup>
                 )}
@@ -193,16 +315,24 @@ const ModelsPage: React.FC = () => {
                 <Tr>
                   <TableHeaderContentWithControls {...tableControls}>
                     <Th {...getThProps({ columnKey: "name" })} />
-                    <Th {...getThProps({ columnKey: "provider" })} />
+                    <Th
+                      {...getThProps({ columnKey: "provider" })}
+                      modifier="wrap"
+                    />
                     <Th {...getThProps({ columnKey: "model" })} />
-                    <Th {...getThProps({ columnKey: "connection" })} />
-                    <Th {...getThProps({ columnKey: "usage" })} />
-                    <Th screenReaderText={t("actions.rowActions")} />
+                    <Th {...getThProps({ columnKey: "status" })} width={30} />
+                    <Th
+                      {...getThProps({ columnKey: "usage" })}
+                      modifier="fitContent"
+                    />
+                    {canManageModels && (
+                      <Th screenReaderText={t("actions.rowActions")} />
+                    )}
                   </TableHeaderContentWithControls>
                 </Tr>
               </Thead>
               <ConditionalTableBody
-                isLoading={isLoading}
+                isLoading={isLoading || isEmptyStateWaiting}
                 isError={!!fetchError}
                 isNoData={currentPageItems.length === 0}
                 noDataEmptyState={
@@ -211,23 +341,41 @@ const ModelsPage: React.FC = () => {
                       title={t("message.noResultsFoundTitle")}
                       description={t("message.noResultsFoundBody")}
                     />
+                  ) : !canManageModels ? (
+                    <NoDataEmptyState
+                      title={t("agentic.model.emptyTitle")}
+                      description={t("agentic.model.emptyReadOnly")}
+                    />
+                  ) : hasNoProviders ? (
+                    <NoDataEmptyState
+                      title={t("agentic.model.emptyTitle")}
+                      description={t("agentic.model.emptyNoProviders")}
+                      actions={
+                        <Button variant="primary" component={providersLink}>
+                          {t("agentic.model.goToProviders")}
+                        </Button>
+                      }
+                    />
                   ) : (
-                    <EmptyState
-                      headingLevel="h2"
-                      icon={CubesIcon}
-                      titleText={t("agentic.model.emptyTitle")}
-                      variant="sm"
-                    >
-                      <EmptyStateBody>
-                        {t("agentic.model.emptyDescription")}
-                      </EmptyStateBody>
-                    </EmptyState>
+                    <NoDataEmptyState
+                      title={t("agentic.model.emptyTitle")}
+                      description={t("agentic.model.emptyDescription")}
+                      actions={
+                        <Button
+                          variant="primary"
+                          onClick={() => setModalState("create")}
+                        >
+                          {t("agentic.model.create")}
+                        </Button>
+                      }
+                    />
                   )
                 }
                 numRenderedColumns={numRenderedColumns}
               >
                 {currentPageItems.map((model, rowIndex) => {
-                  const usageCount = getUsageCount(model);
+                  const users = getUsers(model);
+                  const deleteBlocker = getDeleteBlocker(model, users);
                   return (
                     <Tbody key={model.id} isExpanded={isCellExpanded(model)}>
                       <Tr {...getTrProps({ item: model })}>
@@ -236,62 +384,80 @@ const ModelsPage: React.FC = () => {
                           item={model}
                           rowIndex={rowIndex}
                         >
-                          <Td width={25} {...getTdProps({ columnKey: "name" })}>
-                            <Stack hasGutter>
-                              <StackItem>{model.name}</StackItem>
-                              {model.isOrganizationDefault && (
-                                <StackItem>
-                                  <Label color="blue" isCompact>
-                                    {t("agentic.model.defaultModel")}
-                                  </Label>
-                                </StackItem>
-                              )}
-                            </Stack>
-                          </Td>
                           <Td
-                            width={20}
-                            {...getTdProps({ columnKey: "provider" })}
+                            modifier="nowrap"
+                            {...getTdProps({ columnKey: "name" })}
                           >
+                            {model.isOrganizationDefault ? (
+                              <Flex
+                                spaceItems={{ default: "spaceItemsSm" }}
+                                alignItems={{ default: "alignItemsCenter" }}
+                                flexWrap={{ default: "nowrap" }}
+                              >
+                                <FlexItem>{model.name}</FlexItem>
+                                <FlexItem>
+                                  {/* focusable so keyboard users reach the tooltip */}
+                                  <Tooltip
+                                    content={t("agentic.model.defaultTooltip")}
+                                  >
+                                    <Label
+                                      variant="outline"
+                                      isCompact
+                                      tabIndex={0}
+                                    >
+                                      {t("agentic.model.defaultLabel")}
+                                    </Label>
+                                  </Tooltip>
+                                </FlexItem>
+                              </Flex>
+                            ) : (
+                              model.name
+                            )}
+                          </Td>
+                          <Td {...getTdProps({ columnKey: "provider" })}>
                             {model.provider.name}
                           </Td>
                           <Td
-                            width={20}
+                            modifier="nowrap"
                             {...getTdProps({ columnKey: "model" })}
                           >
-                            {model.model}
+                            <span className={textStyles.fontFamilyMonospace}>
+                              {model.model}
+                            </span>
                           </Td>
-                          <Td
-                            width={20}
-                            {...getTdProps({ columnKey: "connection" })}
-                          >
+                          <Td {...getTdProps({ columnKey: "status" })}>
                             <VerificationStatusText
                               status={model.verificationStatus}
-                              supportingText={model.statusReason}
+                              supportingText={getStatusText(model)}
                             />
                           </Td>
                           <Td
-                            width={15}
+                            modifier="nowrap"
                             {...getTdProps({ columnKey: "usage" })}
                           >
-                            {t("agentic.model.agentUsage", {
-                              count: usageCount,
-                            })}
+                            {renderUsedBy(users)}
                           </Td>
-                          <Td isActionCell>
-                            {canManageModels && (
+                          {canManageModels && (
+                            <Td isActionCell>
                               <ActionsColumn
                                 items={[
-                                  {
-                                    title: t("agentic.model.setDefault"),
-                                    onClick: () => setDefault(model.id),
-                                    isDisabled: model.isOrganizationDefault,
-                                  },
                                   {
                                     title: t("actions.edit"),
                                     onClick: () =>
                                       openModalAfterMenuClose(() =>
                                         setModalState(model)
                                       ),
+                                  },
+                                  {
+                                    title: t("agentic.model.setDefault"),
+                                    onClick: () =>
+                                      openModalAfterMenuClose(() =>
+                                        setModelToSetDefault(model)
+                                      ),
+                                    ...disabledActionProps(
+                                      getSetDefaultBlocker(model),
+                                      "left"
+                                    ),
                                   },
                                   { isSeparator: true },
                                   {
@@ -300,28 +466,12 @@ const ModelsPage: React.FC = () => {
                                       openModalAfterMenuClose(() =>
                                         setModelToDelete(model)
                                       ),
-                                    isDanger: true,
-                                    isAriaDisabled:
-                                      usageCount > 0 ||
-                                      model.isOrganizationDefault,
-                                    tooltipProps: model.isOrganizationDefault
-                                      ? {
-                                          content: t(
-                                            "agentic.model.deleteDefault"
-                                          ),
-                                        }
-                                      : usageCount > 0
-                                        ? {
-                                            content: t(
-                                              "agentic.model.deleteInUse"
-                                            ),
-                                          }
-                                        : undefined,
+                                    ...deleteActionProps(deleteBlocker),
                                   },
                                 ]}
                               />
-                            )}
-                          </Td>
+                            </Td>
+                          )}
                         </TableRowContentWithControls>
                       </Tr>
                     </Tbody>
@@ -340,17 +490,12 @@ const ModelsPage: React.FC = () => {
 
       <Modal
         variant="medium"
+        aria-labelledby={MODEL_FORM_TITLE_ID}
+        aria-describedby={MODEL_FORM_DESCRIPTION_ID}
         isOpen={modalState != null}
         onClose={() => setModalState(null)}
       >
-        <ModalHeader
-          title={
-            modalState === "create"
-              ? t("agentic.model.create")
-              : t("agentic.model.edit")
-          }
-        />
-        <ModalBody>
+        {modalState != null && (
           <ModelForm
             key={formKey}
             model={modalState === "create" ? null : modalState}
@@ -359,14 +504,15 @@ const ModelsPage: React.FC = () => {
               refetch();
             }}
           />
-        </ModalBody>
+        )}
       </Modal>
 
       {modelToDelete && (
         <ConfirmDialog
-          title={t("agentic.model.deleteTitle", { model: modelToDelete.name })}
-          titleIconVariant="warning"
-          message={t("agentic.model.deleteDescription")}
+          title={t("agentic.model.deleteTitle")}
+          message={t("agentic.model.deleteBody", {
+            model: modelToDelete.name,
+          })}
           isOpen
           confirmBtnVariant={ButtonVariant.danger}
           confirmBtnLabel={t("actions.delete")}
@@ -376,6 +522,31 @@ const ModelsPage: React.FC = () => {
           onConfirm={() => {
             deleteModel(modelToDelete.id);
             setModelToDelete(null);
+          }}
+        />
+      )}
+      {modelToSetDefault && (
+        <ConfirmDialog
+          title={t("agentic.model.setDefaultTitle")}
+          message={
+            currentDefault
+              ? t("agentic.model.setDefaultBody", {
+                  model: modelToSetDefault.name,
+                  current: currentDefault.name,
+                })
+              : t("agentic.model.setDefaultBodyFirst", {
+                  model: modelToSetDefault.name,
+                })
+          }
+          isOpen
+          confirmBtnVariant={ButtonVariant.primary}
+          confirmBtnLabel={t("agentic.model.setDefault")}
+          cancelBtnLabel={t("actions.cancel")}
+          onCancel={() => setModelToSetDefault(null)}
+          onClose={() => setModelToSetDefault(null)}
+          onConfirm={() => {
+            setDefault(modelToSetDefault.id);
+            setModelToSetDefault(null);
           }}
         />
       )}

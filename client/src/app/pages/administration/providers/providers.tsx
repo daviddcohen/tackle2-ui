@@ -5,18 +5,17 @@ import {
   Button,
   ButtonVariant,
   Content,
-  EmptyState,
-  EmptyStateBody,
+  List,
+  ListItem,
   Modal,
-  ModalBody,
-  ModalHeader,
   PageSection,
+  Popover,
+  Skeleton,
   Toolbar,
   ToolbarContent,
   ToolbarGroup,
   ToolbarItem,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
 import {
   ActionsColumn,
   Table,
@@ -27,14 +26,16 @@ import {
   Tr,
 } from "@patternfly/react-table";
 
-import { Provider } from "@app/agentic";
+import { ModelProjection, Provider } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { PageHeader } from "@app/components/PageHeader";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -43,19 +44,27 @@ import {
 } from "@app/components/TableControls";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useFormModalState } from "@app/hooks/useFormModalState";
-import { VerificationStatusText } from "@app/pages/agentic/components/agentic-status";
+import {
+  VerificationStatusText,
+  statusPresentation,
+} from "@app/pages/agentic/components/agentic-status";
 import {
   useDeleteProviderMutation,
   useFetchGateways,
   useFetchProviders,
 } from "@app/queries/agentic";
 import { providersWriteScopes } from "@app/scopes";
+import { deleteActionProps } from "@app/utils/agentic";
 import {
   getAxiosErrorMessage,
   openModalAfterMenuClose,
 } from "@app/utils/utils";
 
-import { ProviderForm } from "./components/provider-form";
+import {
+  PROVIDER_FORM_DESCRIPTION_ID,
+  PROVIDER_FORM_TITLE_ID,
+  ProviderForm,
+} from "./components/provider-form";
 
 const ProvidersPage: React.FC = () => {
   const { t } = useTranslation();
@@ -63,17 +72,24 @@ const ProvidersPage: React.FC = () => {
   const canManageProviders = useHasSomeScopes(providersWriteScopes);
 
   const { providers, isFetching, isLoading, fetchError } = useFetchProviders();
-  const { gateways: models } = useFetchGateways();
-  const getModelCount = (provider: Provider) =>
-    models.filter((model) => model.provider.id === provider.id).length;
+  // Usage comes from the models query: never "Not used" or an enabled Delete before it succeeded (X6).
+  const {
+    gateways: models,
+    isSuccess: isModelsLoaded,
+    fetchError: modelsError,
+  } = useFetchGateways();
+  const getModels = (provider: Provider) =>
+    models
+      .filter((model) => model.provider.id === provider.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
   const [createUpdateModalState, setCreateUpdateModalState, formKey] =
     useFormModalState<"create" | Provider>();
   const isModalOpen = createUpdateModalState !== null;
   const providerToEdit =
     createUpdateModalState !== "create" ? createUpdateModalState : null;
 
-  const [providerToDelete, setProviderToDelete] = React.useState<Provider>();
-  const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
+  const [providerToDelete, setProviderToDelete] =
+    React.useState<Provider | null>(null);
 
   const { mutate: deleteProvider } = useDeleteProviderMutation(
     () =>
@@ -95,42 +111,32 @@ const ProvidersPage: React.FC = () => {
     items: providers,
     columnNames: {
       name: t("terms.name"),
-      providerType: t("agentic.provider.providerType"),
-      endpoint: t("agentic.provider.endpoint"),
-      status: t("agentic.provider.verificationStatus"),
-      lastVerified: t("agentic.provider.lastVerified"),
+      providerType: t("agentic.provider.type"),
+      endpoint: t("agentic.provider.endpointColumn"),
+      status: t("agentic.provider.status"),
+      usedBy: t("agentic.provider.usedBy"),
     },
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    hasActionsColumn: true,
+    // No actions column at all for a user who has no actions (guide 4.1).
+    hasActionsColumn: canManageProviders,
     filterCategories: [
       {
         categoryKey: "name",
         title: t("terms.name"),
         type: FilterType.search,
-        placeholderText: t("agentic.agent.filterByName"),
+        placeholderText: t("agentic.provider.filterByName"),
         getItemValue: (item) => item.name,
       },
       {
         categoryKey: "status",
-        title: t("agentic.provider.verificationStatus"),
+        title: t("agentic.provider.status"),
         type: FilterType.multiselect,
         placeholderText: t("agentic.provider.filterByStatus"),
-        selectOptions: [
-          {
-            value: "verified",
-            label: t("agentic.verificationStatus.verified"),
-          },
-          {
-            value: "pending",
-            label: t("agentic.verificationStatus.pending"),
-          },
-          {
-            value: "unreachable",
-            label: t("agentic.verificationStatus.unreachable"),
-          },
-        ],
+        selectOptions: Object.entries(statusPresentation.verification).map(
+          ([status, { labelKey }]) => ({ value: status, label: t(labelKey) })
+        ),
         matcher: (filter: string, item: Provider) =>
           item.verificationStatus === filter,
       },
@@ -140,7 +146,7 @@ const ProvidersPage: React.FC = () => {
     initialSort: { columnKey: "name", direction: "asc" },
     getSortValues: (item) => ({
       name: item.name,
-      providerType: item.providerType,
+      providerType: t(`agentic.provider.types.${item.providerType}`),
       status: item.verificationStatus,
     }),
     isLoading,
@@ -161,20 +167,85 @@ const ProvidersPage: React.FC = () => {
     },
   } = tableControls;
 
+  /** A provider's status does not block its models, so only the reason and what to check (amendment 1). */
+  const getStatusText = (provider: Provider) =>
+    [
+      provider.statusReason,
+      provider.verificationStatus === "unreachable"
+        ? t("agentic.provider.unreachableEffect")
+        : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+  /** One model is its name (models have no page); more open a popover of names (guide 2.4). */
+  const renderUsedBy = (users: ModelProjection[]) => {
+    if (modelsError) {
+      return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+    }
+    if (!isModelsLoaded) {
+      return <Skeleton screenreaderText={t("terms.loading")} />;
+    }
+    if (users.length === 0) {
+      return <EmptyTextMessage message={t("agentic.provider.notUsed")} />;
+    }
+    if (users.length === 1) return users[0].name;
+    return (
+      <Popover
+        headerContent={t("agentic.provider.usedByTitle", {
+          count: users.length,
+        })}
+        bodyContent={
+          <List isPlain>
+            {users.map((model) => (
+              <ListItem key={model.id}>{model.name}</ListItem>
+            ))}
+          </List>
+        }
+      >
+        <Button variant="link" isInline>
+          {t("agentic.provider.usedByModels", { count: users.length })}
+        </Button>
+      </Popover>
+    );
+  };
+
+  const getDeleteBlocker = (users: ModelProjection[]) => {
+    if (!isModelsLoaded) return t("agentic.common.usageUnchecked");
+    if (users.length > 0) {
+      return t("agentic.provider.deleteInUse", { count: users.length });
+    }
+    return undefined;
+  };
+
   const closeModal = () => setCreateUpdateModalState(null);
+  // The toolbar and the empty state each render their own button: an element id must stay unique.
+  const renderCreateButton = (id?: string) => (
+    <Button
+      type="button"
+      id={id}
+      variant={ButtonVariant.primary}
+      onClick={() => setCreateUpdateModalState("create")}
+    >
+      {t("agentic.provider.create")}
+    </Button>
+  );
 
   return (
     <>
       <PageSection hasBodyWrapper={false}>
-        <Content>
-          <Content component="h1">{t("agentic.provider.title")}</Content>
-          <Content component="p">{t("agentic.provider.description")}</Content>
-        </Content>
+        <PageHeader
+          title={t("agentic.provider.title")}
+          description={
+            <Content component="p">{t("agentic.provider.description")}</Content>
+          }
+          breadcrumbs={[]}
+        />
       </PageSection>
 
       <PageSection hasBodyWrapper={false}>
         <ConditionalRender
-          when={isFetching && !(providers.length || fetchError)}
+          when={isFetching && !(providers || fetchError)}
           then={<AppPlaceholder />}
         >
           <div
@@ -185,21 +256,14 @@ const ProvidersPage: React.FC = () => {
           >
             <Toolbar {...toolbarProps}>
               <ToolbarContent>
-                <FilterToolbar {...filterToolbarProps} />
-                <ToolbarGroup variant="action-group">
-                  {canManageProviders && (
+                <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
+                {canManageProviders && (
+                  <ToolbarGroup variant="action-group">
                     <ToolbarItem>
-                      <Button
-                        type="button"
-                        id="create-provider"
-                        variant={ButtonVariant.primary}
-                        onClick={() => setCreateUpdateModalState("create")}
-                      >
-                        {t("agentic.provider.create")}
-                      </Button>
+                      {renderCreateButton("create-provider")}
                     </ToolbarItem>
-                  )}
-                </ToolbarGroup>
+                  </ToolbarGroup>
+                )}
                 <ToolbarItem {...paginationToolbarItemProps}>
                   <SimplePagination
                     idPrefix="providers-table"
@@ -218,10 +282,15 @@ const ProvidersPage: React.FC = () => {
                   <TableHeaderContentWithControls {...tableControls}>
                     <Th {...getThProps({ columnKey: "name" })} />
                     <Th {...getThProps({ columnKey: "providerType" })} />
-                    <Th {...getThProps({ columnKey: "endpoint" })} />
-                    <Th {...getThProps({ columnKey: "status" })} />
-                    <Th {...getThProps({ columnKey: "lastVerified" })} />
-                    <Th screenReaderText={t("actions.rowActions")} />
+                    <Th {...getThProps({ columnKey: "endpoint" })} width={25} />
+                    <Th {...getThProps({ columnKey: "status" })} width={30} />
+                    <Th
+                      {...getThProps({ columnKey: "usedBy" })}
+                      modifier="fitContent"
+                    />
+                    {canManageProviders && (
+                      <Th screenReaderText={t("actions.rowActions")} />
+                    )}
                   </TableHeaderContentWithControls>
                 </Tr>
               </Thead>
@@ -236,103 +305,95 @@ const ProvidersPage: React.FC = () => {
                       description={t("message.noResultsFoundBody")}
                     />
                   ) : (
-                    <EmptyState
-                      headingLevel="h2"
-                      icon={CubesIcon}
-                      titleText={t("agentic.provider.emptyTitle")}
-                      variant="sm"
-                    >
-                      <EmptyStateBody>
-                        {t("agentic.provider.emptyDescription")}
-                      </EmptyStateBody>
-                    </EmptyState>
+                    <NoDataEmptyState
+                      title={t("agentic.provider.emptyTitle")}
+                      description={
+                        canManageProviders
+                          ? t("agentic.provider.emptyDescription")
+                          : t("agentic.provider.emptyReadOnly")
+                      }
+                      actions={
+                        canManageProviders ? renderCreateButton() : undefined
+                      }
+                    />
                   )
                 }
                 numRenderedColumns={numRenderedColumns}
               >
-                {currentPageItems.map((provider, rowIndex) => (
-                  <Tbody key={provider.id}>
-                    <Tr {...getTrProps({ item: provider })}>
-                      <TableRowContentWithControls
-                        {...tableControls}
-                        item={provider}
-                        rowIndex={rowIndex}
-                      >
-                        <Td width={20} {...getTdProps({ columnKey: "name" })}>
-                          {provider.name}
-                        </Td>
-                        <Td
-                          width={15}
-                          {...getTdProps({ columnKey: "providerType" })}
+                {currentPageItems.map((provider, rowIndex) => {
+                  const users = getModels(provider);
+                  const deleteBlocker = getDeleteBlocker(users);
+                  return (
+                    <Tbody key={provider.id}>
+                      <Tr {...getTrProps({ item: provider })}>
+                        <TableRowContentWithControls
+                          {...tableControls}
+                          item={provider}
+                          rowIndex={rowIndex}
                         >
-                          {t(
-                            `agentic.provider.types.${provider.providerType}`,
-                            {
-                              defaultValue: provider.providerType,
-                            }
-                          )}
-                        </Td>
-                        <Td
-                          width={25}
-                          {...getTdProps({ columnKey: "endpoint" })}
-                        >
-                          <Content component="small">
+                          <Td
+                            modifier="nowrap"
+                            {...getTdProps({ columnKey: "name" })}
+                          >
+                            {provider.name}
+                          </Td>
+                          <Td
+                            modifier="nowrap"
+                            {...getTdProps({ columnKey: "providerType" })}
+                          >
+                            {t(
+                              `agentic.provider.types.${provider.providerType}`,
+                              { defaultValue: provider.providerType }
+                            )}
+                          </Td>
+                          <Td
+                            modifier="truncate"
+                            tooltip={provider.endpoint}
+                            {...getTdProps({ columnKey: "endpoint" })}
+                          >
                             {provider.endpoint}
-                          </Content>
-                        </Td>
-                        <Td width={15} {...getTdProps({ columnKey: "status" })}>
-                          <VerificationStatusText
-                            status={provider.verificationStatus}
-                            supportingText={provider.statusReason}
-                          />
-                        </Td>
-                        <Td
-                          width={15}
-                          {...getTdProps({ columnKey: "lastVerified" })}
-                        >
-                          {provider.lastVerified
-                            ? new Date(provider.lastVerified).toLocaleString()
-                            : "—"}
-                        </Td>
-                        <Td isActionCell>
-                          {canManageProviders && (
-                            <ActionsColumn
-                              items={[
-                                {
-                                  title: t("actions.edit"),
-                                  onClick: () =>
-                                    openModalAfterMenuClose(() =>
-                                      setCreateUpdateModalState(provider)
-                                    ),
-                                },
-                                { isSeparator: true },
-                                {
-                                  title: t("actions.delete"),
-                                  onClick: () =>
-                                    openModalAfterMenuClose(() => {
-                                      setProviderToDelete(provider);
-                                      setIsDeleteOpen(true);
-                                    }),
-                                  isDanger: true,
-                                  isAriaDisabled: getModelCount(provider) > 0,
-                                  tooltipProps:
-                                    getModelCount(provider) > 0
-                                      ? {
-                                          content: t(
-                                            "agentic.provider.deleteInUse",
-                                            { count: getModelCount(provider) }
-                                          ),
-                                        }
-                                      : undefined,
-                                },
-                              ]}
+                          </Td>
+                          <Td {...getTdProps({ columnKey: "status" })}>
+                            <VerificationStatusText
+                              status={provider.verificationStatus}
+                              supportingText={getStatusText(provider)}
                             />
+                          </Td>
+                          <Td
+                            modifier="nowrap"
+                            {...getTdProps({ columnKey: "usedBy" })}
+                          >
+                            {renderUsedBy(users)}
+                          </Td>
+                          {canManageProviders && (
+                            <Td isActionCell>
+                              <ActionsColumn
+                                items={[
+                                  {
+                                    title: t("actions.edit"),
+                                    onClick: () =>
+                                      openModalAfterMenuClose(() =>
+                                        setCreateUpdateModalState(provider)
+                                      ),
+                                  },
+                                  { isSeparator: true },
+                                  {
+                                    title: t("actions.delete"),
+                                    onClick: () =>
+                                      openModalAfterMenuClose(() =>
+                                        setProviderToDelete(provider)
+                                      ),
+                                    ...deleteActionProps(deleteBlocker),
+                                  },
+                                ]}
+                              />
+                            </Td>
                           )}
-                        </Td>
-                      </TableRowContentWithControls>
-                    </Tr>
-                  </Tbody>
-                ))}
+                        </TableRowContentWithControls>
+                      </Tr>
+                    </Tbody>
+                  );
+                })}
               </ConditionalTableBody>
             </Table>
             <SimplePagination
@@ -347,44 +408,35 @@ const ProvidersPage: React.FC = () => {
       <Modal
         id="create-edit-provider-modal"
         variant="medium"
+        aria-labelledby={PROVIDER_FORM_TITLE_ID}
+        aria-describedby={PROVIDER_FORM_DESCRIPTION_ID}
         isOpen={isModalOpen}
         onClose={closeModal}
       >
-        <ModalHeader
-          title={
-            providerToEdit
-              ? t("agentic.provider.edit")
-              : t("agentic.provider.createTitle")
-          }
-        />
-        <ModalBody>
+        {isModalOpen && (
           <ProviderForm
             key={formKey}
             provider={providerToEdit}
             onClose={closeModal}
           />
-        </ModalBody>
+        )}
       </Modal>
 
-      {isDeleteOpen && (
+      {providerToDelete && (
         <ConfirmDialog
-          title={t("agentic.provider.deleteTitle", {
-            provider: providerToDelete?.name,
+          title={t("agentic.provider.deleteTitle")}
+          message={t("agentic.provider.deleteBody", {
+            provider: providerToDelete.name,
           })}
-          titleIconVariant="warning"
-          message={t("agentic.provider.deleteDescription")}
           isOpen
           confirmBtnVariant={ButtonVariant.danger}
           confirmBtnLabel={t("actions.delete")}
           cancelBtnLabel={t("actions.cancel")}
-          onCancel={() => setIsDeleteOpen(false)}
-          onClose={() => setIsDeleteOpen(false)}
+          onCancel={() => setProviderToDelete(null)}
+          onClose={() => setProviderToDelete(null)}
           onConfirm={() => {
-            if (providerToDelete) {
-              deleteProvider(providerToDelete.id);
-              setProviderToDelete(undefined);
-            }
-            setIsDeleteOpen(false);
+            deleteProvider(providerToDelete.id);
+            setProviderToDelete(null);
           }}
         />
       )}

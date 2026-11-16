@@ -6,6 +6,8 @@
 import type { Page } from "@playwright/test";
 
 import {
+  breadcrumb,
+  breadcrumbTitles,
   dataRows,
   dialog,
   expect,
@@ -13,6 +15,7 @@ import {
   expectTooltipOnHover,
   field,
   gotoProto,
+  mainHeading,
   openRowActions,
   pickTypeahead,
   rowByText,
@@ -52,26 +55,105 @@ test.describe("Models list", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Models" })
     ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Models are the LLMs agents run on. Only verified models can be used by agents."
+      )
+    ).toBeVisible();
+    await expect(page.getByRole("columnheader")).toContainText([
+      "Name",
+      "Provider",
+      "Model ID",
+      "Status",
+      "Used by",
+    ]);
     const claude = rowByText(page, "Claude 3.7 Sonnet");
-    await expect(claude).toContainText("Default Model");
+    await expect(claude).toContainText("Default");
     await expect(claude).toContainText("Verified");
-    await expect(claude).toContainText("3 Agents");
-    await expect(rowByText(page, "Granite Code 20B")).toContainText(
-      "Unreachable"
+    await expect(claude).toContainText("3 agents");
+    const granite = rowByText(page, "Granite Code 20B");
+    await expect(granite).toContainText("Unreachable");
+    await expect(granite).toContainText(
+      "The configured endpoint did not respond within 30 seconds. Check the API endpoint and credential."
     );
-    await expect(rowByText(page, "Gemini 2.5 Pro")).toContainText("Pending");
+    await expect(granite).toContainText("Not used");
+    const gemini = rowByText(page, "Gemini 2.5 Pro");
+    await expect(gemini).toContainText("Pending");
+    await expect(gemini).toContainText(
+      "Verification has not been run for this Model. Agents cannot use it until it is verified."
+    );
     expectHealthy(diagnostics);
+  });
+
+  test("the Default label explains itself on hover and on keyboard focus", async ({
+    page,
+  }) => {
+    const label = rowByText(page, "Claude 3.7 Sonnet").locator(
+      '[tabindex="0"]',
+      { hasText: /^Default$/ }
+    );
+    await expectTooltipOnHover(
+      page,
+      label,
+      "New agents start with this model selected."
+    );
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await label.focus();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "New agents start with this model selected."
+    );
+  });
+
+  test("Used by opens a popover of agent links that return to Models", async ({
+    page,
+  }) => {
+    const claude = rowByText(page, "Claude 3.7 Sonnet");
+    await claude.getByRole("button", { name: "3 agents" }).click();
+    const popover = page.getByRole("dialog", { name: "Used by 3 agents" });
+    await expect(popover.getByRole("link")).toHaveText([
+      "Code Migrator",
+      "Migration Proposal Agent",
+      "Security Review Agent",
+    ]);
+    await popover.getByRole("link", { name: "Code Migrator" }).click();
+    await expect(mainHeading(page)).toHaveText("Code Migrator");
+    expect(await breadcrumbTitles(page)).toEqual(["Models", "Code Migrator"]);
+    await breadcrumb(page).getByRole("link", { name: "Models" }).click();
+    await expect(page).toHaveURL(/\/models/);
+    await expect(dataRows(page)).toHaveCount(5);
   });
 
   test("default model cannot be deleted or re-set as default", async ({
     page,
   }) => {
     await openRowActions(page, "Claude 3.7 Sonnet");
-    await expect(
-      page.getByRole("menuitem", { name: "Set as Default" })
-    ).toBeDisabled();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "Edit",
+      "Set as default",
+      "Delete",
+    ]);
+    const setDefault = page.getByRole("menuitem", { name: "Set as default" });
+    await expect(setDefault).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "Edit" })).toBeEnabled();
+    await expectTooltipOnHover(page, setDefault, "Already the default model.");
+    await expectTooltipOnHover(
+      page,
+      page.getByRole("menuitem", { name: "Delete" }),
+      "Choose another default model before deleting this one."
+    );
+  });
+
+  test("only verified models can be set as default", async ({ page }) => {
+    await openRowActions(page, "Gemini 2.5 Pro");
+    const setDefault = page.getByRole("menuitem", { name: "Set as default" });
+    await expect(setDefault).toBeDisabled();
+    await expectTooltipOnHover(
+      page,
+      setDefault,
+      "Only verified models can be the default."
+    );
   });
 
   test("model used by agents cannot be deleted", async ({ page }) => {
@@ -79,23 +161,33 @@ test.describe("Models list", () => {
     await expect(page.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
   });
 
-  // Regression guard: models.tsx uses isDisabled + tooltipProps; disabled menu items get no pointer events so the tooltip never shows (agents.tsx uses isAriaDisabled correctly)
+  // Regression guard: a disabled menu item must be aria-disabled (disabledActionProps); with isDisabled it gets no pointer events and its tooltip never shows
   test("disabled Delete explains why on hover", async ({ page }) => {
     await openRowActions(page, "Llama 3.3 70B");
     await expectTooltipOnHover(
       page,
       page.getByRole("menuitem", { name: "Delete" }),
-      "Remove this Model from its Agents"
+      "Used by 2 agents. Remove it from those agents before deleting it."
     );
   });
 
   test("set another model as default moves the label", async ({ page }) => {
     await openRowActions(page, "GPT-4o");
-    await page.getByRole("menuitem", { name: "Set as Default" }).click();
-    await expect(toast(page, /default/i)).toBeVisible();
-    await expect(rowByText(page, "GPT-4o")).toContainText("Default Model");
+    await page.getByRole("menuitem", { name: "Set as default" }).click();
+    await expect(dialog(page)).toContainText("Change the default model?");
+    await expect(dialog(page)).toContainText(
+      "GPT-4o will replace Claude 3.7 Sonnet as the organization default. New agents start with the default model selected; existing agents keep the model they use."
+    );
+    await dialog(page).getByRole("button", { name: "Cancel" }).click();
+    await expect(rowByText(page, "Claude 3.7 Sonnet")).toContainText("Default");
+
+    await openRowActions(page, "GPT-4o");
+    await page.getByRole("menuitem", { name: "Set as default" }).click();
+    await dialog(page).getByRole("button", { name: "Set as default" }).click();
+    await expect(toast(page, "Default model updated")).toBeVisible();
+    await expect(rowByText(page, "GPT-4o")).toContainText("Default");
     await expect(rowByText(page, "Claude 3.7 Sonnet")).not.toContainText(
-      "Default Model"
+      "Default"
     );
   });
 
@@ -104,8 +196,9 @@ test.describe("Models list", () => {
   }) => {
     await openRowActions(page, "Granite Code 20B");
     await page.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(dialog(page)).toContainText("Delete model?");
     await expect(dialog(page)).toContainText(
-      'Delete Model "Granite Code 20B"?'
+      "Granite Code 20B will be deleted. It can no longer be selected for agents. This action cannot be undone."
     );
     await dialog(page).getByRole("button", { name: "Cancel" }).click();
     await expect(rowByText(page, "Granite Code 20B")).toHaveCount(1);
@@ -155,7 +248,7 @@ test.describe("Model form", () => {
     await expect(create).toBeDisabled();
     await name.fill("Claude 3.7 Sonnet");
     await expect(dialog(page)).toContainText(
-      "A Model with this name already exists."
+      "A model with this name already exists."
     );
     await name.fill("x".repeat(121));
     await expect(dialog(page)).toContainText(
@@ -168,13 +261,41 @@ test.describe("Model form", () => {
   });
 
   test("model ID options depend on the selected provider", async ({ page }) => {
-    await expect(dialog(page)).toContainText("Select a Provider first");
-    await pickTypeahead(page, "model-provider-select", /Anthropic Production/);
-    await page.locator("#model-id-select-input").click();
+    // the dialog is named and described by its header
+    await expect(
+      page.getByRole("dialog", { name: "Create model" })
+    ).toHaveAccessibleDescription(
+      "Agents can use a model once it is verified. Verification runs after you save."
+    );
+    await expect(dialog(page)).toContainText(
+      "The model provider that hosts this model."
+    );
+    await expect(dialog(page)).toContainText("Select a provider first.");
+    const modelId = page.locator("#model-id-select-input");
+    await expect(modelId).toBeDisabled();
+
+    // provider options are sorted and say their type and status
+    await page.locator("#model-provider-select-input").click();
     await expect(page.getByRole("option")).toHaveText([
-      "Claude Opus 5.5",
-      "Claude Sonnet 4.6",
-      "Claude Haiku 4.5",
+      /Anthropic ProductionAnthropic · Verified/,
+      /Azure OpenAI CorpAzure OpenAI · Unreachable/,
+      /Google Vertex AIGoogle Vertex AI · Pending/,
+      /IBM watsonxOther · Verified/,
+      /Internal OllamaOllama · Verified/,
+    ]);
+    await page.getByRole("option", { name: /Anthropic Production/ }).click();
+    await expect(dialog(page)).toContainText(
+      "Endpoint: https://api.anthropic.com/v1"
+    );
+    await expect(dialog(page)).toContainText(
+      "Models offered by Anthropic Production."
+    );
+    await expect(modelId).toBeEnabled();
+    await modelId.click();
+    await expect(page.getByRole("option")).toHaveText([
+      "Claude Opus 5.5 (claude-opus-5-5)",
+      "Claude Sonnet 4.6 (claude-sonnet-4-6)",
+      "Claude Haiku 4.5 (claude-haiku-4-5)",
     ]);
   });
 
@@ -222,7 +343,7 @@ test.describe("Model form", () => {
     await openRowActions(page, "QA Editable");
     await page.getByRole("menuitem", { name: "Edit" }).click();
     await expect(page.locator("#model-id-select-input")).toHaveValue(
-      "Claude Sonnet 4.6"
+      "Claude Sonnet 4.6 (claude-sonnet-4-6)"
     );
     await field(dialog(page), "Name").fill("QA Editable 2");
     await expect(
@@ -239,6 +360,38 @@ test.describe("Model form", () => {
     await expect(
       dialog(page).getByRole("button", { name: "Save" })
     ).toBeEnabled();
+  });
+
+  test("editing a model in use warns that changes apply to its agents", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Escape");
+    await openRowActions(page, "Claude 3.7 Sonnet");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(dialog(page)).toContainText("Edit model");
+    await expect(dialog(page)).toContainText(
+      "Saving verifies the model again."
+    );
+    await expect(dialog(page)).toContainText(
+      "Used by 3 agents. Changes apply to them."
+    );
+    await expect(
+      dialog(page).getByRole("button", { name: "Save" })
+    ).toBeDisabled();
+  });
+
+  test("editing an unreachable model shows its status and what to do", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Escape");
+    await openRowActions(page, "Granite Code 20B");
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    await expect(dialog(page)).toContainText("This model is unreachable");
+    await expect(dialog(page)).toContainText(
+      "The configured endpoint did not respond within 30 seconds. Check the API endpoint and credential, then save to verify it again."
+    );
+    // not in use, so no in-use sentence
+    await expect(dialog(page)).not.toContainText("Used by");
   });
 
   test("re-selecting the provider while editing keeps the saved Model ID", async ({
@@ -260,9 +413,19 @@ test.describe("Models scenarios and access", () => {
       persona: "platformEngineer",
       scenario: "initial",
     });
-    await expect(page.getByText("No Models configured")).toBeVisible();
+    await expect(page.getByText("No models yet")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Create model" })
+      page.getByText(
+        "Every model connects through a model provider. Create a model provider first, then create models here."
+      )
+    ).toBeVisible();
+    // without a model provider there is nothing to create a model from
+    const create = page.getByRole("button", { name: "Create model" });
+    await expect(create).toHaveAttribute("aria-disabled", "true");
+    await expectTooltipOnHover(page, create, "Create a model provider first.");
+    await page.getByRole("link", { name: "Go to model providers" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Model providers" })
     ).toBeVisible();
   });
 
@@ -290,7 +453,7 @@ test.describe("Models scenarios and access", () => {
     await expect(page.getByText("Unable to connect")).toBeVisible({
       timeout: 20000,
     });
-    await expect(page.getByText("No Models configured")).toHaveCount(0);
+    await expect(page.getByText("No models yet")).toHaveCount(0);
   });
 
   test("model rename is reflected on the Agents list", async ({ page }) => {
