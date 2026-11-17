@@ -10,6 +10,7 @@ import {
   BASE_PATH,
   type Named,
   agenticRequest,
+  appPath,
   expect,
   expectNoBrokenText,
   main,
@@ -223,10 +224,27 @@ test(
     expect(appLinks.length).toBeGreaterThan(3);
     for (const link of appLinks) {
       await test.step(`${link.text} -> ${link.href}`, async () => {
-        expect(new URL(link.href).pathname.startsWith(BASE_PATH)).toBe(true);
+        const target = new URL(link.href);
+        expect(target.pathname.startsWith(BASE_PATH)).toBe(true);
         await page.goto(link.href);
         await expect(mainHeading(page)).toBeVisible();
         await expect(switcher(page)).toBeVisible();
+        // The view it names, not a not-found state or the redirect that
+        // unknown routes get (only the root redirects, to the inventory).
+        await expect(main(page).getByText(/not found/i)).toHaveCount(0);
+        const expectedPath = appPath(target.pathname);
+        await expect
+          .poll(() => appPath(new URL(page.url()).pathname))
+          .toBe(expectedPath === "/" ? "/applications" : expectedPath);
+        const persona = target.searchParams.get("protoPersona");
+        const scenario = target.searchParams.get("protoScenario");
+        const stage = target.searchParams.get("protoStage");
+        if (persona != null)
+          await expect(personaSelect(page)).toHaveValue(persona);
+        if (scenario != null)
+          await expect(scenarioSelect(page)).toHaveValue(scenario);
+        if (stage != null && (await stageSelect(page).count()) > 0)
+          await expect(stageSelect(page)).toHaveValue(stage);
       });
     }
     // The switcher links back to the guide, in a new tab so this tab keeps
