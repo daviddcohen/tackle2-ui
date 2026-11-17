@@ -19,11 +19,15 @@ export const BASE_PATH = new URL(
 export const withBase = (path: string) =>
   `${BASE_PATH.slice(0, -1)}${path.startsWith("/") ? path : `/${path}`}`;
 
-/** Router path of a browser pathname: strips the base (`/tackle2-ui/x` to `/x`). */
+/**
+ * Router path of a browser pathname: strips the base (`/tackle2-ui/x` to `/x`).
+ * A pathname outside the base gets a prefix no router path has, so a URL that
+ * escaped the base never matches an expected app path.
+ */
 export const appPath = (pathname: string) =>
   pathname.startsWith(BASE_PATH)
     ? `/${pathname.slice(BASE_PATH.length)}`
-    : pathname;
+    : `<outside base>${pathname}`;
 
 /** `url` with its pathname replaced by the router path. */
 export const appUrl = (url: string | URL) => {

@@ -92,7 +92,9 @@ navigation link sweep (`navigation/entity-links.spec.ts`) is the longest part.
   it resolves under the base URL; never `page.goto("/...")`. Compare a browser
   pathname as a router path with `appPath(url.pathname)` (or `appUrl(url)`),
   and match rendered hrefs with `withBase("/plan-runs/1")`
-  (`a[href^="${withBase("/skills/")}"]`). Both are no-ops at the root.
+  (`a[href^="${withBase("/skills/")}"]`). Both are no-ops at the root. Under a
+  base, `appPath` marks a pathname outside it (`<outside base>/x`), so a URL
+  that escaped the base never matches a router path.
 - **Mock state lives in the page.** MSW resets on every `page.goto`, so each
   test starts from the fixtures and tests are independent and parallel-safe. To
   check the effect of a write on another page, navigate in-app (click a link or

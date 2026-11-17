@@ -15,6 +15,7 @@
 import type { Page } from "@playwright/test";
 
 import {
+  BASE_PATH,
   type FixtureGraph,
   type Named,
   appPath,
@@ -213,6 +214,13 @@ for (const group of GROUPS) {
               ])
           ).values(),
         ]);
+      // An absolute href outside the base would be filtered out below, so
+      // fail on it here instead of skipping it.
+      expect(
+        links
+          .map((link) => link.href)
+          .filter((href) => href.startsWith("/") && !href.startsWith(BASE_PATH))
+      ).toEqual([]);
       for (const { href, label } of links.filter((link) =>
         internalEntity.test(appPath(link.href))
       )) {
@@ -239,7 +247,8 @@ for (const group of GROUPS) {
             destination.pathname
           )?.[1];
           if (expected != null) {
-            if (isArchetypeDrawer(destination))
+            // A browser URL: destination's pathname is already a router path.
+            if (isArchetypeDrawer(new URL(href, sourceURL)))
               await expect(drawerTitle(page)).toHaveText(expected);
             else if (profilesOwner != null) {
               await expect(currentCrumb(page)).toHaveText("Target profiles");
