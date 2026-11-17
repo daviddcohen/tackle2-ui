@@ -1,0 +1,110 @@
+# Prototype Pages (fork only; upstream has no file with this name).
+#
+# Builds the agentic migration prototype as a static site (MSW mock data and the
+# persona/scenario switcher, no backend) and deploys it to GitHub Pages on every
+# push to main, or when run by hand. A failed build never reaches the deploy job,
+# so the last good site stays up and the failure shows as a red run.
+#
+# The quiet-upstream job keeps the fork quiet: this repository also carries the
+# upstream Konveyor workflows (CI, image builds, nightlies, issue bots), which
+# must not run here. The files stay unedited so syncs from upstream never
+# conflict; instead this job disables every active workflow except this one on
+# each run, which also catches workflows that a later sync adds.
+# See docs/prototype-architecture.md, "Static hosting on GitHub Pages".
+
+name: Prototype Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  quiet-upstream:
+    name: Disable upstream workflows
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Disable every active workflow except this one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          # owner/repo/.github/workflows/prototype-pages.yaml@refs/heads/main
+          self="${WORKFLOW_REF#"$REPO/"}"
+          self="${self%%@*}"
+          echo "This workflow: $self"
+          disabled=0
+          while IFS=$'\t' read -r id state path name; do
+            [[ -z "$id" ]] && continue
+            if [[ "$path" == "$self" ]]; then
+              echo "Keep:     $path ($state)"
+            elif [[ "$path" == dynamic/* ]]; then
+              # GitHub-managed (Pages, Dependabot), not files in the repository.
+              echo "Skip:     $path ($state)"
+            elif [[ "$state" == "active" ]]; then
+              gh workflow disable "$id" --repo "$REPO"
+              echo "Disabled: $path ($name)"
+              disabled=$((disabled + 1))
+            else
+              echo "Already:  $path ($state)"
+            fi
+          done < <(gh api --paginate "repos/$REPO/actions/workflows" \
+            --jq '.workflows[] | [.id, .state, .path, .name] | @tsv')
+          echo "Disabled $disabled workflow(s)."
+
+  build:
+    name: Build static prototype
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # Like upstream CI: no install scripts (skips the Cypress binary download
+      # and husky), then build the common workspace (the root postinstall).
+      - name: Install
+        run: |
+          npm ci --ignore-scripts --no-audit
+          npm run postinstall
+
+      - name: Build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build:prototype:static -w client
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: client/dist
+          # Keep .nojekyll (hidden files are dropped by default).
+          include-hidden-files: true
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
