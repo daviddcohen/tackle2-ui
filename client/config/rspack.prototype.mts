@@ -7,7 +7,7 @@ import type { Compiler, Configuration } from "@rspack/core";
 import HtmlWebpackPlugin from "html-webpack-plugin";
 import { merge } from "rspack-merge";
 
-import { brandingStrings } from "@konveyor-ui/common";
+import { type ClientEnv, brandingStrings } from "@konveyor-ui/common";
 
 import { brandingPath } from "./rspack.common.mjs";
 import productionConfiguration from "./rspack.prod.mjs";
@@ -24,17 +24,33 @@ const faviconPath = path.resolve(brandingPath, "favicon.ico");
  */
 const isStaticHtml = process.env.STATIC_HTML === "true";
 
-/** Normalize a base path to a leading and trailing slash: `a/b` gives `/a/b/`. */
-const normalizeBasePath = (basePath = "") =>
-  `/${basePath}/`.replace(/\/{2,}/g, "/");
+if (process.env.BASE_PATH && !isStaticHtml) {
+  console.warn(
+    "BASE_PATH is ignored without STATIC_HTML=true: the Node server serves the app at /."
+  );
+}
+
+/**
+ * Normalize a base path to a leading and trailing slash: `a/b` gives `/a/b/`.
+ * It goes unescaped into `<base href>`, so only URL path characters pass.
+ */
+const normalizeBasePath = (basePath = "") => {
+  if (!/^[A-Za-z0-9._~/-]*$/.test(basePath)) {
+    throw new Error(
+      `BASE_PATH ${JSON.stringify(basePath)} may only contain letters, digits and . _ ~ / -`
+    );
+  }
+  return `/${basePath}/`.replace(/\/{2,}/g, "/");
+};
 
 /**
  * The `window._env` the Node server injects for the hosted demo, computed by
  * the server's own serializer in a child process (it reads `process.env` at
- * import), with the environment of `Dockerfile.prototype`.
+ * import), with the environment of `Dockerfile.prototype` and nothing else, so
+ * no build machine variable can leak into the published page.
  */
-const serializePrototypeClientEnv = () =>
-  execFileSync(
+const serializePrototypeClientEnv = () => {
+  const serialized = execFileSync(
     process.execPath,
     [
       "--input-type=module",
@@ -47,13 +63,26 @@ const serializePrototypeClientEnv = () =>
     {
       encoding: "utf-8",
       env: {
-        ...process.env,
         NODE_ENV: "production",
         MOCK: "stub",
         AUTH_REQUIRED: "false",
       },
     }
   ).trim();
+  // Decoded the way client/src/app/env.ts reads it.
+  let mock: unknown;
+  try {
+    mock = (JSON.parse(atob(serialized)) as Partial<ClientEnv>).MOCK;
+  } catch (error) {
+    throw new Error(`Could not decode the serialized window._env: ${error}`);
+  }
+  if (mock !== "stub") {
+    throw new Error(
+      `The static prototype needs MOCK=stub in window._env, got ${JSON.stringify(mock)}`
+    );
+  }
+  return serialized;
+};
 
 /** Emits an empty `.nojekyll` so GitHub Pages never runs Jekyll on the output. */
 class NoJekyllPlugin {
