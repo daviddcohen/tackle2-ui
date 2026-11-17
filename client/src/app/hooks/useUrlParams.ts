@@ -83,13 +83,14 @@ export const useUrlParams = <
     // In case setParams is called multiple times synchronously from the same rendered instance,
     // we use document.location here as the current params so these calls never overwrite each other.
     // This also retains any unrelated params that might be present and allows newParams to be a partial update.
-    const { pathname, search } = document.location;
+    // The pathname comes from history.location (spread below): it is relative to the router basename,
+    // while document.location.pathname would repeat the base path when the app is served under one.
+    const { search } = document.location;
     const existingSearchParams = new URLSearchParams(search);
     // We prefix the params object here so the serialize function doesn't have to care about the keyPrefix.
     const newPrefixedSerializedParams = withPrefixes(serialize(newParams));
     history.replace({
       ...history.location,
-      pathname,
       search: trimAndStringifyUrlParams({
         existingSearchParams,
         newPrefixedSerializedParams,

@@ -203,7 +203,7 @@ const AssessmentSettings: React.FC = () => {
                         variant={ButtonVariant.link}
                         component="a"
                         download
-                        href="/templates/questionnaire-template.yaml"
+                        href="templates/questionnaire-template.yaml"
                       >
                         {t("dialog.title.download", {
                           what: t("terms.YAMLTemplate"),

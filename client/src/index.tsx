@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import App from "@app/App";
 import { isPrototypeEnabled } from "@app/Constants";
 import { AuthProvider } from "@app/auth";
+import { getBasePath, withBasePath } from "@app/utils/base-path";
 
 import "@app/dayjs";
 import "@app/i18n";
@@ -45,6 +46,12 @@ if (process.env.NODE_ENV === "development") {
     prototype?.initializePrototypeMasquerade();
     if (browserMocks.config.enabled) {
       browserMocks.worker.start({
+        // Register the worker under the app's base path so it controls the
+        // pages when the app is served from a subpath.
+        serviceWorker: {
+          url: withBasePath("mockServiceWorker.js"),
+          options: { scope: getBasePath() },
+        },
         onUnhandledRequest: (request, print) => {
           if (request.url.pathname.startsWith("/hub")) {
             print.warning();
