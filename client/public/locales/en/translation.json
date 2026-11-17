@@ -1130,6 +1130,7 @@
   "agentic": {
     "prototype": {
       "guide": "How to use this preview",
+      "opensInNewTab": "(opens in a new tab)",
       "persona": "Persona",
       "personas": {
         "hubMigrator": "Hub Migrator (Migrator)",

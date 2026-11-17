@@ -229,10 +229,17 @@ test(
         await expect(switcher(page)).toBeVisible();
       });
     }
-    // The switcher links back to the guide.
-    await switcher(page)
-      .getByRole("link", { name: "How to use this preview" })
-      .click();
-    await expect(page).toHaveURL(guide.href);
+    // The switcher links back to the guide, in a new tab so this tab keeps
+    // its in-memory mock data.
+    const guideLink = switcher(page).getByRole("link", {
+      name: "How to use this preview",
+    });
+    await expect(guideLink).toHaveAttribute("target", "_blank");
+    const [guideTab] = await Promise.all([
+      page.context().waitForEvent("page"),
+      guideLink.click(),
+    ]);
+    await expect(guideTab).toHaveURL(guide.href);
+    await guideTab.close();
   }
 );
