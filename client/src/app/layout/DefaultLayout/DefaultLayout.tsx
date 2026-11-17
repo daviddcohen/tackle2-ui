@@ -16,8 +16,18 @@ export interface DefaultLayoutProps {
 
 export const DefaultLayout: React.FC<DefaultLayoutProps> = ({ children }) => {
   const pageId = "main-content-page-layout-horizontal-nav";
+  // The fragment href resolves against <base href>, so following it would
+  // load a different page; move focus to the main region instead.
   const PageSkipToContent = (
-    <SkipToContent href={`#${pageId}`}>Skip to content</SkipToContent>
+    <SkipToContent
+      href={`#${pageId}`}
+      onClick={(event) => {
+        event.preventDefault();
+        document.getElementById(pageId)?.focus();
+      }}
+    >
+      Skip to content
+    </SkipToContent>
   );
 
   const drawerRef = useRef<HTMLElement | null>(null);
