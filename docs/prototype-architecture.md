@@ -96,7 +96,7 @@ The prototype runs entirely in the browser (MSW answers the Hub and agentic APIs
 - Live prototype: https://daviddcohen.github.io/tackle2-ui/
 - Visitor guide: https://daviddcohen.github.io/tackle2-ui/prototype-guide/ (source `client/public/prototype-guide/index.html`, also linked from the switcher as "How to use this preview")
 
-Mock data lives in the visitor's browser and resets on every reload or new link; nothing is stored on a server.
+Mock data lives in the visitor's browser and resets on every reload or when a shared link is opened; nothing is stored on a server.
 
 ### Static build
 
@@ -108,7 +108,9 @@ BASE_PATH=/tackle2-ui/ npm run build:prototype:static -w client
 
 `client/dist/` then holds `index.html` and an identical `404.html` (GitHub Pages serves it for any path it has no file for, so deep links and query strings load the app), `.nojekyll`, `mockServiceWorker.js` and `prototype-guide/`. `window._env` is rendered at build time by the Node server's own serializer with `MOCK=stub` and `AUTH_REQUIRED=false`.
 
-`BASE_PATH` (default `/`) is the path the site is served under. It becomes the `<base href>` of the page; the app reads it back from `document.baseURI` for the router basename, the service worker URL and scope, and locale loading. Without `BASE_PATH`, or without `STATIC_HTML`, the build behaves as before.
+`BASE_PATH` (default `/`) is the path the site is served under. It becomes the `<base href>` of the page; the app reads it back from `document.baseURI` for the router basename, the service worker URL and scope, and locale loading. It may only contain letters, digits and `. _ ~ / -` (the build fails otherwise), and it applies only with `STATIC_HTML=true` (without it the build warns and ignores it). Without `STATIC_HTML` the prototype build leaves `index.html.ejs` for the Node server as before; every prototype build ships `prototype-guide/`.
+
+The base path covers the app's own assets and routes. API calls (`/hub`), the OIDC redirect and the agent-run WebSocket stay at the origin root. That is fine for the static site, where the service worker answers `/hub`, but serving the app with a real backend under a subpath would need those moved under the base too.
 
 ### Serving it locally
 
@@ -130,11 +132,11 @@ A build serves correctly only under the base path it was built for. Running the 
 
 ### The Pages workflow
 
-`.github/workflows/prototype-pages.yaml` (a fork-only file name, so syncs never conflict) runs on every push to `main` and on demand (`workflow_dispatch`). One concurrency group (`pages`, never cancelled) keeps deploys in order. Actions are pinned to commit SHAs; no secrets are used.
+`.github/workflows/prototype-pages.yaml` (a fork-only file name, so syncs never conflict) runs on every push to `main` and on demand (`workflow_dispatch`); `build` and `deploy` run only on `main`, so a manual run from another branch only quiets the upstream workflows. One concurrency group (`pages`, never cancelled) keeps deploys in order. Actions are pinned to commit SHAs; no secrets are used.
 
 - `build` (`contents: read`): `npm ci`, the static build with `BASE_PATH=/<repository name>/`, upload of `client/dist` as the Pages artifact.
 - `deploy` (`pages: write`, `id-token: write`, environment `github-pages`): publishes the artifact. It runs only after a green build, so a failed build leaves the last good site up and shows as a failed run.
-- `quiet-upstream` (`actions: write`, independent of the deploy): disables every active workflow except this one.
+- `quiet-upstream` (`actions: write`, independent of the deploy): disables every active workflow except this one. It fails (red run, deploy unaffected) if the workflow list cannot be read, if this workflow is missing from it, or if any workflow could not be disabled.
 
 ### Keeping the upstream workflows quiet
 
