@@ -202,7 +202,7 @@ test.describe("reset and URL validation", () => {
       page,
       pageErrors,
     }) => {
-      await page.goto(`/plan-runs?${query}`);
+      await page.goto(`plan-runs?${query}`);
       await expect(mainHeading(page)).toHaveText("Plan runs");
       await expectCanonicalProto(page, persona, scenario);
       expect(searchParam(page, "protoStage")).toBe(stage);

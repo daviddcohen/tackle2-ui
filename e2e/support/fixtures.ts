@@ -46,6 +46,13 @@ export const test = base.extend<{
       if (message.type() !== "error" && message.type() !== "warning") return;
       const text = message.text();
       if (IGNORED_CONSOLE.some((pattern) => pattern.test(text))) return;
+      // A static host (GitHub Pages) serves deep links as 404.html with
+      // status 404; the browser reports it for the page document itself.
+      if (
+        /^Failed to load resource: .*\b404\b/.test(text) &&
+        message.location().url === page.url()
+      )
+        return;
       diagnostics.console.push(text.slice(0, 500));
     });
     page.on("response", (response) => {

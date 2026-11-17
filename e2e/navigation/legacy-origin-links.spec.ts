@@ -13,6 +13,7 @@ import {
   mainHeading,
   protoUrl,
   test,
+  withBase,
 } from "../support";
 
 const state = { scenario: "completed" } as const;
@@ -102,14 +103,14 @@ test("detail pages tag outgoing entity links with their own origin", async ({
   await page.goto(protoUrl("/agents/1", state));
   await expect(mainHeading(page)).toHaveText("Migration Proposal Agent");
   for (const href of await hrefs(
-    'a[href^="/migration-plans/"], a[href^="/skills/"]'
+    `a[href^="${withBase("/migration-plans/")}"], a[href^="${withBase("/skills/")}"]`
   ))
     expect(href).toMatch(/[?&]from=agent-1(&|$)/);
 
   await page.goto(protoUrl("/plan-runs/1", state));
   await expect(mainHeading(page)).toHaveText("Run #1 — Java EE to Quarkus");
   const runLinks = await hrefs(
-    'a[href^="/migration-plans/"], a[href^="/agents/"], a[href^="/skills/"]'
+    `a[href^="${withBase("/migration-plans/")}"], a[href^="${withBase("/agents/")}"], a[href^="${withBase("/skills/")}"]`
   );
   expect(runLinks.length).toBeGreaterThan(3);
   for (const href of runLinks) expect(href).toMatch(/[?&]from=run-1(&|$)/);

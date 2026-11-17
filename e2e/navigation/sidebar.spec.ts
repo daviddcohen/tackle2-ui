@@ -8,6 +8,7 @@ import {
   protoUrl,
   sidebar,
   test,
+  withBase,
 } from "../support";
 
 // In sidebar order: primary objects first, building blocks after.
@@ -107,7 +108,7 @@ for (const persona of [
     for (const item of [...migrationItems, ...agenticItems]) {
       await expect(
         nav.getByRole("link", { name: item.name, exact: true })
-      ).toHaveAttribute("href", item.href);
+      ).toHaveAttribute("href", withBase(item.href));
     }
     // Administration-only items never leak into the Migration perspective.
     for (const name of ["Models", "Model providers", "General"]) {
@@ -139,7 +140,7 @@ test("Administration sidebar lists every upstream item plus Model providers and 
   for (const item of adminItems) {
     await expect(
       sidebar(page).getByRole("link", { name: item.name, exact: true })
-    ).toHaveAttribute("href", item.href);
+    ).toHaveAttribute("href", withBase(item.href));
   }
   await expect(
     sidebar(page).getByRole("link", {

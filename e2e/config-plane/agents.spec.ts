@@ -4,6 +4,7 @@
 import type { Page } from "@playwright/test";
 
 import {
+  appPath,
   dataRows,
   dialog,
   expect,
@@ -285,7 +286,8 @@ test.describe("Agent test modal", () => {
     // The prototype bar may reorder the query, so check the parts.
     await expect(page).toHaveURL(
       (url) =>
-        url.pathname === "/agents/4" && url.searchParams.get("tab") === "runs"
+        appPath(url.pathname) === "/agents/4" &&
+        url.searchParams.get("tab") === "runs"
     );
     await expect(page.getByRole("tab", { name: "Runs" })).toHaveAttribute(
       "aria-selected",

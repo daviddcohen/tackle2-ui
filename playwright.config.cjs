@@ -10,13 +10,27 @@
  * running there). To test another server, point PLAYWRIGHT_BASE_URL at it:
  *
  *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:7013 npm run test:e2e:prototype
+ *
+ * The base URL may carry a base path (the static build for GitHub Pages is
+ * served under /tackle2-ui/); it is normalized to end with "/" so relative
+ * paths resolve under it:
+ *
+ *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:7401/tackle2-ui/ npm run test:e2e:prototype
+ *
+ * PLAYWRIGHT_ALL_BROWSERS=true adds Firefox and WebKit projects that run the
+ * @smoke tests only (the full suite runs in Chromium):
+ *
+ *   PLAYWRIGHT_ALL_BROWSERS=true PLAYWRIGHT_BASE_URL=https://daviddcohen.github.io/tackle2-ui/ \
+ *     npm run test:e2e:prototype -- --grep @smoke
  */
 const { defineConfig, devices } = require("@playwright/test");
 
-const baseURL =
+const rawBaseURL =
   process.env.PLAYWRIGHT_BASE_URL ??
   process.env.PW_BASE ??
   "http://localhost:9000";
+const baseURL = rawBaseURL.endsWith("/") ? rawBaseURL : `${rawBaseURL}/`;
+const allBrowsers = process.env.PLAYWRIGHT_ALL_BROWSERS === "true";
 const useExternalServer =
   process.env.PLAYWRIGHT_BASE_URL != null || process.env.PW_BASE != null;
 
@@ -53,5 +67,15 @@ module.exports = defineConfig({
         viewport: { width: 1440, height: 900 },
       },
     },
+    ...(allBrowsers
+      ? [
+          ["firefox", "Desktop Firefox"],
+          ["webkit", "Desktop Safari"],
+        ].map(([name, device]) => ({
+          name,
+          grep: /@smoke/,
+          use: { ...devices[device], viewport: { width: 1440, height: 900 } },
+        }))
+      : []),
   ],
 });
