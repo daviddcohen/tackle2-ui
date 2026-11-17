@@ -1129,6 +1129,7 @@
   },
   "agentic": {
     "prototype": {
+      "guide": "How to use this preview",
       "persona": "Persona",
       "personas": {
         "hubMigrator": "Hub Migrator (Migrator)",

@@ -130,6 +130,9 @@ export const PrototypeScopeSwitcher: React.FC = () => {
       <button type="button" onClick={state.reset}>
         {t("agentic.prototype.reset")}
       </button>
+
+      {/* Plain link: the guide is a static page, relative to <base href>. */}
+      <a href="prototype-guide/">{t("agentic.prototype.guide")}</a>
     </div>
   );
 };
