@@ -130,6 +130,16 @@ export const PrototypeScopeSwitcher: React.FC = () => {
       <button type="button" onClick={state.reset}>
         {t("agentic.prototype.reset")}
       </button>
+
+      {/* Plain link: the guide is a static page, relative to <base href>. A
+          new tab keeps this tab's in-memory mock data. */}
+      <a href="prototype-guide/" target="_blank" rel="noopener noreferrer">
+        {t("agentic.prototype.guide")}
+        <span className="pf-v6-screen-reader">
+          {" "}
+          {t("agentic.prototype.opensInNewTab")}
+        </span>
+      </a>
     </div>
   );
 };

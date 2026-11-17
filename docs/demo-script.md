@@ -1,5 +1,7 @@
 # Agentic Migration Prototype Demo
 
+The prototype is published at https://daviddcohen.github.io/tackle2-ui/ (visitor guide: https://daviddcohen.github.io/tackle2-ui/prototype-guide/). Data is mock and resets on reload. How the site is built and deployed: [Static hosting on GitHub Pages](prototype-architecture.md#static-hosting-on-github-pages).
+
 ## Platform Engineer
 
 1. Select Platform Engineer and Configured.

@@ -9,6 +9,7 @@ import {
   protoUrl,
   stageLinks,
   test,
+  withBase,
 } from "../support";
 
 interface Visit {
@@ -80,7 +81,9 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
 
   // agent -> skill
   const skillLink = main(page)
-    .locator('a[href^="/skills/"]:not([href^="/skills/collections"])')
+    .locator(
+      `a[href^="${withBase("/skills/")}"]:not([href^="${withBase("/skills/collections")}"])`
+    )
     .first();
   const skillName = (await skillLink.innerText()).trim();
   await skillLink.click();
@@ -90,7 +93,9 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
   visits.push(await visit(page));
 
   // skill -> plan
-  const planLink = main(page).locator('a[href^="/migration-plans/"]').first();
+  const planLink = main(page)
+    .locator(`a[href^="${withBase("/migration-plans/")}"]`)
+    .first();
   const planName = (await planLink.innerText()).trim();
   await planLink.click();
   await expect(mainHeading(page)).toHaveText(planName);
@@ -165,7 +170,9 @@ test("returning to an entity already in the trail truncates the cycle", async ({
   );
   await expect(mainHeading(page)).toHaveText("Code Migrator");
   const skillLink = main(page)
-    .locator('a[href^="/skills/"]:not([href^="/skills/collections"])')
+    .locator(
+      `a[href^="${withBase("/skills/")}"]:not([href^="${withBase("/skills/collections")}"])`
+    )
     .first();
   await skillLink.click();
   await page.getByRole("tab", { name: /Associations/ }).click();
@@ -234,22 +241,18 @@ test("a not-found detail keeps the trail it was reached from", async ({
   );
   await expect(mainHeading(page)).toHaveText(/^Run #1 — /);
   // Simulate the stage disappearing: navigate within the SPA with the run's trail.
-  await page.evaluate(() => {
+  await page.evaluate((stagePath) => {
     const crumbs = [
       { title: "Plan runs", path: "/plan-runs" },
       { title: "Run #1 — Java EE to Quarkus", path: "/plan-runs/1" },
     ];
-    window.history.pushState(
-      { state: { breadcrumbs: crumbs } },
-      "",
-      "/plan-runs/1/stages/99999"
-    );
+    window.history.pushState({ state: { breadcrumbs: crumbs } }, "", stagePath);
     window.dispatchEvent(
       new PopStateEvent("popstate", {
         state: { state: { breadcrumbs: crumbs } },
       })
     );
-  });
+  }, withBase("/plan-runs/1/stages/99999"));
   await expect(page.getByText("Stage not found").first()).toBeVisible();
   await expect
     .poll(() => breadcrumbTitles(page))
@@ -271,7 +274,7 @@ test("run and stage pages name their nouns in the trail while the run loads", as
     .toEqual(["Plan runs", "Plan run", "Stage"]);
   await expect(
     breadcrumb(page).getByRole("link", { name: "Plan run", exact: true })
-  ).toHaveAttribute("href", "/plan-runs/1");
+  ).toHaveAttribute("href", withBase("/plan-runs/1"));
   await expect
     .poll(() => breadcrumbTitles(page), { timeout: 20_000 })
     .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"]);

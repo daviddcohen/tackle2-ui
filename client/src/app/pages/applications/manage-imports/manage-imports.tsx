@@ -209,7 +209,7 @@ export const ManageImports: React.FC = () => {
                             <a
                               {...props}
                               download
-                              href="/templates/template_application_import.csv"
+                              href="templates/template_application_import.csv"
                             />
                           )}
                         >

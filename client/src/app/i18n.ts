@@ -17,6 +17,11 @@ i18n
     },
 
     returnEmptyString: false,
+
+    // Relative, so it resolves against <base href> under any base path.
+    backend: {
+      loadPath: "locales/{{lng}}/{{ns}}.json",
+    },
   });
 
 export default i18n;

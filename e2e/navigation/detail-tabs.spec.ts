@@ -10,6 +10,7 @@ import {
   mainHeading,
   protoUrl,
   test,
+  withBase,
 } from "../support";
 
 test("an application name in the inventory opens its detail page, and the crumb returns", async ({
@@ -20,7 +21,10 @@ test("an application name in the inventory opens its detail page, and the crumb 
     name: "Customer Management",
     exact: true,
   });
-  await expect(link).toHaveAttribute("href", /^\/applications\/\d+/);
+  await expect(link).toHaveAttribute(
+    "href",
+    new RegExp(`^${withBase("/applications/")}\\d+`)
+  );
   await link.click();
   await expect(page).toHaveURL(/\/applications\/\d+/);
   await expect(mainHeading(page)).toHaveText("Customer Management");

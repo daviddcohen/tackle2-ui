@@ -2,7 +2,14 @@
  * Cross-entity sections render the related entities as links. Where each link
  * leads (and the trail it keeps) is covered exhaustively by entity-links.spec.ts.
  */
-import { expect, main, mainHeading, protoUrl, test } from "../support";
+import {
+  expect,
+  main,
+  mainHeading,
+  protoUrl,
+  test,
+  withBase,
+} from "../support";
 
 test("skill associations list direct associations, plans and collections", async ({
   page,
@@ -31,7 +38,7 @@ test("an application associated with a skill links to the application", async ({
   await page.goto(protoUrl("/skills/5?tab=associations"));
   await expect(
     main(page).getByRole("link", { name: "Customer Management" }).first()
-  ).toHaveAttribute("href", /^\/applications\/1\b/);
+  ).toHaveAttribute("href", new RegExp(`^${withBase("/applications/1")}\\b`));
 });
 
 test("plan detail links its stage agents and skills and shows where each skill comes from", async ({

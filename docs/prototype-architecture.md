@@ -88,3 +88,67 @@ Changing persona is an explicit demo action that opens the recommended starting 
 ## Integration boundary
 
 The controller is domain agnostic. The Hub must own product vocabulary, application-to-Plan resolution, portfolio authorization, audit, credential mediation, and application-specific result presentation. The Migration Tab, IDE, and CLI consume governed policy and execution results. They do not manage Hub Models, Agents, Plans, Stages, or Skills.
+
+## Static hosting on GitHub Pages
+
+The prototype runs entirely in the browser (MSW answers the Hub and agentic APIs), so it can be published as static files. The fork `daviddcohen/tackle2-ui` publishes its `main` branch at:
+
+- Live prototype: https://daviddcohen.github.io/tackle2-ui/
+- Visitor guide: https://daviddcohen.github.io/tackle2-ui/prototype-guide/ (source `client/public/prototype-guide/index.html`, also linked from the switcher as "How to use this preview")
+
+Mock data lives in the visitor's browser and resets on every reload or when a shared link is opened; nothing is stored on a server.
+
+### Static build
+
+```bash
+STATIC_HTML=true BASE_PATH=/tackle2-ui/ npm run build:prototype -w client
+# same as
+BASE_PATH=/tackle2-ui/ npm run build:prototype:static -w client
+```
+
+`client/dist/` then holds `index.html` and an identical `404.html` (GitHub Pages serves it for any path it has no file for, so deep links and query strings load the app), `.nojekyll`, `mockServiceWorker.js` and `prototype-guide/`. `window._env` is rendered at build time by the Node server's own serializer with `MOCK=stub` and `AUTH_REQUIRED=false`.
+
+`BASE_PATH` (default `/`) is the path the site is served under. It becomes the `<base href>` of the page; the app reads it back from `document.baseURI` for the router basename, the service worker URL and scope, and locale loading. It may only contain letters, digits and `. _ ~ / -` (the build fails otherwise), and it applies only with `STATIC_HTML=true` (without it the build warns and ignores it). Without `STATIC_HTML` the prototype build leaves `index.html.ejs` for the Node server as before; every prototype build ships `prototype-guide/`.
+
+The base path covers the app's own assets and routes. API calls (`/hub`), the OIDC redirect and the agent-run WebSocket stay at the origin root. That is fine for the static site, where the service worker answers `/hub`, but serving the app with a real backend under a subpath would need those moved under the base too.
+
+### Serving it locally
+
+`e2e/support/static-server.mjs` (root script `npm run serve:static`) is a dependency-free server that behaves like GitHub Pages: directory index, `<mount>` redirects to `<mount>/`, unknown paths get `404.html` with status 404, no rewrites, bound to 127.0.0.1.
+
+```bash
+# At the root
+npm run build:prototype:static -w client
+npm run serve:static -- --dir client/dist --port 7400
+# open http://127.0.0.1:7400/
+
+# Under the Pages subpath
+BASE_PATH=/tackle2-ui/ npm run build:prototype:static -w client
+npm run serve:static -- --dir client/dist --port 7401 --mount /tackle2-ui/
+# open http://127.0.0.1:7401/tackle2-ui/
+```
+
+A build serves correctly only under the base path it was built for. Running the Playwright suite against either server is described in `e2e/README.md`.
+
+### The Pages workflow
+
+`.github/workflows/prototype-pages.yaml` (a fork-only file name, so syncs never conflict) runs on every push to `main` and on demand (`workflow_dispatch`); `build` and `deploy` run only on `main`, so a manual run from another branch only quiets the upstream workflows. One concurrency group (`pages`, never cancelled) keeps deploys in order. Actions are pinned to commit SHAs; no secrets are used.
+
+- `build` (`contents: read`): `npm ci`, the static build with `BASE_PATH=/<repository name>/`, upload of `client/dist` as the Pages artifact.
+- `deploy` (`pages: write`, `id-token: write`, environment `github-pages`): publishes the artifact. It runs only after a green build, so a failed build leaves the last good site up and shows as a failed run.
+- `quiet-upstream` (`actions: write`, independent of the deploy): disables every active workflow except this one. It fails (red run, deploy unaffected) if the workflow list cannot be read, if this workflow is missing from it, or if any workflow could not be disabled.
+
+### Keeping the upstream workflows quiet
+
+The fork carries the 16 upstream Konveyor workflows (CI, image builds to quay, nightlies, stale and issue bots). They stay unedited so syncs from upstream and staging apply cleanly; instead the `quiet-upstream` job disables them in the fork's Actions settings, on every run. A workflow that a later sync adds is disabled on the next run (it may run once before that, for example on the push that adds it). The job is idempotent and logs what it kept, skipped and disabled.
+
+Owner, once:
+
+1. Settings > Pages > Build and deployment > Source: "GitHub Actions" (already set on the fork).
+2. Turn on Actions for the fork (Actions tab, or Settings > Actions > General), then right away Actions > "Prototype Pages" > Run workflow on `main`. That run disables the upstream workflows and publishes the site. Hold syncs into `main` until it is green.
+
+To re-enable an upstream workflow on purpose, enable it in the Actions tab and remove or adjust the guard job first, or it is disabled again on the next run.
+
+### On push to main, and re-running
+
+Every push to `main` rebuilds and redeploys; the site updates within a few minutes (browsers may keep the previous `index.html` for up to about 10 minutes). To redeploy without a push, or after a failure: Actions > "Prototype Pages" > Run workflow (branch `main`), or `gh workflow run prototype-pages.yaml --repo daviddcohen/tackle2-ui --ref main`. A failed run can also be re-run from its run page.

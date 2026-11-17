@@ -112,6 +112,11 @@ const config: Configuration = mergeWithRules({
         {
           from: pathTo("../public/mockServiceWorker.js"),
         },
+        // Prototype visitor guide, linked from the prototype switcher.
+        {
+          from: pathTo("../public/prototype-guide"),
+          to: "prototype-guide",
+        },
       ],
     }),
 

@@ -5,6 +5,7 @@ import { AppRoutes } from "./Routes";
 import { NotificationsProvider } from "./components/NotificationsContext";
 import { TaskManagerProvider } from "./components/task-manager/TaskManagerContext";
 import { DefaultLayout } from "./layout";
+import { getRouterBasename } from "./utils/base-path";
 
 import "./app.css";
 
@@ -18,7 +19,7 @@ export interface AppProps {
 
 const App: React.FC<AppProps> = ({ shell: Shell = React.Fragment }) => {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={getRouterBasename()}>
       <Shell>
         <NotificationsProvider>
           <TaskManagerProvider>

@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>How to use this preview: Konveyor agentic migration prototype</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #151515;
+        --muted: #4d4d4d;
+        --link: #0050a0;
+        --link-visited: #5c2d91;
+        --rule: #d2d2d2;
+        --panel: #f2f2f2;
+        --focus: #0050a0;
+        --code-bg: #e8e8e8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151515;
+          --fg: #f0f0f0;
+          --muted: #c7c7c7;
+          --link: #92c5f9;
+          --link-visited: #d1b8f0;
+          --rule: #4d4d4d;
+          --panel: #232323;
+          --focus: #92c5f9;
+          --code-bg: #2e2e2e;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          "Red Hat Text",
+          "RedHatText",
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+      .skip-link {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        padding: 0.5rem 1rem;
+        background: var(--bg);
+        color: var(--link);
+      }
+      .skip-link:focus {
+        left: 1rem;
+        top: 1rem;
+      }
+      header,
+      main,
+      footer {
+        max-width: 48rem;
+        margin: 0 auto;
+        padding: 0 1.25rem;
+      }
+      header {
+        padding-top: 2rem;
+        border-bottom: 1px solid var(--rule);
+      }
+      h1 {
+        font-size: 2rem;
+        line-height: 1.25;
+        margin: 0 0 0.5rem;
+      }
+      h2 {
+        font-size: 1.375rem;
+        margin: 2rem 0 0.5rem;
+      }
+      p,
+      ul,
+      dl {
+        margin: 0 0 1rem;
+      }
+      .lead {
+        color: var(--muted);
+        font-size: 1.125rem;
+      }
+      a {
+        color: var(--link);
+        text-underline-offset: 0.15em;
+      }
+      a:visited {
+        color: var(--link-visited);
+      }
+      a:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .primary-action {
+        display: inline-block;
+        margin: 0.5rem 0 1.5rem;
+        padding: 0.625rem 1.25rem;
+        border: 2px solid var(--link);
+        border-radius: 6px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .primary-action:hover {
+        text-decoration: underline;
+      }
+      .note {
+        background: var(--panel);
+        border-left: 4px solid var(--rule);
+        padding: 0.75rem 1rem;
+        margin: 0 0 1rem;
+      }
+      code {
+        font-family: ui-monospace, "Red Hat Mono", Menlo, Consolas, monospace;
+        font-size: 0.9375em;
+        background: var(--code-bg);
+        padding: 0.1em 0.3em;
+        border-radius: 3px;
+      }
+      dt {
+        font-weight: 600;
+      }
+      dd {
+        margin: 0 0 0.75rem 0;
+      }
+      li {
+        margin-bottom: 0.375rem;
+      }
+      footer {
+        margin-top: 2.5rem;
+        padding-bottom: 2rem;
+        border-top: 1px solid var(--rule);
+        color: var(--muted);
+        font-size: 0.9375rem;
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <header>
+      <h1>How to use this preview</h1>
+      <p class="lead">
+        A clickable prototype of the agentic migration redesign of the Konveyor
+        user interface.
+      </p>
+    </header>
+    <main id="content" tabindex="-1">
+      <a class="primary-action" href="../">Open the prototype</a>
+
+      <h2>What this is</h2>
+      <p>
+        This preview shows a proposed design for agentic migration in Konveyor:
+        a configuration plane (models, agents, skills and migration plans) and
+        an execution plane (plan runs across an application portfolio). It is a
+        prototype for discussion and feedback, not a product. Behavior, names
+        and screens can change.
+      </p>
+
+      <h2>Your data</h2>
+      <div class="note">
+        <p>
+          All data is mock data. It lives only in your browser, nothing is sent
+          to a server, and it resets every time you reload the page or open a
+          shared link.
+        </p>
+      </div>
+      <p>
+        Anything you create, edit, start or approve stays while you click around
+        in the same tab. Reload to start over.
+      </p>
+
+      <h2>The prototype switcher</h2>
+      <p>
+        A dark bar marked <strong>Prototype only</strong> sits at the top of
+        every page. It is not part of the design; it lets you change who you are
+        and what state the system is in:
+      </p>
+      <dl>
+        <dt>Persona</dt>
+        <dd>
+          Platform Engineer (Admin) configures models and providers, Enterprise
+          Architect (Architect) designs plans and runs migrations across the
+          portfolio, Hub Migrator (Migrator) runs migrations with read-only
+          configuration.
+        </dd>
+        <dt>Scenario</dt>
+        <dd>
+          The state of the system, for example Partial configuration, Preflight
+          blocked, Running, Action required, Failed or Completed.
+        </dd>
+        <dt>Stage</dt>
+        <dd>
+          Shown on plan run pages in run scenarios: the stage of the run that is
+          active (running, waiting for approval or failed).
+        </dd>
+        <dt>Reset Prototype</dt>
+        <dd>
+          Returns to the default persona and scenario and opens the start page,
+          the Application inventory.
+        </dd>
+      </dl>
+      <p>
+        The switcher keeps its state in the address, so any view can be shared
+        as a link. The parameters are
+        <code>protoPersona</code> (<code>platformEngineer</code>,
+        <code>enterpriseArchitect</code>, <code>hubMigrator</code>),
+        <code>protoScenario</code> (for example <code>configured</code>,
+        <code>running</code>, <code>actionRequired</code>, <code>failed</code>,
+        <code>completed</code>) and <code>protoStage</code> (a stage number,
+        starting at 1).
+      </p>
+
+      <h2>Key screens</h2>
+      <p>Each link opens the prototype in a specific persona and scenario.</p>
+      <ul>
+        <li>
+          <a
+            href="../applications?protoPersona=enterpriseArchitect&amp;protoScenario=preflightBlocked"
+            >Application inventory with a preflight blocker</a
+          >
+          (Enterprise Architect): select applications and run a migration plan.
+        </li>
+        <li>
+          <a
+            href="../plan-runs/1?protoPersona=enterpriseArchitect&amp;protoScenario=actionRequired&amp;protoStage=1"
+            >A plan run waiting for approval</a
+          >
+          (Enterprise Architect): review the stage and approve it.
+        </li>
+        <li>
+          <a
+            href="../plan-runs/1/stages/2?protoPersona=enterpriseArchitect&amp;protoScenario=running&amp;protoStage=2"
+            >A running stage with live agent output</a
+          >
+          (Enterprise Architect): logs and transcript update as the agent works.
+        </li>
+        <li>
+          <a
+            href="../applications/1?tab=migration&amp;protoPersona=enterpriseArchitect&amp;protoScenario=completed&amp;protoStage=4"
+            >An application's Migration tab after a completed run</a
+          >
+          (Enterprise Architect): target branch, commits and the plan run.
+        </li>
+        <li>
+          <a
+            href="../migration-plans?protoPersona=enterpriseArchitect&amp;protoScenario=partialConfiguration"
+            >Migration plans with configuration checks</a
+          >
+          (Enterprise Architect): stages, agents, models and skills.
+        </li>
+        <li>
+          <a
+            href="../agents?protoPersona=enterpriseArchitect&amp;protoScenario=configured"
+            >Agents</a
+          >
+          and
+          <a
+            href="../skills?protoPersona=enterpriseArchitect&amp;protoScenario=configured"
+            >Skills</a
+          >
+          (Enterprise Architect): reusable configuration and where it is used.
+        </li>
+        <li>
+          <a
+            href="../models?protoPersona=platformEngineer&amp;protoScenario=configured"
+            >Models in Administration</a
+          >
+          (Platform Engineer): verification status, the organization default and
+          credential references.
+        </li>
+        <li>
+          <a
+            href="../applications?protoPersona=hubMigrator&amp;protoScenario=running"
+            >Application inventory as a Hub Migrator</a
+          >
+          during a running migration.
+        </li>
+      </ul>
+
+      <h2>Good to know</h2>
+      <ul>
+        <li>
+          Use a desktop browser window; the screens are designed for desktop
+          widths.
+        </li>
+        <li>
+          Some upstream Konveyor pages are present but not part of this
+          redesign. They run on the same mock data.
+        </li>
+        <li>
+          This page is always available from the
+          <strong>How to use this preview</strong> link in the switcher.
+        </li>
+      </ul>
+    </main>
+    <footer>
+      <p>
+        Konveyor agentic migration prototype. Mock data only.
+        <a href="../">Open the prototype</a>
+      </p>
+    </footer>
+  </body>
+</html>

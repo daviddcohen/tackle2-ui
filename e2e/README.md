@@ -25,6 +25,44 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:7016 npm run test:e2e:prototype
 
 First time only: `npx playwright install chromium`.
 
+### Static build, at the root or under a base path
+
+The GitHub Pages build (see "Static hosting on GitHub Pages" in
+`docs/prototype-architecture.md`) is served by a static server with no
+rewrites. `e2e/support/static-server.mjs` mimics GitHub Pages (unknown paths
+get `404.html` with status 404). A build only works under the base path it was
+built for, so build once per base:
+
+```bash
+# Root, port 7400
+npm run build:prototype:static -w client
+npm run serve:static -- --dir client/dist --port 7400 &
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:7400/ npm run test:e2e:prototype
+
+# Subpath /tackle2-ui/, port 7401
+BASE_PATH=/tackle2-ui/ npm run build:prototype:static -w client
+npm run serve:static -- --dir client/dist --port 7401 --mount /tackle2-ui/ &
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:7401/tackle2-ui/ npm run test:e2e:prototype
+```
+
+Stop the server afterwards (`kill %1`). The base URL may carry a path; the
+config adds a trailing slash. `navigation/static-hosting.spec.ts` covers what
+static hosting can break (deep links with query strings, `404.html` loads,
+reload resets, table state in the URL, a request audit, translations, the
+service worker scope, template downloads, the visitor guide).
+
+### Live smoke in Chromium, Firefox and WebKit
+
+Tests tagged `@smoke` form a short smoke run. `PLAYWRIGHT_ALL_BROWSERS=true`
+adds Firefox and WebKit projects that run only `@smoke` tests:
+
+```bash
+npx playwright install firefox webkit   # first time only
+PLAYWRIGHT_ALL_BROWSERS=true \
+  PLAYWRIGHT_BASE_URL=https://daviddcohen.github.io/tackle2-ui/ \
+  npm run test:e2e:prototype -- --grep @smoke
+```
+
 Failures keep a screenshot, a trace and the error context under
 `test-results/playwright/`; open a trace with
 `npx playwright show-trace <path>/trace.zip`.
@@ -50,6 +88,13 @@ navigation link sweep (`navigation/entity-links.spec.ts`) is the longest part.
   `protoUrl(path, { persona, scenario, stage })` (defaults: Enterprise Architect,
   `configured`). Never rely on switcher defaults or a hard-coded host: the base
   URL comes from `playwright.config.cjs`.
+- **Base-path safe.** `protoUrl` returns a relative path (no leading slash) so
+  it resolves under the base URL; never `page.goto("/...")`. Compare a browser
+  pathname as a router path with `appPath(url.pathname)` (or `appUrl(url)`),
+  and match rendered hrefs with `withBase("/plan-runs/1")`
+  (`a[href^="${withBase("/skills/")}"]`). Both are no-ops at the root. Under a
+  base, `appPath` marks a pathname outside it (`<outside base>/x`), so a URL
+  that escaped the base never matches a router path.
 - **Mock state lives in the page.** MSW resets on every `page.goto`, so each
   test starts from the fixtures and tests are independent and parallel-safe. To
   check the effect of a write on another page, navigate in-app (click a link or

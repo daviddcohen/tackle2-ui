@@ -10,6 +10,7 @@
     "build": "NODE_ENV=production rspack build --config ./config/rspack.prod.mts",
     "prebuild:prototype": "npm run prebuild",
     "build:prototype": "NODE_ENV=development rspack build --config ./config/rspack.prototype.mts",
+    "build:prototype:static": "STATIC_HTML=true npm run build:prototype",
     "build:dev": "NODE_ENV=development rspack build --config ./config/rspack.dev.mts",
     "start:dev": "NODE_ENV=development rspack dev --config ./config/rspack.dev.mts",
     "test": "NODE_ENV=test TZ=UTC jest --rootDir=. --config=./config/jest.config.ts",

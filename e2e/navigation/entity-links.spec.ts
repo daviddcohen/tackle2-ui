@@ -15,8 +15,11 @@
 import type { Page } from "@playwright/test";
 
 import {
+  BASE_PATH,
   type FixtureGraph,
   type Named,
+  appPath,
+  appUrl,
   breadcrumb,
   breadcrumbTitles,
   currentCrumb,
@@ -37,7 +40,8 @@ const ready = async (page: Page) => {
 const drawerTitle = (page: Page) => page.locator("#page-drawer-content h2");
 
 const isArchetypeDrawer = (url: URL) =>
-  url.pathname === "/archetypes" && url.searchParams.has("ar:activeItem");
+  appPath(url.pathname) === "/archetypes" &&
+  url.searchParams.has("ar:activeItem");
 
 /**
  * The view's trail, leaf included. The archetype drawer's title is its leaf
@@ -182,13 +186,15 @@ for (const group of GROUPS) {
         sourceTitles.at(-1) ?? (await mainHeading(page).innerText()).trim();
       // Ancestor crumbs of the source page, by path: a link to one of them
       // (the stage page's run link, addenda R1) returns to it, like the crumb.
-      const ancestorPaths = await breadcrumb(page)
-        .getByRole("link")
-        .evaluateAll((elements) =>
-          elements.map(
-            (element) => new URL((element as HTMLAnchorElement).href).pathname
+      const ancestorPaths = (
+        await breadcrumb(page)
+          .getByRole("link")
+          .evaluateAll((elements) =>
+            elements.map(
+              (element) => new URL((element as HTMLAnchorElement).href).pathname
+            )
           )
-        );
+      ).map(appPath);
       const links = await page
         .locator("main a[href], #page-drawer-content a[href]")
         .evaluateAll((elements) => [
@@ -208,8 +214,15 @@ for (const group of GROUPS) {
               ])
           ).values(),
         ]);
+      // An absolute href outside the base would be filtered out below, so
+      // fail on it here instead of skipping it.
+      expect(
+        links
+          .map((link) => link.href)
+          .filter((href) => href.startsWith("/") && !href.startsWith(BASE_PATH))
+      ).toEqual([]);
       for (const { href, label } of links.filter((link) =>
-        internalEntity.test(link.href)
+        internalEntity.test(appPath(link.href))
       )) {
         await test.step(`${source} -> ${href}`, async () => {
           // Match the exact href: entity names can repeat in several tables.
@@ -220,20 +233,22 @@ for (const group of GROUPS) {
             .filter({ visible: true })
             .first()
             .click();
-          const destination = new URL(href, sourceURL);
+          // Router paths: the base path (if any) stripped.
+          const destination = appUrl(new URL(href, sourceURL));
           await expect(page).toHaveURL(
             (url) =>
-              url.pathname === destination.pathname &&
+              appPath(url.pathname) === destination.pathname &&
               url.hash === destination.hash
           );
           await ready(page);
           await expect(breadcrumb(page)).toBeVisible();
-          const expected = expectedName(graph, href);
+          const expected = expectedName(graph, appPath(href));
           const profilesOwner = /^\/archetypes\/(\d+)\/target-profiles$/.exec(
             destination.pathname
           )?.[1];
           if (expected != null) {
-            if (isArchetypeDrawer(destination))
+            // A browser URL: destination's pathname is already a router path.
+            if (isArchetypeDrawer(new URL(href, sourceURL)))
               await expect(drawerTitle(page)).toHaveText(expected);
             else if (profilesOwner != null) {
               await expect(currentCrumb(page)).toHaveText("Target profiles");
@@ -266,7 +281,7 @@ for (const group of GROUPS) {
             // with its archetype, "{profile} ({archetype})" (skills amendment
             // 6): profile names repeat across archetypes.
             const isQualifiedTargetProfile =
-              /^\/skills\/\d+$/.test(new URL(sourceURL).pathname) &&
+              /^\/skills\/\d+$/.test(appUrl(sourceURL).pathname) &&
               /#target-profile-\d+$/.test(href) &&
               label.startsWith(`${expected} (`) &&
               label.endsWith(")");
@@ -288,7 +303,7 @@ for (const group of GROUPS) {
                 expected
               );
           }
-          if (destination.pathname === new URL(sourceURL).pathname) {
+          if (destination.pathname === appUrl(sourceURL).pathname) {
             // A link to another tab of the same page (the skill's "6
             // associations" fact opens its Associations tab) switches tabs:
             // the trail stays the source's, and Back returns to the source.

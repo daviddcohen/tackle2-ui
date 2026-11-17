@@ -6,6 +6,7 @@
 import type { Page } from "@playwright/test";
 
 import {
+  appPath,
   breadcrumb,
   currentCrumb,
   expect,
@@ -17,6 +18,7 @@ import {
   sidebar,
   switcher,
   test,
+  withBase,
 } from "../support";
 
 const state = { scenario: "completed", stage: 4 } as const;
@@ -32,7 +34,10 @@ test("deep application, run, skill and association journeys retain tabs, survive
   page,
 }) => {
   await page.goto(view("/applications/1?tab=plan-runs"));
-  await page.locator('main a[href^="/plan-runs/"]').first().click();
+  await page
+    .locator(`main a[href^="${withBase("/plan-runs/")}"]`)
+    .first()
+    .click();
   await expect(page).toHaveURL(/\/plan-runs\/\d+/);
   const runURL = page.url();
   await page
@@ -45,7 +50,10 @@ test("deep application, run, skill and association journeys retain tabs, survive
   await expect(crumbItems(page)).toHaveCount(4);
   const skillTitles = await crumbTitles(page);
   // The archetype drawer's title is the leaf: its trail lists ancestors only.
-  await page.locator('main a[href^="/archetypes?"]').first().click();
+  await page
+    .locator(`main a[href^="${withBase("/archetypes?")}"]`)
+    .first()
+    .click();
   await expect(crumbItems(page)).toHaveCount(4);
   await page.reload();
   await expect(crumbItems(page)).toHaveCount(4);
@@ -60,7 +68,10 @@ test("deep application, run, skill and association journeys retain tabs, survive
   await expect(page.locator("tr:focus")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(skillURL);
-  await page.locator('main a[href^="/migration-plans/"]').first().click();
+  await page
+    .locator(`main a[href^="${withBase("/migration-plans/")}"]`)
+    .first()
+    .click();
   await expect(crumbItems(page)).toHaveCount(5);
   await breadcrumb(page)
     .getByRole("link", { name: skillTitles[2], exact: true })
@@ -117,7 +128,10 @@ test("tabs, table filters, scenario changes and sidebar navigation have explicit
   await sidebar(page)
     .getByRole("link", { name: "Skills", exact: true })
     .click();
-  await page.locator('main a[href^="/skills/"]').first().click();
+  await page
+    .locator(`main a[href^="${withBase("/skills/")}"]`)
+    .first()
+    .click();
   await expect(crumbItems(page)).toHaveCount(2);
   await expect(
     breadcrumb(page).getByRole("link", { name: "Skills", exact: true })
@@ -128,13 +142,17 @@ test("returning through an Agent association restores the saved runs tab and tru
   page,
 }) => {
   await page.goto(view("/agents/2?tab=runs"));
-  await page.locator('main a[href^="/plan-runs/1/stages/2"]').click();
+  await page
+    .locator(`main a[href^="${withBase("/plan-runs/1/stages/2")}"]`)
+    .click();
   // The stage page reaches skills through its run (the run's Skills section).
-  await page.locator('main a[href="/plan-runs/1"]').click();
-  await page.locator('main a[href^="/skills/2?"]').click();
+  await page.locator(`main a[href="${withBase("/plan-runs/1")}"]`).click();
+  await page.locator(`main a[href^="${withBase("/skills/2?")}"]`).click();
   await associationsTab(page).click();
   await page
-    .locator('main a[href^="/agents/2"]:not(.pf-v6-c-breadcrumb__link)')
+    .locator(
+      `main a[href^="${withBase("/agents/2")}"]:not(.pf-v6-c-breadcrumb__link)`
+    )
     .click();
   await expect(crumbItems(page)).toHaveCount(2);
   await expect(
@@ -168,7 +186,7 @@ test("every Agents list Skills link preserves the list context", async ({
     await (
       single
         ? // A plan can share the skill's name: pick the skill's own link.
-          row.locator(`a[href^="/skills/${agent.skills[0].id}"]`)
+          row.locator(`a[href^="${withBase(`/skills/${agent.skills[0].id}`)}"]`)
         : row.getByRole("link", { name: /^\d+ (skill|collection)/ })
     ).click();
     await expect(currentCrumb(page)).toHaveText(
@@ -236,7 +254,7 @@ test("launching a migration keeps the global scenario when returning to Inventor
     .click();
   await expect(page).toHaveURL(
     (url) =>
-      /^\/plan-runs\/\d+$/.test(url.pathname) &&
+      /^\/plan-runs\/\d+$/.test(appPath(url.pathname)) &&
       url.searchParams.get("protoScenario") === "configured"
   );
   await breadcrumb(page)
@@ -245,7 +263,9 @@ test("launching a migration keeps the global scenario when returning to Inventor
   // Starting a migration does not switch the global prototype scenario; the
   // started run itself is Pending/Running.
   await expect(scenarioSelect(page)).toHaveValue("configured");
-  await expect(page).toHaveURL((url) => url.pathname === "/applications");
+  await expect(page).toHaveURL(
+    (url) => appPath(url.pathname) === "/applications"
+  );
 });
 
 test("an unavailable associated entity retains breadcrumbs back to the originating view", async ({
@@ -253,7 +273,7 @@ test("an unavailable associated entity retains breadcrumbs back to the originati
 }) => {
   await page.goto(view("/skills/2?tab=associations"));
   const applicationLink = page
-    .locator('main a[href^="/applications/"]')
+    .locator(`main a[href^="${withBase("/applications/")}"]`)
     .first();
   const applicationName = await applicationLink.innerText();
   await applicationLink.click();
@@ -276,7 +296,7 @@ test("an unavailable associated entity retains breadcrumbs back to the originati
   await skillCrumb.click();
   await expect(page).toHaveURL(
     (url) =>
-      url.pathname === "/skills/2" &&
+      appPath(url.pathname) === "/skills/2" &&
       url.searchParams.get("tab") === "associations"
   );
 });
@@ -286,9 +306,9 @@ for (const action of ["persona", "reset"] as const) {
     page,
   }) => {
     await page.goto(view("/skills/2?tab=associations"));
-    await page.locator('main a[href^="/archetypes?"]').click();
+    await page.locator(`main a[href^="${withBase("/archetypes?")}"]`).click();
     await page
-      .locator('#page-drawer-content a[href^="/applications?"]')
+      .locator(`#page-drawer-content a[href^="${withBase("/applications?")}"]`)
       .click();
     await expect(crumbItems(page)).toHaveCount(4);
     if (action === "persona") {
@@ -300,7 +320,9 @@ for (const action of ["persona", "reset"] as const) {
         .click();
       await expect(scenarioSelect(page)).toHaveValue("configured");
     }
-    await expect(page).toHaveURL((url) => url.pathname === "/applications");
+    await expect(page).toHaveURL(
+      (url) => appPath(url.pathname) === "/applications"
+    );
     await expect(breadcrumb(page)).toHaveCount(0);
     expect(new URL(page.url()).searchParams.has("filters")).toBe(false);
   });
@@ -310,7 +332,7 @@ test("Archetype application counts apply their filter when Inventory is an ances
   page,
 }) => {
   await page.goto(view("/applications"));
-  await page.locator('main a[href="/applications/1"]').click();
+  await page.locator(`main a[href="${withBase("/applications/1")}"]`).click();
   await page.getByRole("tab", { name: "Skills", exact: true }).click();
   // Skill sources are plain text: reach the archetype through the skill.
   await page
@@ -318,7 +340,10 @@ test("Archetype application counts apply their filter when Inventory is an ances
     .getByRole("link", { name: "EJB to CDI conversion patterns" })
     .click();
   await associationsTab(page).click();
-  await page.locator('main a[href^="/archetypes?"]').first().click();
+  await page
+    .locator(`main a[href^="${withBase("/archetypes?")}"]`)
+    .first()
+    .click();
   await page
     .locator("#page-drawer-content")
     .getByRole("tabpanel", { name: "Details", exact: true })
@@ -326,7 +351,7 @@ test("Archetype application counts apply their filter when Inventory is an ances
     .click();
   await expect(page).toHaveURL(
     (url) =>
-      url.pathname === "/applications" &&
+      appPath(url.pathname) === "/applications" &&
       url.searchParams.get("filters")?.includes("Java EE Application") === true
   );
   await expect(
@@ -339,9 +364,15 @@ test("The applications count applies the Plan filter when returning to an ancest
   page,
 }) => {
   await page.goto(view("/applications"));
-  await page.locator('main a[href="/applications/1"]').first().click();
+  await page
+    .locator(`main a[href="${withBase("/applications/1")}"]`)
+    .first()
+    .click();
   await page.getByRole("tab", { name: "Plan runs", exact: true }).click();
-  await page.locator('main a[href^="/migration-plans/1"]').first().click();
+  await page
+    .locator(`main a[href^="${withBase("/migration-plans/1")}"]`)
+    .first()
+    .click();
   await main(page)
     .locator("dl")
     .getByRole("link", { name: /^\d+ applications?$/ })
@@ -350,7 +381,7 @@ test("The applications count applies the Plan filter when returning to an ancest
   // Plan, the same set the link counts.
   await expect(page).toHaveURL(
     (url) =>
-      url.pathname === "/applications" &&
+      appPath(url.pathname) === "/applications" &&
       url.searchParams.get("filters")?.includes("migrationPlan") === true
   );
   await expect(
@@ -378,13 +409,19 @@ for (const [name, viewport] of [
     };
     await page.setViewportSize(viewport);
     await page.goto(view("/applications/1?tab=plan-runs"));
-    await page.locator('main a[href^="/plan-runs/"]').first().click();
+    await page
+      .locator(`main a[href^="${withBase("/plan-runs/")}"]`)
+      .first()
+      .click();
     await page
       .getByRole("grid", { name: "Skills", exact: true })
       .getByRole("link", { name: "Jakarta EE namespace migration" })
       .click();
     await associationsTab(page).click();
-    await page.locator('main a[href^="/migration-plans/"]').first().click();
+    await page
+      .locator(`main a[href^="${withBase("/migration-plans/")}"]`)
+      .first()
+      .click();
     await expect(crumbItems(page)).toHaveCount(5);
     await expect(currentCrumb(page)).toHaveCount(1);
     await expectInViewport();
@@ -400,7 +437,7 @@ for (const [name, viewport] of [
     // The drawer trail lists ancestors only; the target profiles trail adds
     // the owning archetype before its leaf. Both end at the skill.
     for (const [selector, crumbs] of [
-      ['main a[href^="/archetypes?"]', 4],
+      [`main a[href^="${withBase("/archetypes?")}"]`, 4],
       ['main a[href*="/target-profiles"]', 6],
     ] as const) {
       await page.locator(selector).first().click();
@@ -431,8 +468,11 @@ test("cold links use the canonical hierarchy and a new tab has its own history",
     breadcrumb(page).getByRole("link", { name: "Code Migrator", exact: true })
   ).toBeVisible();
   // The stage page reaches skills through its run (addenda R1).
-  await page.locator('main a[href="/plan-runs/1"]').click();
-  await page.locator('main a[href^="/skills/"]').first().click();
+  await page.locator(`main a[href="${withBase("/plan-runs/1")}"]`).click();
+  await page
+    .locator(`main a[href^="${withBase("/skills/")}"]`)
+    .first()
+    .click();
   await expect(crumbItems(page)).toHaveCount(5);
   const href = page.url();
   const newTab = await context.newPage();

@@ -1,5 +1,6 @@
 import {
   type Persona,
+  appPath,
   breadcrumbTitles,
   errorBoundary,
   expect,
@@ -218,7 +219,7 @@ for (const route of routes) {
   }) => {
     await page.goto(protoUrl(route.path, { persona: route.persona }));
     await expect(mainHeading(page)).toHaveText(route.heading);
-    expect(new URL(page.url()).pathname).toBe(route.path);
+    expect(appPath(new URL(page.url()).pathname)).toBe(route.path);
     if (route.nav) await expectNavCurrent(page, route.nav);
     if (route.crumbs)
       await expect.poll(() => breadcrumbTitles(page)).toEqual(route.crumbs);
@@ -269,7 +270,7 @@ test.describe("unknown and retired routes", () => {
         protoUrl(path, { persona: "hubMigrator", scenario: "running" })
       );
       await expect(mainHeading(page)).toHaveText("Application inventory");
-      expect(new URL(page.url()).pathname).toBe("/applications");
+      expect(appPath(new URL(page.url()).pathname)).toBe("/applications");
       expect(searchParam(page, "protoPersona")).toBe("hubMigrator");
       expect(searchParam(page, "protoScenario")).toBe("running");
     });
@@ -280,7 +281,7 @@ test.describe("unknown and retired routes", () => {
   }) => {
     await page.goto(protoUrl("/skills/collections"));
     await expect(mainHeading(page)).toHaveText("Skills", { timeout: 15_000 });
-    expect(new URL(page.url()).pathname).toBe("/skills");
+    expect(appPath(new URL(page.url()).pathname)).toBe("/skills");
     expect(searchParam(page, "tab")).toBe("collections");
     expect(searchParam(page, "skills:filters")).toBeNull();
     await expect(
@@ -312,7 +313,7 @@ test.describe("administration routes are scope-gated per persona", () => {
       }) => {
         await page.goto(protoUrl(path, { persona }));
         await expect(mainHeading(page)).toHaveText("Application inventory");
-        expect(new URL(page.url()).pathname).toBe("/applications");
+        expect(appPath(new URL(page.url()).pathname)).toBe("/applications");
         expect(searchParam(page, "protoPersona")).toBe(persona);
       });
     }

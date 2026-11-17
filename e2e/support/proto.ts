@@ -87,7 +87,11 @@ export interface ProtoState {
 // Only used to parse relative paths; page.goto resolves against baseURL.
 const PARSE_ORIGIN = "http://e2e.invalid";
 
-/** `path` (may carry its own query and hash) with explicit prototype state. */
+/**
+ * `path` (may carry its own query and hash) with explicit prototype state.
+ * Returned without its leading slash so `page.goto` resolves it against the
+ * base URL, which may carry a base path (`/tackle2-ui/`).
+ */
 export const protoUrl = (path: string, state: ProtoState = {}) => {
   const url = new URL(path, PARSE_ORIGIN);
   url.searchParams.set("protoPersona", state.persona ?? "enterpriseArchitect");
@@ -95,7 +99,7 @@ export const protoUrl = (path: string, state: ProtoState = {}) => {
   if (state.stage != null) url.searchParams.set("protoStage", `${state.stage}`);
   for (const [key, value] of Object.entries(state.params ?? {}))
     url.searchParams.set(key, value);
-  return `${url.pathname}${url.search}${url.hash}`;
+  return `${url.pathname.slice(1)}${url.search}${url.hash}`;
 };
 
 export const gotoProto = (page: Page, path: string, state: ProtoState = {}) =>
@@ -103,11 +107,16 @@ export const gotoProto = (page: Page, path: string, state: ProtoState = {}) =>
 
 /**
  * Client-side navigation that keeps the in-page MSW state (a `page.goto`
- * would reload and reset it). Keeps the current prototype query.
+ * would reload and reset it). Keeps the current prototype query. `path` is a
+ * router path (`/agents`), resolved under the document's base path.
  */
 export const spaNavigate = (page: Page, path: string) =>
   page.evaluate((target) => {
-    const url = new URL(target, window.location.origin);
+    // Without a <base> element, baseURI is the current page, not the root.
+    const base = document.querySelector("base[href]")
+      ? document.baseURI
+      : `${window.location.origin}/`;
+    const url = new URL(target.replace(/^\//, ""), base);
     for (const [key, value] of new URLSearchParams(window.location.search))
       if (key.startsWith("proto") && !url.searchParams.has(key))
         url.searchParams.set(key, value);
