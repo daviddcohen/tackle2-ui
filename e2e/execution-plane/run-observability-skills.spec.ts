@@ -12,6 +12,7 @@ import type { Locator, Page } from "@playwright/test";
 import {
   agenticGet,
   agenticRequest,
+  appPath,
   bootMockApi,
   dialog,
   expect,
@@ -110,7 +111,7 @@ test("a run with an excluded skill: skills, context and the skill loader agree",
     .getByRole("button", { name: "Run on 1 application" })
     .click();
   await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
-  const runId = new URL(page.url()).pathname.split("/")[2];
+  const runId = appPath(new URL(page.url()).pathname).split("/")[2];
   const run = await agenticGet<Run>(page, `/plan-runs/${runId}`);
   const used = names(run.resolvedSkills);
   const excluded = names(run.excludedSkills);

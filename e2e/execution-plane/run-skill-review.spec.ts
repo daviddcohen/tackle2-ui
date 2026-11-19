@@ -11,6 +11,7 @@ import type { Locator, Page } from "@playwright/test";
 import {
   agenticGet,
   agenticRequest,
+  appPath,
   bootMockApi,
   dialog,
   expect,
@@ -177,7 +178,7 @@ test.describe("Skills in the run dialog and on the run pages", () => {
       .getByRole("button", { name: "Run on 1 application" })
       .click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
-    const runPath = new URL(page.url()).pathname;
+    const runPath = appPath(new URL(page.url()).pathname);
     await expect(
       main(page).getByRole("heading", { name: heading, exact: true })
     ).toBeVisible();
