@@ -156,8 +156,8 @@ const read =
  * A POST that only reads (it computes a preview and changes nothing): the
  * scenario applies as in `read()`, so `apiError` answers 503 and `loading`
  * delays 10 s. `initial` hides nothing here, on purpose: the preview is the
- * same resolution as a plan's `effectiveSkills`, which `initial` does not
- * filter either. Hub archetypes and target profiles are not scenario-aware,
+ * same resolution as a saved plan's, which `initial` does not filter
+ * either. Hub archetypes and target profiles are not scenario-aware,
  * so in `initial` a draft with an archetype still resolves the fixture skills
  * associated with it, as a plan saved with that archetype does; those skills
  * are hidden from `GET /skills` and their pages are 404.

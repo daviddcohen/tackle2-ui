@@ -95,7 +95,10 @@ export const getStagesWithUnverifiedModel = (
     .filter(({ model }) => model?.verificationStatus !== "verified");
 
 /**
- * Configuration checks of a Plan. Pass `undefined` for `agents` or `models`
+ * Configuration checks of a Plan: its stages have agents, and their models
+ * are verified. A plan without a migration path is not a configuration
+ * problem (it runs when someone picks it), so there is no path check.
+ * Pass `undefined` for `agents` or `models`
  * while they are loading or failed to load: the Model check is then not
  * evaluated rather than reported as an issue.
  */
@@ -109,22 +112,6 @@ export const getPlanConfigurationChecks = (
       ? getStagesWithUnverifiedModel(plan, agents, models)
       : undefined;
   return [
-    {
-      id: "path",
-      labelKey: "agentic.plan.configurationCheck.path.label",
-      status: plan.migrationPath ? "passed" : "issue",
-      detailKey: plan.migrationPath
-        ? "agentic.plan.configurationCheck.path.assigned"
-        : "agentic.plan.configurationCheck.path.unassigned",
-      detailValues: plan.migrationPath
-        ? {
-            archetype: plan.migrationPath.archetype.name,
-            target: plan.migrationPath.targetProfiles
-              .map((profile) => profile.name)
-              .join(", "),
-          }
-        : undefined,
-    },
     {
       id: "stages",
       labelKey: "agentic.plan.configurationCheck.stages.label",
@@ -156,18 +143,6 @@ export const getPlanConfigurationChecks = (
               ? { count: unavailableStages.length }
               : undefined,
         },
-    {
-      id: "skills",
-      labelKey: "agentic.plan.configurationCheck.skills.label",
-      // Undefined means the server did not report skills; an empty list means none apply.
-      status: plan.effectiveSkills ? "passed" : "notEvaluated",
-      detailKey: plan.effectiveSkills
-        ? "agentic.plan.configurationCheck.skills.resolved"
-        : "agentic.plan.configurationCheck.skills.notEvaluated",
-      detailValues: plan.effectiveSkills
-        ? { count: plan.effectiveSkills.length }
-        : undefined,
-    },
   ];
 };
 

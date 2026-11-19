@@ -37,17 +37,17 @@ const fillMinimalAgent = async (page: Page, name: string) => {
 test.describe("Agents list", () => {
   test.beforeEach(async ({ page }) => {
     await gotoProto(page, "/agents", { persona: ARCHITECT });
-    await expect(dataRows(page)).toHaveCount(8);
+    await expect(dataRows(page)).toHaveCount(9);
   });
 
   test("renders agents with model and skills summary", async ({
     page,
     diagnostics,
   }) => {
-    const codeMigrator = rowByText(page, "Code Migrator");
-    await expect(codeMigrator).toContainText("Claude 3.7 Sonnet");
+    const securityReview = rowByText(page, "Security Review Agent");
+    await expect(securityReview).toContainText("Claude 3.7 Sonnet");
     await expect(
-      codeMigrator.getByRole("link", { name: "4 skills, 1 collection" })
+      securityReview.getByRole("link", { name: "2 skills, 1 collection" })
     ).toBeVisible();
     expectHealthy(diagnostics);
   });
@@ -60,11 +60,11 @@ test.describe("Agents list", () => {
       .click();
     await expect(page).toHaveURL(/\/skills\/\d+/);
     await page.goBack();
-    await rowByText(page, "Code Migrator")
-      .getByRole("link", { name: "4 skills, 1 collection" })
+    await rowByText(page, "Security Review Agent")
+      .getByRole("link", { name: "2 skills, 1 collection" })
       .click();
     await expect(
-      page.getByRole("heading", { level: 1, name: "Code Migrator" })
+      page.getByRole("heading", { level: 1, name: "Security Review Agent" })
     ).toBeVisible();
   });
 
@@ -86,12 +86,12 @@ test.describe("Agents list", () => {
     );
     await dialog(page).getByRole("button", { name: "Delete" }).click();
     await expect(toast(page, "Agent deleted")).toBeVisible();
-    await expect(dataRows(page)).toHaveCount(7);
+    await expect(dataRows(page)).toHaveCount(8);
   });
 
   test("hub migrator sees agents read-only", async ({ page }) => {
     await gotoProto(page, "/agents", { persona: "hubMigrator" });
-    await expect(dataRows(page)).toHaveCount(8);
+    await expect(dataRows(page)).toHaveCount(9);
     await expect(
       page.getByRole("button", { name: "Create agent" })
     ).toHaveCount(0);
@@ -112,7 +112,7 @@ test.describe("Agents list", () => {
 test.describe("Agent form", () => {
   test.beforeEach(async ({ page }) => {
     await gotoProto(page, "/agents", { persona: ARCHITECT });
-    await expect(dataRows(page)).toHaveCount(8);
+    await expect(dataRows(page)).toHaveCount(9);
     await openCreate(page);
   });
 
@@ -257,7 +257,7 @@ test("with no verified model, Model is disabled and points to the models", async
 test.describe("Agent test modal", () => {
   test.beforeEach(async ({ page }) => {
     await gotoProto(page, "/agents", { persona: ARCHITECT });
-    await expect(dataRows(page)).toHaveCount(8);
+    await expect(dataRows(page)).toHaveCount(9);
   });
 
   test("start a test run and see it on the agent runs tab", async ({

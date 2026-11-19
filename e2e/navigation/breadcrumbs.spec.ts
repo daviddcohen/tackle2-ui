@@ -60,10 +60,10 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
 
   // application -> plan run
   await main(page)
-    .getByRole("link", { name: /^Run #1 — / })
+    .getByRole("link", { name: /^Run #1: / })
     .first()
     .click();
-  await expect(mainHeading(page)).toHaveText(/^Run #1 — /);
+  await expect(mainHeading(page)).toHaveText(/^Run #1: /);
   visits.push(await visit(page));
 
   // plan run -> stage run
@@ -73,10 +73,10 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
 
   // stage run -> agent
   await main(page)
-    .getByRole("link", { name: "Code Migrator", exact: true })
+    .getByRole("link", { name: "Java Code Migrator", exact: true })
     .first()
     .click();
-  await expect(mainHeading(page)).toHaveText("Code Migrator");
+  await expect(mainHeading(page)).toHaveText("Java Code Migrator");
   visits.push(await visit(page));
 
   // agent -> skill
@@ -88,8 +88,8 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
   const skillName = (await skillLink.innerText()).trim();
   await skillLink.click();
   await expect(mainHeading(page)).toHaveText(skillName);
-  await page.getByRole("tab", { name: /Associations/ }).click();
-  await expect(page).toHaveURL(/tab=associations/);
+  await page.getByRole("tab", { name: /Usage/ }).click();
+  await expect(page).toHaveURL(/tab=usage/);
   visits.push(await visit(page));
 
   // skill -> plan
@@ -101,19 +101,19 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
   await expect(mainHeading(page)).toHaveText(planName);
   visits.push(await visit(page));
 
-  // plan -> agent
+  // plan -> agent (every plan that gets this skill has a Build Validator stage)
   await main(page)
-    .getByRole("link", { name: "Migration Proposal Agent", exact: true })
+    .getByRole("link", { name: "Build Validator", exact: true })
     .first()
     .click();
-  await expect(mainHeading(page)).toHaveText("Migration Proposal Agent");
+  await expect(mainHeading(page)).toHaveText("Build Validator");
   visits.push(await visit(page));
 
   // agent -> skill collection
   await main(page)
-    .getByRole("link", { name: "Java modernization foundation", exact: true })
+    .getByRole("link", { name: "OpenShift delivery checks", exact: true })
     .click();
-  await expect(mainHeading(page)).toHaveText("Java modernization foundation");
+  await expect(mainHeading(page)).toHaveText("OpenShift delivery checks");
   visits.push(await visit(page));
 
   expect(visits[0].crumbs).toEqual([
@@ -175,7 +175,7 @@ test("returning to an entity already in the trail truncates the cycle", async ({
     )
     .first();
   await skillLink.click();
-  await page.getByRole("tab", { name: /Associations/ }).click();
+  await page.getByRole("tab", { name: /Usage/ }).click();
   await main(page)
     .getByRole("link", { name: "Code Migrator", exact: true })
     .first()
@@ -192,7 +192,7 @@ test("cold deep links use the canonical hierarchy and each crumb works", async (
   for (const [path, crumbs] of [
     [
       "/plan-runs/1/stages/2",
-      ["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"],
+      ["Plan runs", "Run #1: Java EE to Quarkus", "Migrate"],
     ],
     ["/skills/collections/1", ["Skills", "Java modernization foundation"]],
     [
@@ -239,12 +239,12 @@ test("a not-found detail keeps the trail it was reached from", async ({
       stage: 4,
     })
   );
-  await expect(mainHeading(page)).toHaveText(/^Run #1 — /);
+  await expect(mainHeading(page)).toHaveText(/^Run #1: /);
   // Simulate the stage disappearing: navigate within the SPA with the run's trail.
   await page.evaluate((stagePath) => {
     const crumbs = [
       { title: "Plan runs", path: "/plan-runs" },
-      { title: "Run #1 — Java EE to Quarkus", path: "/plan-runs/1" },
+      { title: "Run #1: Java EE to Quarkus", path: "/plan-runs/1" },
     ];
     window.history.pushState({ state: { breadcrumbs: crumbs } }, "", stagePath);
     window.dispatchEvent(
@@ -256,7 +256,7 @@ test("a not-found detail keeps the trail it was reached from", async ({
   await expect(page.getByText("Stage not found").first()).toBeVisible();
   await expect
     .poll(() => breadcrumbTitles(page))
-    .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Stage"]);
+    .toEqual(["Plan runs", "Run #1: Java EE to Quarkus", "Stage"]);
 });
 
 test("run and stage pages name their nouns in the trail while the run loads", async ({
@@ -277,5 +277,5 @@ test("run and stage pages name their nouns in the trail while the run loads", as
   ).toHaveAttribute("href", withBase("/plan-runs/1"));
   await expect
     .poll(() => breadcrumbTitles(page), { timeout: 20_000 })
-    .toEqual(["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"]);
+    .toEqual(["Plan runs", "Run #1: Java EE to Quarkus", "Migrate"]);
 });

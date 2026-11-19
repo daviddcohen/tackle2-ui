@@ -338,7 +338,10 @@ describe("AgentDetail", () => {
         "href",
         expect.stringMatching(/^\/migration-plans\/1\?from=agent-7/)
       );
-      expect(screen.getByText("Stage 1")).toBeInTheDocument();
+      // Stages are numbered, as on the skill page.
+      const planRow = screen.getByRole("row", { name: /Plan A/ });
+      expect(planRow).toHaveTextContent("agentic.plan.stageTitle");
+      expect(planRow).not.toHaveTextContent(/Stage 1$/);
     });
 
     it("never says the agent is unused when the plans fail to load", async () => {

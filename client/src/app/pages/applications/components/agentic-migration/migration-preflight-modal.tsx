@@ -8,8 +8,6 @@ import { object, string } from "yup";
 import {
   Alert,
   Button,
-  Content,
-  ExpandableSection,
   Form,
   FormGroup,
   FormHelperText,
@@ -24,7 +22,6 @@ import {
   StackItem,
 } from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
-import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   Caption,
   Table,
@@ -57,12 +54,6 @@ import {
   MigrationStatus,
   preflightDisplayStatus,
 } from "@app/pages/agentic/components/agentic-status";
-import { SectionEmpty } from "@app/pages/agentic/components/detail-section";
-import {
-  SkillsTable,
-  groupSkillSources,
-  skillRowCounts,
-} from "@app/pages/agentic/components/skills-table";
 import {
   useFetchApplicationMigrations,
   useFetchMigrationPlans,
@@ -70,6 +61,12 @@ import {
 import { universalComparator } from "@app/utils/utils";
 
 import { applicationDetailsPath, planRunPath } from "./paths";
+import { RunSkillsPreview } from "./run-skills-preview";
+import {
+  PlanChoice,
+  groupReadyApplicationsByPlan,
+  startApplicationIds,
+} from "./start-groups";
 
 export const DEFAULT_TARGET_BRANCH = "konveyor/agentic-migration";
 
@@ -160,69 +157,6 @@ const PreflightReason: React.FC<{
 };
 
 /**
- * The skills of one application's migration, from the view the dialog
- * already holds (the same set as its Skills tab), behind a collapsed
- * disclosure whose toggle carries the count. `isRerun` swaps the standard
- * sentence for one saying the new run resolves them again. The dialog owns
- * `isExpanded`, so hiding and showing the preview keeps what was open.
- */
-const ApplicationSkillsPreview: React.FC<{
-  migration: ApplicationMigrationView;
-  isRerun: boolean;
-  isExpanded: boolean;
-  onExpandedChange: (isExpanded: boolean) => void;
-}> = ({ migration, isRerun, isExpanded, onExpandedChange }) => {
-  const { t } = useTranslation();
-  // Unknown is not "no skills".
-  const rows =
-    migration.effectiveSkills != null
-      ? groupSkillSources(migration.effectiveSkills, migration.excludedSkills)
-      : undefined;
-  const { used, total } = skillRowCounts(rows);
-  const hasExcluded = used < total;
-  const toggleText = !total
-    ? t("agentic.applicationDetail.tabSkills")
-    : hasExcluded
-      ? t("agentic.applicationDetail.skillsTitleUsed", { used, count: total })
-      : t("agentic.applicationDetail.skillsTitle", { count: total });
-  const description = isRerun
-    ? hasExcluded
-      ? t("agentic.execution.rerunSkillsDescriptionExcluded")
-      : t("agentic.execution.rerunSkillsDescription")
-    : hasExcluded
-      ? t("agentic.applicationDetail.skillsDescriptionExcluded")
-      : t("agentic.applicationDetail.skillsDescription");
-  return (
-    <ExpandableSection
-      toggleId="migration-preflight-skills-toggle"
-      contentId="migration-preflight-skills"
-      toggleText={toggleText}
-      isExpanded={isExpanded}
-      onToggle={(_event, expanded) => onExpandedChange(expanded)}
-      isIndented
-    >
-      {rows == null ? (
-        <EmptyTextMessage message={t("agentic.common.unavailable")} />
-      ) : rows.length === 0 ? (
-        <SectionEmpty>{t("agentic.execution.skillsEmpty")}</SectionEmpty>
-      ) : (
-        <Stack hasGutter>
-          <StackItem>
-            <Content component="p" className={textStyles.textColorSubtle}>
-              {description}
-            </Content>
-          </StackItem>
-          <StackItem>
-            {/* Plain names: a link would close the dialog and lose its choices. */}
-            <SkillsTable rows={rows} />
-          </StackItem>
-        </Stack>
-      )}
-    </ExpandableSection>
-  );
-};
-
-/**
  * "Run migration plan": the
  * readiness of each selected application first, then how to run the ready
  * ones. Mount it only while open, so every opening starts from a fresh form.
@@ -252,7 +186,8 @@ export const MigrationPreflightModal: React.FC<
     providedMigrations ? [] : applications.map((application) => application.id)
   );
   const migrations = providedMigrations ?? fetchedMigrations;
-  const { migrationPlans: plans } = useFetchMigrationPlans();
+  const { migrationPlans: plans, isLoading: isLoadingPlans } =
+    useFetchMigrationPlans();
   const schema = object({
     planSelection: string().oneOf(["recommended", "single"]).required(),
     planId: string().when("planSelection", {
@@ -331,27 +266,46 @@ export const MigrationPreflightModal: React.FC<
     </Link>
   );
 
+  // The plan runs Run starts: the skills preview and submit both read
+  // these, so the preview shows exactly what Run sends. From a fixed plan
+  // only the selected ready rows start (otherwise runIds is every ready row).
+  const startRows = rows.filter(({ application }) =>
+    runIds.has(application.id)
+  );
+  const groupStarts = (choice: PlanChoice) =>
+    groupReadyApplicationsByPlan(startRows, choice, plans).map((group) =>
+      // The fixed plan keeps its name while the plans list loads.
+      fixedPlan != null && group.plan.id === fixedPlan.id
+        ? { ...group, plan: { id: fixedPlan.id, name: fixedPlan.name } }
+        : group
+    );
+  const startGroups = groupStarts({ planSelection, planId });
+  const isPlanMissing = planSelection === "single" && planId === "";
+  // What Run sends. Before a plan is picked for all, nothing can be sent
+  // (Run is disabled): the label still names the ready applications (the
+  // selected ones from a fixed plan).
+  const startCount = isPlanMissing
+    ? runCount
+    : startApplicationIds(startGroups).length;
+
   const submit = (values: MigrationPreflightValues) => {
     onStartReady({
-      applicationIds: runApplications.map((application) => application.id),
+      applicationIds: startApplicationIds(groupStarts(values)),
       planSelection: values.planSelection,
       planId: values.planSelection === "single" ? values.planId : undefined,
       targetBranch: values.targetBranch.trim(),
     });
   };
 
-  // One application on its own migration plan: preview that plan's skills.
-  // A plan picked for all applications resolves other skills, and several
-  // applications have no single preview, so in both cases there is none (a
-  // follow-up needs a run preview endpoint).
-  const singleMigration =
-    rows.length === 1 && !isNoneReady && planSelection !== "single"
-      ? rows[0].migration
-      : undefined;
+  // Nothing to preview when nothing can start: no ready application, or
+  // none selected from a fixed plan.
   const skillsPreview =
-    singleMigration == null ? null : (
-      <ApplicationSkillsPreview
-        migration={singleMigration}
+    isNoneReady || (isFixedPlan && runCount === 0) ? null : (
+      <RunSkillsPreview
+        groups={startGroups}
+        migrations={migrations}
+        isPlanMissing={isPlanMissing}
+        isLoadingPlans={isLoadingPlans}
         isRerun={rerunPlanId != null}
         isExpanded={isSkillsExpanded}
         onExpandedChange={setSkillsExpanded}
@@ -637,10 +591,10 @@ export const MigrationPreflightModal: React.FC<
               type="submit"
               form="migration-preflight-form"
               variant="primary"
-              isDisabled={!isValid || isStarting || runCount === 0}
+              isDisabled={!isValid || isStarting || startCount === 0}
               isLoading={isStarting}
             >
-              {t("agentic.execution.startReady", { count: runCount })}
+              {t("agentic.execution.startReady", { count: startCount })}
             </Button>
             <Button variant="link" onClick={onClose}>
               {t("actions.cancel")}

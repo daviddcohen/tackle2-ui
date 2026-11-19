@@ -42,13 +42,7 @@ import {
 } from "@app/api/rest/agentic";
 import { server } from "@mocks/server";
 
-import {
-  collectionSkillsForAgents,
-  db,
-  effectiveSkillsForPlan,
-  resetAgenticDb,
-  uniqueEffectiveSkills,
-} from "./db";
+import { db, resetAgenticDb } from "./db";
 import { resetExecutionWorld } from "./execution";
 import handlers from "./handlers";
 
@@ -116,6 +110,53 @@ describe("REST semantics", () => {
     expect(typeof skill.id).toBe("string");
     expect(skill.createTime).toBeDefined();
     expect((await getSkillById(skill.id)).name).toBe("Brand new skill");
+  });
+
+  it("accepts and validates a skill's load policy", async () => {
+    const base = {
+      description: "",
+      sourceType: "inline" as const,
+      content: "# Hi",
+    };
+    const rule = await createSkill({
+      ...base,
+      name: "House rule",
+      loadPolicy: "rule",
+    });
+    expect((await getSkillById(rule.id)).loadPolicy).toBe("rule");
+    // Absent on create: "skill", the CRD default.
+    const plain = await createSkill({ ...base, name: "Plain skill" });
+    expect((await getSkillById(plain.id)).loadPolicy).toBe("skill");
+    // Absent on update keeps the stored policy; a value replaces it.
+    await updateSkill({ ...base, id: rule.id, name: "House rule" });
+    expect((await getSkillById(rule.id)).loadPolicy).toBe("rule");
+    await updateSkill({
+      ...base,
+      id: rule.id,
+      name: "House rule",
+      loadPolicy: "skill",
+    });
+    expect((await getSkillById(rule.id)).loadPolicy).toBe("skill");
+    const before = await getSkills();
+    expect(
+      await messageOf(
+        axios.post(AGENTIC_ENDPOINTS.skills, {
+          ...base,
+          name: "Bad policy",
+          loadPolicy: "always",
+        })
+      )
+    ).toBe('loadPolicy must be "rule" or "skill".');
+    expect(
+      await statusOf(
+        axios.put(`${AGENTIC_ENDPOINTS.skills}/${rule.id}`, {
+          ...base,
+          name: "House rule",
+          loadPolicy: 1,
+        })
+      )
+    ).toBe(400);
+    expect(await getSkills()).toEqual(before);
   });
 
   it("uses the URL id, never a body id", async () => {
@@ -234,26 +275,27 @@ describe("referential integrity", () => {
 
 describe("rename cascades (names are resolved by the server)", () => {
   it("reflects a Skill rename on agents and collections", async () => {
-    const skill = await getSkillById("1");
+    // Build validation standards: on Build Validator and in a collection.
+    const skill = await getSkillById("15");
     await updateSkill({
-      id: "1",
-      name: "Spring Boot to Quarkus RENAMED",
+      id: "15",
+      name: "Build validation RENAMED",
       description: skill.description,
       sourceType: skill.sourceType,
-      content: skill.content,
+      imageRef: skill.imageRef,
       associations: skill.associations?.map((a) =>
         a.scope === "agent"
           ? { scope: a.scope, resource: { id: a.resource.id } }
           : { scope: a.scope, resource: { id: a.resource.id } }
       ),
     });
-    const collection = await getSkillCollectionById("1");
+    const collection = await getSkillCollectionById("2");
     expect(collection.skills.map((s) => s.name)).toContain(
-      "Spring Boot to Quarkus RENAMED"
+      "Build validation RENAMED"
     );
-    const agent = await getAgentById("2");
+    const agent = await getAgentById("3");
     expect(agent.skills.map((s) => s.name)).toContain(
-      "Spring Boot to Quarkus RENAMED"
+      "Build validation RENAMED"
     );
   });
 
@@ -373,8 +415,16 @@ describe("plans", () => {
         isDefault: false,
       },
     });
-    expect(created.effectiveSkills?.length).toBeGreaterThan(0);
     expect(created.runCount).toBe(0);
+    // The saved plan resolves: the target profile reaches every stage.
+    const { everyStage } = await resolvePlanSkills({
+      stages: created.stages.map(({ agent }) => ({ agent: { id: agent.id } })),
+      migrationPath: created.migrationPath && {
+        archetype: { id: created.migrationPath.archetype.id },
+        targetProfiles: created.migrationPath.targetProfiles,
+      },
+    });
+    expect(everyStage[0].skills.length).toBeGreaterThan(0);
   });
 
   it("assigns a Plan to a target profile atomically", async () => {
@@ -416,117 +466,154 @@ describe("plan skill review", () => {
     },
   });
 
-  it("resolves a draft's skills from every source, one entry per skill", async () => {
+  it("resolves a draft's skills per stage and for every stage", async () => {
     // A full MigrationPlanRequest is a valid resolve body.
-    const { skills } = await resolvePlanSkills(
-      requestFor(await getMigrationPlanById("5"))
-    );
-    const ids = skills.map(({ skill }) => skill.id);
-    expect(new Set(ids).size).toBe(ids.length);
-    expect([...ids].sort((a, b) => Number(a) - Number(b))).toEqual([
-      "1",
-      "2",
-      "3",
-      "7",
-      "8",
-      "9",
-      "13",
-      "14",
-      "15",
+    const plan = await getMigrationPlanById("5");
+    const { stages, everyStage } = await resolvePlanSkills(requestFor(plan));
+    const idsOf = (entries: { skill: { id: string } }[]) =>
+      entries.map(({ skill }) => skill.id);
+    // Each stage: its agent's skills, then its collections' skills.
+    expect(
+      stages.map((group) => [group.name, group.agent.name, idsOf(group.skills)])
+    ).toEqual([
+      ["Assess runtime", "Migration Proposal Agent", ["13"]],
+      ["Upgrade Java", "Java Code Migrator", ["14", "1", "2", "3"]],
+      ["Containerize", "Containerization Agent", ["8"]],
+      ["Validate", "Build Validator", ["15", "6"]],
     ]);
-    expect(skills.every(({ excluded }) => !excluded)).toBe(true);
-    expect(skills.find(({ skill }) => skill.id === "9")?.sources).toEqual([
+    expect(stages[3].skills[0].from).toEqual([
+      { kind: "agent", agent: { id: "3", name: "Build Validator" } },
       {
-        scope: "agent",
-        scopeName: "Code Migrator",
-        resource: { id: "2", name: "Code Migrator" },
-      },
-      {
-        scope: "archetype",
-        scopeName: "Legacy Java Application",
-        resource: { id: 3, name: "Legacy Java Application" },
-      },
-      {
-        scope: "targetProfile",
-        scopeName: "Java 17 on OpenShift",
-        resource: { id: 31, name: "Java 17 on OpenShift" },
+        kind: "collection",
+        agent: { id: "3", name: "Build Validator" },
+        collection: { id: "2", name: "OpenShift delivery checks" },
       },
     ]);
-    const collection = { id: "1", name: "Java modernization foundation" };
-    expect(skills.find(({ skill }) => skill.id === "3")?.sources).toEqual([
+    // Every stage: the plan's archetype, then its target profile.
+    expect(everyStage).toHaveLength(1);
+    expect(idsOf(everyStage[0].skills)).toEqual(["8", "9", "14", "15", "7"]);
+    expect(everyStage[0].skills.find((e) => e.skill.id === "9")?.from).toEqual([
       {
-        scope: "agent",
-        scopeName: "Migration Proposal Agent via Java modernization foundation",
-        resource: { id: "1", name: "Migration Proposal Agent" },
-        collection,
+        kind: "archetype",
+        archetype: { id: 3, name: "Legacy Java Application" },
       },
       {
-        scope: "agent",
-        scopeName: "Code Migrator via Java modernization foundation",
-        resource: { id: "2", name: "Code Migrator" },
-        collection,
+        kind: "targetProfile",
+        targetProfile: { id: 31, name: "Java 17 on OpenShift" },
+        archetype: { id: 3, name: "Legacy Java Application" },
       },
     ]);
-  });
 
-  it("lists each source once, even for an agent used by two stages", async () => {
-    const { skills } = await resolvePlanSkills({
-      stages: [{ agent: { id: "2" } }, { agent: { id: "2" } }],
+    // A collection skill names the agent and the collection.
+    expect(
+      stages[1].skills.find(({ skill }) => skill.id === "3")?.from
+    ).toEqual([
+      {
+        kind: "collection",
+        agent: { id: "9", name: "Java Code Migrator" },
+        collection: { id: "1", name: "Java modernization foundation" },
+      },
+    ]);
+    // The plan excludes nothing, and each group lists a skill once.
+    [...stages, ...everyStage].forEach((group) => {
+      const ids = idsOf(group.skills);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(group.skills.every(({ excluded }) => !excluded)).toBe(true);
     });
-    const migration = skills.find(({ skill }) => skill.id === "1");
-    expect(migration?.sources.map((source) => source.scopeName)).toEqual([
-      "Code Migrator",
-      "Code Migrator via Java modernization foundation",
-    ]);
   });
 
-  it("matches the sources the plan, run and application views resolve", async () => {
-    for (const plan of db.plans) {
-      const { skills } = await resolvePlanSkills(
-        requestFor(await getMigrationPlanById(plan.id))
-      );
-      const key = (scope: string, scopeName: string, skillId: string) =>
-        `${skillId}|${scope}|${scopeName}`;
-      const resolved = skills
-        .flatMap(({ skill, sources }) =>
-          sources.map((source) => key(source.scope, source.scopeName, skill.id))
-        )
-        .sort();
-      const expected = uniqueEffectiveSkills([
-        ...effectiveSkillsForPlan(plan),
-        ...collectionSkillsForAgents(plan.stages.map((s) => s.agent.id)),
-      ])
-        .map((entry) => key(entry.scope, entry.scopeName, entry.skill.id))
-        .sort();
-      expect(resolved).toEqual(expected);
-    }
+  it("lists each origin once in a stage, and each stage on its own", async () => {
+    const { stages } = await resolvePlanSkills({
+      stages: [
+        { agent: { id: "2" }, name: "First" },
+        { agent: { id: "2" }, name: "Second" },
+      ],
+    });
+    const migration = stages[0].skills.find(({ skill }) => skill.id === "14");
+    expect(migration?.from).toEqual([
+      { kind: "agent", agent: { id: "2", name: "Code Migrator" } },
+    ]);
+    expect(stages.map(({ order, name }) => [order, name])).toEqual([
+      [1, "First"],
+      [2, "Second"],
+    ]);
+    expect(stages[0].skills).toEqual(stages[1].skills);
+  });
+
+  it("is the resolution the application views read", async () => {
+    // An application view resolves its plan's stages the same way, with
+    // its own context instead of the plan's.
+    const migrations = await getApplicationMigrations([1]);
+    const view = migrations[1];
+    const plan = await getMigrationPlanById(view.plan!.id);
+    const forApplication = await resolvePlanSkills({
+      ...requestFor(plan),
+      applications: [{ id: 1 }],
+    });
+    expect(view.skills?.stages).toEqual(
+      forApplication.stages.map((group, index) => ({
+        ...group,
+        stageId: plan.stages[index].id,
+      }))
+    );
+    expect(view.skills?.everyStage).toEqual(forApplication.everyStage);
   });
 
   it("flags excluded skills and ignores ids that reference nothing", async () => {
     const draft = requestFor(await getMigrationPlanById("5"));
-    const { skills } = await resolvePlanSkills({
+    const excludedDraft = await resolvePlanSkills({
       ...draft,
       excludedSkills: [{ id: "9" }, { id: "9" }, { id: "9999" }],
     });
-    expect(
-      skills.filter(({ excluded }) => excluded).map(({ skill }) => skill.id)
-    ).toEqual(["9"]);
+    const entries = [
+      ...excludedDraft.stages.flatMap((group) => group.skills),
+      ...excludedDraft.everyStage.flatMap((group) => group.skills),
+    ];
+    expect([
+      ...new Set(
+        entries.filter(({ excluded }) => excluded).map(({ skill }) => skill.id)
+      ),
+    ]).toEqual(["9"]);
 
     const plain = await resolvePlanSkills(draft);
     const withUnknown = await resolvePlanSkills({
-      stages: [...draft.stages, { agent: { id: "9999" } }],
+      stages: [...draft.stages, { agent: { id: "9999" }, name: "Unknown" }],
       migrationPath: {
         archetype: draft.migrationPath!.archetype,
         targetProfiles: [...draft.migrationPath!.targetProfiles, { id: 9999 }],
       },
     });
-    expect(withUnknown).toEqual(plain);
+    // The unknown agent's stage is listed, with nothing in it.
+    expect(withUnknown).toEqual({
+      ...plain,
+      stages: [
+        ...plain.stages,
+        {
+          order: plain.stages.length + 1,
+          name: "Unknown",
+          agent: { id: "9999", name: "9999" },
+          skills: [],
+        },
+      ],
+    });
     expect(
       await resolvePlanSkills({
         stages: [],
         migrationPath: { archetype: { id: 9999 }, targetProfiles: [] },
+        applications: undefined,
       })
-    ).toEqual({ skills: [] });
+    ).toEqual({ stages: [], everyStage: [{ skills: [] }] });
+    expect(
+      await resolvePlanSkills({ stages: [], applications: [{ id: 9999 }] })
+    ).toEqual({ stages: [], everyStage: [] });
+    // No applications is the plan preview; a stage without a name is named
+    // after its position.
+    const unnamed = await resolvePlanSkills({
+      stages: [{ agent: { id: "2" } }],
+      applications: [],
+    });
+    expect(unnamed.stages.map(({ name }) => name)).toEqual(["Stage 1"]);
+    expect(unnamed.everyStage).toEqual([{ skills: [] }]);
   });
 
   it("rejects a malformed body with 400", async () => {
@@ -538,6 +625,8 @@ describe("plan skill review", () => {
       await post({ stages: [], migrationPath: { archetype: { id: "3" } } })
     ).toBe(400);
     expect(await post({ stages: [], excludedSkills: ["9"] })).toBe(400);
+    expect(await post({ stages: [], applications: [{ id: "1" }] })).toBe(400);
+    expect(await post({ stages: [], applications: {} })).toBe(400);
   });
 
   it("follows the apiError scenario like every read", async () => {
@@ -545,7 +634,7 @@ describe("plan skill review", () => {
     expect(await statusOf(resolvePlanSkills({ stages: [] }))).toBe(503);
   });
 
-  it("lists the plans that resolve a skill, with the resolution's sources and exclusion", async () => {
+  it("lists the plans that resolve a skill, with the resolution's placements", async () => {
     // Skill 3 reaches plan 5 only through an agent's skill collection.
     const draft = requestFor(await getMigrationPlanById("5"));
     await updateMigrationPlan({
@@ -558,31 +647,63 @@ describe("plan skill review", () => {
     const names = plans.map(({ plan }) => plan.name);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
     const plan5 = plans.find(({ plan }) => plan.id === "5");
-    const resolved = (
-      await resolvePlanSkills({ ...draft, excludedSkills: [{ id: "3" }] })
-    ).skills.find(({ skill }) => skill.id === "3");
+    const preview = await resolvePlanSkills({
+      ...draft,
+      excludedSkills: [{ id: "3" }],
+    });
     expect(plan5).toEqual({
       plan: { id: "5", name: draft.name },
-      sources: resolved?.sources,
-      excluded: true,
+      placements: preview.stages
+        .filter((group) => group.skills.some(({ skill }) => skill.id === "3"))
+        .map((group) => {
+          const entry = group.skills.find(({ skill }) => skill.id === "3")!;
+          return {
+            stage: { order: group.order, name: group.name },
+            from: entry.from,
+            excluded: entry.excluded,
+          };
+        }),
     });
-    expect(plan5?.sources.every(({ collection }) => collection != null)).toBe(
-      true
-    );
+    expect(plan5?.placements.length).toBeGreaterThan(0);
+    expect(
+      plan5?.placements.every(
+        ({ stage, excluded }) => stage != null && excluded
+      )
+    ).toBe(true);
+    expect(
+      plan5?.placements.every(({ from }) =>
+        from.every((origin) => origin.kind === "collection")
+      )
+    ).toBe(true);
 
     // Every plan, the same as resolving it.
     for (const plan of db.plans) {
-      const { skills } = await resolvePlanSkills({
+      const { stages, everyStage } = await resolvePlanSkills({
         ...requestFor(await getMigrationPlanById(plan.id)),
         excludedSkills: plan.excludedSkills?.map(({ id }) => ({ id })),
       });
-      const entry = skills.find(({ skill }) => skill.id === "3");
+      // The plan preview has one every-stage group.
+      const contextEntry = everyStage[0]?.skills.find(
+        ({ skill }) => skill.id === "3"
+      );
+      const placements = [
+        ...stages.flatMap((group) =>
+          group.skills
+            .filter(({ skill }) => skill.id === "3")
+            .map(({ from, excluded }) => ({
+              stage: { order: group.order, name: group.name },
+              from,
+              excluded,
+            }))
+        ),
+        ...(contextEntry
+          ? [{ from: contextEntry.from, excluded: contextEntry.excluded }]
+          : []),
+      ];
       expect(plans.find((candidate) => candidate.plan.id === plan.id)).toEqual(
-        entry && {
-          plan: { id: plan.id, name: plan.name },
-          sources: entry.sources,
-          excluded: entry.excluded,
-        }
+        placements.length > 0
+          ? { plan: { id: plan.id, name: plan.name }, placements }
+          : undefined
       );
     }
   });
@@ -679,7 +800,7 @@ describe("execution: one source of truth", () => {
       detail.applications.forEach((application) => {
         const view = migrations[application.id];
         expect(view.planRun?.id).toBe("2");
-        expect(view.plan?.name).toBe(detail.planName);
+        expect(view.planRunPlan?.name).toBe(detail.planName);
         if (detail.status === "AwaitingApproval") {
           expect(view.intervention).toBe("actionRequired");
         } else {

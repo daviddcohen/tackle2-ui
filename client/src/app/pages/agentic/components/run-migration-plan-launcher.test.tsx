@@ -9,7 +9,7 @@ import {
 
 const run = {
   id: "4",
-  name: "Run #4 — Java EE lift and shift",
+  name: "Run #4: Java EE lift and shift",
   planId: "3",
   planName: "Java EE lift and shift",
   applications: [

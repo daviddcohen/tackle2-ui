@@ -43,15 +43,15 @@ const routes: RouteCase[] = [
   { path: "/plan-runs", heading: "Plan runs", nav: "Plan runs" },
   {
     path: "/plan-runs/1",
-    heading: "Run #1 — Java EE to Quarkus",
+    heading: "Run #1: Java EE to Quarkus",
     nav: "Plan runs",
-    crumbs: ["Plan runs", "Run #1 — Java EE to Quarkus"],
+    crumbs: ["Plan runs", "Run #1: Java EE to Quarkus"],
   },
   {
     path: "/plan-runs/1/stages/1",
     heading: "Prepare proposal",
     nav: "Plan runs",
-    crumbs: ["Plan runs", "Run #1 — Java EE to Quarkus", "Prepare proposal"],
+    crumbs: ["Plan runs", "Run #1: Java EE to Quarkus", "Prepare proposal"],
   },
   { path: "/skills", heading: "Skills", nav: "Skills" },
   {

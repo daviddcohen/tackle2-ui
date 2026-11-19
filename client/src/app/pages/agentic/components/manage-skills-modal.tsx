@@ -46,10 +46,8 @@ const DESCRIPTION_ID = "manage-skills-modal-description";
 const FORM_ID = "manage-skills-form";
 const SELECT_ID = "manage-skills-select";
 const SAVE_ID = "manage-skills-save";
-/** The id the drawer and Skills tab buttons share, for focus after a save. */
-export const MANAGE_SKILLS_BUTTON_ID = "manage-skills-button";
 
-/** The entity whose direct skill associations are edited. */
+/** The owner whose attached skills are edited. */
 export type ManageSkillsTarget =
   | { scope: "archetype"; id: number; name: string }
   | {
@@ -59,6 +57,15 @@ export type ManageSkillsTarget =
       archetype: { id: number; name: string };
     }
   | { scope: "application"; id: number; name: string };
+
+/**
+ * The id of the Manage skills button that edits `target` ("manage-skills-
+ * archetype-1"): unique per group when one page shows several, and where
+ * focus goes after a save when the element that opened the modal is gone.
+ */
+export const manageSkillsButtonId = (
+  target: Pick<ManageSkillsTarget, "scope" | "id">
+) => `manage-skills-${target.scope}-${target.id}`;
 
 export interface ManageSkillsModalProps {
   /** The entity whose direct skills are edited; closed when null. */
@@ -76,7 +83,7 @@ export const useCanManageSkills = () => {
   return isAgenticEnabled && canWriteSkills;
 };
 
-/** Ids of the skills associated directly with the target (server data). */
+/** Ids of the skills attached to the target itself (server data). */
 const directSkillIds = (skills: Skill[], target: ManageSkillsTarget) =>
   skills
     .filter((skill) =>
@@ -98,11 +105,17 @@ const isTransient = (element: Element) =>
  * close. A kebab item opens the modal after its menu closed, so the last
  * focus outside a menu is the kebab toggle. When that element is gone (an
  * empty state turned into a table after a save), focus moves to the
- * placement's Manage skills button.
+ * Manage skills button of the target's group.
  */
-const useReturnFocus = (isOpen: boolean) => {
+const useReturnFocus = (target: ManageSkillsTarget | null) => {
+  const isOpen = target != null;
   const lastFocused = React.useRef<HTMLElement | null>(null);
   const returnTo = React.useRef<HTMLElement | null>(null);
+  // The last target's button id, kept after close for the fallback.
+  const [groupButtonId, setGroupButtonId] = React.useState<string | null>(null);
+  const targetButtonId = target != null ? manageSkillsButtonId(target) : null;
+  if (targetButtonId != null && targetButtonId !== groupButtonId)
+    setGroupButtonId(targetButtonId);
 
   React.useEffect(() => {
     const onFocusIn = (event: FocusEvent) => {
@@ -127,21 +140,23 @@ const useReturnFocus = (isOpen: boolean) => {
       returnTo.current = null;
       // After the next render, when a table may have replaced the trigger.
       frame = window.requestAnimationFrame(() => {
-        const target = element?.isConnected
+        const destination = element?.isConnected
           ? element
-          : document.getElementById(MANAGE_SKILLS_BUTTON_ID);
-        target?.focus();
+          : groupButtonId != null
+            ? document.getElementById(groupButtonId)
+            : null;
+        destination?.focus();
       });
     }
     wasOpen.current = isOpen;
     return () => {
       if (frame != null) window.cancelAnimationFrame(frame);
     };
-  }, [isOpen]);
+  }, [isOpen, groupButtonId]);
 };
 
 /**
- * Manage the skills associated directly with an archetype, a target profile
+ * Manage the skills attached to an archetype, a target profile
  * or an application. Saving replaces the whole set; the same associations
  * are edited from the skill form. Mount it only for users who can manage
  * skills (`useCanManageSkills`): it listens to focus on the whole page.
@@ -150,7 +165,7 @@ export const ManageSkillsModal: React.FC<ManageSkillsModalProps> = ({
   target,
   onClose,
 }) => {
-  useReturnFocus(target != null);
+  useReturnFocus(target);
   // Mounted only while open, so every opening starts from the server data.
   return target ? (
     <ManageSkillsDialog
@@ -343,9 +358,14 @@ const ManageSkillsDialog: React.FC<{
     >
       <ModalHeader
         title={t("agentic.skill.manageSkills.titleFor", { name })}
-        description={t(
-          `agentic.skill.manageSkills.description.${target.scope}`
-        )}
+        // The scope sentence the attached lists show for this owner.
+        description={
+          target.scope === "targetProfile"
+            ? t("agentic.skill.scopeSentence.targetProfile", {
+                archetype: target.archetype.name,
+              })
+            : t(`agentic.skill.scopeSentence.${target.scope}`)
+        }
         labelId={TITLE_ID}
         descriptorId={DESCRIPTION_ID}
       />
@@ -394,14 +414,25 @@ const ManageSkillsForm: React.FC<ManageSkillsFormProps> = ({
     () =>
       [...skills]
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((skill) => ({
-          value: skill.id,
-          label: skill.name,
-          ...(skill.description
-            ? { optionProps: { description: skill.description } }
-            : {}),
-        })),
-    [skills]
+        .map((skill) => {
+          // How agents use it comes first: it decides what attaching does.
+          const policy = t(
+            `agentic.skill.loadPolicy.${skill.loadPolicy ?? "skill"}`
+          );
+          return {
+            value: skill.id,
+            label: skill.name,
+            optionProps: {
+              description: skill.description
+                ? t("agentic.skill.manageSkills.optionDescription", {
+                    policy,
+                    description: skill.description,
+                  })
+                : policy,
+            },
+          };
+        }),
+    [skills, t]
   );
 
   const helper =

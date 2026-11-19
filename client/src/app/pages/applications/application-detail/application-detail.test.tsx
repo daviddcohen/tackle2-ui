@@ -113,7 +113,6 @@ jest.mock("@app/queries/agentic", () => ({
         intervention: "none",
         stages: [],
         plan: { id: "1", name: "Java EE to Quarkus" },
-        effectiveSkills: [],
       },
     },
     isLoading: false,
@@ -194,7 +193,8 @@ describe("ApplicationDetail Manage skills", () => {
   it("opens the same modal from the Skills tab", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole("button", { name: MANAGE }));
+    // The group's button is named after the application (its aria-label).
+    await user.click(await screen.findByRole("button", { name: MANAGE_TITLE }));
     expect(screen.getAllByRole("dialog", { name: MANAGE_TITLE })).toHaveLength(
       1
     );
@@ -205,11 +205,12 @@ describe("ApplicationDetail Manage skills", () => {
     const user = userEvent.setup();
     renderPage();
     expect(
-      await screen.findByRole("link", {
-        name: "agentic.applicationDetail.goToSkills",
+      await screen.findByRole("heading", {
+        name: "agentic.attachedSkills.application",
       })
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: MANAGE })).toBeNull();
+    expect(screen.queryByRole("button", { name: MANAGE_TITLE })).toBeNull();
     await openActions(user);
     expect(screen.getAllByRole("menuitem").length).toBeGreaterThan(0);
     expect(screen.queryByRole("menuitem", { name: MANAGE })).toBeNull();

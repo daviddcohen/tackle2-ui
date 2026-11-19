@@ -44,7 +44,7 @@ test.describe("Skill form: Skill collections", () => {
     page,
     diagnostics,
   }) => {
-    await gotoProto(page, "/skills/1?tab=associations");
+    await gotoProto(page, "/skills/1?tab=usage");
     await expect(collectionsSection(page)).toContainText(
       "Java modernization foundation"
     );
@@ -105,12 +105,16 @@ test.describe("Skill collection form: Agents", () => {
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Skill collection updated")).toBeVisible();
 
+    // An old Associations link opens the Usage tab and is rewritten.
     await spaNavigate(page, "/skills/1?tab=associations");
     await expect(
-      page.getByRole("tab", { name: "Associations", selected: true })
+      page.getByRole("tab", { name: "Usage", selected: true })
     ).toBeVisible();
+    await expect(page).toHaveURL(/tab=usage/);
     await expect(
-      main(page).getByRole("link", { name: "Code Migrator" })
+      main(page).getByRole("link", {
+        name: "Quarkus 3.x (Spring Boot Application)",
+      })
     ).toBeVisible();
     await expect(
       main(page).getByRole("link", { name: "Java modernization foundation" })
@@ -129,7 +133,7 @@ test.describe("Skill collection form: Agents", () => {
     ).toBeVisible();
     await pickMulti(page, COLLECTION_AGENTS, ["Test Runner"]);
     // Close the menu so it does not cover the footer buttons.
-    await field(dialog(page), "Description").click();
+    await dialog(page).getByRole("heading").first().click();
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Skill collection updated")).toBeVisible();
     // The collection's own page refreshes without a reload.
@@ -154,7 +158,7 @@ test.describe("Skill collection form: Agents", () => {
       "Platform deployment pack",
     ]);
     // Close the menu so it does not cover the footer buttons.
-    await field(dialog(page), "Description").click();
+    await dialog(page).getByRole("heading").first().click();
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Agent updated")).toBeVisible();
 
@@ -210,7 +214,7 @@ test.describe("Skill association forms: locked chips", () => {
         await chips(page, COLLECTION_SKILLS)
           .getByRole("button", { name })
           .click();
-    await field(dialog(page), "Description").click();
+    await dialog(page).getByRole("heading").first().click();
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Skill collection updated")).toBeVisible();
 

@@ -1,7 +1,21 @@
 /**
  * Run observability side of the agentic mock server: for every started stage
- * of a plan run, the AgentRun behind it (the CR, as the Hub serves it), its
- * recorded transcript and its container logs.
+ * of a plan run and every application of the run, the AgentRun behind it
+ * (the CR, as the Hub serves it), its recorded transcript and its container
+ * logs. The real backend runs one AgentWorkflowRun per application, so a
+ * stage has one AgentRun per application.
+ *
+ * Per application (multi-application runs): each agent run has
+ * its application (label and `APP_ID`), its own name, its own skills (the
+ * stage's group plus that application's every-stage group), its own
+ * transcript text (the repository and "the application" name it) and its
+ * own context curve. Its phase follows the stage, except that a Failed or
+ * AwaitingApproval stage fails or waits for one application only, the run's
+ * first: the other applications' agent runs for that stage Succeeded. The
+ * `StageRun.status` stays the aggregate (the worst state shows). The first
+ * application's agent run keeps the stage's name, messages and output, so a
+ * consumer that takes the stage's first agent run sees what it saw before;
+ * a run on one application is unchanged.
  *
  * No state of its own: everything is generated from the plan run
  * `execution.getPlanRun` returns, so a stage's status agrees everywhere. The
@@ -44,12 +58,16 @@
 import {
   AgentRunLogChunk,
   AgentRunTranscript,
+  ControllerRunPhase,
   EntityId,
+  HubRef,
   ModelProjection,
   PlanRun,
   RECORDING_SKIP_REASONS,
+  SkillLoadPolicy,
   StageAgentRun,
   StageRun,
+  isCommitOf,
   isTerminalRunPhase,
 } from "@app/agentic";
 import {
@@ -173,6 +191,15 @@ interface StageContext {
   stage: StageRun;
   index: number;
   name: string;
+  /** The application this agent run works on (none for a run without any). */
+  application?: HubRef;
+  /** Position of `application` in the run's applications. */
+  applicationIndex: number;
+  /** This agent run's phase (see `applicationPhase`). */
+  phase: ControllerRunPhase;
+  completedAt?: string;
+  /** `terminationData.stopReason` source: the stage output, when it is this run's. */
+  output?: string;
   gateway: StageGateway;
   approve: boolean;
   /** The pod exists: Running or AwaitingApproval. */
@@ -181,28 +208,101 @@ interface StageContext {
   timeline: Timeline;
 }
 
-const agentRunNames = (run: PlanRun): string[] => {
+/**
+ * The applications a stage has an agent run for, in run order. A run without
+ * applications still gets one agent run per stage (no application).
+ */
+const runApplications = (run: PlanRun): (HubRef | undefined)[] =>
+  run.applications.length > 0 ? run.applications : [undefined];
+
+/** Kubernetes name limit. */
+const MAX_NAME = 63;
+
+/** `head` cut to leave room for `tail`, then `tail`: at most 63 characters. */
+const withTail = (head: string, tail: string) =>
+  `${toResourceName(head, MAX_NAME - tail.length)}${tail}`;
+
+/**
+ * Agent run names by stage index, then application index, unique within the
+ * run. The first application keeps the stage's name (`run-{run}-{stage}`,
+ * what a run on one application has, with `-{n}` for a repeated stage name);
+ * the others add `-app-{id}`, cutting the stage slug, never a suffix. Names
+ * that still collide after a cut get `-{stage}-{application}` (1-based).
+ */
+const agentRunNames = (run: PlanRun): string[][] => {
   const base = run.stageRuns.map((stage, index) => {
     const slug = toResourceName(`run-${run.id}-${stage.name}`, 58);
     return slug !== "" ? slug : `run-${toResourceName(run.id)}-${index + 1}`;
   });
-  return base.map((name, index) =>
-    base.indexOf(name) === index ? name : `${name}-${index + 1}`
+  const repeat = base.map((name, index) =>
+    base.indexOf(name) === index ? "" : `-${index + 1}`
+  );
+  const names = base.map((name, index) =>
+    runApplications(run).map((application, applicationIndex) =>
+      applicationIndex === 0 || application == null
+        ? `${name}${repeat[index]}`
+        : withTail(name, `${repeat[index]}-app-${application.id}`)
+    )
+  );
+  const seen = new Set<string>();
+  return names.map((forStage, index) =>
+    forStage.map((name, applicationIndex) => {
+      let unique = name;
+      for (let n = 1; seen.has(unique); n++) {
+        unique = withTail(
+          name,
+          `-${index + 1}-${applicationIndex + 1}${n > 1 ? `-${n}` : ""}`
+        );
+      }
+      seen.add(unique);
+      return unique;
+    })
   );
 };
 
 /**
- * The names of the skills the run gives its agents, once each.
- * `resolvedSkills` has one entry per skill and source, and the loader stages
- * a skill once whatever the number of sources. Skills the plan excluded are
- * not in it.
+ * An agent run's phase. A Failed or AwaitingApproval stage fails or waits
+ * for the run's first application; the other applications' agent runs for
+ * that stage finished (Succeeded), so the stage shows its worst state and
+ * has one decision. Any other stage status is every agent run's.
  */
-const stagedSkillNames = (run: PlanRun): string[] => {
-  const names = new Map<string, string>();
-  (run.resolvedSkills ?? []).forEach(({ skill }) =>
-    names.set(String(skill.id), skill.name)
-  );
-  return [...names.values()];
+const applicationPhase = (
+  stage: StageRun,
+  applicationIndex: number
+): ControllerRunPhase =>
+  applicationIndex > 0 &&
+  (stage.status === "Failed" || stage.status === "AwaitingApproval")
+    ? "Succeeded"
+    : stage.status;
+
+/**
+ * The skills this stage's agent loads for one application, once each, with
+ * how it loads them: the stage's own group of the run's skills snapshot
+ * (`stageId`) and that application's every-stage group, without the rows the
+ * plan excluded. A run without a snapshot stages nothing.
+ */
+const stagedSkills = (
+  run: PlanRun,
+  stage: StageRun,
+  applicationId: number | undefined
+): { name: string; loadPolicy: SkillLoadPolicy }[] => {
+  const rows = [
+    ...(run.skills?.stages.find((group) => group.stageId === stage.stageId)
+      ?.skills ?? []),
+    ...(run.skills?.everyStage.find(
+      (group) => group.application?.id === applicationId
+    )?.skills ?? []),
+  ].filter((row) => !row.excluded);
+  const staged = new Map<
+    string,
+    { name: string; loadPolicy: SkillLoadPolicy }
+  >();
+  rows.forEach(({ skill, loadPolicy }) => {
+    if (!staged.has(skill.id)) {
+      staged.set(skill.id, { name: skill.name, loadPolicy });
+    }
+  });
+  return [...staged.values()];
 };
 
 const isStarted = (stage: StageRun) =>
@@ -241,23 +341,48 @@ const gatewayFor = (stage: StageRun): StageGateway => {
   };
 };
 
-const lastMessageAt = (stage: StageRun) =>
+/** The stage's last message time, of those at or before `limit` if given. */
+const lastMessageAt = (stage: StageRun, limit?: string) =>
   stage.messages?.reduce<string | undefined>(
     (latest, message) =>
-      latest == null || message.timestamp > latest ? message.timestamp : latest,
+      (limit == null || message.timestamp <= limit) &&
+      (latest == null || message.timestamp > latest)
+        ? message.timestamp
+        : latest,
     undefined
   );
 
-const timelineFor = (run: PlanRun, stage: StageRun, now: number): Timeline => {
+/**
+ * When another application's agent run (not the run's first) ended, in a
+ * stage that failed, waits, or was decided: at the stage's last message up
+ * to the decision or the stage's end (a waiting stage's proposal is ready
+ * then). Pinned there, so approving or rejecting the first application's
+ * proposal later never moves it. Other stages: the stage's end.
+ */
+const otherApplicationEnd = (stage: StageRun) => {
+  if (stage.approvedAt != null) {
+    return lastMessageAt(stage, stage.approvedAt) ?? stage.completedAt;
+  }
+  if (stage.status === "Failed" || stage.status === "AwaitingApproval") {
+    return lastMessageAt(stage, stage.completedAt) ?? stage.completedAt;
+  }
+  return stage.completedAt;
+};
+
+const timelineFor = (
+  run: PlanRun,
+  stage: StageRun,
+  phase: ControllerRunPhase,
+  completedAt: string | undefined,
+  now: number
+): Timeline => {
   const started = Date.parse(stage.startedAt ?? run.startedAt);
-  if (stage.status === "Running") {
+  if (phase === "Running") {
     const since = execution.getStageLiveSince(run.id, stage.stageId) ?? started;
     return { start: since, scale: 1, visibleUntil: Math.max(0, now - since) };
   }
   const endIso =
-    stage.status === "AwaitingApproval"
-      ? lastMessageAt(stage)
-      : stage.completedAt;
+    phase === "AwaitingApproval" ? lastMessageAt(stage) : completedAt;
   const end = endIso != null ? Date.parse(endIso) : NaN;
   const duration = Number.isNaN(end)
     ? OBSERVABILITY_SCRIPT_MS
@@ -283,38 +408,57 @@ const timelineFor = (run: PlanRun, stage: StageRun, now: number): Timeline => {
 const contextFor = (
   run: PlanRun,
   index: number,
+  applicationIndex: number,
   name: string,
   now: number
 ): StageContext => {
   const stage = run.stageRuns[index];
-  const terminal = isTerminalRunPhase(stage.status);
+  const phase = applicationPhase(stage, applicationIndex);
+  const own = phase === stage.status;
+  const completedAt =
+    applicationIndex === 0 ? stage.completedAt : otherApplicationEnd(stage);
+  const terminal = isTerminalRunPhase(phase);
   return {
     run,
     stage,
     index,
     name,
+    application: runApplications(run)[applicationIndex],
+    applicationIndex,
+    phase,
+    completedAt,
+    output: own ? stage.output : undefined,
     gateway: gatewayFor(stage),
     approve: stage.requiresApproval,
     live: !terminal,
     terminal,
-    timeline: timelineFor(run, stage, now),
+    timeline: timelineFor(run, stage, phase, completedAt, now),
   };
 };
 
-/** Every started stage of a run, with its agent run name. */
+/**
+ * Every started stage of a run, one agent run per application: stage order,
+ * then the run's application order.
+ */
 const startedStages = (run: PlanRun, now: number): StageContext[] => {
   const names = agentRunNames(run);
   return run.stageRuns.flatMap((stage, index) =>
-    isStarted(stage) ? [contextFor(run, index, names[index], now)] : []
+    isStarted(stage)
+      ? names[index].map((name, applicationIndex) =>
+          contextFor(run, index, applicationIndex, name, now)
+        )
+      : []
   );
 };
 
 const findAgentRun = (name: string, now = Date.now()): StageContext => {
   for (const run of execution.listPlanRuns()) {
     const names = agentRunNames(run);
-    const index = names.indexOf(name);
-    if (index !== -1 && isStarted(run.stageRuns[index])) {
-      return contextFor(run, index, name, now);
+    for (let index = 0; index < names.length; index++) {
+      const applicationIndex = names[index].indexOf(name);
+      if (applicationIndex !== -1 && isStarted(run.stageRuns[index])) {
+        return contextFor(run, index, applicationIndex, name, now);
+      }
     }
   }
   throw notFound(`Agent run "${name}" not found.`);
@@ -487,6 +631,28 @@ const CURVES: Record<"normal" | "danger", ContextCurve> = {
   },
 };
 
+/**
+ * The curve of one agent run: the stage's, with its growth varied by up to
+ * 10 % either way for the applications after the run's first, so each
+ * application's context reads differently (deterministic by name).
+ */
+const curveFor = (
+  curve: ContextCurve,
+  applicationIndex: number,
+  seed: string
+): ContextCurve => {
+  if (applicationIndex === 0) return curve;
+  const factor = 1 + (between(`${seed}:growth`, 0, 20) - 10) / 100;
+  return {
+    ...curve,
+    slope: curve.slope * factor,
+    compactions: curve.compactions.map((c) => ({
+      ...c,
+      slope: c.slope * factor,
+    })),
+  };
+};
+
 /** Context occupancy (fraction of the window) after each step. */
 const occupancy = (curve: ContextCurve, seed: string): number[] => {
   const values: number[] = [];
@@ -526,15 +692,36 @@ const buildScript = (ctx: StageContext): Script => {
     log.push({ rel, level: "WARN", text });
 
   const branch = run.targetBranch || "konveyor/migration";
+  const applicationName =
+    findApplication(ctx.application?.id ?? -1)?.name ?? ctx.application?.name;
   const repo =
-    toResourceName(
-      findApplication(run.applications[0]?.id ?? -1)?.name ?? "application"
-    ) || "application";
-  const skills = stagedSkillNames(run).map((name) => toResourceName(name));
+    toResourceName(applicationName ?? "application") || "application";
+  // In a run on several applications the agent names its application where
+  // the stage's instructions say "the application".
+  const instructions =
+    run.applications.length > 1 && applicationName != null
+      ? stage.instructions.replace(
+          /\b(the) (application)\b/gi,
+          (_match, article: string, word: string) =>
+            `${article} ${applicationName} ${word}`
+        )
+      : stage.instructions;
+  // ...and says which application it works on.
+  const scope =
+    run.applications.length > 1 && applicationName != null
+      ? `I work on ${applicationName} (application ${ctx.applicationIndex + 1} of ${run.applications.length} in this run). `
+      : "";
+  const skills = stagedSkills(run, stage, ctx.application?.id).map(({ name }) =>
+    toResourceName(name)
+  );
   const stageCount = run.stageRuns.length;
   const window = gateway.contextWindow;
   const curve = occupancy(
-    stage.stageId === DANGER_STAGE_ID ? CURVES.danger : CURVES.normal,
+    curveFor(
+      stage.stageId === DANGER_STAGE_ID ? CURVES.danger : CURVES.normal,
+      ctx.applicationIndex,
+      seed
+    ),
     seed
   );
   const compactionSteps = new Set(
@@ -721,7 +908,7 @@ const buildScript = (ctx: StageContext): Script => {
       say(
         at + 400,
         "agent_thought_chunk",
-        `The stage asks me to ${stage.instructions.charAt(0).toLowerCase()}${stage.instructions.slice(1, 160)}`
+        `${scope}The stage asks me to ${instructions.charAt(0).toLowerCase()}${instructions.slice(1, 160)}`
       );
       usage(at + 1500, step);
       continue;
@@ -803,11 +990,11 @@ const buildScript = (ctx: StageContext): Script => {
       acp(at + 3400, ladder("completed", "in_progress", "pending"));
   }
 
-  if (ctx.terminal || stage.status === "AwaitingApproval") {
+  if (ctx.terminal || ctx.phase === "AwaitingApproval") {
     const at = FINISH_MS;
-    if (stage.status === "Failed") {
+    if (ctx.phase === "Failed") {
       const output =
-        stage.output ?? "The stage failed before it could push its changes.";
+        ctx.output ?? "The stage failed before it could push its changes.";
       tool(at, `developer__shell: ${eco.build}`, "execute", "failed", output);
       acp(at + 1200, ladder("completed", "in_progress", "pending"));
       const notice = `Stage failed: ${output}`;
@@ -820,7 +1007,7 @@ const buildScript = (ctx: StageContext): Script => {
         level: "ERROR",
         text: `stage failed: ${output}`,
       });
-    } else if (stage.status === "AwaitingApproval") {
+    } else if (ctx.phase === "AwaitingApproval") {
       say(
         at,
         "agent_message_chunk",
@@ -831,7 +1018,11 @@ const buildScript = (ctx: StageContext): Script => {
         "tee: session/request_permission kperm-1 offered to 1 viewer(s)"
       );
     } else {
-      const commits = stage.commits?.length ?? 0;
+      // This application's own commits.
+      const commits =
+        stage.commits?.filter((commit) =>
+          isCommitOf(commit, ctx.application?.id)
+        ).length ?? 0;
       say(
         at,
         "agent_message_chunk",
@@ -906,7 +1097,7 @@ const recordingFor = (
   }
   // Waiting for approval, the agent has finished its turn: everything it did
   // is recorded. The pod still exists, so its log stays live.
-  if (ctx.stage.status === "AwaitingApproval") return { status: "complete" };
+  if (ctx.phase === "AwaitingApproval") return { status: "complete" };
   if (ctx.live) return { status: "recording" };
   return { status: hasGap(ctx) ? "incomplete" : "complete" };
 };
@@ -914,7 +1105,9 @@ const recordingFor = (
 /**
  * The recorded lines visible now: frames stamped with their time, the gap,
  * and the stage's own messages (the plan run's activity, including the live
- * progress messages) as agent messages at their timestamps.
+ * progress messages) as agent messages at their timestamps. The stage's
+ * messages are the first application's agent run's (they carry its failure
+ * or its proposal), never another application's.
  */
 const recordedLines = (
   ctx: StageContext,
@@ -938,7 +1131,8 @@ const recordedLines = (
       line: { t, frame: frame(update, method) },
     });
   });
-  (ctx.stage.messages ?? []).forEach((message, i) => {
+  const messages = ctx.applicationIndex === 0 ? (ctx.stage.messages ?? []) : [];
+  messages.forEach((message, i) => {
     const ms = Date.parse(message.timestamp);
     const rel = (ms - ctx.timeline.start) / ctx.timeline.scale;
     if (Number.isNaN(ms) || inGap(rel)) return;
@@ -1013,8 +1207,13 @@ const agentRunResource = (ctx: StageContext, script: Script): Crd.AgentRun => {
   const { run, stage, gateway } = ctx;
   const startTime = stage.startedAt ?? run.startedAt;
   const startMs = Date.parse(startTime);
-  const applicationId = run.applications[0]?.id;
-  const workflowRun = toResourceName(`run-${run.id}`);
+  const applicationId = ctx.application?.id;
+  // One AgentWorkflowRun per application: the first application's keeps
+  // the plan run's name, the others add their application id.
+  const workflowRun =
+    ctx.applicationIndex > 0 && applicationId != null
+      ? toResourceName(`run-${run.id}-app-${applicationId}`)
+      : toResourceName(`run-${run.id}`);
   const usage = ctx.terminal ? visibleUsage(ctx, script).usage : undefined;
   const ready = timeAt(ctx, ACP_READY_AFTER_MS);
   const acpReady = ctx.terminal
@@ -1023,7 +1222,7 @@ const agentRunResource = (ctx: StageContext, script: Script): Crd.AgentRun => {
         "False",
         "Finished",
         "The run has finished; its ACP endpoint is closed.",
-        stage.completedAt ?? startTime
+        ctx.completedAt ?? startTime
       )
     : isVisible(ctx, ACP_READY_AFTER_MS)
       ? condition(
@@ -1041,21 +1240,21 @@ const agentRunResource = (ctx: StageContext, script: Script): Crd.AgentRun => {
           startTime
         );
   const succeeded =
-    stage.status === "Succeeded"
+    ctx.phase === "Succeeded"
       ? condition(
           "Succeeded",
           "True",
           "Succeeded",
           "The agent completed its work.",
-          stage.completedAt ?? startTime
+          ctx.completedAt ?? startTime
         )
-      : stage.status === "Failed"
+      : ctx.phase === "Failed"
         ? condition(
             "Succeeded",
             "False",
             "Failed",
-            stage.output ?? "The agent failed.",
-            stage.completedAt ?? startTime
+            ctx.output ?? "The agent failed.",
+            ctx.completedAt ?? startTime
           )
         : condition(
             "Succeeded",
@@ -1064,7 +1263,7 @@ const agentRunResource = (ctx: StageContext, script: Script): Crd.AgentRun => {
             "The agent is running.",
             startTime
           );
-  const completionTime = ctx.terminal ? stage.completedAt : undefined;
+  const completionTime = ctx.terminal ? ctx.completedAt : undefined;
   return {
     apiVersion: "konveyor.io/v1alpha1",
     kind: "AgentRun",
@@ -1104,7 +1303,7 @@ const agentRunResource = (ctx: StageContext, script: Script): Crd.AgentRun => {
       ],
     },
     status: {
-      phase: ctx.terminal ? (stage.status as Crd.AgentRunPhase) : "Running",
+      phase: ctx.terminal ? (ctx.phase as Crd.AgentRunPhase) : "Running",
       observedGeneration: 1,
       sandboxName: ctx.name,
       startTime,
@@ -1119,12 +1318,12 @@ const agentRunResource = (ctx: StageContext, script: Script): Crd.AgentRun => {
       ...(ctx.terminal
         ? {
             terminationData: {
-              exitCode: stage.status === "Succeeded" ? 0 : 1,
-              outcome: stage.status === "Succeeded" ? "succeeded" : "failed",
+              exitCode: ctx.phase === "Succeeded" ? 0 : 1,
+              outcome: ctx.phase === "Succeeded" ? "succeeded" : "failed",
               // The stage output the plan run shows is this field.
               stopReason:
-                stage.output ??
-                (stage.status === "Succeeded" ? "end_turn" : "stage failed"),
+                ctx.output ??
+                (ctx.phase === "Succeeded" ? "end_turn" : "stage failed"),
               // What the harness writes today: no tokens, and no cost
               // (it reads a field goose does not send, see ADR 0021).
               usage: {
@@ -1187,7 +1386,7 @@ const agentLogText = (ctx: StageContext, script: Script): string => {
     ctx.stage.stageId === LONG_LOG_STAGE_ID &&
     script.buildOutputAt != null &&
     isVisible(ctx, script.buildOutputAt);
-  const key = `${ctx.name}|${ctx.stage.status}|${ctx.timeline.start}|${ctx.timeline.scale}`;
+  const key = `${ctx.name}|${ctx.phase}|${ctx.timeline.start}|${ctx.timeline.scale}`;
   if (long) {
     const cached = LONG_LOG_CACHE.get(key);
     if (cached != null) return cached;
@@ -1222,10 +1421,12 @@ const agentLogText = (ctx: StageContext, script: Script): string => {
 
 /** The init container's log: plain lines (the loader writes to stderr, no timestamps). */
 const skillLoaderLogText = (ctx: StageContext): string => {
-  const skills = stagedSkillNames(ctx.run).map((name) => ({
-    name: toResourceName(name),
-    type: /standard|rule/i.test(name) ? "rule" : "skill",
-  }));
+  const skills = stagedSkills(ctx.run, ctx.stage, ctx.application?.id).map(
+    ({ name, loadPolicy }) => ({
+      name: toResourceName(name),
+      type: loadPolicy,
+    })
+  );
   if (skills.length === 0) {
     return "sources: 0 declared under /opt/skills-src, destination: /opt/skills\nno skills staged, the agent will run without any\n";
   }
@@ -1258,14 +1459,20 @@ const stageAgentRun = (ctx: StageContext): StageAgentRun => {
   return toStageAgentRun(agentRunResource(ctx, script), {
     runId: ctx.run.id,
     stageId: ctx.stage.stageId,
-    phase: ctx.stage.status,
+    phase: ctx.phase,
+    applicationNames: new Map(
+      ctx.run.applications.map(({ id, name }) => [id, name])
+    ),
     gateway: ctx.gateway.resource,
     liveUsage: visibleUsage(ctx, script).usage,
     logSource: ctx.live ? "live" : "saved",
   });
 };
 
-/** GET /plan-runs/:runId/agent-runs: one per started stage, in stage order. */
+/**
+ * GET /plan-runs/:runId/agent-runs: one per started stage and application,
+ * in stage order, then the run's application order.
+ */
 export const listPlanRunAgentRuns = (runId: EntityId): StageAgentRun[] => {
   const now = Date.now();
   const run = execution.getPlanRun(runId);

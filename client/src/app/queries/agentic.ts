@@ -15,6 +15,7 @@
  * - `isLoading` means "first load in flight" (TanStack v4 `isInitialLoading`),
  *   so a disabled query never reports loading forever.
  */
+import { useMemo } from "react";
 import {
   QueryClient,
   useMutation,
@@ -31,11 +32,11 @@ import {
   MigrationPlan,
   ModelProjection,
   PlanRun,
-  PlanSkill,
   Provider,
   ResolvePlanSkillsRequest,
   Skill,
   SkillCollection,
+  SkillsByStage,
   StartApplicationMigrationsRequest,
   StartApplicationMigrationsResponse,
   isActivePlanRun,
@@ -992,10 +993,11 @@ export const useAssignPlanToTargetProfileMutation = (
 
 /**
  * The cache key of a resolve request: only what decides the resolved skills,
- * so editing a draft's name or instructions refetches nothing. Stage agents
- * keep their stage order (the server orders sources by it), without repeats;
- * target profile and excluded skill ids are sorted and deduplicated. The
- * request itself is sent as given, with its stages in stage order.
+ * so editing a draft's description or instructions refetches nothing. Every
+ * stage keeps its position, agent and name (the response is keyed by stage);
+ * target profile and excluded skill ids are sorted and deduplicated;
+ * application ids are deduplicated in order (an empty list is none). The request itself is sent as given, with its stages in
+ * stage order.
  */
 export const normalizeResolvePlanSkillsRequest = (
   request: ResolvePlanSkillsRequest
@@ -1003,9 +1005,10 @@ export const normalizeResolvePlanSkillsRequest = (
   const uniqueSorted = <T extends EntityId | number>(ids: T[]): T[] =>
     [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   return {
-    stages: [...new Set(request.stages.map((stage) => stage.agent.id))].map(
-      (agentId) => ({ agent: { id: agentId } })
-    ),
+    stages: request.stages.map((stage) => ({
+      agent: { id: stage.agent.id },
+      ...(stage.name != null ? { name: stage.name } : {}),
+    })),
     ...(request.migrationPath
       ? {
           migrationPath: {
@@ -1019,13 +1022,24 @@ export const normalizeResolvePlanSkillsRequest = (
     excludedSkills: uniqueSorted(
       (request.excludedSkills ?? []).map((skill) => skill.id)
     ).map((skillId) => ({ id: skillId })),
+    // Applications keep their order: the server answers one every-stage
+    // group per application, in request order (repeats dropped).
+    ...(request.applications && request.applications.length > 0
+      ? {
+          applications: [
+            ...new Set(
+              request.applications.map((application) => application.id)
+            ),
+          ].map((applicationId) => ({ id: applicationId })),
+        }
+      : {}),
   };
 };
 
 /**
  * The Skills a draft Plan resolves to (server-derived), for the plan
  * wizard and plan pages. Disabled while `request` is undefined. A changed
- * draft is a new query, so `planSkills` is undefined (and the surfaces show
+ * draft is a new query, so `skillsByStage` is undefined (and the surfaces show
  * skeleton rows) until its result arrives; the previous draft's rows are not
  * kept. Does not poll (agent, skill, collection and plan writes invalidate
  * it).
@@ -1049,8 +1063,18 @@ export const useResolvePlanSkills = (
       enabled: enabled && request != null,
       retry: agenticRetry,
     });
+  // Only an answer with both groups counts. One object per response, so
+  // callers can tell a new resolution apart.
+  const skillsByStage = useMemo(
+    () =>
+      data?.stages != null && data.everyStage != null
+        ? { stages: data.stages, everyStage: data.everyStage }
+        : undefined,
+    [data]
+  );
   return {
-    planSkills: data?.skills,
+    skillsByStage,
+    isAnswered: data != null,
     isFetching,
     isLoading: isInitialLoading,
     fetchError: error,
@@ -1060,7 +1084,10 @@ export const useResolvePlanSkills = (
 
 /** What the plan skill surfaces read from `useResolvePlanSkills`. */
 export interface PlanSkillsQuery {
-  planSkills?: PlanSkill[];
+  /** What each stage gets; undefined until the draft resolves. */
+  skillsByStage?: SkillsByStage;
+  /** The server answered, with or without the per-stage groups. */
+  isAnswered?: boolean;
   isFetching: boolean;
   fetchError: unknown;
   refetch: () => Promise<{ isError: boolean }>;
@@ -1084,31 +1111,28 @@ export const isResolveEndpointMissing = (error: unknown) =>
  * resolves (`useResolvePlanSkills` does not keep the previous draft's rows,
  * which can hold skills that no longer resolve, or out-of-date exclusions).
  * A retry after a failure is "loading" here; the wizard step keeps its alert
- * up while a retry it started runs. A server
- * without the resolve endpoint is "unavailable", not "error".
+ * up while a retry it started runs. A server without the resolve endpoint is
+ * "unavailable", not "error", and so is one that answers without the
+ * per-stage groups: the surfaces have nothing to show.
  */
 export const planSkillsState = ({
-  planSkills,
+  skillsByStage,
+  isAnswered = false,
   isFetching,
   fetchError,
 }: PlanSkillsQuery): PlanSkillsState => {
-  if (isFetching && (planSkills == null || fetchError != null)) {
+  const answered = isAnswered || skillsByStage != null;
+  if (isFetching && (!answered || fetchError != null)) {
     return "loading";
   }
   if (fetchError != null) {
     return isResolveEndpointMissing(fetchError) ? "unavailable" : "error";
   }
-  return planSkills == null ? "loading" : "ready";
+  if (skillsByStage != null) {
+    return "ready";
+  }
+  return answered ? "unavailable" : "loading";
 };
-
-/**
- * The latest resolution of the draft, or undefined while it loads or after
- * it failed (then nothing is known about which skills resolve).
- */
-export const currentPlanSkills = (
-  query: PlanSkillsQuery
-): PlanSkill[] | undefined =>
-  planSkillsState(query) === "ready" ? query.planSkills : undefined;
 
 // ---------------------------------------------------------------------------
 // Plan runs

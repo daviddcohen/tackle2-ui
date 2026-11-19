@@ -27,7 +27,7 @@ const stage = (
 });
 
 const run = (overrides: Partial<PlanRun> & Pick<PlanRun, "id">): PlanRun => ({
-  name: `Run #${overrides.id} — Java EE to Quarkus`,
+  name: `Run #${overrides.id}: Java EE to Quarkus`,
   planId: "1",
   planName: "Java EE to Quarkus",
   applications: [{ id: 1, name: "Customer Management" }],
@@ -100,7 +100,7 @@ describe("PlanRunsTable", () => {
 
     // A pending run has not started, whatever its startedAt says.
     expect(cells(pending)).toEqual([
-      "Run #7 — Java EE to Quarkus",
+      "Run #7: Java EE to Quarkus",
       "Java EE to Quarkus",
       "Pending",
       "Customer Management",
@@ -108,7 +108,7 @@ describe("PlanRunsTable", () => {
       "Not started",
     ]);
     expect(cells(actionRequired).slice(0, 5)).toEqual([
-      "Run #1 — Java EE to Quarkus",
+      "Run #1: Java EE to Quarkus",
       "Java EE to Quarkus",
       "Action requiredApproval needed: Prepare proposal",
       "3 applications",
@@ -195,7 +195,7 @@ describe("PlanRunsTable", () => {
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent)
     ).toEqual(["Run", "Status", "Applications", "Started", "Duration"]);
-    expect(cells(bodyRows()[0])[0]).toBe("Run #7 — Java EE to Quarkus");
+    expect(cells(bodyRows()[0])[0]).toBe("Run #7: Java EE to Quarkus");
   });
 
   it("paginates a tab only above 10 runs", () => {
@@ -262,7 +262,7 @@ describe("PlanRunsTable on the list (with filters)", () => {
     const filters = encodeURIComponent(JSON.stringify({ name: ["Run #3"] }));
     renderList({}, `?planRuns:filters=${filters}`);
     expect(bodyRows()).toHaveLength(1);
-    expect(cells(bodyRows()[0])[0]).toBe("Run #3 — Java EE to Quarkus");
+    expect(cells(bodyRows()[0])[0]).toBe("Run #3: Java EE to Quarkus");
     // Its view state stays under the same prefix.
     expect(
       new URLSearchParams(window.location.search).get("planRuns:sortColumn")

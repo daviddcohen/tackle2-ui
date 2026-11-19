@@ -3,7 +3,13 @@ import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
-import { Agent, MigrationPlan, ModelProjection, PlanSkill } from "@app/agentic";
+import {
+  Agent,
+  EntityRef,
+  MigrationPlan,
+  ModelProjection,
+  SkillsByStage,
+} from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { adminScopes, architectScopes } from "@app/auth/roles-to-scopes";
 import { NotificationsContext } from "@app/components/NotificationsContext";
@@ -71,36 +77,63 @@ const plan: MigrationPlan = {
     targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
     isDefault: true,
   },
-  effectiveSkills: [
-    {
-      skill: { id: "3", name: "Quarkus best practices" },
-      scope: "targetProfile",
-      scopeName: "Quarkus 3.x",
-    },
-  ],
   applicationImpact: { matching: 3 },
   runCount: 0,
 };
 
+/** The target profile skills the plan's Every stage group gets. */
+const PROFILE_SKILLS: EntityRef[] = [
+  { id: "3", name: "Quarkus best practices" },
+];
+
 /**
- * The plan's skill resolution, from its effective skills; without them the
- * resolution fails, as on a backend that cannot resolve a plan's skills.
+ * The plan's skill resolution: its stages without skills, then
+ * `profileSkills` as the Every stage group. With `profileSkills` null the
+ * resolution is missing, as on a backend that cannot resolve a plan's
+ * skills.
  */
-const resolvedSkills = (detail: MigrationPlan): PlanSkill[] | undefined =>
-  detail.effectiveSkills?.map(({ skill, scope, scopeName }) => ({
-    skill,
-    sources: [{ scope, scopeName, resource: { id: 0, name: scopeName } }],
-    excluded: false,
-  }));
+const resolvedSkills = (
+  detail: MigrationPlan,
+  profileSkills: EntityRef[] | null
+): SkillsByStage | undefined =>
+  profileSkills == null
+    ? undefined
+    : {
+        stages: detail.stages.map((stage) => ({
+          order: stage.order,
+          name: stage.name,
+          agent: stage.agent,
+          skills: [],
+        })),
+        everyStage: [
+          {
+            skills: profileSkills.map((skill) => ({
+              skill,
+              loadPolicy: "skill",
+              from: [
+                {
+                  kind: "targetProfile",
+                  targetProfile: { id: 11, name: "Quarkus 3.x" },
+                  archetype: { id: 1, name: "Java EE Application" },
+                },
+              ],
+              excluded: false,
+            })),
+          },
+        ],
+      };
 
 const useEndpoints = (
   detail: MigrationPlan,
-  { models = [verifiedModel] }: { models?: ModelProjection[] } = {}
+  {
+    models = [verifiedModel],
+    profileSkills = PROFILE_SKILLS,
+  }: { models?: ModelProjection[]; profileSkills?: EntityRef[] | null } = {}
 ) =>
   server.use(
     rest.post(AGENTIC_ENDPOINTS.planSkillsResolve, (_req, res, ctx) => {
-      const skills = resolvedSkills(detail);
-      return skills == null ? res(ctx.status(404)) : res(ctx.json({ skills }));
+      const skills = resolvedSkills(detail, profileSkills);
+      return skills == null ? res(ctx.status(404)) : res(ctx.json(skills));
     }),
     rest.get(`${AGENTIC_ENDPOINTS.plans}/:id`, (_req, res, ctx) =>
       res(ctx.json(detail))
@@ -194,9 +227,7 @@ describe("PlanDetailsPage", () => {
     expect(within(stages).getByText("Anthropic")).toBeInTheDocument();
     // The skills come from the plan skill resolution, which answers on its own.
     expect(
-      await screen.findByRole("heading", {
-        name: "agentic.planDetail.skillsTitle",
-      })
+      await screen.findByRole("grid", { name: "agentic.stageSkills.title" })
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -257,29 +288,29 @@ describe("PlanDetailsPage", () => {
     }
   });
 
-  it("says Unavailable for the path, usage and skills the server did not report", async () => {
+  it("says Not assigned for a missing path, Unavailable for usage and skills the server did not report", async () => {
     const user = userEvent.setup();
-    useEndpoints({
-      ...plan,
-      migrationPath: undefined,
-      applicationImpact: undefined,
-      effectiveSkills: undefined,
-    });
+    useEndpoints(
+      {
+        ...plan,
+        migrationPath: undefined,
+        applicationImpact: undefined,
+      },
+      { profileSkills: null }
+    );
     renderAt();
     await screen.findByRole("heading", { level: 1 });
-    for (const term of [
-      "terms.archetype",
-      "terms.targetProfiles",
-      "terms.applications",
-    ]) {
+    // No migration path is a plan that runs when someone picks it.
+    for (const term of ["terms.archetype", "terms.targetProfiles"]) {
       expect(
-        within(fact(term)).getByText("agentic.common.unavailable")
+        within(fact(term)).getByText("agentic.execution.notAssigned")
       ).toBeInTheDocument();
     }
     expect(
-      screen.getByRole("heading", {
-        name: "agentic.planDetail.skillsTitleEmpty",
-      })
+      within(fact("terms.applications")).getByText("agentic.common.unavailable")
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("agentic.planDetail.skillsNotAvailable")
     ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "agentic.common.actions" })
@@ -291,7 +322,13 @@ describe("PlanDetailsPage", () => {
 
   it("says Not evaluated, with the reason, when a check cannot run", async () => {
     const user = userEvent.setup();
-    useEndpoints({ ...plan, effectiveSkills: undefined });
+    useEndpoints(plan);
+    // A client error is not retried: the models check cannot run at once.
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
+        res(ctx.status(403))
+      )
+    );
     renderAt();
     const status = await within(
       await waitFor(() => fact("agentic.plan.configuration"))
@@ -299,9 +336,23 @@ describe("PlanDetailsPage", () => {
     await user.hover(status);
     expect(
       await screen.findByText(
-        "agentic.plan.configurationCheck.skills.notEvaluated"
+        "agentic.plan.configurationCheck.models.notEvaluated"
       )
     ).toBeInTheDocument();
+  });
+
+  it("has no configuration issue for a plan without a migration path", async () => {
+    // A plan without a path is run when someone picks it (plans 3, 4, 7).
+    useEndpoints({ ...plan, migrationPath: undefined });
+    renderAt();
+    await waitFor(() =>
+      expect(
+        within(fact("agentic.plan.configuration")).getByText(
+          "agentic.configurationStatus.checksPassed"
+        )
+      ).toBeInTheDocument()
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("disables Edit and Delete of a plan managed by Konveyor", async () => {
@@ -330,11 +381,15 @@ describe("PlanDetailsPage", () => {
   });
 
   it("says when no skills apply", async () => {
-    useEndpoints({ ...plan, effectiveSkills: [] });
+    useEndpoints(plan, { profileSkills: [] });
     renderAt();
+    const table = await screen.findByRole("grid", {
+      name: "agentic.stageSkills.title",
+    });
+    // The stage group and the Every stage group each say so.
     expect(
-      await screen.findByText("agentic.planDetail.skillsEmpty")
-    ).toBeInTheDocument();
+      within(table).getAllByText("agentic.stageSkills.noSkills")
+    ).toHaveLength(2);
   });
 
   it("cues a plan that is not assigned to its target profiles", async () => {

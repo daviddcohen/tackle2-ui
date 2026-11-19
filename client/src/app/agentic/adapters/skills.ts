@@ -10,6 +10,7 @@ import {
   Skill,
   SkillCollection,
   SkillCollectionRequest,
+  SkillLoadPolicy,
   SkillRequest,
   SkillSourceType,
 } from "../types";
@@ -21,6 +22,10 @@ const SOURCE_TYPES = {
   source: "git",
   image: "oci",
 } as const satisfies Record<string, SkillSourceType>;
+
+/** `spec.type` -> load policy: an absent type is `skill`, the CRD default. */
+const toLoadPolicy = (type: Crd.SkillCardType | undefined): SkillLoadPolicy =>
+  type ?? "skill";
 
 /** `"/"`, `""` and surrounding slashes mean the repository root (no subPath). */
 const toSubPath = (path: string | undefined) => {
@@ -35,6 +40,7 @@ const toSubPath = (path: string | undefined) => {
  * target-profile and application associations have no backend source. A card
  * with no source maps to `inline` with no content. An image card's `subPath`
  * has no domain field. `operatorManaged` marks the operator's built-in cards.
+ * `loadPolicy` is `spec.type` (`rule` or `skill`; absent is `skill`).
  */
 export const toSkill = (
   card: Crd.SkillCard,
@@ -53,6 +59,7 @@ export const toSkill = (
     repoBranch: kind === "source" ? spec.ref : undefined,
     repoPath: kind === "source" ? spec.subPath : undefined,
     imageRef: kind === "image" ? spec.image : undefined,
+    loadPolicy: toLoadPolicy(spec.type),
     associations: agents
       ?.filter((agent) =>
         (agent.spec.skillCards ?? []).some(({ ref }) => ref === id)
@@ -79,9 +86,12 @@ const NO_SOURCE: Crd.SkillCardSpec = {
 /**
  * SkillRequest -> SkillCard spec, spread over `base` and setting exactly one
  * source. On update pass the current `card.spec` as `base`: the Hub replaces
- * the whole spec, so `type`, `tags`, `version`, an image card's `subPath` and
- * any field this contract does not know yet are kept from it. `name` is
- * `spec.displayName`, so a Skill can be renamed (its resource name cannot).
+ * the whole spec, so `tags`, `version`, an image card's `subPath` and any
+ * field this contract does not know yet are kept from it. `loadPolicy` writes
+ * `spec.type` only when it differs from the card's current one (absent
+ * counts as `skill`), so an unchanged policy keeps an absent `type` absent;
+ * a request without it keeps `type`. `name` is `spec.displayName`, so a
+ * Skill can be renamed (its resource name cannot).
  * `associations` are not written here: the `agent` scope lives on
  * `Agent.spec.skillCards`, the Hub scopes have no backend yet.
  */
@@ -89,9 +99,14 @@ export const toSkillCardSpec = (
   request: SkillRequest,
   base: Crd.SkillCardSpec = {}
 ): Crd.SkillCardSpec => {
+  const type =
+    request.loadPolicy == null || request.loadPolicy === toLoadPolicy(base.type)
+      ? base.type
+      : request.loadPolicy;
   const common: Crd.SkillCardSpec = {
     ...base,
     ...NO_SOURCE,
+    ...(type !== base.type ? { type } : {}),
     displayName: request.name,
     description: request.description || undefined,
   };

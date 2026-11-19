@@ -2,8 +2,10 @@
  * AgentRun (konveyor.io/v1alpha1, `/hub/agentic/agentruns/{name}`) -> the
  * stage agent run the observability views show.
  *
- * A plan run stage is one AgentRun: `AgentWorkflowRun.status.stages[]`
- * names it in `agentRunName`. Usage comes from, in order:
+ * A plan run stage is one AgentRun per application: each application's
+ * AgentWorkflowRun names its stage's AgentRun in
+ * `status.stages[].agentRunName`, and the AgentRun carries the application
+ * (label `konveyor.io/application`, else env `APP_ID`). Usage comes from, in order:
  * 1. `status.usage`, the typed usage ADR 0021 proposes (PR 282, not merged);
  * 2. `status.terminationData.usage`, what the harness writes at the end of
  *    the run today (merged: `turnsUsed`, `contextUsed`, `contextSize`, and a
@@ -24,7 +26,7 @@ import {
 } from "../observability";
 import { ControllerRunPhase, EntityId } from "../types";
 
-import { toEntityId } from "./common";
+import { ApplicationNameIndex, toEntityId, toRunApplication } from "./common";
 
 /**
  * Containers of an AgentRun pod with a log, in start order: the init
@@ -48,6 +50,8 @@ export interface StageAgentRunContext {
   liveUsage?: AgentRunUsage;
   /** From the logs endpoint (`X-Log-Source`). Default: saved once the run ended. */
   logSource?: AgentRunLogSource;
+  /** Hub application names, for `application.name` (else `#{id}`). */
+  applicationNames?: ApplicationNameIndex;
 }
 
 /** Drops undefined fields, so a spread never erases a value. */
@@ -142,6 +146,11 @@ export const toStageAgentRun = (
   const { status } = run;
   const usage = toAgentRunUsage(run, context);
   const started = status?.startTime != null;
+  const application = toRunApplication(
+    run.metadata,
+    run.spec.env,
+    context.applicationNames
+  );
   const logSource =
     context.logSource ??
     (isTerminalPhase(status?.phase) ? "saved" : started ? "live" : undefined);
@@ -149,6 +158,7 @@ export const toStageAgentRun = (
     name: toEntityId(run.metadata),
     runId: context.runId,
     stageId: context.stageId,
+    ...(application != null ? { application } : {}),
     phase: context.phase ?? status?.phase ?? "Pending",
     ...(status?.sandboxName ? { podName: status.sandboxName } : {}),
     containers: [...AGENT_RUN_CONTAINERS],

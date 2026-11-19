@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AxiosError } from "axios";
 import { LocationDescriptor } from "history";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, generatePath, useLocation } from "react-router-dom";
 import {
   Alert,
@@ -20,7 +20,8 @@ import { DevPaths } from "@app/Paths";
 import {
   ApplicationMigrationResult,
   ApplicationMigrationView,
-  HubRef,
+  EntityId,
+  EntityRef,
   PlanRun,
   StageRun,
   UNCONFIGURED_MIGRATION,
@@ -40,16 +41,20 @@ import {
   DetailFacts,
   DetailSection,
   DetailSections,
+  LinkLabels,
   SectionEmpty,
 } from "@app/pages/agentic/components/detail-section";
 import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
+import { linkToPath } from "@app/pages/agentic/components/skill-origin";
 import {
   StageAttentionAlert,
   getStageAttention,
 } from "@app/pages/agentic/components/stage-attention-alert";
 import { StageRunsTable } from "@app/pages/agentic/components/stage-runs-table";
+import { StageSkillsTable } from "@app/pages/agentic/components/stage-skills-table";
 import {
-  targetProfileOwnerPath,
+  archetypePath,
+  targetProfilePath,
   targetProfilesPath,
 } from "@app/pages/agentic/entity-paths";
 import {
@@ -57,12 +62,17 @@ import {
   useFetchPlanRun,
   useResolveApplicationMigrationRequestMutation,
 } from "@app/queries/agentic";
-import { useFetchArchetypes } from "@app/queries/archetypes";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
-import { getAxiosErrorMessage } from "@app/utils/utils";
+import { getAxiosErrorMessage, universalComparator } from "@app/utils/utils";
 
 import { planRunPath } from "../../components/agentic-migration/paths";
 import { DecoratedApplication } from "../../useDecoratedApplications";
+
+import {
+  SKILLS_BY_STAGE_HASH,
+  SKILLS_BY_STAGE_HEADING_ID,
+  SKILLS_BY_STAGE_ID,
+} from "./skills-by-stage-anchor";
 
 interface MigrationTabProps {
   application: DecoratedApplication;
@@ -82,6 +92,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   linkCrumbs,
 }) => {
   const { t } = useTranslation();
+  const location = useLocation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
   const linkTo = (pathname: string, search = "") =>
@@ -133,7 +144,30 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
     linkCrumbs,
   });
 
-  if (isLoading || isLoadingRun) {
+  const isReady = !isLoading && !isLoadingRun;
+  // "See skills by stage" (Skills tab) opens this tab at that section: move
+  // focus to its heading once it is there, so the reader starts on it. Once
+  // per navigation (location key): a refetch that shows the placeholder and
+  // the content again must not pull focus back.
+  const focusedFor = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!isReady || location.hash !== SKILLS_BY_STAGE_HASH) return;
+    const navigation = location.key ?? location.pathname + location.search;
+    if (focusedFor.current === navigation) return;
+    const heading = document.getElementById(SKILLS_BY_STAGE_HEADING_ID);
+    if (heading == null) return;
+    focusedFor.current = navigation;
+    heading.scrollIntoView?.();
+    heading.focus();
+  }, [
+    isReady,
+    location.hash,
+    location.key,
+    location.pathname,
+    location.search,
+  ]);
+
+  if (!isReady) {
     return <AppPlaceholder />;
   }
 
@@ -141,12 +175,22 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
     return <StateError />;
   }
 
+  const archetypes = application.archetypes ?? [];
+
   if (!migration.configured) {
     return (
-      <NoMigrationPath
-        archetype={application.archetypes?.[0]}
-        linkTo={linkTo}
-      />
+      <DetailSections>
+        <MigrationFacts
+          migration={migration}
+          archetypes={archetypes}
+          linkTo={linkTo}
+        />
+        <NoMigrationPlan
+          migration={migration}
+          archetype={migration.archetype ?? archetypes[0]}
+          linkTo={linkTo}
+        />
+      </DetailSections>
     );
   }
 
@@ -164,6 +208,22 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         )
       : migration.stages;
   const hasRun = migration.planRun != null;
+  // The latest run ran another plan than the one the next run uses. Without
+  // the run's plan nothing is said: it is never guessed from the run name.
+  const ranOtherPlan =
+    migration.planRunPlan != null &&
+    migration.plan != null &&
+    migration.planRunPlan.id !== migration.plan.id;
+  const planLink = (plan: EntityRef | undefined) =>
+    plan != null ? (
+      <Link
+        to={linkTo(
+          generatePath(DevPaths.migrationPlanDetails, { planId: plan.id })
+        )}
+      />
+    ) : (
+      <span />
+    );
   const cannotStart =
     !hasRun &&
     (migration.preflight === "blocked" ||
@@ -177,12 +237,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         surface="application"
         planRun={planRun}
         reviewStageTo={(stageRun) =>
-          linkTo(
-            generatePath(DevPaths.stageRunDetails, {
-              runId: planRun.id,
-              stageId: stageRun.stageId,
-            })
-          )
+          stageRunTo(planRun.id, stageRun.stageId, applicationId, linkTo)
         }
         onApprove={canManageRun ? decide("approve") : undefined}
         onReject={canManageRun ? decide("reject") : undefined}
@@ -219,10 +274,39 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         {alert}
         <MigrationFacts
           migration={migration}
+          archetypes={archetypes}
           planRun={planRun}
           linkTo={linkTo}
         />
-        <DetailSection title={t("agentic.stageRunsTable.label")}>
+        <DetailSection
+          // A named region, like Skills by stage below it.
+          headingId="migration-stages-heading"
+          title={t("agentic.stageRunsTable.label")}
+          description={
+            ranOtherPlan ? (
+              // Names both plans, so the Stages above (the run's plan) and
+              // Skills by stage below (this application's plan) do not read
+              // as one plan. The run's own name often
+              // holds its plan's name, so the link says "latest run".
+              <Trans
+                i18nKey="agentic.execution.latestRunOtherPlan"
+                values={{
+                  plan: migration.planRunPlan?.name,
+                  ownPlan: migration.plan?.name,
+                }}
+                components={{
+                  runLink: migration.planRun ? (
+                    <Link to={linkTo(planRunPath(migration.planRun.id))} />
+                  ) : (
+                    <span />
+                  ),
+                  planLink: planLink(migration.planRunPlan),
+                  ownPlanLink: planLink(migration.plan),
+                }}
+              />
+            ) : undefined
+          }
+        >
           {hasRun && stages.length > 0 ? (
             <StageRunsTable stages={stages} />
           ) : status === "preflightReady" && runMigrationPlan.open != null ? (
@@ -246,6 +330,30 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           )}
         </DetailSection>
         {migration.result && <CommitsSection result={migration.result} />}
+        <DetailSection
+          id={SKILLS_BY_STAGE_ID}
+          headingId={SKILLS_BY_STAGE_HEADING_ID}
+          title={t("agentic.stageSkills.title")}
+          description={
+            migration.plan != null && migration.skills != null
+              ? t("agentic.execution.skillsByStageNext", {
+                  plan: migration.plan.name,
+                })
+              : undefined
+          }
+        >
+          <StageSkillsTable
+            skills={migration.skills}
+            context="application"
+            linkTo={linkTo}
+            originOptions={{
+              archetypeId: migration.archetype?.id,
+              thisApplicationId: applicationId,
+            }}
+            unavailableText={t("agentic.execution.skillsByStageUnavailable")}
+            aria-label={t("agentic.stageSkills.title")}
+          />
+        </DetailSection>
       </DetailSections>
 
       {runMigrationPlan.modal}
@@ -254,40 +362,33 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
 };
 
 /**
- * The facts: Status · Migration plan · Plan run ·
- * Target profile · Target branch · Skills. Without a run, Plan run and Target
- * branch are omitted.
+ * The facts: Status, then the chain that decides the plan
+ * (Archetype, Target profile, Migration plan), then Plan run and Target
+ * branch once there is a run. Each name links where it is edited.
  */
 const MigrationFacts: React.FC<{
   migration: ApplicationMigrationView;
+  /** The application's archetypes; the target profile's comes first. */
+  archetypes: Ref[];
   planRun?: PlanRun;
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
-}> = ({ migration, planRun, linkTo }) => {
+}> = ({ migration, archetypes, planRun, linkTo }) => {
   const { t } = useTranslation();
-  const location = useLocation();
-  const skillsTab = new URLSearchParams(location.search);
-  skillsTab.set("tab", "skills");
-  // The Skills tab of this same page, keeping its breadcrumb trail.
-  const skillsLink = useLinkComponent({
-    pathname: location.pathname,
-    search: `?${skillsTab.toString()}`,
-    state: location.state,
-  });
-  const usedSkillIds =
-    migration.effectiveSkills != null
-      ? new Set(migration.effectiveSkills.map(({ skill }) => skill.id))
-      : undefined;
-  const skillCount = usedSkillIds?.size;
-  // Skills its migration plan excludes, counted like the Skills tab heading.
-  const excludedSkillCount = new Set(
-    (migration.excludedSkills ?? [])
-      .map(({ skill }) => skill.id)
-      .filter((id) => !usedSkillIds?.has(id))
-  ).size;
   const unavailable = (
     <EmptyTextMessage message={t("agentic.common.unavailable")} />
   );
+  const none = <EmptyTextMessage message={t("agentic.execution.none")} />;
   const targetBranch = migration.result?.targetBranch ?? planRun?.targetBranch;
+  const to = (path: string) => linkToPath(linkTo, path);
+
+  // The target profile's archetype first, then the others by name.
+  const chainArchetype = migration.archetype;
+  const orderedArchetypes: Ref[] = [
+    ...(chainArchetype != null ? [chainArchetype] : []),
+    ...[...archetypes]
+      .filter((archetype) => archetype.id !== chainArchetype?.id)
+      .sort((a, b) => universalComparator(a.name, b.name)),
+  ];
 
   const monospace = (value: string) => (
     <span className={textStyles.fontFamilyMonospace}>{value}</span>
@@ -301,10 +402,48 @@ const MigrationFacts: React.FC<{
       />,
     ],
     [
+      orderedArchetypes.length > 1
+        ? t("agentic.execution.archetypes")
+        : t("agentic.execution.archetype"),
+      orderedArchetypes.length === 0 ? (
+        none
+      ) : orderedArchetypes.length === 1 ? (
+        <Link to={to(archetypePath(orderedArchetypes[0].id, "skills"))}>
+          {orderedArchetypes[0].name}
+        </Link>
+      ) : (
+        <LinkLabels
+          items={orderedArchetypes.map((archetype) => ({
+            id: archetype.id,
+            name: archetype.name,
+            to: to(archetypePath(archetype.id, "skills")),
+          }))}
+        />
+      ),
+    ],
+    [
+      t("agentic.execution.targetProfile"),
+      migration.targetProfile == null ? (
+        none
+      ) : migration.archetype != null ? (
+        <Link
+          to={to(
+            targetProfilePath(
+              migration.archetype.id,
+              migration.targetProfile.id
+            )
+          )}
+        >
+          {migration.targetProfile.name}
+        </Link>
+      ) : (
+        migration.targetProfile.name
+      ),
+    ],
+    [
       t("agentic.entity.migrationPlan"),
       migration.plan ? (
         <Link
-          key="plan"
           to={linkTo(
             generatePath(DevPaths.migrationPlanDetails, {
               planId: migration.plan.id,
@@ -314,10 +453,7 @@ const MigrationFacts: React.FC<{
           {migration.plan.name}
         </Link>
       ) : (
-        <EmptyTextMessage
-          key="plan"
-          message={t("agentic.execution.notAssigned")}
-        />
+        <EmptyTextMessage message={t("agentic.execution.notAssigned")} />
       ),
     ],
     ...(migration.planRun
@@ -328,22 +464,6 @@ const MigrationFacts: React.FC<{
               {migration.planRun.name}
             </Link>,
           ],
-        ] as [string, React.ReactNode][])
-      : []),
-    [
-      t("agentic.execution.targetProfile"),
-      migration.targetProfile ? (
-        <TargetProfileLink
-          key="profile"
-          profile={migration.targetProfile}
-          linkTo={linkTo}
-        />
-      ) : (
-        <EmptyTextMessage key="profile" message={t("agentic.execution.none")} />
-      ),
-    ],
-    ...(migration.planRun
-      ? ([
           [
             t("agentic.execution.targetBranch"),
             // The tab waits for the run, so no branch here means the run
@@ -364,51 +484,9 @@ const MigrationFacts: React.FC<{
           ],
         ] as [string, React.ReactNode][])
       : []),
-    [
-      t("agentic.applicationDetail.tabSkills"),
-      skillCount == null ? (
-        // The server did not say: unknown, never "None".
-        unavailable
-      ) : skillCount === 0 && excludedSkillCount === 0 ? (
-        <EmptyTextMessage key="skills" message={t("agentic.execution.none")} />
-      ) : (
-        <Button
-          key="skills"
-          variant="link"
-          isInline
-          className={textStyles.textNowrap}
-          component={skillsLink}
-        >
-          {excludedSkillCount > 0
-            ? t("agentic.execution.skillCountUsed", {
-                used: skillCount,
-                count: skillCount + excludedSkillCount,
-              })
-            : t("agentic.execution.skillCount", { count: skillCount })}
-        </Button>
-      ),
-    ],
   ];
 
   return <DetailFacts facts={facts} isTwoColumn />;
-};
-
-/**
- * A target profile belongs to one archetype, which need not be this
- * application's: its owner is found by profile id, as for
- * skill sources. Plain text when no archetype owns it.
- */
-const TargetProfileLink: React.FC<{
-  profile: HubRef;
-  linkTo: (pathname: string) => LocationDescriptor;
-}> = ({ profile, linkTo }) => {
-  const { archetypes } = useFetchArchetypes();
-  const path = targetProfileOwnerPath(profile.id, archetypes);
-  return path != null ? (
-    <Link to={linkTo(path)}>{profile.name}</Link>
-  ) : (
-    <>{profile.name}</>
-  );
 };
 
 /** The run could not be read, so its alert cannot say what it needs. */
@@ -490,22 +568,33 @@ const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
 };
 
 /**
- * No migration plan resolves for the application. Plans
- * come from the archetype's target profile, so the next step is there; an
- * application without an archetype is told to get one first. The data gives
- * no cause (a profile without a plan, no profile, a plan on another profile),
- * so the copy names none.
+ * No migration plan resolves for the application. Plans come from the
+ * archetype's target profile, so the body names the missing link of that
+ * chain (no archetype, no target profile, no plan on the profile) and the
+ * action goes where it is fixed.
  */
-const NoMigrationPath: React.FC<{
+const NoMigrationPlan: React.FC<{
+  migration: ApplicationMigrationView;
   archetype?: Ref;
   linkTo: (pathname: string) => LocationDescriptor;
-}> = ({ archetype, linkTo }) => {
+}> = ({ migration, archetype, linkTo }) => {
   const { t } = useTranslation();
   const link = useLinkComponent(
     linkTo(
       archetype != null ? targetProfilesPath(archetype.id) : DevPaths.archetypes
     )
   );
+  const body =
+    archetype == null
+      ? t("agentic.execution.noArchetypeBody")
+      : migration.targetProfile == null
+        ? t("agentic.execution.noTargetProfileBody", {
+            archetype: archetype.name,
+          })
+        : t("agentic.execution.noPlanForProfileBody", {
+            profile: migration.targetProfile.name,
+            archetype: archetype.name,
+          });
   return (
     <EmptyState
       headingLevel="h2"
@@ -513,13 +602,7 @@ const NoMigrationPath: React.FC<{
       titleText={t("agentic.execution.noMigrationPathTitle")}
       variant="sm"
     >
-      <EmptyStateBody>
-        {archetype != null
-          ? t("agentic.execution.noMigrationPathBody", {
-              archetype: archetype.name,
-            })
-          : t("agentic.execution.noArchetypeBody")}
-      </EmptyStateBody>
+      <EmptyStateBody>{body}</EmptyStateBody>
       <EmptyStateFooter>
         <EmptyStateActions>
           <Button variant="link" component={link}>
@@ -532,3 +615,18 @@ const NoMigrationPath: React.FC<{
     </EmptyState>
   );
 };
+
+/**
+ * A stage page link from this application: it carries the application, so
+ * a run of several applications opens on this one's agent run.
+ */
+export const stageRunTo = (
+  runId: EntityId,
+  stageId: EntityId,
+  applicationId: number,
+  linkTo: (pathname: string, search?: string) => LocationDescriptor
+) =>
+  linkTo(
+    generatePath(DevPaths.stageRunDetails, { runId, stageId }),
+    `?${new URLSearchParams({ application: String(applicationId) })}`
+  );

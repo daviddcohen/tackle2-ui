@@ -23,7 +23,7 @@ jest.mock("@app/auth", () => ({
 
 const run = (id: string, planId: string, planName: string): PlanRun => ({
   id,
-  name: `Run #${id} — ${planName}`,
+  name: `Run #${id}: ${planName}`,
   planId,
   planName,
   applications: [{ id: 1, name: "Customer Management" }],
@@ -76,7 +76,7 @@ describe("PlanRunsPage", () => {
     ]);
     renderPage();
     await screen.findByRole("link", {
-      name: "Run #2 — Spring Boot to Quarkus",
+      name: "Run #2: Spring Boot to Quarkus",
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Name" }));
@@ -101,7 +101,7 @@ describe("PlanRunsPage", () => {
     );
     expect(
       within(table).getByRole("link", {
-        name: "Run #2 — Spring Boot to Quarkus",
+        name: "Run #2: Spring Boot to Quarkus",
       })
     ).toBeInTheDocument();
   });
@@ -109,7 +109,7 @@ describe("PlanRunsPage", () => {
   it("orders the status options with the runs that need a person first", async () => {
     useRuns([run("1", "1", "Java EE to Quarkus")]);
     renderPage();
-    await screen.findByRole("link", { name: "Run #1 — Java EE to Quarkus" });
+    await screen.findByRole("link", { name: "Run #1: Java EE to Quarkus" });
 
     await userEvent.click(screen.getByRole("button", { name: "Name" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Status" }));
@@ -134,7 +134,7 @@ describe("PlanRunsPage", () => {
       within(screen.getByRole("grid")).getByRole("progressbar")
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole("link", { name: "Run #1 — Java EE to Quarkus" })
+      await screen.findByRole("link", { name: "Run #1: Java EE to Quarkus" })
     ).toBeInTheDocument();
   });
 

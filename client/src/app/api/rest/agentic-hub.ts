@@ -9,7 +9,8 @@
  * `@app/agentic/adapters`. To wire a group, move its functions into
  * `./agentic.ts` (or re-export them from there); hooks and pages do not change.
  *
- * Covered: the groups the Hub serves (Skills, Skill collections, Models
+ * Covered: the groups the Hub serves (Skills, with `loadPolicy` as
+ * SkillCard `spec.type`, Skill collections, Models
  * except create, Agents except create, Agent test runs, Plans, Plan runs, and
  * starting migrations with one selected Plan), plus the collection
  * memberships of a Skill and the Agents of a Skill collection (fanned out
@@ -24,9 +25,13 @@
  *   answers inside a live session);
  * - Providers, available models, `setDefaultModel`, execution policy,
  *   `assignPlanToTargetProfile`, `getApplicationMigrations`, "recommended
- *   Plan" starts, `resolvePlanSkills` (no resolve endpoint; Plan
- *   `excludedSkills` has no CRD field and is dropped on save) and
+ *   Plan" starts, `resolvePlanSkills` (no resolve endpoint, so no per-stage
+ *   `SkillsByStage`; Plan `excludedSkills` has no CRD field and is dropped
+ *   on save) and
  *   `getSkillPlans` (no endpoint for the plans that resolve a skill);
+ * - run skills snapshots (`PlanRun.skills`) and the application view's
+ *   `skills`: the controller records no per-stage skills yet
+ *   (agentic-controller#172).
  * - `updateArchetypeSkills`, `updateTargetProfileSkills` and
  *   `updateApplicationSkills` (Hub-scope Skill associations have no Hub
  *   table; `updateSkill` refuses them too).

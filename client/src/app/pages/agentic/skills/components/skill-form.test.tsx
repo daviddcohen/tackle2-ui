@@ -104,7 +104,7 @@ beforeEach(() => {
 });
 
 describe("SkillForm", () => {
-  it("creates with a description and the association fields visible", async () => {
+  it("creates with a description and the usage fields visible", async () => {
     render(<SkillForm skill={null} onClose={jest.fn()} />);
 
     expect(screen.getByText("Create skill")).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe("SkillForm", () => {
       )
     ).toBeInTheDocument();
     expect(screen.getByText("General")).toBeInTheDocument();
-    expect(screen.getByText("Associations")).toBeInTheDocument();
+    expect(screen.getByText("Usage")).toBeInTheDocument();
     for (const id of [
       "skill-agents",
       "skill-archetypes",
@@ -124,9 +124,74 @@ describe("SkillForm", () => {
       expect(document.querySelector(`#${id}-input`)).toBeVisible();
     }
     expect(
-      screen.queryByText(/Changes apply wherever it is used/)
+      screen.queryByText(/Changes apply everywhere it is attached/)
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+  });
+
+  it("asks how agents use it, Available when needed by default", async () => {
+    render(<SkillForm skill={null} onClose={jest.fn()} />);
+
+    const group = screen.getByRole("radiogroup", {
+      name: "How agents use it",
+    });
+    const available = within(group).getByRole("radio", {
+      name: "Available when needed",
+    });
+    expect(available).toBeChecked();
+    expect(available).toHaveAttribute("id", "skill-load-policy-skill");
+    expect(
+      within(group).getByText(
+        "Agents see its name and description, and open it when it is relevant to the task. Best for knowledge about a technology or a kind of change."
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByRole("radio", { name: "Always followed" })
+    ).not.toBeChecked();
+  });
+
+  it("sends the load policy it changed to", async () => {
+    const user = userEvent.setup();
+    const onClose = jest.fn();
+    render(<SkillForm skill={skill} onClose={onClose} />);
+
+    // Absent on the skill: the CRD default.
+    expect(
+      screen.getByRole("radio", { name: "Available when needed" })
+    ).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Always followed" }));
+    const save = screen.getByRole("button", { name: "Save" });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.submit(document.getElementById("skill-form")!);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(updated[0].loadPolicy).toBe("rule");
+  });
+
+  it("starts from a rule's load policy on edit", async () => {
+    render(
+      <SkillForm skill={{ ...skill, loadPolicy: "rule" }} onClose={jest.fn()} />
+    );
+
+    expect(
+      screen.getByRole("radio", { name: "Always followed" })
+    ).toBeChecked();
+  });
+
+  it("says each attachment reaches every stage, with the exclusion only where it applies", () => {
+    render(<SkillForm skill={null} onClose={jest.fn()} />);
+
+    expect(
+      screen.getByText(
+        "Agents use this skill in every stage when they migrate applications in these archetypes, unless a migration plan excludes it."
+      )
+    ).toBeInTheDocument();
+    // A plan cannot exclude an application's own skill.
+    expect(
+      screen.getByText(
+        "Agents use this skill in every stage when they migrate these applications."
+      )
+    ).toBeInTheDocument();
   });
 
   it("warns on edit and shows the associations with one chip per value", async () => {
@@ -134,7 +199,7 @@ describe("SkillForm", () => {
 
     expect(
       await screen.findByText(
-        "This skill has 2 associations and is in 1 skill collection. Changes apply wherever it is used."
+        "This skill is attached to 1 agent and 1 target profile, and is in 1 skill collection. Changes apply everywhere it is attached."
       )
     ).toBeInTheDocument();
     expect(
@@ -284,7 +349,7 @@ describe("SkillForm skill collections", () => {
     fireEvent.submit(document.getElementById("skill-form")!);
   };
 
-  it("starts from the collections that contain the skill, last in Associations", async () => {
+  it("starts from the collections that contain the skill, after the agents", async () => {
     renderForm(skill);
 
     await waitFor(() => expect(collectionsInput()).toBeEnabled());
@@ -297,14 +362,20 @@ describe("SkillForm skill collections", () => {
     expect(
       screen.getByRole("combobox", { name: "Skill collections" })
     ).toHaveAccessibleDescription(
-      "Agents that use these skill collections also use this skill. This also updates each skill collection's skills. Java modernization foundation keeps this skill: a skill collection needs at least one skill."
+      "Agents that use these skill collections use this skill in every stage they run, unless a migration plan excludes it. This also updates each skill collection's skills. Java modernization foundation keeps this skill: a skill collection needs at least one skill."
     );
     const pickers = [
       ...document.querySelectorAll<HTMLInputElement>(
         "#skill-form .pf-v6-c-menu-toggle input"
       ),
     ].map((input) => input.id);
-    expect(pickers[pickers.length - 1]).toBe("skill-skill-collections-input");
+    expect(pickers).toEqual([
+      "skill-agents-input",
+      "skill-skill-collections-input",
+      "skill-archetypes-input",
+      "skill-target-profiles-input",
+      "skill-applications-input",
+    ]);
   });
 
   it("locks the collection the skill is the only member of, and managed ones", async () => {
@@ -654,7 +725,7 @@ describe("SkillForm skill collections", () => {
     expect(screen.queryByText(/Saving leaves them unchanged/)).toBeNull();
     expect(
       screen.getByText(
-        "Agents that use these skill collections also use this skill. This also updates each skill collection's skills."
+        "Agents that use these skill collections use this skill in every stage they run, unless a migration plan excludes it. This also updates each skill collection's skills."
       )
     ).toBeInTheDocument();
 

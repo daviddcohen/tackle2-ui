@@ -127,6 +127,12 @@ export type StageAttentionAlertProps = StageAttentionSurface & {
   isDeciding?: boolean;
   /** Opens "Run migration plan" on a failure; undefined without the scope. */
   onRunMigrationPlan?: () => void;
+  /**
+   * The stage page of a run on several applications: the application whose
+   * agent run failed or waits for the decision. The title names it ("{stage}
+   * failed for {application}"); the decision stays the stage's.
+   */
+  applicationName?: string;
   /** Application tab: the failure as the application view reports it, instead of the stage output. */
   failureDetails?: { summary?: string; evidence?: string[] };
   /**
@@ -184,6 +190,7 @@ const AttentionAlert: React.FC<
   failureDetails,
   restartBlockedReason,
   planRunTo,
+  applicationName,
 }) => {
   const { t } = useTranslation();
   const [decision, setDecision] = React.useState<"approve" | "reject">();
@@ -269,9 +276,14 @@ const AttentionAlert: React.FC<
         variant="danger"
         isInline
         title={
-          stage != null
-            ? t("agentic.stageAttention.failedTitle", { stage: stage.name })
-            : t("agentic.stageAttention.runFailedTitle")
+          stage == null
+            ? t("agentic.stageAttention.runFailedTitle")
+            : applicationName != null
+              ? t("agentic.stageAttention.failedForApplication", {
+                  stage: stage.name,
+                  application: applicationName,
+                })
+              : t("agentic.stageAttention.failedTitle", { stage: stage.name })
         }
         actionLinks={onRunMigrationPlan == null ? reviewActionLink : undefined}
       >
@@ -324,9 +336,26 @@ const AttentionAlert: React.FC<
     run: next
       ? t("agentic.stageAttention.approveBodyRun", values)
       : t("agentic.stageAttention.approveBodyRunLast", values),
-    stage: next
-      ? t("agentic.stageAttention.approveBodyStage", values)
-      : t("agentic.stageAttention.approveBodyStageLast", values),
+    // Approving moves every application of the run on; in a run on several
+    // the body says so, and whose output this page shows.
+    stage:
+      planRun.applications.length > 1
+        ? applicationName != null
+          ? next
+            ? t("agentic.stageAttention.approveBodyStageSeveral", {
+                ...values,
+                application: applicationName,
+              })
+            : t("agentic.stageAttention.approveBodyStageSeveralLast", {
+                ...values,
+                application: applicationName,
+              })
+          : next
+            ? t("agentic.stageAttention.approveBodyStageAll", values)
+            : t("agentic.stageAttention.approveBodyStageAllLast", values)
+        : next
+          ? t("agentic.stageAttention.approveBodyStage", values)
+          : t("agentic.stageAttention.approveBodyStageLast", values),
     application: next
       ? t("agentic.stageAttention.decisionBody", values)
       : t("agentic.stageAttention.decisionBodyLast", values),
@@ -352,9 +381,16 @@ const AttentionAlert: React.FC<
       <Alert
         variant="warning"
         isInline
-        title={t("agentic.stageAttention.approvalTitle", {
-          stage: approvalStage.name,
-        })}
+        title={
+          applicationName != null
+            ? t("agentic.stageAttention.approvalTitleForApplication", {
+                stage: approvalStage.name,
+                application: applicationName,
+              })
+            : t("agentic.stageAttention.approvalTitle", {
+                stage: approvalStage.name,
+              })
+        }
         actionLinks={onApprove == null ? reviewActionLink : undefined}
       >
         <Stack hasGutter>

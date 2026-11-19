@@ -19,9 +19,9 @@ import {
 import { server } from "@mocks/server";
 
 import {
-  MANAGE_SKILLS_BUTTON_ID,
   ManageSkillsModal,
   ManageSkillsTarget,
+  manageSkillsButtonId,
   useCanManageSkills,
 } from "./manage-skills-modal";
 
@@ -58,9 +58,15 @@ const skills = [
   skill("4", "Quarkus best practices", [
     { scope: "targetProfile", resource: { id: 1, name: "Quarkus 3.x" } },
   ]),
-  skill("5", "Corporate coding standards", [
-    { scope: "application", resource: { id: 1, name: "Customer Management" } },
-  ]),
+  {
+    ...skill("5", "Corporate coding standards", [
+      {
+        scope: "application",
+        resource: { id: 1, name: "Customer Management" },
+      },
+    ]),
+    loadPolicy: "rule",
+  },
 ];
 
 const archetype: ManageSkillsTarget = {
@@ -152,7 +158,7 @@ describe("ManageSkillsModal", () => {
     });
     expect(
       within(dialog).getByText(
-        "Agents use these skills when they migrate applications in this archetype, unless a migration plan excludes them."
+        "Agents also use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them."
       )
     ).toBeInTheDocument();
     expect(
@@ -168,7 +174,7 @@ describe("ManageSkillsModal", () => {
     ).toBeNull();
     expect(
       within(dialog).getByText(
-        "Select the skills to associate directly with this archetype. Skills for its target profiles are managed on the target profiles page."
+        "Select the skills to attach to this archetype. Each target profile has its own skills."
       )
     ).toBeInTheDocument();
     expect(saveButton()).toBeDisabled();
@@ -182,12 +188,12 @@ describe("ManageSkillsModal", () => {
       name: "Manage skills for Java EE Application",
     });
     expect(dialog).toHaveAccessibleDescription(
-      "Agents use these skills when they migrate applications in this archetype, unless a migration plan excludes them."
+      "Agents also use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
     ).toHaveAccessibleDescription(
-      "Select the skills to associate directly with this archetype. Skills for its target profiles are managed on the target profiles page."
+      "Select the skills to attach to this archetype. Each target profile has its own skills."
     );
   });
 
@@ -204,23 +210,23 @@ describe("ManageSkillsModal", () => {
 
     expect(
       await screen.findByText(
-        "Skill associations are not available. Try again later."
+        "Attached skills are not available. Try again later."
       )
     ).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
-  it("lists every skill by name with its description", async () => {
+  it("lists every skill by name with how agents use it, then its description", async () => {
     serveSkills((_req, res, ctx) => res(ctx.json(skills)));
     renderModal(archetype);
     await openPicker();
 
     const options = await screen.findAllByRole("menuitem");
     expect(options.map((option) => option.textContent?.trim())).toEqual([
-      "Corporate coding standards",
-      "Jakarta EE namespace migrationRename javax packages to jakarta.",
-      "Quarkus best practices",
+      "Corporate coding standardsAlways followed",
+      "Jakarta EE namespace migrationAvailable when needed · Rename javax packages to jakarta.",
+      "Quarkus best practicesAvailable when needed",
     ]);
   });
 
@@ -263,12 +269,12 @@ describe("ManageSkillsModal", () => {
         name: "Manage skills for Quarkus 3.x (Java EE Application)",
       })
     ).toHaveAccessibleDescription(
-      "Agents use these skills when they migrate applications in this archetype that use this target profile, unless a migration plan excludes them."
+      "Agents also use these skills in every stage when they migrate applications in Java EE Application that target this profile, unless a migration plan excludes them."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
     ).toHaveAccessibleDescription(
-      "Select the skills to associate directly with this target profile. Skills for Java EE Application itself are managed on the archetypes page."
+      "Select the skills to attach to this target profile. Skills for Java EE Application itself are attached on the archetype."
     );
     await userEvent.click(
       await screen.findByRole("button", {
@@ -296,12 +302,12 @@ describe("ManageSkillsModal", () => {
         name: "Manage skills for Customer Management",
       })
     ).toHaveAccessibleDescription(
-      "Agents use these skills when they migrate this application, unless its migration plan excludes them."
+      "Agents also use these skills in every stage when they migrate this application."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
     ).toHaveAccessibleDescription(
-      "Select the skills to associate directly with this application. The Skills tab shows every skill for this application, where it comes from and whether its migration plan excludes it."
+      "Select the skills to attach to this application. Archetype and target profile skills are attached on the archetype."
     );
     await openPicker();
     await toggleOption("Quarkus best practices");
@@ -485,7 +491,7 @@ describe("ManageSkillsModal", () => {
 
     expect(
       await screen.findByText(
-        "No skills exist yet. Create a skill first, then associate it here."
+        "No skills exist yet. Create a skill first, then attach it here."
       )
     ).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Go to skills" });
@@ -505,7 +511,7 @@ describe("ManageSkillsModal focus", () => {
       <QueryClientProvider client={newQueryClient()}>
         <MemoryRouter>
           {isSaved ? (
-            <button id={MANAGE_SKILLS_BUTTON_ID}>Manage skills</button>
+            <button id={manageSkillsButtonId(archetype)}>Manage skills</button>
           ) : (
             <button onClick={() => setTarget(archetype)}>Add skills</button>
           )}
@@ -534,6 +540,96 @@ describe("ManageSkillsModal focus", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Manage skills" })
+      ).toHaveFocus()
+    );
+  });
+});
+
+describe("ManageSkillsModal return focus per group", () => {
+  const profile: ManageSkillsTarget = {
+    scope: "targetProfile",
+    id: 11,
+    name: "Quarkus 3.x",
+    archetype: { id: 1, name: "Java EE Application" },
+  };
+
+  it("gives each target's Manage skills button its own id", () => {
+    expect(manageSkillsButtonId(archetype)).toBe("manage-skills-archetype-1");
+    expect(manageSkillsButtonId(profile)).toBe(
+      "manage-skills-targetProfile-11"
+    );
+    expect(manageSkillsButtonId({ scope: "application", id: 3 })).toBe(
+      "manage-skills-application-3"
+    );
+  });
+
+  /** Two groups on one page, as the archetype drawer shows them. */
+  const Groups: React.FC<{ replaceTriggers?: boolean }> = ({
+    replaceTriggers,
+  }) => {
+    const [target, setTarget] = React.useState<ManageSkillsTarget | null>(null);
+    const [isClosed, setIsClosed] = React.useState(false);
+    const groupButton = (groupTarget: ManageSkillsTarget, label: string) => (
+      <button
+        // A re-render that replaces the button keeps its id.
+        key={`${label}-${replaceTriggers && isClosed ? "new" : "old"}`}
+        id={manageSkillsButtonId(groupTarget)}
+        onClick={() => setTarget(groupTarget)}
+      >
+        {label}
+      </button>
+    );
+    return (
+      <QueryClientProvider client={newQueryClient()}>
+        <MemoryRouter>
+          {groupButton(archetype, "Manage archetype skills")}
+          {groupButton(profile, "Manage profile skills")}
+          <ManageSkillsModal
+            target={target}
+            onClose={() => {
+              setIsClosed(true);
+              setTarget(null);
+            }}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  };
+
+  it("returns focus to the group button that opened it", async () => {
+    serveSkills((_req, res, ctx) => res(ctx.json(skills)));
+    render(<Groups />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Manage profile skills" })
+    );
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Close" })
+    );
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Manage profile skills" })
+      ).toHaveFocus()
+    );
+  });
+
+  it("falls back to the target's group button when the opener was replaced", async () => {
+    serveSkills((_req, res, ctx) => res(ctx.json(skills)));
+    render(<Groups replaceTriggers />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Manage profile skills" })
+    );
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Close" })
+    );
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Manage profile skills" })
       ).toHaveFocus()
     );
   });

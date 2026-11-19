@@ -25,24 +25,19 @@ import {
 import { ReviewFields } from "@app/components/detail-drawer/review-fields";
 import { BreadcrumbEntry } from "@app/hooks/useBreadcrumbs";
 import { useUrlParams } from "@app/hooks/useUrlParams";
+import { ManageSkillsTarget } from "@app/pages/agentic/components/manage-skills-modal";
 
-import { TabAssociatedSkills } from "./tab-associated-skills";
+import { ArchetypeDrawerTab as TabKey } from "./archetype-drawer-tabs";
 import { TabDetailsContent } from "./tab-details-content";
+import { TabSkills } from "./tab-skills";
 import { TabTargetProfiles } from "./tab-target-profiles";
 
 interface IArchetypeDetailDrawerProps {
   breadcrumbs: BreadcrumbEntry[];
   onCloseClick: () => void;
   archetype: Archetype | null;
-  /** Opens the page's Manage skills modal for the archetype. */
-  onManageSkills: (archetype: Archetype) => void;
-}
-
-enum TabKey {
-  Details = 0,
-  TargetProfiles,
-  Skills,
-  Reviews,
+  /** Opens the page's Manage skills modal for the archetype or one of its target profiles. */
+  onManageSkills: (target: ManageSkillsTarget) => void;
 }
 
 const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
@@ -134,9 +129,9 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
                   <TabTitleText>{t("agentic.archetype.skills")}</TabTitleText>
                 }
               >
-                <TabAssociatedSkills
+                <TabSkills
                   archetype={archetype}
-                  onManageSkills={() => onManageSkills(archetype)}
+                  onManageSkills={onManageSkills}
                 />
               </Tab>
             )}

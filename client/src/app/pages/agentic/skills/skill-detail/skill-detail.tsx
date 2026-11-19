@@ -3,20 +3,12 @@ import { AxiosError } from "axios";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown, { Components } from "react-markdown";
-import {
-  Link,
-  generatePath,
-  useHistory,
-  useLocation,
-  useParams,
-} from "react-router-dom";
+import { useHistory, useLocation, useParams } from "react-router-dom";
 import {
   ButtonVariant,
   ClipboardCopy,
   Content,
-  Flex,
   FlexItem,
-  Label,
   PageSection,
   Panel,
   PanelMain,
@@ -29,36 +21,28 @@ import {
   TitleProps,
 } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
-import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths, SkillDetailsRoute } from "@app/Paths";
-import { Skill } from "@app/agentic";
+import { Skill, SkillCollection } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { ExternalLink } from "@app/components/ExternalLink";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
-import { ConditionalTableBody } from "@app/components/TableControls";
 import { markdownPFComponents } from "@app/components/markdownPFComponents";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
-import {
-  SkillSources,
-  planSkillRows,
-  skillRowCounts,
-} from "@app/pages/agentic/components/skills-table";
 import {
   DetailTabPanel,
   EntityDetailActions,
   EntityDetailLoading,
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
-import { skillAssociationPath } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
-  isResolveEndpointMissing,
   useDeleteSkillMutation,
+  useFetchAgents,
   useFetchSkillById,
   useFetchSkillCollections,
   useFetchSkillPlans,
@@ -72,18 +56,21 @@ import {
   DetailFacts,
   DetailSection,
   DetailSections,
-  SectionEmpty,
 } from "../../components/detail-section";
 import { SkillModal } from "../components/skill-form";
 import {
   getCollectionsContainingSkill,
-  getSkillAssociationRows,
   getSkillDeleteBlockedReason,
+  getSkillUsageParts,
 } from "../skill-usage";
 
-const SKILL_DETAIL_TABS = ["details", "associations"] as const;
+import { SkillUsageTab } from "./skill-usage-tab";
+
+const SKILL_DETAIL_TABS = ["details", "usage"] as const;
 type SkillDetailTab = (typeof SKILL_DETAIL_TABS)[number];
 const TAB_PREFIX = "skill-detail";
+/** The Usage tab's old name: links saved before the rename still open it. */
+const LEGACY_USAGE_TAB = "associations";
 
 /**
  * The skill's Markdown headings sit below the page structure: its `# h1`
@@ -147,6 +134,11 @@ const SkillDetail: React.FC = () => {
     useFetchSkillById(skillId);
   const { archetypes, isFetching: isLoadingArchetypes } = useFetchArchetypes();
   const {
+    agents,
+    isLoading: isLoadingAgents,
+    fetchError: agentsError,
+  } = useFetchAgents();
+  const {
     skillCollections,
     isLoading: isLoadingCollections,
     fetchError: collectionsError,
@@ -157,10 +149,22 @@ const SkillDetail: React.FC = () => {
     fetchError: plansError,
   } = useFetchSkillPlans(skillId);
 
-  const [activeTab, setActiveTab] = useUrlTab<SkillDetailTab>(
+  const location = useLocation();
+  const isLegacyUsageTab =
+    new URLSearchParams(location.search).get("tab") === LEGACY_USAGE_TAB;
+  // Rewrites `?tab=associations` once, keeping the other parameters and the
+  // breadcrumb trail in history state.
+  React.useEffect(() => {
+    if (!isLegacyUsageTab) return;
+    const params = new URLSearchParams(location.search);
+    params.set("tab", "usage");
+    history.replace({ ...location, search: `?${params}` });
+  }, [history, isLegacyUsageTab, location]);
+  const [urlTab, setActiveTab] = useUrlTab<SkillDetailTab>(
     SKILL_DETAIL_TABS,
     "details"
   );
+  const activeTab = isLegacyUsageTab ? "usage" : urlTab;
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
 
@@ -189,22 +193,6 @@ const SkillDetail: React.FC = () => {
     [skillCollections, skillId]
   );
 
-  // Rows come from the server's plan skill resolution, the same as plan
-  // Details, in the server's plan name order: never add sources here. A
-  // plan that excludes the skill keeps its row, marked Excluded.
-  const plansResolvingSkill = React.useMemo(
-    () =>
-      (skillPlans ?? []).map(({ plan, sources, excluded }) => ({
-        plan,
-        excluded,
-        sources:
-          planSkillRows([
-            { skill: { id: skillId, name: "" }, sources, excluded: false },
-          ])[0]?.sources ?? [],
-      })),
-    [skillPlans, skillId]
-  );
-
   const { breadcrumbs, linkCrumbs: childLinkCrumbs } = useEntityBreadcrumbs(
     skill?.name ?? t("agentic.entity.skill"),
     [{ title: t("sidebar.skills"), path: DevPaths.skills }]
@@ -226,15 +214,8 @@ const SkillDetail: React.FC = () => {
     );
   }
 
-  const childLink = (path: string) =>
-    breadcrumbTo(path, `?from=skill-${skillId}`, childLinkCrumbs);
-
-  // Undefined while loading or after a failure: unknown, not empty.
-  const planCount = skillPlans?.length;
-  // A plan that excludes the skill is listed but does not use it: the
-  // heading counts it as the plan and application pages count exclusions.
-  const { used: usedPlanCount } = skillRowCounts(plansResolvingSkill);
-  const hasExcludingPlan = planCount != null && usedPlanCount < planCount;
+  const childLink = (path: string, hash = "") =>
+    breadcrumbTo(path, `?from=skill-${skillId}${hash}`, childLinkCrumbs);
 
   const knownCollections =
     isLoadingCollections || collectionsError != null
@@ -289,13 +270,11 @@ const SkillDetail: React.FC = () => {
             }
           />
           <Tab
-            eventKey="associations"
-            id={panelId("associations")}
-            tabContentId={panelId("associations")}
+            eventKey="usage"
+            id={panelId("usage")}
+            tabContentId={panelId("usage")}
             title={
-              <TabTitleText>
-                {t("agentic.skillDetail.tabAssociations")}
-              </TabTitleText>
+              <TabTitleText>{t("agentic.skillDetail.tabUsage")}</TabTitleText>
             }
           />
         </Tabs>
@@ -309,7 +288,11 @@ const SkillDetail: React.FC = () => {
         <PageSection hasBodyWrapper={false}>
           <DetailSections>
             <FlexItem>
-              <SkillFacts skill={skill} />
+              <SkillFacts
+                skill={skill}
+                collections={knownCollections}
+                isLoadingCollections={isLoadingCollections}
+              />
             </FlexItem>
             {skill.sourceType === "inline" && skill.content && (
               <FlexItem>
@@ -337,188 +320,26 @@ const SkillDetail: React.FC = () => {
 
       <DetailTabPanel
         prefix={TAB_PREFIX}
-        eventKey="associations"
+        eventKey="usage"
         activeKey={activeTab}
       >
         <PageSection hasBodyWrapper={false}>
-          <DetailSections>
-            <FlexItem>
-              <AssociatedWithSection
-                skill={skill}
-                archetypes={archetypes}
-                isLoadingArchetypes={isLoadingArchetypes}
-                linkTo={(path) => breadcrumbTo(path, "", childLinkCrumbs)}
-              />
-            </FlexItem>
-
-            <FlexItem>
-              <DetailSection
-                title={
-                  !planCount
-                    ? t("agentic.skillDetail.usedInPlans")
-                    : hasExcludingPlan
-                      ? t("agentic.skillDetail.usedInPlansTitleUsed", {
-                          used: usedPlanCount,
-                          count: planCount,
-                        })
-                      : t("agentic.skillDetail.usedInPlansTitle", {
-                          count: planCount,
-                        })
-                }
-                description={
-                  !planCount
-                    ? undefined
-                    : hasExcludingPlan
-                      ? t("agentic.skillDetail.usedInPlansDescriptionExcluded")
-                      : t("agentic.skillDetail.usedInPlansDescription")
-                }
-              >
-                {isLoadingPlans ? (
-                  <Skeleton
-                    width="16rem"
-                    screenreaderText={t("agentic.plan.loadingPlans")}
-                  />
-                ) : planCount == null ? (
-                  <EmptyTextMessage
-                    message={
-                      isResolveEndpointMissing(plansError)
-                        ? t("agentic.skillDetail.plansNotAvailable")
-                        : t("agentic.common.unavailable")
-                    }
-                  />
-                ) : planCount === 0 ? (
-                  <SectionEmpty>
-                    {t("agentic.skillDetail.noPlans")}
-                  </SectionEmpty>
-                ) : (
-                  <Table
-                    aria-label={t("agentic.skillDetail.usedInPlans")}
-                    variant="compact"
-                  >
-                    <Thead>
-                      <Tr>
-                        <Th width={40}>{t("agentic.entity.migrationPlan")}</Th>
-                        <Th>{t("terms.source")}</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {plansResolvingSkill.map(
-                        ({ plan, excluded, sources }) => (
-                          <Tr key={plan.id}>
-                            <Td dataLabel={t("agentic.entity.migrationPlan")}>
-                              <Flex
-                                spaceItems={{ default: "spaceItemsSm" }}
-                                alignItems={{ default: "alignItemsCenter" }}
-                              >
-                                <FlexItem>
-                                  <Link
-                                    to={childLink(
-                                      generatePath(
-                                        DevPaths.migrationPlanDetails,
-                                        { planId: String(plan.id) }
-                                      )
-                                    )}
-                                  >
-                                    {plan.name}
-                                  </Link>
-                                </FlexItem>
-                                {excluded && (
-                                  <FlexItem>
-                                    <Label variant="outline" isCompact>
-                                      {t("agentic.skillsTable.excluded")}
-                                    </Label>
-                                  </FlexItem>
-                                )}
-                              </Flex>
-                            </Td>
-                            <Td dataLabel={t("terms.source")}>
-                              <SkillSources sources={sources} />
-                            </Td>
-                          </Tr>
-                        )
-                      )}
-                    </Tbody>
-                  </Table>
-                )}
-              </DetailSection>
-            </FlexItem>
-
-            <FlexItem>
-              <DetailSection
-                title={
-                  knownCollections != null &&
-                  collectionsContainingSkill.length > 0
-                    ? t("agentic.skillDetail.inCollectionsTitle", {
-                        count: collectionsContainingSkill.length,
-                      })
-                    : t("agentic.skillDetail.inCollections")
-                }
-                description={
-                  // Only above rows: an empty section is its heading and
-                  // empty state, as for the plans above.
-                  knownCollections != null &&
-                  collectionsContainingSkill.length > 0
-                    ? t("agentic.skillDetail.inCollectionsDescription")
-                    : undefined
-                }
-              >
-                {knownCollections != null &&
-                collectionsContainingSkill.length === 0 ? (
-                  <SectionEmpty>
-                    {t("agentic.skillDetail.notInAnyCollection")}
-                  </SectionEmpty>
-                ) : (
-                  <Table
-                    aria-label={t("agentic.skillDetail.inCollections")}
-                    variant="compact"
-                  >
-                    <Thead>
-                      <Tr>
-                        <Th width={30}>
-                          {t("agentic.entity.skillCollection")}
-                        </Th>
-                        <Th>{t("agentic.skillCollection.members")}</Th>
-                      </Tr>
-                    </Thead>
-                    <ConditionalTableBody
-                      isLoading={isLoadingCollections}
-                      isError={collectionsError != null}
-                      numRenderedColumns={2}
-                    >
-                      <Tbody>
-                        {collectionsContainingSkill.map((collection) => (
-                          <Tr key={collection.id}>
-                            <Td dataLabel={t("agentic.entity.skillCollection")}>
-                              <Link
-                                to={childLink(
-                                  generatePath(
-                                    DevPaths.skillCollectionDetails,
-                                    { collectionId: String(collection.id) }
-                                  )
-                                )}
-                              >
-                                {collection.name}
-                              </Link>
-                            </Td>
-                            <Td
-                              dataLabel={t("agentic.skillCollection.members")}
-                            >
-                              {/* One member is this skill: its name. */}
-                              {collection.skills.length === 1
-                                ? collection.skills[0].name
-                                : t("agentic.skillCollection.skillCount", {
-                                    count: collection.skills.length,
-                                  })}
-                            </Td>
-                          </Tr>
-                        ))}
-                      </Tbody>
-                    </ConditionalTableBody>
-                  </Table>
-                )}
-              </DetailSection>
-            </FlexItem>
-          </DetailSections>
+          <SkillUsageTab
+            skill={skill}
+            archetypes={archetypes}
+            isLoadingArchetypes={isLoadingArchetypes}
+            collections={knownCollections && collectionsContainingSkill}
+            isLoadingCollections={isLoadingCollections}
+            isCollectionsError={collectionsError != null}
+            agents={isLoadingAgents || agentsError != null ? undefined : agents}
+            plans={skillPlans}
+            isLoadingPlans={isLoadingPlans}
+            plansError={plansError}
+            linkTo={(pathname, search) =>
+              breadcrumbTo(pathname, search, childLinkCrumbs)
+            }
+            childLinkTo={childLink}
+          />
         </PageSection>
       </DetailTabPanel>
 
@@ -552,27 +373,44 @@ const SkillDetail: React.FC = () => {
 };
 
 /**
- * The Associations tab of this page, as a link that keeps the rest of the
- * query (`?from=`) and the breadcrumb trail in history state.
+ * The Usage tab of this page, as a link that keeps the rest of the query
+ * (`?from=`) and the breadcrumb trail in history state.
  */
-const useAssociationsTabLink = () => {
+const useUsageTabLink = () => {
   const { pathname, search, state } = useLocation();
   const params = new URLSearchParams(search);
-  params.set("tab", "associations");
+  params.set("tab", "usage");
   return { pathname, search: `?${params}`, state };
 };
 
-/** The Details tab facts: source, where it loads from, usage, dates. */
-const SkillFacts: React.FC<{ skill: Skill }> = ({ skill }) => {
+/**
+ * The Details tab facts: source, how agents use it, where it loads from,
+ * usage, dates.
+ */
+const SkillFacts: React.FC<{
+  skill: Skill;
+  /** Undefined while unknown: the usage then leaves collections out. */
+  collections: SkillCollection[] | undefined;
+  isLoadingCollections: boolean;
+}> = ({ skill, collections, isLoadingCollections }) => {
   const { t } = useTranslation();
-  const associationCount = skill.associations?.length;
-  const associationsTab = useAssociationsTabLink();
+  const usageParts = getSkillUsageParts(
+    t,
+    skill,
+    collections &&
+      getCollectionsContainingSkill({ id: skill.id }, collections).length
+  );
+  const usageTab = useUsageTabLink();
   const monospace = (value: string) => (
     <span className={textStyles.fontFamilyMonospace}>{value}</span>
   );
 
   const facts: [string, React.ReactNode][] = [
     [t("terms.source"), t(`agentic.skill.sourceTypes.${skill.sourceType}`)],
+    [
+      t("agentic.skill.loadPolicy.label"),
+      t(`agentic.skill.loadPolicy.${skill.loadPolicy ?? "skill"}`),
+    ],
     ...(skill.sourceType === "git"
       ? ([
           [
@@ -612,17 +450,31 @@ const SkillFacts: React.FC<{ skill: Skill }> = ({ skill }) => {
         ] as [string, React.ReactNode][])
       : []),
     [
-      t("agentic.skill.associations"),
-      associationCount == null ? (
+      t("agentic.skill.usage"),
+      usageParts == null ? (
         <EmptyTextMessage
-          key="associations"
+          key="usage"
           message={t("agentic.common.unavailable")}
         />
-      ) : associationCount === 0 ? (
-        <EmptyTextMessage key="associations" message={t("terms.none")} />
+      ) : usageParts.length === 0 && isLoadingCollections ? (
+        <Skeleton
+          key="usage"
+          width="6rem"
+          screenreaderText={t("terms.loading")}
+        />
+      ) : usageParts.length === 0 ? (
+        // Not "None" while the collections are unknown.
+        <EmptyTextMessage
+          key="usage"
+          message={
+            collections == null
+              ? t("agentic.common.unavailable")
+              : t("terms.none")
+          }
+        />
       ) : (
-        <CountLink key="associations" to={associationsTab}>
-          {t("agentic.skill.associationCount", { count: associationCount })}
+        <CountLink key="usage" to={usageTab}>
+          {usageParts.join(", ")}
         </CountLink>
       ),
     ],
@@ -645,98 +497,6 @@ const SkillFacts: React.FC<{ skill: Skill }> = ({ skill }) => {
   ];
 
   return <DetailFacts facts={facts} />;
-};
-
-interface AssociatedWithSectionProps {
-  skill: Skill;
-  archetypes: ReturnType<typeof useFetchArchetypes>["archetypes"];
-  isLoadingArchetypes: boolean;
-  /** Association paths carry their own query or hash, so no `?from=`. */
-  linkTo: (path: string) => ReturnType<typeof breadcrumbTo>;
-}
-
-/**
- * "Associated with (n)": Type · Name, the skill's own
- * associations. Target profiles need the archetypes for their name and link,
- * so the rows wait for that query when a target profile is present; if
- * it fails, they show the bare name without a link.
- */
-const AssociatedWithSection: React.FC<AssociatedWithSectionProps> = ({
-  skill,
-  archetypes,
-  isLoadingArchetypes,
-  linkTo,
-}) => {
-  const { t } = useTranslation();
-  const associations = skill.associations;
-  const count = associations?.length ?? 0;
-  const rows = getSkillAssociationRows(t, associations ?? [], archetypes);
-  const needsArchetypes = rows.some(
-    (row) => row.association.scope === "targetProfile"
-  );
-
-  let content: React.ReactNode;
-  if (associations == null) {
-    content = <EmptyTextMessage message={t("agentic.common.unavailable")} />;
-  } else if (count === 0) {
-    content = (
-      <SectionEmpty>{t("agentic.skillDetail.noAssociations")}</SectionEmpty>
-    );
-  } else {
-    content = (
-      <Table
-        aria-label={t("agentic.skillDetail.associatedWith")}
-        variant="compact"
-      >
-        <Thead>
-          <Tr>
-            <Th width={30}>{t("terms.type")}</Th>
-            <Th>{t("terms.name")}</Th>
-          </Tr>
-        </Thead>
-        <ConditionalTableBody
-          isLoading={needsArchetypes && isLoadingArchetypes}
-          numRenderedColumns={2}
-        >
-          <Tbody>
-            {rows.map(({ association, name }, index) => {
-              // A target profile without its archetype has no page to open.
-              const destination = skillAssociationPath(association, archetypes);
-              return (
-                <Tr
-                  key={`${association.scope}-${association.resource.id}-${index}`}
-                >
-                  <Td dataLabel={t("terms.type")}>
-                    {t(`agentic.skillsTable.scope.${association.scope}`)}
-                  </Td>
-                  <Td dataLabel={t("terms.name")}>
-                    {destination != null ? (
-                      <Link to={linkTo(destination)}>{name}</Link>
-                    ) : (
-                      name
-                    )}
-                  </Td>
-                </Tr>
-              );
-            })}
-          </Tbody>
-        </ConditionalTableBody>
-      </Table>
-    );
-  }
-
-  return (
-    <DetailSection
-      title={
-        count > 0
-          ? t("agentic.skillDetail.associatedWithTitle", { count })
-          : t("agentic.skillDetail.associatedWith")
-      }
-      description={t("agentic.skillDetail.associatedWithDescription")}
-    >
-      {content}
-    </DetailSection>
-  );
 };
 
 export default SkillDetail;

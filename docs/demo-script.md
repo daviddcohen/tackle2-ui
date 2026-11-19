@@ -18,10 +18,10 @@ The prototype is published at https://daviddcohen.github.io/tackle2-ui/ (visitor
 1. Select Enterprise Architect and Partial configuration.
 2. Open Plans and select a Plan with configuration issues.
 3. Review derived Configuration Checks instead of a persisted readiness status.
-4. Confirm the migration path relationship, ordered Stages, Agent assignments, approved Models, and effective Skill provenance.
+4. Confirm the migration path relationship, ordered Stages, Agent assignments, verified Models, and the skills each stage gets with where each comes from.
 5. Create or edit a blank Plan and verify that the wizard distinguishes reusable Plan configuration from application-specific migration proposals.
 6. Open Agents and Skills to show how reusable objects connect without exposing controller resource names. Agent creation is hidden because the current Hub architect role grants Agent read access only.
-7. Inspect Skill associations and confirm the effective Agent, archetype, target profile, and application provenance plus the prototype contract boundary.
+7. Open a skill's Usage tab and confirm what it is attached to (agent, archetype, target profile, application), the plan stages that get it, and the prototype contract boundary.
 
 ## Enterprise Architect portfolio execution
 

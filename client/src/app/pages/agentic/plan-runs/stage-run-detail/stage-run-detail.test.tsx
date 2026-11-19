@@ -6,6 +6,7 @@ import { DevPaths } from "@app/Paths";
 import {
   AgentRunTranscript,
   PlanRun,
+  SkillsByStage,
   StageAgentRun,
   StageRun,
 } from "@app/agentic";
@@ -83,7 +84,7 @@ const stage = (
 
 const run = (stageRuns: StageRun[], status: PlanRun["status"]): PlanRun => ({
   id: "1",
-  name: "Run #1 — Java EE to Quarkus",
+  name: "Run #1: Java EE to Quarkus",
   planId: "1",
   planName: "Java EE to Quarkus",
   applications: [{ id: 1, name: "Customer Management" }],
@@ -244,13 +245,13 @@ describe("StageRunDetail", () => {
       await screen.findByRole("heading", { level: 1, name: "Prepare proposal" })
     ).toBeInTheDocument();
     const runLinks = screen.getAllByRole("link", {
-      name: "Run #1 — Java EE to Quarkus",
+      name: "Run #1: Java EE to Quarkus",
     });
     // The breadcrumb and the status line both lead to the run.
     expect(runLinks).toHaveLength(2);
     expect(runLinks[1]).toHaveAttribute("href", "/plan-runs/1");
     expect(runLinks[1].parentElement).toHaveTextContent(
-      /^Stage 1 of 2 in Run #1 — Java EE to Quarkus · Started November 10, 2026/
+      /^Stage 1 of 2 in Run #1: Java EE to Quarkus · Started November 10, 2026/
     );
   });
 
@@ -415,12 +416,12 @@ describe("StageRunDetail", () => {
     expect(fact("Approval")).toHaveTextContent("Required after this stage");
   });
 
-  it("asks to check the transcript and commits, and links its Logs tab", async () => {
+  it("asks to check the logs and commits, and links its Logs tab", async () => {
     useRun(awaiting);
     renderStage("1");
     expect(
       await screen.findByText(
-        "Prepare proposal Agent finished Prepare proposal. Check its transcript and commits, then approve to start Migrate."
+        "Prepare proposal Agent finished Prepare proposal. Check its logs and commits, then approve to start Migrate."
       )
     ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Review stage" })).toBeNull();
@@ -1000,7 +1001,34 @@ describe("StageRunDetail", () => {
       }
     );
 
-    it("names the run's applications in the header, keeping the trail", async () => {
+    it("names the one application of the run in the header, keeping the trail", async () => {
+      useRun(awaiting);
+      renderStage("1");
+      const title = await screen.findByRole("heading", { level: 1 });
+      const header = title.closest(
+        ".pf-v6-c-page__main-section"
+      ) as HTMLElement;
+      const link = within(header).getByRole("link", {
+        name: "Customer Management",
+      });
+      expect(link).toHaveAttribute("href", "/applications/1");
+      expect(link.parentElement).toHaveTextContent(
+        /^Application: Customer Management$/
+      );
+      // No Select, and the URL stays as it was.
+      expect(
+        within(header).queryByRole("button", { name: /^Application:/ })
+      ).toBeNull();
+      expect(currentSearch).toBe("");
+      // The application row comes before the status line.
+      const statusLine = within(header).getByText(/^Stage 1 of 2 in/);
+      expect(
+        link.compareDocumentPosition(statusLine) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it("puts the application Select of a run on several applications first in the header", async () => {
       useRun({
         ...awaiting,
         applications: [
@@ -1013,17 +1041,15 @@ describe("StageRunDetail", () => {
       const header = title.closest(
         ".pf-v6-c-page__main-section"
       ) as HTMLElement;
-      const first = within(header).getByRole("link", {
-        name: "Customer Management",
+      const toggle = await within(header).findByRole("button", {
+        name: "Application: Customer Management",
       });
-      expect(first).toHaveAttribute("href", "/applications/1");
-      expect(first.parentElement).toHaveTextContent(
-        /^Applications: Customer Management, Inventory Service$/
-      );
-      // The application row comes before the status line.
+      expect(
+        within(header).queryByRole("link", { name: "Customer Management" })
+      ).toBeNull();
       const statusLine = within(header).getByText(/^Stage 1 of 2 in/);
       expect(
-        first.compareDocumentPosition(statusLine) &
+        toggle.compareDocumentPosition(statusLine) &
           Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
     });
@@ -1151,5 +1177,563 @@ describe("StageRunDetail", () => {
         expect(screen.queryByText(reason)).toBeNull();
       }
     });
+  });
+  describe("a run on several applications", () => {
+    const customer = { id: 1, name: "Customer Management" };
+    const inventory = { id: 2, name: "Inventory Service" };
+    const proposalAgent = { id: "1", name: "Prepare proposal Agent" };
+    const migrateAgent = { id: "2", name: "Migrate Agent" };
+    const skills: SkillsByStage = {
+      stages: [
+        {
+          order: 1,
+          name: "Prepare proposal",
+          agent: proposalAgent,
+          stageId: "1",
+          skills: [
+            {
+              skill: { id: "10", name: "API compatibility checklist" },
+              loadPolicy: "skill",
+              from: [{ kind: "agent", agent: proposalAgent }],
+              excluded: false,
+            },
+          ],
+        },
+        {
+          order: 2,
+          name: "Migrate",
+          agent: migrateAgent,
+          stageId: "2",
+          skills: [
+            {
+              skill: { id: "20", name: "Jakarta EE namespace migration" },
+              loadPolicy: "skill",
+              from: [{ kind: "agent", agent: migrateAgent }],
+              excluded: false,
+            },
+          ],
+        },
+      ],
+      everyStage: [customer, inventory].map((application) => ({
+        application,
+        skills: [
+          {
+            skill: {
+              id: String(100 + application.id),
+              name: `${application.name} conventions`,
+            },
+            loadPolicy: "rule" as const,
+            from: [{ kind: "application" as const, application }],
+            excluded: false,
+          },
+        ],
+      })),
+    };
+    const severalRun = (
+      status: "Failed" | "AwaitingApproval",
+      overrides: Partial<PlanRun> = {}
+    ): PlanRun => ({
+      ...run(
+        [
+          stage(1, "Prepare proposal", status, {
+            requiresApproval: true,
+            startedAt: "2026-11-10T10:06:00Z",
+            output: "Error: Unable to resolve dependency tree.",
+          }),
+          stage(2, "Migrate", "Pending"),
+        ],
+        status
+      ),
+      applications: [customer, inventory],
+      skills,
+      ...overrides,
+    });
+    /** Customer Management's agent run is the first; Inventory Service's differs in everything. */
+    const severalAgentRuns = (
+      customerPhase: StageAgentRun["phase"],
+      inventoryPhase: StageAgentRun["phase"]
+    ) => [
+      agentRunOf("1", {
+        application: customer,
+        phase: customerPhase,
+        startedAt: "2026-11-10T10:06:00Z",
+        podName: "pod-customer",
+      }),
+      agentRunOf("1", {
+        name: "run-1-stage-1-app-2",
+        application: inventory,
+        phase: inventoryPhase,
+        startedAt: "2026-11-11T12:00:00Z",
+        podName: "pod-inventory",
+      }),
+    ];
+    /** Each agent run's transcript and log name it. */
+    const useNamedViews = () =>
+      server.use(
+        rest.get(
+          `${AGENTIC_ENDPOINTS.agentRuns}/:name/transcript`,
+          (req, res, ctx) =>
+            res(
+              ctx.json({
+                status: "complete",
+                entries: [
+                  {
+                    kind: "message",
+                    id: "m1",
+                    at: "2026-11-10T10:07:00Z",
+                    role: "agent",
+                    text: `Working on ${req.params.name}`,
+                  },
+                ],
+              } satisfies AgentRunTranscript)
+            )
+        ),
+        rest.get(
+          `${AGENTIC_ENDPOINTS.agentRuns}/:name/logs`,
+          (req, res, ctx) => {
+            const text = `log of ${req.params.name}\n`;
+            return res(
+              ctx.json({
+                container: req.url.searchParams.get("container"),
+                source: "saved",
+                offset: 0,
+                nextOffset: text.length,
+                text,
+                complete: true,
+              })
+            );
+          }
+        )
+      );
+    const useSeveralAgentRuns = (
+      customerPhase: StageAgentRun["phase"],
+      inventoryPhase: StageAgentRun["phase"]
+    ) => {
+      useAgentRuns(severalAgentRuns(customerPhase, inventoryPhase));
+      useNamedViews();
+    };
+    const header = async () =>
+      (await screen.findByRole("heading", { level: 1 })).closest(
+        ".pf-v6-c-page__main-section"
+      ) as HTMLElement;
+    const searchParam = (key: string) =>
+      new URLSearchParams(currentSearch).get(key);
+    /** Transcript, Logs and YAML of the selected application carry no alert. */
+    const expectNoAlertOnViews = async () => {
+      Element.prototype.scrollIntoView = jest.fn();
+      for (const name of ["Transcript", "Logs", "YAML"]) {
+        await userEvent.click(screen.getByRole("tab", { name }));
+        await waitFor(() =>
+          expect(screen.getByRole("tab", { name })).toHaveAttribute(
+            "aria-selected",
+            "true"
+          )
+        );
+        expect(screen.queryByRole("heading", { name: /alert:/ })).toBeNull();
+      }
+      await userEvent.click(screen.getByRole("tab", { name: "Details" }));
+    };
+    const pickApplication = async (name: string) => {
+      await userEvent.click(
+        screen.getByRole("button", { name: /^Application: / })
+      );
+      await userEvent.click(
+        await screen.findByRole("option", { name: new RegExp(`^${name}`) })
+      );
+    };
+
+    it("opens on the application whose agent run needs attention, written once to the URL", async () => {
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Succeeded", "Failed");
+      renderStage("1", "?tab=details&from=agent-4");
+      const head = await header();
+      expect(
+        await within(head).findByRole("button", {
+          name: "Application: Inventory Service",
+        })
+      ).toBeVisible();
+      expect(searchParam("application")).toBe("2");
+      expect(searchParam("tab")).toBe("details");
+      expect(searchParam("from")).toBe("agent-4");
+      // The status line is Inventory Service's agent run.
+      expect(within(head).getByText("Failed")).toBeVisible();
+      expect(within(head).getByText(/^Stage 1 of 2 in/)).toHaveTextContent(
+        /Started November 11, 2026/
+      );
+      await waitFor(() =>
+        expect(fact("Pod")).toHaveTextContent("pod-inventory")
+      );
+    });
+
+    it("lists each application with its status, and switches by keyboard", async () => {
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Succeeded", "Failed");
+      renderStage("1");
+      const head = await header();
+      const toggle = await within(head).findByRole("button", {
+        name: "Application: Inventory Service",
+      });
+      await waitFor(() => expect(searchParam("application")).toBe("2"));
+
+      toggle.focus();
+      await userEvent.keyboard("{Enter}");
+      const list = await screen.findByRole("listbox", {
+        name: "Applications",
+      });
+      await userEvent.keyboard("{ArrowDown}");
+      const options = within(list).getAllByRole("option");
+      // The run's order, each with its agent run's status.
+      expect(options.map((option) => option.textContent)).toEqual([
+        "Customer ManagementSucceeded",
+        "Inventory ServiceFailed",
+      ]);
+      await waitFor(() => expect(options[0]).toHaveFocus());
+      await userEvent.keyboard("{Enter}");
+
+      const picked = await within(head).findByRole("button", {
+        name: "Application: Customer Management",
+      });
+      await waitFor(() => expect(picked).toHaveFocus());
+      expect(searchParam("application")).toBe("1");
+      expect(within(head).getByText("Succeeded")).toBeVisible();
+      expect(within(head).getByText(/^Stage 1 of 2 in/)).toHaveTextContent(
+        /Started November 10, 2026/
+      );
+      expect(fact("Pod")).toHaveTextContent("pod-customer");
+    });
+
+    it("points to the failed application from another one, on Details only, with nothing to decide", async () => {
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Succeeded", "Failed");
+      renderStage("1", "?application=1");
+      await screen.findByRole("button", {
+        name: "Application: Customer Management",
+      });
+      expect(
+        await screen.findByRole("heading", {
+          name: "Danger alert: Prepare proposal failed for Inventory Service",
+        })
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Run migration plan" })
+      ).toBeNull();
+      expect(screen.queryByRole("link", { name: "View logs" })).toBeNull();
+      expect(
+        screen.queryByText("Error: Unable to resolve dependency tree.")
+      ).toBeNull();
+
+      // The views of Customer Management carry no alert.
+      await expectNoAlertOnViews();
+
+      // "Show" switches every tab to the failed application.
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Show Inventory Service" })
+      );
+      const shown = await screen.findByRole("button", {
+        name: "Application: Inventory Service",
+      });
+      // Focus lands on the toggle, like after a choice in the Select.
+      await waitFor(() => expect(shown).toHaveFocus());
+      expect(searchParam("application")).toBe("2");
+      expect(
+        screen.getByRole("button", { name: "Run migration plan" })
+      ).toBeVisible();
+      const viewLogs = screen.getByRole("link", { name: "View logs" });
+      const search = new URLSearchParams(
+        viewLogs.getAttribute("href")?.split("?")[1]
+      );
+      expect(search.get("tab")).toBe("logs");
+      expect(search.get("application")).toBe("2");
+    });
+
+    it("keeps the decision on the waiting application, and says approving moves every application", async () => {
+      useRun(severalRun("AwaitingApproval"));
+      useSeveralAgentRuns("AwaitingApproval", "Succeeded");
+      renderStage("1", "?application=2");
+      const head = await header();
+      await within(head).findByRole("button", {
+        name: "Application: Inventory Service",
+      });
+      await waitFor(() =>
+        expect(within(head).getByText("Succeeded")).toBeVisible()
+      );
+      // Inventory Service succeeded: a pointer to the application that waits.
+      expect(
+        await screen.findByRole("heading", {
+          name: "Warning alert: Prepare proposal needs approval for Customer Management",
+        })
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Approve and continue" })
+      ).toBeNull();
+      await expectNoAlertOnViews();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Show Customer Management" })
+      );
+      expect(
+        await screen.findByText(
+          "Prepare proposal Agent finished Prepare proposal for Customer Management. Check its logs and commits, then approve to start Migrate for all 2 applications."
+        )
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Approve and continue" })
+      ).toBeVisible();
+      expect(searchParam("application")).toBe("1");
+    });
+
+    it("names no application when several failed", async () => {
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Failed", "Failed");
+      renderStage("1", "?application=2");
+      expect(
+        await screen.findByRole("heading", {
+          name: "Danger alert: Prepare proposal failed",
+        })
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Run migration plan" })
+      ).toBeVisible();
+    });
+
+    it("shows the selected application's commits and duration", async () => {
+      useRun(
+        severalRun("Failed", {
+          stageRuns: [
+            stage(1, "Prepare proposal", "Failed", {
+              startedAt: "2026-11-10T10:06:00Z",
+              completedAt: "2026-11-10T10:15:00Z",
+              commits: [
+                {
+                  hash: "aaaa111",
+                  message: "Customer change",
+                  stageName: "Prepare proposal",
+                  application: customer,
+                },
+                {
+                  hash: "bbbb222",
+                  message: "Inventory change",
+                  stageName: "Prepare proposal",
+                  application: inventory,
+                },
+              ],
+            }),
+            stage(2, "Migrate", "Pending"),
+          ],
+        })
+      );
+      useAgentRuns([
+        agentRunOf("1", {
+          application: customer,
+          phase: "Succeeded",
+          startedAt: "2026-11-10T10:06:00Z",
+          completedAt: "2026-11-10T10:09:00Z",
+        }),
+        agentRunOf("1", {
+          name: "run-1-stage-1-app-2",
+          application: inventory,
+          phase: "Failed",
+          startedAt: "2026-11-10T10:06:00Z",
+          completedAt: "2026-11-10T10:15:00Z",
+        }),
+      ]);
+      useNamedViews();
+      renderStage("1", "?application=1");
+      const commits = await screen.findByRole("grid", { name: "Commits" });
+      expect(commits).toHaveTextContent("Customer change");
+      expect(commits).not.toHaveTextContent("Inventory change");
+      expect(
+        screen.getByRole("heading", { name: "Commits (1)" })
+      ).toBeVisible();
+      await waitFor(() => expect(fact("Duration")).toHaveTextContent("3m"));
+
+      await pickApplication("Inventory Service");
+      await waitFor(() =>
+        expect(screen.getByRole("grid", { name: "Commits" })).toHaveTextContent(
+          "Inventory change"
+        )
+      );
+      expect(fact("Duration")).toHaveTextContent("9m");
+    });
+
+    it.each(["Failed", "AwaitingApproval"] as const)(
+      "keeps Skills and Commits loading, and shows no alert, until the application is chosen (%s)",
+      async (status) => {
+        useRun(severalRun(status));
+        server.use(
+          rest.get(
+            `${AGENTIC_ENDPOINTS.planRuns}/:id/agent-runs`,
+            (_req, res, ctx) => res(ctx.delay(5000), ctx.json([]))
+          )
+        );
+        renderStage("1");
+        const head = await header();
+        // A disabled toggle holds the Select's place, never the links.
+        const toggle = await within(head).findByRole("button", {
+          name: /^Application:/,
+        });
+        expect(toggle).toBeDisabled();
+        expect(
+          within(head).queryByRole("link", { name: "Customer Management" })
+        ).toBeNull();
+        const skills = screen.getByRole("region", { name: "Skills" });
+        expect(skills).not.toHaveTextContent("Every stage");
+        expect(within(skills).getByText("Loading skills")).toBeInTheDocument();
+        const commits = screen.getByRole("region", { name: "Commits" });
+        expect(within(commits).getByText("Loading")).toBeInTheDocument();
+        expect(commits).not.toHaveTextContent("This stage made no commits.");
+        // Nothing says which application needs a person yet: no alert.
+        expect(screen.queryByRole("heading", { name: /alert:/ })).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: "Approve and continue" })
+        ).toBeNull();
+      }
+    );
+
+    it.each([
+      ["Failed", "Danger alert: Prepare proposal failed"],
+      ["AwaitingApproval", "Warning alert: Prepare proposal needs approval"],
+    ] as const)(
+      "says what happened to the stage (%s), with no actions, when the agent runs cannot be read",
+      async (status, title) => {
+        useRun(severalRun(status));
+        useAgentRuns("error");
+        renderStage("1");
+        expect(
+          await screen.findByRole("heading", { name: title })
+        ).toBeVisible();
+        for (const name of [
+          "Run migration plan",
+          "Approve and continue",
+          /^Show /,
+        ]) {
+          expect(screen.queryByRole("button", { name })).toBeNull();
+        }
+        expect(screen.queryByRole("link", { name: "View logs" })).toBeNull();
+      }
+    );
+
+    it.each([
+      ["transcript", "Working on"],
+      ["logs", "log of"],
+      ["yaml", "name:"],
+    ] as const)(
+      "shows the selected application's agent run on the %s tab",
+      async (tabKey, prefix) => {
+        Element.prototype.scrollIntoView = jest.fn();
+        useRun(severalRun("Failed"));
+        useSeveralAgentRuns("Succeeded", "Failed");
+        renderStage("1", `?tab=${tabKey}&application=1`);
+        const panel = await screen.findByRole("tabpanel");
+        await waitFor(() =>
+          expect(panel).toHaveTextContent(`${prefix} run-1-stage-1`)
+        );
+        expect(panel).not.toHaveTextContent("run-1-stage-1-app-2");
+
+        await pickApplication("Inventory Service");
+        await waitFor(() =>
+          expect(screen.getByRole("tabpanel")).toHaveTextContent(
+            `${prefix} run-1-stage-1-app-2`
+          )
+        );
+        expect(searchParam("tab")).toBe(tabKey);
+      }
+    );
+
+    it("keeps the application when the tab changes", async () => {
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Succeeded", "Failed");
+      renderStage("1", "?application=1");
+      await screen.findByRole("button", {
+        name: "Application: Customer Management",
+      });
+      await userEvent.click(screen.getByRole("tab", { name: "YAML" }));
+      expect(searchParam("tab")).toBe("yaml");
+      expect(searchParam("application")).toBe("1");
+      await userEvent.click(screen.getByRole("tab", { name: "Details" }));
+      expect(searchParam("application")).toBe("1");
+    });
+
+    it("shows this stage's skills and the selected application's Every stage group only", async () => {
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Succeeded", "Failed");
+      renderStage("1", "?application=2");
+      const section = await screen.findByRole("region", { name: "Skills" });
+      expect(section).toHaveTextContent(
+        "Worked out when the run started. If the agent's skills changed before this stage started, the agent got the new ones."
+      );
+      const table = within(section).getByRole("grid", { name: "Skills" });
+      const groups = () =>
+        within(table)
+          .getAllByRole("heading", { level: 3 })
+          .map((heading) => heading.textContent);
+      expect(groups()).toEqual([
+        "Stage 1: Prepare proposal",
+        "Every stage: Inventory Service",
+      ]);
+      expect(table).toHaveTextContent("Inventory Service conventions");
+      expect(table).not.toHaveTextContent("Customer Management conventions");
+      expect(table).not.toHaveTextContent("Jakarta EE namespace migration");
+
+      await pickApplication("Customer Management");
+      await waitFor(() =>
+        expect(groups()).toEqual([
+          "Stage 1: Prepare proposal",
+          "Every stage: Customer Management",
+        ])
+      );
+    });
+
+    it("says a pending stage's skills are worked out, and keeps the Select", async () => {
+      useRun(severalRun("AwaitingApproval"));
+      useSeveralAgentRuns("AwaitingApproval", "Succeeded");
+      renderStage("2");
+      const head = await header();
+      // No agent runs for a pending stage: the run's first application.
+      expect(
+        await within(head).findByRole("button", {
+          name: "Application: Customer Management",
+        })
+      ).toBeVisible();
+      await waitFor(() => expect(searchParam("application")).toBe("1"));
+      const section = screen.getByRole("region", { name: "Skills" });
+      expect(section).toHaveTextContent(
+        "Worked out when the run started. If the agent's skills change before this stage starts, it gets the new ones."
+      );
+      expect(
+        within(section).getByRole("heading", {
+          level: 3,
+          name: "Stage 2: Migrate",
+        })
+      ).toBeVisible();
+      await userEvent.click(within(head).getByRole("button"));
+      expect(
+        (await screen.findAllByRole("option")).map(
+          (option) => option.textContent
+        )
+      ).toEqual(["Customer ManagementPending", "Inventory ServicePending"]);
+    });
+
+    it("says the skills of a stage the ended run never reached were not read", async () => {
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Succeeded", "Failed");
+      renderStage("2");
+      const section = await screen.findByRole("region", { name: "Skills" });
+      await waitFor(() =>
+        expect(section).toHaveTextContent(
+          "Worked out when the run started. This stage did not run, so its agent did not read them."
+        )
+      );
+      expect(section).not.toHaveTextContent("it gets the new ones");
+    });
+  });
+
+  it("says the skills of a run without a snapshot are unavailable", async () => {
+    useRun(awaiting);
+    renderStage("1");
+    const section = await screen.findByRole("region", { name: "Skills" });
+    expect(section).toHaveTextContent(
+      /^SkillsUnavailableThis server does not report the skills of a stage yet.$/
+    );
   });
 });

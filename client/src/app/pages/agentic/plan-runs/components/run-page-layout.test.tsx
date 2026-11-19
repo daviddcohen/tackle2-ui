@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Location } from "history";
 import { MemoryRouter, Route } from "react-router-dom";
 
-import { render, screen } from "@app/test-config/test-utils";
+import { render, screen, within } from "@app/test-config/test-utils";
 
 import { DetailSection } from "../../components/detail-section";
 
@@ -142,6 +142,65 @@ describe("StageApplicationRow", () => {
         location()?.state as { breadcrumbs: { title: string }[] }
       ).breadcrumbs.map((crumb) => crumb.title)
     ).toEqual(["Plan runs"]);
+  });
+
+  it("shows the application Select instead of the links in a run on several applications", async () => {
+    const onSelect = jest.fn();
+    render(
+      <MemoryRouter>
+        <StageApplicationRow
+          applications={[
+            { id: 1, name: "Claims Processing" },
+            { id: 2, name: "Underwriting Workbench" },
+          ]}
+          runId="1"
+          linkCrumbs={[]}
+          selection={{
+            selectedId: 2,
+            onSelect,
+            statuses: new Map([[1, "Failed"]]),
+          }}
+        />
+      </MemoryRouter>
+    );
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    const toggle = screen.getByRole("button", {
+      name: "Application: Underwriting Workbench",
+    });
+    await userEvent.click(toggle);
+    const options = within(
+      screen.getByRole("listbox", { name: "Applications" })
+    ).getAllByRole("option");
+    // A status only where the agent run is known.
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Claims ProcessingFailed",
+      "Underwriting Workbench",
+    ]);
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(options[1]);
+    expect(onSelect).not.toHaveBeenCalled();
+    await userEvent.click(toggle);
+    await userEvent.click(
+      screen.getByRole("option", { name: /^Claims Processing/ })
+    );
+    expect(onSelect).toHaveBeenCalledWith(1);
+  });
+
+  it("keeps the link of a run on one application, even with a selection", () => {
+    render(
+      <MemoryRouter>
+        <StageApplicationRow
+          applications={[{ id: 7, name: "Partner Events API" }]}
+          runId="1"
+          linkCrumbs={[]}
+          selection={{ selectedId: 7, onSelect: jest.fn() }}
+        />
+      </MemoryRouter>
+    );
+    expect(
+      screen.getByRole("link", { name: "Partner Events API" })
+    ).toBeVisible();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("renders nothing without applications", () => {

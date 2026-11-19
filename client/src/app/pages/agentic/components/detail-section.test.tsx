@@ -74,6 +74,55 @@ describe("detail page stacks", () => {
       "pf-v6-u-text-color-subtle"
     );
     expect(container.querySelector("#commits")).not.toBeNull();
+    // Without a heading id it stays a plain block, as before.
+    expect(container.querySelector("section")).toBeNull();
+  });
+
+  it("renders a sub-section heading at h3 size md, with a node title", () => {
+    render(
+      <MemoryRouter>
+        <DetailSection
+          headingLevel="h3"
+          title={
+            <>
+              Archetype skills: <a href="/archetypes/1">Java EE</a> (2)
+            </>
+          }
+        >
+          <p>Rows</p>
+        </DetailSection>
+      </MemoryRouter>
+    );
+    const heading = screen.getByRole("heading", {
+      level: 3,
+      name: "Archetype skills: Java EE (2)",
+    });
+    expect(heading).toHaveClass("pf-m-md");
+    expect(screen.getByRole("link", { name: "Java EE" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+  });
+
+  it("names the section by its heading, which a script can focus", () => {
+    render(
+      <DetailSection
+        headingId="skills-by-stage-heading"
+        title="Skills by stage"
+      >
+        <p>Rows</p>
+      </DetailSection>
+    );
+    const heading = screen.getByRole("heading", {
+      level: 2,
+      name: "Skills by stage",
+    });
+    expect(heading).toHaveAttribute("id", "skills-by-stage-heading");
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    expect(heading).toHaveClass("pf-m-lg");
+    expect(
+      screen.getByRole("region", { name: "Skills by stage" })
+    ).toContainElement(screen.getByText("Rows"));
+    heading.focus();
+    expect(heading).toHaveFocus();
   });
   it("puts the actions on the heading's line, only when given", () => {
     const { rerender } = render(
@@ -163,5 +212,20 @@ describe("DetailFacts and LinkLabels", () => {
       "href",
       "/agents/2"
     );
+  });
+
+  it("renders an item without a destination as a plain label", () => {
+    render(
+      <MemoryRouter>
+        <LinkLabels
+          items={[
+            { id: 1, name: "Code Migrator", to: "/agents/1" },
+            { id: 2, name: "Quarkus 3.x" },
+          ]}
+        />
+      </MemoryRouter>
+    );
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByText("Quarkus 3.x")).toBeVisible();
   });
 });

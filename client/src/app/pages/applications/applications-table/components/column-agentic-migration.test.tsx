@@ -61,6 +61,17 @@ describe("ColumnAgenticMigration", () => {
     expect(screen.getByText("Java EE to Quarkus")).toBeInTheDocument();
   });
 
+  it("names the plan the run uses, not the plan the next run would use", () => {
+    renderCell(
+      view({
+        runPhase: "Pending",
+        planRunPlan: { id: "3", name: "Java EE lift and shift" },
+      })
+    );
+    expect(screen.getByText("Java EE lift and shift")).toBeInTheDocument();
+    expect(screen.queryByText("Java EE to Quarkus")).not.toBeInTheDocument();
+  });
+
   it("shows the server's reason, not linked, before a blocked start", () => {
     renderCell(
       view({

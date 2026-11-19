@@ -495,6 +495,40 @@ describe("toStageAgentRun", () => {
     });
   });
 
+  it("maps the application from the label, named from the index", () => {
+    const labelled: Crd.AgentRun = {
+      ...running,
+      metadata: {
+        name: "run-1-migrate-app-8",
+        labels: { "konveyor.io/application": "8" },
+      },
+      spec: { ...running.spec, env: [{ name: "APP_ID", value: "3" }] },
+    };
+    expect(
+      toStageAgentRun(labelled, {
+        runId: "1",
+        stageId: "2",
+        applicationNames: new Map([[8, "Inventory Service"]]),
+      }).application
+    ).toEqual({ id: 8, name: "Inventory Service" });
+  });
+
+  it("falls back to the APP_ID env, and to the id as the name", () => {
+    const fromEnv: Crd.AgentRun = {
+      ...running,
+      spec: { ...running.spec, env: [{ name: "APP_ID", value: "3" }] },
+    };
+    expect(
+      toStageAgentRun(fromEnv, { runId: "1", stageId: "2" }).application
+    ).toEqual({ id: 3, name: "#3" });
+  });
+
+  it("has no application when the AgentRun names none", () => {
+    expect(
+      toStageAgentRun(running, { runId: "1", stageId: "2" })
+    ).not.toHaveProperty("application");
+  });
+
   it("has no pod, start, usage or log source before the pod exists", () => {
     const pending = toStageAgentRun(agentRun({ phase: "Pending" }, {}), {
       runId: "1",

@@ -48,7 +48,7 @@ import { NotificationsContext } from "@app/components/NotificationsContext";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { targetProfilesPath } from "@app/pages/agentic/entity-paths";
 import {
-  currentPlanSkills,
+  planSkillsState,
   useCreateMigrationPlanMutation,
   useFetchAgents,
   useFetchGateways,
@@ -63,7 +63,12 @@ import { DetailSection, DetailSections } from "../../components/detail-section";
 import { StageCard, StageFormData } from "../components/stage-card";
 import { StagesTable } from "../components/stages-table";
 
-import { PlanSkillsStep, PlanSkillsSummary } from "./plan-skills-step";
+import {
+  DraftStageTitle,
+  PlanSkillsStep,
+  PlanSkillsSummary,
+  draftSkills,
+} from "./plan-skills-step";
 
 interface PlanWizardProps {
   isOpen: boolean;
@@ -307,10 +312,20 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     [stages, archetypeId, targetProfileIds]
   );
   const skillsQuery = useResolvePlanSkills(skillsRequest, { enabled: isOpen });
-  const setSkillUsed = (skill: EntityRef, used: boolean) =>
+  // The request's stages by position, numbered and named as in the form.
+  const stageTitles = React.useMemo<DraftStageTitle[]>(
+    () =>
+      stages.flatMap((stage, index) =>
+        stage.agentId != null
+          ? [{ order: index + 1, name: stage.name.trim() }]
+          : []
+      ),
+    [stages]
+  );
+  const setSkillIncluded = (skill: EntityRef, included: boolean) =>
     setValue(
       "excludedSkillIds",
-      used
+      included
         ? excludedSkillIds.filter((id) => id !== skill.id)
         : [...excludedSkillIds.filter((id) => id !== skill.id), skill.id],
       { shouldDirty: true }
@@ -413,11 +428,15 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     // Only exclusions of skills in the latest resolution are saved, so none
     // pile up unseen. Without a resolution (loading or failed) they are sent
     // as they are.
-    const resolvedSkills = currentPlanSkills(skillsQuery);
+    const resolvedSkills =
+      planSkillsState(skillsQuery) === "ready" &&
+      skillsQuery.skillsByStage != null
+        ? draftSkills(skillsQuery.skillsByStage)
+        : undefined;
     const excludedSkills =
       resolvedSkills != null
         ? submittedExcludedSkillIds.filter((id) =>
-            resolvedSkills.some((entry) => entry.skill.id === id)
+            resolvedSkills.some((skill) => skill.id === id)
           )
         : submittedExcludedSkillIds;
     // An edit that clears every exclusion sends an empty list, so a backend
@@ -796,8 +815,10 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
         <WizardStep id={SKILLS_STEP_ID} name={t("agentic.plan.skillsStep")}>
           <PlanSkillsStep
             query={skillsQuery}
+            stageTitles={stageTitles}
+            archetypeId={archetypeId ?? undefined}
             excludedIds={excludedSkillIds}
-            onUsedChange={setSkillUsed}
+            onIncludeChange={setSkillIncluded}
             isEdit={plan != null}
           />
         </WizardStep>
@@ -877,11 +898,12 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>
-                  {t("agentic.plan.skillsStep")}
+                  {t("agentic.plan.reviewExcludedSkills")}
                 </DescriptionListTerm>
                 <DescriptionListDescription>
                   <PlanSkillsSummary
                     query={skillsQuery}
+                    stageTitles={stageTitles}
                     excludedIds={excludedSkillIds}
                     savedExcluded={
                       plan != null ? (plan.excludedSkills ?? []) : undefined
@@ -893,6 +915,8 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
             <DetailSection title={t("agentic.plan.stages")}>
               <StagesTable
                 aria-label={t("agentic.plan.stagesToReview")}
+                // Shown over the plan page, whose tables use 0 and 100.
+                rowIndexOffset={200}
                 rows={stages.map((stage) => ({
                   key: stage.formKey,
                   name: stage.name,

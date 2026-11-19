@@ -254,6 +254,64 @@ test.describe("Migration plans list and running a plan", () => {
     ]);
   });
 
+  test("previews and runs only the selected applications, from the plans list", async ({
+    page,
+  }) => {
+    await openList(page);
+    const { plans } = await loadData(page);
+    const { plan, ready } = await runnablePlan(page, plans);
+    expect(ready.length, "a plan with two ready applications").toBeGreaterThan(
+      1
+    );
+    await rowActions(planRow(page, plan)).click();
+    await runItem(page).click();
+    const preflight = dialog(page, "Run migration plan");
+    const table = preflight.getByRole("grid", {
+      name: `Applications of ${plan.name}`,
+    });
+    // Leave the last ready application out.
+    const left = ready[ready.length - 1];
+    const kept = ready.slice(0, -1);
+    await table
+      .getByRole("row")
+      .filter({ has: page.getByRole("rowheader", { name: left.name }) })
+      .getByRole("checkbox")
+      .uncheck();
+    await preflight.getByRole("button", { name: "Skills by stage" }).click();
+    // One run of the fixed plan: the kept applications, never the left one.
+    const preview = preflight.getByRole("grid", {
+      name: "Skills by stage",
+      exact: true,
+    });
+    await expect(preview).toBeVisible();
+    for (const application of kept)
+      await expect(
+        preview.getByRole("heading", {
+          name: `Every stage: ${application.name}`,
+        })
+      ).toBeVisible();
+    await expect(
+      preview.getByRole("heading", { name: `Every stage: ${left.name}` })
+    ).toHaveCount(0);
+
+    // Run counts what it sends, and sends what the preview showed.
+    const runButton = preflight.getByRole("button", {
+      name: `Run on ${kept.length} application${kept.length === 1 ? "" : "s"}`,
+    });
+    await expect(runButton).toBeEnabled();
+    await runButton.click();
+    await expect(preflight).toBeHidden();
+    await expect(page).toHaveURL((url) =>
+      /^\/plan-runs\/\d+$/.test(appPath(url.pathname))
+    );
+    const runId = appPath(new URL(page.url()).pathname).split("/").pop()!;
+    const created = await agenticGet<Run>(page, `/plan-runs/${runId}`);
+    expect(created.planId).toBe(plan.id);
+    expect(
+      created.applications.map((application) => application.id).sort()
+    ).toEqual(kept.map((application) => application.id).sort());
+  });
+
   test("runs a plan from the Actions menu of its page", async ({ page }) => {
     await openList(page);
     const { plans } = await loadData(page);

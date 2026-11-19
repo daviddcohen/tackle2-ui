@@ -361,7 +361,7 @@ export const startAgentTestRun = (request: AgentTestRunRequest) =>
 // partial. `/hub/agentic/workflows` (AgentWorkflow CRD):
 // stage identity is the stage `name`; `requiresApproval` maps to
 // `execution.mode: approve` (per tool call, not per stage). The migration path
-// (archetype + target profiles), `effectiveSkills`, `applicationImpact` and
+// (archetype + target profiles), `applicationImpact` and
 // `runCount` are missing (Hub product vocabulary / Hub-computed views;
 // `runCount` can be counted client-side). `excludedSkills` and the skill
 // resolve preview are missing too (proposed: per-stage
@@ -387,8 +387,9 @@ export const deleteMigrationPlan = (planId: EntityId) =>
   axios.delete<void>(`${PLANS}/${id(planId)}`).then(() => undefined);
 
 /**
- * The Skills a draft (or saved) Plan resolves to, one entry per Skill with its
- * sources and whether the draft's `excludedSkills` turns it off. Reads only;
+ * The Skills a draft (or saved) Plan resolves to, per stage and for every
+ * stage, each with where it comes from and whether the draft's
+ * `excludedSkills` turns it off. Reads only;
  * a full `MigrationPlanRequest` is a valid body. Real backend: missing
  * (proposed `POST /hub/agentic/workflows/skills/resolve` with a draft
  * AgentWorkflow spec; today the controller resolves skills only when a stage's

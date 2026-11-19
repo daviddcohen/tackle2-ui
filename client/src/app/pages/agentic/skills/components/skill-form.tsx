@@ -9,6 +9,7 @@ import {
   Button,
   ButtonVariant,
   Form,
+  FormGroup,
   FormHelperText,
   FormSection,
   HelperText,
@@ -17,6 +18,7 @@ import {
   ModalBody,
   ModalFooter,
   ModalHeader,
+  Radio,
   TextArea,
   ToggleGroup,
   ToggleGroupItem,
@@ -28,6 +30,7 @@ import {
   Skill,
   SkillAssociationRequest,
   SkillAssociationScope,
+  SkillLoadPolicy,
   SkillRequest,
   SkillSourceType,
 } from "@app/agentic";
@@ -63,7 +66,10 @@ import {
   isValidGitUrl,
 } from "@app/utils/utils";
 
-import { getCollectionsContainingSkill } from "../skill-usage";
+import {
+  getCollectionsContainingSkill,
+  getSkillAttachmentParts,
+} from "../skill-usage";
 
 const FORM_ID = "skill-form";
 const TITLE_ID = "skill-modal-title";
@@ -101,9 +107,13 @@ const ASSOCIATION_FIELDS: {
   },
 ];
 
+/** The default first: absent means "skill" (the CRD default). */
+const LOAD_POLICIES: SkillLoadPolicy[] = ["skill", "rule"];
+
 interface FormValues {
   name: string;
   description: string;
+  loadPolicy: SkillLoadPolicy;
   sourceType: SkillSourceType;
   content: string;
   repoUrl: string;
@@ -353,6 +363,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({
     description: string()
       .trim()
       .max(500, t("agentic.skill.validation.descriptionMaximum")),
+    loadPolicy: mixed<SkillLoadPolicy>().oneOf(LOAD_POLICIES).required(),
     sourceType: mixed<SkillSourceType>()
       .oneOf(["inline", "git", "oci"])
       .required(),
@@ -401,6 +412,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({
     defaultValues: {
       name: skill?.name || "",
       description: skill?.description || "",
+      loadPolicy: skill?.loadPolicy ?? "skill",
       sourceType: skill?.sourceType || "inline",
       content: skill?.content || "",
       repoUrl: skill?.repoUrl || "",
@@ -418,6 +430,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({
   });
 
   const selectedSourceType = useWatch({ control, name: "sourceType" });
+  const selectedLoadPolicy = useWatch({ control, name: "loadPolicy" });
   const selectedCollections = useWatch({ control, name: "skillCollections" });
   // Save turns on for what the submit writes: a picker that is back to its
   // starting set in another order is no change.
@@ -445,28 +458,28 @@ export const SkillForm: React.FC<SkillFormProps> = ({
     resetField,
   ]);
 
-  // The edit warning counts what the delete reason counts,
-  // once both counts are known.
-  const associationCount = skill?.associations?.length;
+  // The edit warning names what the delete reason names,
+  // once both are known.
+  const attachments =
+    skill?.associations != null
+      ? getSkillAttachmentParts(t, skill.associations)
+      : undefined;
   const collectionCount =
     skill == null || isLoadingCollections || collectionsError != null
       ? undefined
       : getCollectionsContainingSkill(skill, skillCollections).length;
   const editWarning = (() => {
-    if (associationCount == null || collectionCount == null) {
+    if (attachments == null || collectionCount == null) {
       return undefined;
     }
-    const associations = t("agentic.skill.associationCount", {
-      count: associationCount,
-    });
     const collections = t("agentic.skill.collectionCount", {
       count: collectionCount,
     });
-    if (associationCount > 0 && collectionCount > 0) {
-      return t("agentic.skill.editWarning.both", { associations, collections });
+    if (attachments.length > 0 && collectionCount > 0) {
+      return t("agentic.skill.editWarning.both", { attachments, collections });
     }
-    if (associationCount > 0) {
-      return t("agentic.skill.editWarning.associationsOnly", { associations });
+    if (attachments.length > 0) {
+      return t("agentic.skill.editWarning.attachedOnly", { attachments });
     }
     if (collectionCount > 0) {
       return t("agentic.skill.editWarning.collectionsOnly", { collections });
@@ -498,6 +511,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({
     const payload: SkillRequest = {
       name: formValues.name.trim(),
       description: formValues.description.trim(),
+      loadPolicy: formValues.loadPolicy,
       sourceType: formValues.sourceType,
       content:
         formValues.sourceType === "inline"
@@ -575,6 +589,160 @@ export const SkillForm: React.FC<SkillFormProps> = ({
   }, [isSubmitting, onSavingChange]);
   React.useEffect(() => () => onSavingChange?.(false), [onSavingChange]);
 
+  const associationField = ({
+    field,
+    toggleId,
+  }: (typeof ASSOCIATION_FIELDS)[number]) => {
+    const isDisabled = field === "agents" && !canManageAgents;
+    return (
+      <HookFormPFGroupController
+        key={field}
+        control={control}
+        name={field}
+        label={t(`agentic.skill.associationFields.${field}.label`)}
+        fieldId={`${toggleId}-input`}
+        helperText={
+          isDisabled
+            ? t("agentic.skill.agentsReadOnly")
+            : t(`agentic.skill.associationFields.${field}.helper`)
+        }
+        renderInput={({ field: { value } }) => (
+          <MultiSelect
+            toggleId={toggleId}
+            toggleAriaLabel={t(
+              `agentic.skill.associationFields.${field}.placeholder`
+            )}
+            ariaLabel={t(`agentic.skill.associationFields.${field}.label`)}
+            inputAriaLabel={t(`agentic.skill.associationFields.${field}.label`)}
+            inputAriaDescribedBy={`${toggleId}-input-helper`}
+            maxMenuHeight={PICKER_MENU_HEIGHT}
+            popperProps={PICKER_MENU_POPPER}
+            options={options[field]}
+            values={value}
+            isDisabled={isDisabled}
+            hasCheckbox
+            hasBadge
+            hasChips
+            onSelect={(selection) => {
+              if (!selection || isDisabled) return;
+              setValue(
+                field,
+                value.includes(selection)
+                  ? value.filter((id) => id !== selection)
+                  : [...value, selection],
+                { shouldDirty: true, shouldValidate: true }
+              );
+            }}
+            onClear={() => {
+              if (isDisabled) return;
+              setValue(field, [], {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+            }}
+            placeholderText={t(
+              `agentic.skill.associationFields.${field}.placeholder`
+            )}
+          />
+        )}
+      />
+    );
+  };
+
+  // Membership, not an attachment scope, so not one of ASSOCIATION_FIELDS.
+  const collectionsField = (
+    <HookFormPFGroupController
+      control={control}
+      name="skillCollections"
+      label={t("agentic.skill.associationFields.skillCollections.label")}
+      fieldId={`${COLLECTIONS_TOGGLE_ID}-input`}
+      renderInput={({ field: { value } }) => (
+        <>
+          <MultiSelect
+            toggleId={COLLECTIONS_TOGGLE_ID}
+            toggleAriaLabel={t(
+              "agentic.skill.associationFields.skillCollections.placeholder"
+            )}
+            ariaLabel={t(
+              "agentic.skill.associationFields.skillCollections.label"
+            )}
+            inputAriaLabel={t(
+              "agentic.skill.associationFields.skillCollections.label"
+            )}
+            inputAriaDescribedBy={COLLECTIONS_HELPER_ID}
+            maxMenuHeight={PICKER_MENU_HEIGHT}
+            popperProps={PICKER_MENU_POPPER}
+            options={collectionOptions}
+            values={value}
+            lockedValues={lockedCollections}
+            isDisabled={isCollectionsDisabled}
+            hasCheckbox
+            hasBadge
+            hasChips
+            onSelect={(selection) => {
+              if (
+                !selection ||
+                isCollectionsDisabled ||
+                lockedCollections.includes(selection)
+              ) {
+                return;
+              }
+              setValue(
+                "skillCollections",
+                value.includes(selection)
+                  ? value.filter((id) => id !== selection)
+                  : [...value, selection],
+                { shouldDirty: true, shouldValidate: true }
+              );
+            }}
+            onClear={() => {
+              if (isCollectionsDisabled) return;
+              setValue(
+                "skillCollections",
+                value.filter((id) => lockedCollections.includes(id)),
+                { shouldDirty: true, shouldValidate: true }
+              );
+            }}
+            placeholderText={t(
+              "agentic.skill.associationFields.skillCollections.placeholder"
+            )}
+          />
+          {/* Own helper: it has a warning variant and a second line. */}
+          <FormHelperText id={COLLECTIONS_HELPER_ID}>
+            <HelperText>
+              {/* Only a failed first read leaves the field
+                          disabled and unsent; after that, a failed refetch
+                          changes nothing the save does. */}
+              {initialCollections == null && collectionsError != null ? (
+                <HelperTextItem variant="warning">
+                  {t("agentic.skill.skillCollectionsUnavailable")}
+                </HelperTextItem>
+              ) : initialCollections == null ? (
+                // Never an empty field that reads as "in no
+                // collection" while they load.
+                <HelperTextItem>
+                  {t("agentic.skill.skillCollectionsLoading")}
+                </HelperTextItem>
+              ) : (
+                <HelperTextItem>
+                  {canManageCollections
+                    ? t(
+                        "agentic.skill.associationFields.skillCollections.helper"
+                      )
+                    : t("agentic.skill.skillCollectionsReadOnly")}
+                </HelperTextItem>
+              )}
+              {canManageCollections &&
+                lockedHelpers.map((helper) => (
+                  <HelperTextItem key={helper}>{helper}</HelperTextItem>
+                ))}
+            </HelperText>
+          </FormHelperText>
+        </>
+      )}
+    />
+  );
+
   return (
     <>
       <ModalHeader
@@ -609,6 +777,31 @@ export const SkillForm: React.FC<SkillFormProps> = ({
               rows={2}
               resizeOrientation="vertical"
             />
+            <FormGroup
+              role="radiogroup"
+              isStack
+              fieldId="skill-load-policy"
+              label={t("agentic.skill.loadPolicy.label")}
+            >
+              {LOAD_POLICIES.map((policy) => (
+                <Radio
+                  key={policy}
+                  id={`skill-load-policy-${policy}`}
+                  name="skill-load-policy"
+                  label={t(`agentic.skill.loadPolicy.${policy}`)}
+                  description={t(
+                    `agentic.skill.loadPolicy.${policy}Description`
+                  )}
+                  isChecked={selectedLoadPolicy === policy}
+                  onChange={() =>
+                    setValue("loadPolicy", policy, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+              ))}
+            </FormGroup>
           </FormSection>
 
           <FormSection title={t("terms.source")}>
@@ -706,161 +899,12 @@ export const SkillForm: React.FC<SkillFormProps> = ({
           </FormSection>
 
           {/* Always visible on create and edit. */}
-          <FormSection title={t("agentic.skill.associations")}>
-            {ASSOCIATION_FIELDS.map(({ field, toggleId }) => {
-              const isDisabled = field === "agents" && !canManageAgents;
-              return (
-                <HookFormPFGroupController
-                  key={field}
-                  control={control}
-                  name={field}
-                  label={t(`agentic.skill.associationFields.${field}.label`)}
-                  fieldId={`${toggleId}-input`}
-                  helperText={
-                    isDisabled
-                      ? t("agentic.skill.agentsReadOnly")
-                      : t(`agentic.skill.associationFields.${field}.helper`)
-                  }
-                  renderInput={({ field: { value } }) => (
-                    <MultiSelect
-                      toggleId={toggleId}
-                      toggleAriaLabel={t(
-                        `agentic.skill.associationFields.${field}.placeholder`
-                      )}
-                      ariaLabel={t(
-                        `agentic.skill.associationFields.${field}.label`
-                      )}
-                      inputAriaLabel={t(
-                        `agentic.skill.associationFields.${field}.label`
-                      )}
-                      inputAriaDescribedBy={`${toggleId}-input-helper`}
-                      maxMenuHeight={PICKER_MENU_HEIGHT}
-                      popperProps={PICKER_MENU_POPPER}
-                      options={options[field]}
-                      values={value}
-                      isDisabled={isDisabled}
-                      hasCheckbox
-                      hasBadge
-                      hasChips
-                      onSelect={(selection) => {
-                        if (!selection || isDisabled) return;
-                        setValue(
-                          field,
-                          value.includes(selection)
-                            ? value.filter((id) => id !== selection)
-                            : [...value, selection],
-                          { shouldDirty: true, shouldValidate: true }
-                        );
-                      }}
-                      onClear={() => {
-                        if (isDisabled) return;
-                        setValue(field, [], {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
-                      }}
-                      placeholderText={t(
-                        `agentic.skill.associationFields.${field}.placeholder`
-                      )}
-                    />
-                  )}
-                />
-              );
-            })}
-            {/* Membership, not an association scope, so outside the loop. */}
-            <HookFormPFGroupController
-              control={control}
-              name="skillCollections"
-              label={t(
-                "agentic.skill.associationFields.skillCollections.label"
-              )}
-              fieldId={`${COLLECTIONS_TOGGLE_ID}-input`}
-              renderInput={({ field: { value } }) => (
-                <>
-                  <MultiSelect
-                    toggleId={COLLECTIONS_TOGGLE_ID}
-                    toggleAriaLabel={t(
-                      "agentic.skill.associationFields.skillCollections.placeholder"
-                    )}
-                    ariaLabel={t(
-                      "agentic.skill.associationFields.skillCollections.label"
-                    )}
-                    inputAriaLabel={t(
-                      "agentic.skill.associationFields.skillCollections.label"
-                    )}
-                    inputAriaDescribedBy={COLLECTIONS_HELPER_ID}
-                    maxMenuHeight={PICKER_MENU_HEIGHT}
-                    popperProps={PICKER_MENU_POPPER}
-                    options={collectionOptions}
-                    values={value}
-                    lockedValues={lockedCollections}
-                    isDisabled={isCollectionsDisabled}
-                    hasCheckbox
-                    hasBadge
-                    hasChips
-                    onSelect={(selection) => {
-                      if (
-                        !selection ||
-                        isCollectionsDisabled ||
-                        lockedCollections.includes(selection)
-                      ) {
-                        return;
-                      }
-                      setValue(
-                        "skillCollections",
-                        value.includes(selection)
-                          ? value.filter((id) => id !== selection)
-                          : [...value, selection],
-                        { shouldDirty: true, shouldValidate: true }
-                      );
-                    }}
-                    onClear={() => {
-                      if (isCollectionsDisabled) return;
-                      setValue(
-                        "skillCollections",
-                        value.filter((id) => lockedCollections.includes(id)),
-                        { shouldDirty: true, shouldValidate: true }
-                      );
-                    }}
-                    placeholderText={t(
-                      "agentic.skill.associationFields.skillCollections.placeholder"
-                    )}
-                  />
-                  {/* Own helper: it has a warning variant and a second line. */}
-                  <FormHelperText id={COLLECTIONS_HELPER_ID}>
-                    <HelperText>
-                      {/* Only a failed first read leaves the field
-                          disabled and unsent; after that, a failed refetch
-                          changes nothing the save does. */}
-                      {initialCollections == null &&
-                      collectionsError != null ? (
-                        <HelperTextItem variant="warning">
-                          {t("agentic.skill.skillCollectionsUnavailable")}
-                        </HelperTextItem>
-                      ) : initialCollections == null ? (
-                        // Never an empty field that reads as "in no
-                        // collection" while they load.
-                        <HelperTextItem>
-                          {t("agentic.skill.skillCollectionsLoading")}
-                        </HelperTextItem>
-                      ) : (
-                        <HelperTextItem>
-                          {canManageCollections
-                            ? t(
-                                "agentic.skill.associationFields.skillCollections.helper"
-                              )
-                            : t("agentic.skill.skillCollectionsReadOnly")}
-                        </HelperTextItem>
-                      )}
-                      {canManageCollections &&
-                        lockedHelpers.map((helper) => (
-                          <HelperTextItem key={helper}>{helper}</HelperTextItem>
-                        ))}
-                    </HelperText>
-                  </FormHelperText>
-                </>
-              )}
-            />
+          <FormSection title={t("agentic.skill.usage")}>
+            {/* Agents, then skill collections: both decide what a stage's
+                agent gets; then the context owners. */}
+            {ASSOCIATION_FIELDS.slice(0, 1).map(associationField)}
+            {collectionsField}
+            {ASSOCIATION_FIELDS.slice(1).map(associationField)}
           </FormSection>
         </Form>
       </ModalBody>

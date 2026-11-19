@@ -67,8 +67,10 @@ Failures keep a screenshot, a trace and the error context under
 `test-results/playwright/`; open a trace with
 `npx playwright show-trace <path>/trace.zip`.
 
-The full run takes about 6 minutes with 4 workers (`--workers=4`); the
-navigation link sweep (`navigation/entity-links.spec.ts`) is the longest part.
+The full run (642 tests) takes about 13 minutes with 4 workers
+(`--workers=4`, measured with another e2e run on the same machine); the
+navigation link sweep (`navigation/entity-links.spec.ts`, about 4.5 minutes,
+its "stages" group the longest at about 3.5) is the longest part.
 
 ## What each folder covers
 

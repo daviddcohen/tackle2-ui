@@ -130,7 +130,7 @@ test("a missing stage of a known run goes back to that run by name", async ({
   await page.goto(protoUrl("/plan-runs/1/stages/99999"));
   await expect(mainHeading(page)).toHaveText("Stage not found");
   await page
-    .getByRole("button", { name: "Back to Run #1 — Java EE to Quarkus" })
+    .getByRole("button", { name: "Back to Run #1: Java EE to Quarkus" })
     .click();
   await expect(page).toHaveURL(/\/plan-runs\/1(\?|$)/);
 });

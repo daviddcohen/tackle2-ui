@@ -36,7 +36,7 @@ const planRun = (
   applications = 3
 ): PlanRun => ({
   id: "1",
-  name: "Run #1 — Java EE to Quarkus",
+  name: "Run #1: Java EE to Quarkus",
   planId: "1",
   planName: "Java EE to Quarkus",
   applications: Array.from({ length: applications }, (_, index) => ({
@@ -165,7 +165,7 @@ describe("StageAttentionAlert, approval", () => {
       within(dialog).getByRole("heading", { name: "Approve and continue?" })
     ).toBeInTheDocument();
     expect(dialog).toHaveTextContent(
-      "Prepare proposal is approved and Migrate starts next. This decision applies to all 3 applications in Run #1 — Java EE to Quarkus."
+      "Prepare proposal is approved and Migrate starts next. This decision applies to all 3 applications in Run #1: Java EE to Quarkus."
     );
 
     await user.click(
@@ -196,20 +196,53 @@ describe("StageAttentionAlert, approval", () => {
   });
 
   it("points at the evidence on the stage page, without a link to itself", () => {
+    const oneApplication = {
+      ...awaiting,
+      applications: [awaiting.applications[0]],
+    };
+    renderAlert({
+      surface: "stage",
+      planRun: oneApplication,
+      stageRun: oneApplication.stageRuns[1],
+      onApprove: jest.fn(),
+      reviewStageTo,
+    });
+
+    // Approval stages are not recorded: the logs, not the transcript.
+    expect(
+      screen.getByText(
+        "Prepare proposal Agent finished Prepare proposal. Check its logs and commits, then approve to start Migrate."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("says approving moves every application of a run on several", () => {
+    const { unmount } = renderAlert({
+      surface: "stage",
+      planRun: awaiting,
+      stageRun: awaiting.stageRuns[1],
+      applicationName: "App 2",
+      onApprove: jest.fn(),
+    });
+    expect(
+      screen.getByText(
+        "Prepare proposal Agent finished Prepare proposal for App 2. Check its logs and commits, then approve to start Migrate for all 3 applications."
+      )
+    ).toBeInTheDocument();
+    unmount();
+    // Several applications wait: none is named.
     renderAlert({
       surface: "stage",
       planRun: awaiting,
       stageRun: awaiting.stageRuns[1],
       onApprove: jest.fn(),
-      reviewStageTo,
     });
-
     expect(
       screen.getByText(
-        "Prepare proposal Agent finished Prepare proposal. Check its transcript and commits, then approve to start Migrate."
+        "Prepare proposal Agent finished Prepare proposal. Check each application's logs and commits, then approve to start Migrate for all 3 applications."
       )
     ).toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("completes the run when no stage follows", async () => {
@@ -235,7 +268,7 @@ describe("StageAttentionAlert, approval", () => {
       screen.getByRole("button", { name: "Approve and continue" })
     );
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "Validate is approved and the run completes. This decision applies to the only application in Run #1 — Java EE to Quarkus."
+      "Validate is approved and the run completes. This decision applies to the only application in Run #1: Java EE to Quarkus."
     );
   });
 
@@ -248,7 +281,7 @@ describe("StageAttentionAlert, approval", () => {
     });
     expect(
       screen.getByText(
-        "Prepare proposal Agent finished Prepare proposal. Approving starts Migrate for all 3 applications in Run #1 — Java EE to Quarkus."
+        "Prepare proposal Agent finished Prepare proposal. Approving starts Migrate for all 3 applications in Run #1: Java EE to Quarkus."
       )
     ).toBeInTheDocument();
     expect(
@@ -269,7 +302,7 @@ describe("StageAttentionAlert, approval", () => {
 
     expect(
       screen.getByText(
-        "Prepare proposal Agent finished Prepare proposal. Approving starts Migrate for all 3 applications in Run #1 — Java EE to Quarkus."
+        "Prepare proposal Agent finished Prepare proposal. Approving starts Migrate for all 3 applications in Run #1: Java EE to Quarkus."
       )
     ).toBeInTheDocument();
     // One action row: Approve, Reject, Review stage.
@@ -284,7 +317,7 @@ describe("StageAttentionAlert, approval", () => {
       within(dialog).getByRole("heading", { name: /Reject and fail the run\?/ })
     ).toBeInTheDocument();
     expect(dialog).toHaveTextContent(
-      "Prepare proposal is marked failed and the run stops. This decision applies to all 3 applications in Run #1 — Java EE to Quarkus. This action cannot be undone."
+      "Prepare proposal is marked failed and the run stops. This decision applies to all 3 applications in Run #1: Java EE to Quarkus. This action cannot be undone."
     );
     await user.click(within(dialog).getByRole("button", { name: "Reject" }));
     expect(onReject).toHaveBeenCalledWith(
@@ -534,6 +567,47 @@ describe("StageAttentionAlert, failure", () => {
     ).toEqual([
       "Fix the cause in the application repositories, then run the migration plan again.",
     ]);
+  });
+});
+
+describe("StageAttentionAlert, one application of several", () => {
+  it("names the application whose agent run waits, keeping the stage's decision", async () => {
+    const onApprove = jest.fn();
+    renderAlert({
+      surface: "stage",
+      planRun: awaiting,
+      stageRun: awaiting.stageRuns[1],
+      applicationName: "App 2",
+      onApprove,
+    });
+    expect(
+      screen.getByRole("heading", {
+        name: "Warning alert: Prepare proposal needs approval for App 2",
+      })
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Approve and continue" })
+    );
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Approve and continue",
+      })
+    );
+    expect(onApprove).toHaveBeenCalledWith(awaiting.stageRuns[1]);
+  });
+
+  it("names the application whose agent run failed", () => {
+    renderAlert({
+      surface: "stage",
+      planRun: failed,
+      stageRun: failed.stageRuns[0],
+      applicationName: "App 1",
+    });
+    expect(
+      screen.getByRole("heading", {
+        name: "Danger alert: Prepare proposal failed for App 1",
+      })
+    ).toBeInTheDocument();
   });
 });
 

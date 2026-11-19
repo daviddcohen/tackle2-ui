@@ -9,8 +9,10 @@
  *  - return to the exact source view (URL and trail) from the parent crumb.
  *
  * One test per entity group so failures point at a surface and the groups run
- * in parallel. This is the slowest spec of the suite (about a minute per
- * group); it replaces many hand-written "link X goes to Y" checks.
+ * in parallel, each under its 5 minute limit. This is the slowest spec of
+ * the suite (from 15 seconds for collections to about 3.5 minutes for the
+ * stage pages, about 4.5 minutes for the spec with 4 workers); it replaces
+ * many hand-written "link X goes to Y" checks.
  */
 import type { Page } from "@playwright/test";
 
@@ -68,6 +70,7 @@ const GROUPS = [
   "agents",
   "plans",
   "runs",
+  "stages",
   "applications",
   "archetypes",
 ] as const;
@@ -87,7 +90,7 @@ const surfaces = (graph: FixtureGraph, group: Group): string[] => {
     case "skills":
       return graph.skills.flatMap((skill) => [
         `/skills/${skill.id}`,
-        `/skills/${skill.id}?tab=associations`,
+        `/skills/${skill.id}?tab=usage`,
       ]);
     case "collections":
       return graph.collections.map(
@@ -104,12 +107,15 @@ const surfaces = (graph: FixtureGraph, group: Group): string[] => {
         `/migration-plans/${plan.id}?tab=runs`,
       ]);
     case "runs":
-      return graph.runs.flatMap((run) => [
-        `/plan-runs/${run.id}`,
-        ...run.stageRuns.map(
+      return graph.runs.map((run) => `/plan-runs/${run.id}`);
+    // Stage pages are their own group: each lists its Skills section's
+    // links too, which kept one "runs" group over its time limit.
+    case "stages":
+      return graph.runs.flatMap((run) =>
+        run.stageRuns.map(
           (stage) => `/plan-runs/${run.id}/stages/${stage.stageId}`
-        ),
-      ]);
+        )
+      );
     case "applications":
       return graph.applications.flatMap((application) => [
         `/applications/${application.id}`,
@@ -272,12 +278,14 @@ for (const group of GROUPS) {
               /^\d+ runs?$/.test(label) &&
               /^\/migration-plans\/\d+$/.test(destination.pathname) &&
               destination.searchParams.get("tab") === "runs";
-            // So do the Skills page counts ("6 associations", "3 skills",
-            // "2 agents"): they open the skill or collection that lists them.
+            // So do the Skills page counts ("3 skills", "2 agents") and a
+            // skill's usage summary ("2 agents, 1 collection, 1 archetype"):
+            // they open the skill or collection that lists them.
             const isSkillsCountLink =
-              /^\d+ (associations?|skills|agents)$/.test(label) &&
-              /^\/skills\//.test(destination.pathname);
-            // A skill's "Associated with" table names each target profile
+              /^\d+ (agents?|collections?|archetypes?|target profiles?|applications?|skills)(, \d+ (agents?|collections?|archetypes?|target profiles?|applications?))*$/.test(
+                label
+              ) && /^\/skills\//.test(destination.pathname);
+            // A skill's "Attached to" facts name each target profile
             // with its archetype, "{profile} ({archetype})":
             // profile names repeat across archetypes.
             const isQualifiedTargetProfile =
@@ -316,8 +324,8 @@ for (const group of GROUPS) {
               );
           }
           if (destination.pathname === appUrl(sourceURL).pathname) {
-            // A link to another tab of the same page (the skill's "6
-            // associations" fact opens its Associations tab) switches tabs:
+            // A link to another tab of the same page (the skill's Usage fact
+            // opens its Usage tab) switches tabs:
             // the trail stays the source's, and Back returns to the source.
             expect(
               await breadcrumbTitles(page),

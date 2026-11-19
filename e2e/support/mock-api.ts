@@ -72,3 +72,30 @@ export const bootMockApi = async (
     )
     .toBe(scenario === "apiError" ? 503 : 200);
 };
+
+/**
+ * Adds a target profile to an archetype through the mocked Hub
+ * (`PUT /archetypes/:id`). The fixtures have one profile per archetype; specs
+ * about an archetype with several profiles add the second one themselves.
+ * Call it before the page that lists the profiles fetches them.
+ */
+export const addTargetProfile = async (
+  page: Page,
+  archetypeId: number,
+  profile: { id: number; name: string }
+) => {
+  const archetype = await hubRequest<{ profiles?: unknown[] }>(
+    page,
+    "GET",
+    `/archetypes/${archetypeId}`
+  );
+  expect(archetype.status, `GET /archetypes/${archetypeId}`).toBe(200);
+  const update = await hubRequest(page, "PUT", `/archetypes/${archetypeId}`, {
+    ...archetype.body,
+    profiles: [
+      ...(archetype.body.profiles ?? []),
+      { ...profile, generators: [{ id: 1, name: "Container build assets" }] },
+    ],
+  });
+  expect(update.status, `PUT /archetypes/${archetypeId}`).toBe(204);
+};

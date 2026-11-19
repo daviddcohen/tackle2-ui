@@ -25,7 +25,7 @@ test.describe("Start migration journey", () => {
     await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      /^Run #\d+ — /
+      /^Run #\d+: /
     );
     const summary = page.getByRole("main").locator("dl").first();
     await expect(
@@ -38,6 +38,59 @@ test.describe("Start migration journey", () => {
       .getByRole("link", { name: "Application inventory" })
       .click();
     await waitForInventory(page);
+  });
+
+  test("Skills by stage previews one table per run Run starts, ready applications only", async ({
+    page,
+  }) => {
+    await page.goto(protoUrl("/applications", { scenario: "configured" }));
+    await waitForInventory(page);
+    // Claims Processing is blocked (Run #1 already migrated it).
+    const dialog = await openBulkRunMigration(page, [
+      "Advisor Workbench API",
+      "Claims Processing",
+      "Customer Management",
+      "Order Service",
+    ]);
+    const toggle = dialog.getByRole("button", { name: "Skills by stage" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+    await expect(
+      dialog.getByText(
+        "An application's archetype, target profile and own skills go to that application only."
+      )
+    ).toHaveCount(1);
+    const runTitles = dialog.getByRole("heading", { level: 2 });
+    await expect(runTitles).toHaveText([
+      ".NET Framework to .NET 8: 1 application",
+      "Java EE to Quarkus: 1 application",
+      "Spring Boot to Quarkus: 1 application",
+    ]);
+    const quarkus = dialog.getByRole("grid", {
+      name: "Skills by stage with Java EE to Quarkus",
+    });
+    const everyStage = quarkus.getByRole("heading", {
+      name: "Every stage: Customer Management",
+    });
+    await expect(everyStage).toBeVisible();
+    // Groups start collapsed; names are plain text in the dialog.
+    await expect(
+      quarkus.getByRole("row", { name: /Corporate coding standards/ })
+    ).toBeHidden();
+    await quarkus
+      .getByRole("button", { name: /Every stage: Customer Management/ })
+      .click();
+    const row = quarkus.getByRole("row", {
+      name: /Corporate coding standards/,
+    });
+    await expect(row).toContainText("Application: Customer Management");
+    await expect(quarkus.getByRole("link")).toHaveCount(0);
+    await expect(
+      dialog.getByRole("heading", { name: "Every stage: Claims Processing" })
+    ).toHaveCount(0);
+    await expect(
+      dialog.getByRole("button", { name: "Run on 3 applications" })
+    ).toBeEnabled();
   });
 
   test("target branch typed in preflight is carried to the run", async ({
@@ -85,11 +138,11 @@ test.describe("Start migration journey", () => {
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
     await expect(
       dialog.getByRole("row", { name: /Customer Management/ })
-    ).toContainText("Java EE lift and shift");
+    ).toContainText("Java EE to Quarkus");
     await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
-      "Java EE lift and shift"
+      "Java EE to Quarkus"
     );
   });
 
@@ -134,7 +187,7 @@ test.describe("Start migration journey", () => {
       .innerText();
     await page.getByRole("link", { name: "Plan runs" }).click();
     await expect(
-      page.getByRole("row", { name: new RegExp(title.replace(/[#—]/g, ".")) })
+      page.getByRole("row", { name: new RegExp(title.replace(/[#:]/g, ".")) })
     ).toContainText(detailStatus);
   });
 
@@ -148,6 +201,12 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    // Java EE lift and shift has two approval gates.
+    await dialog
+      .getByLabel("Use one migration plan for all applications")
+      .check();
+    await dialog.getByRole("button", { name: "Migration plan to run" }).click();
+    await pickMenuOption(page, "Java EE lift and shift");
     await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     const status = page.getByRole("main").locator(AGENTIC_STATUS).first();

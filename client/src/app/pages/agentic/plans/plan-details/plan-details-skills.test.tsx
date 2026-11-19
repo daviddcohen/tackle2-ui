@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
@@ -5,8 +6,9 @@ import { DevPaths } from "@app/Paths";
 import {
   Agent,
   MigrationPlan,
-  PlanSkill,
   ResolvePlanSkillsRequest,
+  SkillsByStage,
+  StageSkill,
 } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { NotificationsContext } from "@app/components/NotificationsContext";
@@ -14,26 +16,29 @@ import {
   createMockNotifications,
   render,
   screen,
+  waitFor,
   within,
 } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import PlanDetailsPage from "./plan-details";
 
-// English strings; the page's one Trans (the Runs tab) renders its key.
-jest.mock("react-i18next", () => ({
-  ...jest.requireActual("@app/test-config/english-i18n"),
-  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
-}));
+jest.mock("react-i18next", () =>
+  jest.requireActual("@app/test-config/english-i18n")
+);
 // setupTests stubs useLocation; the URL tabs need the real one.
 jest.mock("react-router-dom", () => jest.requireActual("react-router-dom"));
 
 const agent = {
   id: "7",
-  name: "Code Migrator",
+  name: "Java Code Migrator",
   model: { id: "1", name: "Claude" },
   skills: [],
 } as unknown as Agent;
+
+const javaCoder = { id: "7", name: "Java Code Migrator" };
+const javaEE = { id: 1, name: "Java EE Application" };
+const quarkus = { id: 11, name: "Quarkus 3.x" };
 
 const plan: MigrationPlan = {
   id: "1",
@@ -43,60 +48,75 @@ const plan: MigrationPlan = {
     {
       id: "s1",
       name: "Migrate",
-      agent: { id: "7", name: "Code Migrator" },
+      agent: javaCoder,
       instructions: "",
       requiresApproval: false,
       order: 1,
     },
   ],
   migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
+    archetype: javaEE,
+    targetProfiles: [quarkus],
     isDefault: true,
   },
   applicationImpact: { matching: 0 },
   runCount: 0,
 };
 
-const planSkills: PlanSkill[] = [
-  {
-    skill: { id: "9", name: "EJB to CDI conversion patterns" },
-    sources: [
-      {
-        scope: "agent",
-        scopeName: "Code Migrator",
-        resource: { id: "7", name: "Code Migrator" },
-      },
-    ],
-    excluded: false,
-  },
-  {
-    skill: { id: "1", name: "Jakarta EE namespace migration" },
-    sources: [
-      {
-        scope: "agent",
-        scopeName: "Code Migrator via Java modernization foundation",
-        resource: { id: "7", name: "Code Migrator" },
-        collection: { id: "1", name: "Java modernization foundation" },
-      },
-    ],
-    excluded: false,
-  },
-  {
-    skill: { id: "3", name: "Quarkus best practices" },
-    sources: [
-      {
-        scope: "targetProfile",
-        scopeName: "Quarkus 3.x",
-        resource: { id: 11, name: "Quarkus 3.x" },
-      },
-    ],
-    excluded: false,
-  },
-];
+const stageSkill = (
+  id: string,
+  name: string,
+  from: StageSkill["from"],
+  excluded = false
+): StageSkill => ({
+  skill: { id, name },
+  loadPolicy: "skill",
+  from,
+  excluded,
+});
 
-const description =
-  "Skills from this plan's agents, their skill collections, the archetype and the target profiles. Application skills are added when the plan runs.";
+/** What the resolver answers for the plan preview, with its exclusions. */
+const preview = (excludedIds: string[] = []): SkillsByStage => ({
+  stages: [
+    {
+      order: 1,
+      name: "Migrate",
+      agent: javaCoder,
+      skills: [
+        stageSkill(
+          "1",
+          "Jakarta EE namespace migration",
+          [
+            {
+              kind: "collection",
+              agent: javaCoder,
+              collection: { id: "c1", name: "Java modernization foundation" },
+            },
+          ],
+          excludedIds.includes("1")
+        ),
+      ],
+    },
+  ],
+  everyStage: [
+    {
+      skills: [
+        stageSkill(
+          "3",
+          "Quarkus best practices",
+          [
+            {
+              kind: "targetProfile",
+              targetProfile: quarkus,
+              archetype: javaEE,
+            },
+          ],
+          excludedIds.includes("3")
+        ),
+      ],
+    },
+  ],
+});
 
 let resolveRequests: ResolvePlanSkillsRequest[];
 
@@ -107,11 +127,11 @@ const holdResponse = () =>
   new Promise<void>((resolve) => heldResponses.push(resolve));
 afterEach(() => heldResponses.splice(0).forEach((release) => release()));
 
+type Reply = SkillsByStage | "error" | "missing" | "pending" | "noStages";
+
 const useEndpoints = (
   detail: MigrationPlan,
-  resolveReply: (
-    request: ResolvePlanSkillsRequest
-  ) => PlanSkill[] | "error" | "missing" | "pending"
+  resolveReply: (request: ResolvePlanSkillsRequest) => Reply
 ) =>
   server.use(
     rest.get(`${AGENTIC_ENDPOINTS.plans}/:id`, (_req, res, ctx) =>
@@ -132,11 +152,14 @@ const useEndpoints = (
       const reply = resolveReply(body);
       if (reply === "pending") {
         await holdResponse();
-        return res(ctx.json({ skills: [] }));
+        return res(ctx.json(preview()));
       }
-      if (reply === "error") return res(ctx.status(500));
+      // A client error is not retried.
+      if (reply === "error") return res(ctx.status(400));
       if (reply === "missing") return res(ctx.status(404));
-      return res(ctx.json({ skills: reply }));
+      // A server that answers without the per-stage groups.
+      if (reply === "noStages") return res(ctx.json({}));
+      return res(ctx.json(reply));
     })
   );
 
@@ -151,142 +174,230 @@ const renderPlan = () =>
     </NotificationsContext.Provider>
   );
 
-/** The DetailSection under a heading: Flex > FlexItem > heading. */
-const skillsSection = async (heading: string) =>
-  (await screen.findByRole("heading", { name: heading })).parentElement
-    ?.parentElement as HTMLElement;
+/** The DetailSection under its heading: Flex > FlexItem > heading. */
+const skillsSection = async () =>
+  (await screen.findByRole("heading", { level: 2, name: "Skills by stage" }))
+    .parentElement?.parentElement as HTMLElement;
 
-describe("PlanDetailsPage Skills section", () => {
+/** The section sentence, then the note on application skills. */
+const description =
+  "What each stage's agent gets when this plan runs, and where each skill comes from. Skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead.";
+
+describe("PlanDetailsPage Skills by stage", () => {
   beforeEach(() => {
     resolveRequests = [];
   });
 
-  it("lists the plan's resolved skills, collection skills included, with links and sources", async () => {
-    useEndpoints(plan, () => planSkills);
+  it("comes after Stages: each stage, then Every stage with the plan note", async () => {
+    useEndpoints(plan, () => preview());
     renderPlan();
-    const section = await skillsSection("Skills (3)");
+    const section = await skillsSection();
     expect(within(section).getByText(description)).toBeInTheDocument();
-    const table = within(section).getByRole("grid", { name: "Skills" });
-    expect(
-      within(table).getByRole("row", { name: /Jakarta EE namespace migration/ })
-    ).toHaveTextContent(
-      "Agent: Code Migrator via Java modernization foundation"
+    const table = await within(section).findByRole("grid", {
+      name: "Skills by stage",
+    });
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(headings.indexOf("Skills by stage")).toBe(
+      headings.indexOf("Stages") + 1
     );
     expect(
-      within(table).getByRole("link", { name: "Quarkus best practices" })
-    ).toHaveAttribute("href", expect.stringMatching(/^\/skills\/3\?/));
-    // Read-only: no checkboxes, no markers when nothing is excluded.
+      within(table)
+        .getAllByRole("heading", { level: 3 })
+        .map((heading) => heading.textContent)
+    ).toEqual(["Stage 1: Migrate", "Every stage"]);
+    // The note on application skills is in the section description (above); the Every stage
+    // title has the subtitle every context shows.
+    expect(
+      within(table).getByText(
+        "Archetype, target profile and application skills"
+      )
+    ).toBeVisible();
+    expect(
+      within(table).queryByText(/Skills of this plan's archetype/)
+    ).toBeNull();
+    // The plan's own archetype: the profile has no archetype suffix.
+    expect(
+      within(table).getByRole("row", { name: /Quarkus best practices/ })
+    ).toHaveTextContent("Target profile: Quarkus 3.x");
+    expect(
+      within(table).queryByText(/\(Java EE Application\)/)
+    ).not.toBeInTheDocument();
+    // Read-only: no checkboxes, no Manage skills.
     expect(within(table).queryByRole("checkbox")).toBeNull();
-    expect(within(table).queryByText("Excluded")).toBeNull();
+    expect(within(section).queryByText("Manage skills")).toBeNull();
     expect(resolveRequests[0]).toEqual({
-      stages: [{ agent: { id: "7" } }],
+      stages: [{ agent: { id: "7" }, name: "Migrate" }],
       migrationPath: { archetype: { id: 1 }, targetProfiles: [{ id: 11 }] },
       excludedSkills: [],
     });
   });
 
-  it("marks the skills the plan excludes and counts the used ones in the heading", async () => {
+  it("links names with the plan as origin, keeping their own query and anchor", async () => {
+    useEndpoints(plan, () => preview());
+    renderPlan();
+    const table = await within(await skillsSection()).findByRole("grid", {
+      name: "Skills by stage",
+    });
+    expect(
+      within(table).getByRole("link", { name: "Quarkus best practices" })
+    ).toHaveAttribute("href", "/skills/3?from=plan-1");
+    expect(
+      within(table).getByRole("link", { name: "Quarkus 3.x" })
+    ).toHaveAttribute(
+      "href",
+      "/archetypes/1/target-profiles?from=plan-1#target-profile-11"
+    );
+    expect(
+      within(table).getByRole("link", { name: "Java Code Migrator" })
+    ).toHaveAttribute("href", "/agents/7?from=plan-1");
+  });
+
+  it("gives its toggles names of their own, apart from the Stages table", async () => {
+    useEndpoints(plan, () => preview());
+    renderPlan();
+    const table = await within(await skillsSection()).findByRole("grid", {
+      name: "Skills by stage",
+    });
+    expect(
+      within(table).getByRole("heading", { name: "Stage 1: Migrate" })
+    ).toHaveAttribute("id", "simple-node100");
+    expect(
+      within(table).getByRole("button", { name: "Every stage Details" })
+    ).toBeVisible();
+  });
+
+  it("marks each row of a skill the plan excludes, in every group it reaches", async () => {
+    // Jakarta reaches stage 1 (collection) and every stage (archetype).
+    const both = (excluded: boolean): SkillsByStage => {
+      const base = preview(excluded ? ["1"] : []);
+      return {
+        ...base,
+        everyStage: [
+          {
+            skills: [
+              ...base.everyStage[0].skills,
+              stageSkill(
+                "1",
+                "Jakarta EE namespace migration",
+                [{ kind: "archetype", archetype: javaEE }],
+                excluded
+              ),
+            ],
+          },
+        ],
+      };
+    };
     useEndpoints(
       {
         ...plan,
-        excludedSkills: [{ id: "9", name: "EJB to CDI conversion patterns" }],
+        excludedSkills: [{ id: "1", name: "Jakarta EE namespace migration" }],
       },
-      ({ excludedSkills = [] }) =>
-        planSkills.map((entry) => ({
-          ...entry,
-          excluded: excludedSkills.some(({ id }) => id === entry.skill.id),
-        }))
+      ({ excludedSkills = [] }) => both(excludedSkills.length > 0)
     );
     renderPlan();
-    const section = await skillsSection("Skills (2 of 3 used)");
-    const table = within(section).getByRole("grid", { name: "Skills" });
-    const excluded = within(table).getByRole("row", {
-      name: /EJB to CDI conversion patterns/,
+    const table = await within(await skillsSection()).findByRole("grid", {
+      name: "Skills by stage",
     });
-    expect(within(excluded).getByText("Excluded")).toBeInTheDocument();
-    expect(
-      within(excluded).getByRole("link", {
-        name: "EJB to CDI conversion patterns",
-      })
-    ).toBeInTheDocument();
+    const rows = within(table).getAllByRole("row", {
+      name: /Jakarta EE namespace migration/,
+    });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(within(row).getByText("Excluded")).toBeInTheDocument();
+    }
+    expect(within(table).getAllByText("Excluded")).toHaveLength(2);
+    expect(resolveRequests[0].excludedSkills).toEqual([{ id: "1" }]);
+  });
+
+  it("says what every stage gets for a plan without a migration path", async () => {
+    useEndpoints({ ...plan, migrationPath: undefined }, () => ({
+      stages: preview().stages,
+      everyStage: [{ skills: [] }],
+    }));
+    renderPlan();
+    const section = await skillsSection();
+    const table = await within(section).findByRole("grid", {
+      name: "Skills by stage",
+    });
     expect(
       within(section).getByText(
-        `${description} Excluded skills are not given to the agents.`
+        "What each stage's agent gets when this plan runs, and where each skill comes from. This plan has no archetype or target profile. When it runs, each application gets its own archetype, target profile and application skills in every stage."
       )
-    ).toBeInTheDocument();
-    expect(within(table).getAllByText("Excluded")).toHaveLength(1);
-    expect(within(table).queryByRole("checkbox")).toBeNull();
-    expect(resolveRequests[0].excludedSkills).toEqual([{ id: "9" }]);
+    ).toBeVisible();
+    expect(within(table).getByText("No skills")).toBeVisible();
   });
 
-  it("reads correctly when the plan's only skill is excluded", async () => {
-    useEndpoints(
-      {
-        ...plan,
-        excludedSkills: [{ id: "3", name: "Quarkus best practices" }],
-      },
-      () => [{ ...planSkills[2], excluded: true }]
-    );
-    renderPlan();
-    expect(await skillsSection("Skills (0 of 1 used)")).toBeInTheDocument();
-  });
-
-  it("shows a skeleton while the skills resolve", async () => {
+  it("shows skeleton rows while the skills resolve", async () => {
     useEndpoints(plan, () => "pending");
     renderPlan();
-    const section = await skillsSection("Skills");
-    expect(within(section).getByText("Loading skills")).toBeInTheDocument();
+    const section = await skillsSection();
+    expect(
+      await within(section).findByText("Loading skills")
+    ).toBeInTheDocument();
     expect(within(section).queryByText("Unavailable")).toBeNull();
   });
 
-  it("says Unavailable when the skills could not be resolved", async () => {
-    useEndpoints(plan, () => "error");
+  it("shows the load error with Try again", async () => {
+    let fail = true;
+    useEndpoints(plan, () => (fail ? "error" : preview()));
     renderPlan();
-    const section = await skillsSection("Skills");
-    expect(await within(section).findByText("Unavailable")).toBeInTheDocument();
-    expect(within(section).queryByRole("grid")).toBeNull();
+    const section = await skillsSection();
+    expect(
+      await within(section).findByText("Skills could not be loaded.")
+    ).toBeInTheDocument();
+    fail = false;
+    await userEvent.click(
+      within(section).getByRole("button", { name: "Try again" })
+    );
+    expect(
+      await within(section).findByRole("grid", { name: "Skills by stage" })
+    ).toBeInTheDocument();
   });
 
-  it("says so, without Unavailable, when the server has no resolve endpoint", async () => {
+  it("says Unavailable, with why, when the server has no resolve endpoint", async () => {
     useEndpoints(plan, () => "missing");
     renderPlan();
-    const section = await skillsSection("Skills");
+    const section = await skillsSection();
+    expect(await within(section).findByText("Unavailable")).toBeInTheDocument();
     expect(
-      await within(section).findByText(
+      within(section).getByText(
         "This server cannot list the skills of a migration plan."
       )
     ).toBeInTheDocument();
-    expect(within(section).queryByText("Unavailable")).toBeNull();
     expect(within(section).queryByRole("button")).toBeNull();
   });
 
-  it("sends the stages in stage order", async () => {
+  it("says Unavailable when the server answers without the per-stage groups", async () => {
+    useEndpoints(plan, () => "noStages");
+    renderPlan();
+    const section = await skillsSection();
+    expect(await within(section).findByText("Unavailable")).toBeInTheDocument();
+    expect(
+      within(section).getByText(
+        "This server cannot list the skills of a migration plan."
+      )
+    ).toBeInTheDocument();
+    expect(within(section).queryByRole("grid")).toBeNull();
+  });
+
+  it("sends the stages in stage order, with their names", async () => {
     useEndpoints(
       {
         ...plan,
         stages: [
+          { ...plan.stages[0], id: "s2", order: 2, name: "Validate" },
           { ...plan.stages[0], id: "s1", agent: { id: "8", name: "Planner" } },
-          { ...plan.stages[0], id: "s2", order: 2 },
         ],
       },
-      () => planSkills
+      () => preview()
     );
     renderPlan();
-    await skillsSection("Skills (3)");
+    await waitFor(() => expect(resolveRequests).toHaveLength(1));
     expect(resolveRequests[0].stages).toEqual([
-      { agent: { id: "8" } },
-      { agent: { id: "7" } },
+      { agent: { id: "8" }, name: "Migrate" },
+      { agent: { id: "7" }, name: "Validate" },
     ]);
-  });
-
-  it("says when no skills are associated with the plan", async () => {
-    useEndpoints(plan, () => []);
-    renderPlan();
-    expect(
-      await screen.findByText(
-        "No skills are associated with this plan's agents, archetype or target profiles."
-      )
-    ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Skills" })).toBeInTheDocument();
   });
 });

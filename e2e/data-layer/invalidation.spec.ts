@@ -17,18 +17,17 @@ import {
 } from "../support";
 
 interface SkillPlans {
-  plans: { plan: Named; sources: { collection?: Named }[] }[];
+  plans: { plan: Named; placements: { from: { kind: string }[] }[] }[];
 }
 
-interface PlanWithSkills extends Named {
-  effectiveSkills?: { skill: Named }[];
+interface PlanWithStages extends Named {
   stages: Named[];
 }
 
 test("skill detail: the plans-resolving-skill table refreshes after its associations are cleared", async ({
   page,
 }) => {
-  await gotoProto(page, "/skills/3?tab=associations", {
+  await gotoProto(page, "/skills/3?tab=usage", {
     persona: "platformEngineer",
   });
   const plansTable = page.getByRole("grid", {
@@ -58,8 +57,10 @@ test("skill detail: the plans-resolving-skill table refreshes after its associat
   // agents get it through a skill collection are left ...
   const { plans } = await agenticGet<SkillPlans>(page, "/skills/3/plans");
   expect(
-    plans.every(({ sources }) =>
-      sources.every((source) => source.collection != null)
+    plans.every(({ placements }) =>
+      placements.every(({ from }) =>
+        from.every((origin) => origin.kind === "collection")
+      )
     )
   ).toBe(true);
   // ... and the page shows it without a reload.
@@ -81,7 +82,7 @@ test("editing a plan keeps its stage ids, so its runs keep their stage runs", as
   const viewRunLinks = stageLinks(page);
   await expect(viewRunLinks.first()).toBeVisible();
   const stageRunCount = await viewRunLinks.count();
-  const before = await agenticGet<PlanWithSkills>(page, "/plans/2");
+  const before = await agenticGet<PlanWithStages>(page, "/plans/2");
   expect(before.stages.map((stage) => stage.id)).toEqual(["4", "5", "6"]);
 
   await main(page)
@@ -99,7 +100,7 @@ test("editing a plan keeps its stage ids, so its runs keep their stage runs", as
   await wizard.getByRole("button", { name: "Save", exact: true }).click();
   await expect(wizard).toHaveCount(0);
 
-  const after = await agenticGet<PlanWithSkills>(page, "/plans/2");
+  const after = await agenticGet<PlanWithStages>(page, "/plans/2");
   expect(after.stages.map((stage) => stage.id)).toEqual(["4", "5", "6"]);
 
   await page.goBack();

@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 import { StageAgentRun, StageRun } from "@app/agentic";
@@ -169,6 +170,90 @@ describe("StageRunsTable Context column", () => {
 
     renderTable([], { isLoading: true });
     expect(screen.getAllByText("Loading context usage")).toHaveLength(2);
+  });
+
+  it("shows the fullest application of a run on several, with the lowest and how many reported", async () => {
+    const forApplication = (
+      stageId: string,
+      id: number,
+      contextUsed?: number
+    ): StageAgentRun => ({
+      ...agentRun(stageId, contextUsed),
+      name: `run-1-${stageId}-app-${id}`,
+      application: { id, name: `App ${id}` },
+    });
+    render(
+      <MemoryRouter>
+        <StageRunsTable
+          runId="1"
+          linkTo={(pathname) => pathname}
+          stageRuns={stageRuns}
+          agentRuns={{
+            agentRuns: [
+              forApplication("s1", 1, 122_000),
+              forApplication("s1", 2, 164_000),
+              // Running: one of the two applications reported so far.
+              forApplication("s2", 1, 100_000),
+              forApplication("s2", 2),
+            ],
+            isLoading: false,
+            isUnavailable: false,
+            applicationCount: 2,
+          }}
+        />
+      </MemoryRouter>
+    );
+    expect(rows().map((row) => row[6])).toEqual([
+      "Up to 82%",
+      "Up to 50% (1 of 2 reported)",
+      "Not started",
+    ]);
+    const bar = (stage: string) =>
+      screen.getByRole("progressbar", { name: `Context window of ${stage}` });
+    expect(bar("Stage 1")).toHaveAttribute("aria-valuenow", "82");
+    expect(bar("Stage 1")).toHaveAttribute(
+      "aria-valuetext",
+      "Up to 82% across 2 applications, lowest 61%"
+    );
+    expect(bar("Stage 2")).toHaveAttribute(
+      "aria-valuetext",
+      "Up to 50%, 1 of 2 applications reported"
+    );
+    // The column help says what the column shows in such a run.
+    await userEvent.click(
+      screen.getByRole("button", { name: "More information about context" })
+    );
+    expect(
+      await screen.findByText(
+        /In a run on several applications, the column shows the fullest one\.$/
+      )
+    ).toBeVisible();
+  });
+
+  it("leaves out the lowest when every application reads the same", () => {
+    render(
+      <MemoryRouter>
+        <StageRunsTable
+          runId="1"
+          linkTo={(pathname) => pathname}
+          stageRuns={stageRuns}
+          agentRuns={{
+            agentRuns: [1, 2].map((id) => ({
+              ...agentRun("s1", 100_000),
+              name: `run-1-s1-app-${id}`,
+              application: { id, name: `App ${id}` },
+            })),
+            isLoading: false,
+            isUnavailable: false,
+            applicationCount: 2,
+          }}
+        />
+      </MemoryRouter>
+    );
+    expect(rows()[0][6]).toBe("Up to 50%");
+    expect(
+      screen.getByRole("progressbar", { name: "Context window of Stage 1" })
+    ).toHaveAttribute("aria-valuetext", "Up to 50% across 2 applications");
   });
 
   it("leaves Context out without agent runs, as on the Migration tab", () => {

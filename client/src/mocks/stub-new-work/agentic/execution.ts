@@ -34,6 +34,7 @@ import {
   StageMessage,
   StageRun,
   StartApplicationMigrationsResponse,
+  isCommitOf,
 } from "@app/agentic";
 import { Application } from "@app/api/models";
 import {
@@ -45,13 +46,10 @@ import { mockApplicationArray } from "@mocks/stub-new-work/applications";
 import {
   Body,
   StoredPlan,
-  applicationSkills,
   asBody,
   badRequest,
-  collectionSkillsForAgents,
   conflict,
   db,
-  effectiveSkillsForPlan,
   findApplication,
   findArchetype,
   isSeeded,
@@ -61,16 +59,20 @@ import {
   requiredString,
   resolveAgentRef,
   resolvePlanRef,
-  resolveSkillRef,
-  splitExcludedSkills,
-  uniqueEffectiveSkills,
 } from "./db";
 import { PlanRunTemplate, mockMigrationPlans, mockPlanRuns } from "./fixtures";
-import { APPLICATION_TARGET_PROFILE_IDS, selectPortfolio } from "./portfolio";
+import { selectPortfolio } from "./portfolio";
 import {
   getPrototypeScenario,
   getPrototypeStageIndex,
 } from "./prototype-state";
+import {
+  excludedSkillIdsOf,
+  presentSkillsByStage,
+  resolveSkillsByStage,
+  stagesOfPlan,
+  targetProfileFor,
+} from "./skill-resolution";
 
 // ---------------------------------------------------------------------------
 // Timing
@@ -133,6 +135,58 @@ export const mockRunHash = (runId: EntityId, stageIndex: number): string =>
   ((runNumber(runId) * 31337 + stageIndex * 104729) % 16777216)
     .toString(16)
     .padStart(6, "0") + "cafe";
+
+/**
+ * A stage's commits as each application's own: in a run on
+ * several applications every application's agent run commits to its own
+ * repository, so each commit of the stage becomes one commit per
+ * application, with that application and its own hash (the first
+ * application keeps the original, which e2e specs read). Commits that
+ * already name an application are kept. Used wherever a stage gets
+ * commits: seeding, and a stage finishing or stopping for approval as a
+ * run advances (after an approval, in a run a user started). A run on one
+ * application is unchanged.
+ */
+const stageCommitsPerApplication = (
+  stageRun: StageRun,
+  applications: PlanRun["applications"]
+): StageRun => {
+  const commits = stageRun.commits ?? [];
+  if (
+    applications.length < 2 ||
+    commits.length === 0 ||
+    commits.some((commit) => commit.application != null)
+  ) {
+    return stageRun;
+  }
+  const hashFor = (hash: string, applicationId: number, index: number) => {
+    if (index === 0) return hash;
+    const head = parseInt(hash.slice(0, 6), 16);
+    return Number.isNaN(head)
+      ? `${hash}${applicationId}`
+      : ((head + applicationId * 65537) % 16777216)
+          .toString(16)
+          .padStart(6, "0") + hash.slice(6);
+  };
+  return {
+    ...stageRun,
+    commits: applications.flatMap((application, index) =>
+      commits.map((commit) => ({
+        ...commit,
+        hash: hashFor(commit.hash, application.id, index),
+        application: { id: application.id, name: application.name },
+      }))
+    ),
+  };
+};
+
+/** Every stage of a run with its commits per application. */
+const commitsPerApplication = (run: PlanRun): PlanRun => ({
+  ...run,
+  stageRuns: run.stageRuns.map((stageRun) =>
+    stageCommitsPerApplication(stageRun, run.applications)
+  ),
+});
 
 const PROGRESS_SCRIPT: Array<{ relativeMs: number; content: string }> = [
   { relativeMs: 0, content: "" },
@@ -376,15 +430,19 @@ type SeedPhase =
   | "Failed"
   | "Succeeded";
 
-/** Membership of the seeded runs in the execution scenarios: every portfolio app once. */
-const EXECUTION_MEMBERSHIP: Record<EntityId, number[]> = {
+/**
+ * Membership of the seeded runs in the execution scenarios: every portfolio
+ * app once, each on the plan it resolves to, except Run #4
+ * (`SINGLE_PLAN_RUN_IDS`).
+ */
+export const EXECUTION_MEMBERSHIP: Record<EntityId, number[]> = {
   "1": [1, 3, 8],
-  "2": [7, 12],
+  "2": [4, 5, 12],
   "3": [2],
-  "4": [15, 16],
-  "5": [4, 5],
+  "4": [7],
+  "5": [15, 16],
   "6": [18],
-  "7": [13],
+  "7": [13, 14],
 };
 
 /** Runs waiting for a decision in the `actionRequired` scenario; the rest run. */
@@ -419,6 +477,23 @@ const EXECUTION_SCENARIOS: PrototypeScenario[] = [
 const seedStagesFor = (planId: EntityId): PlanStage[] =>
   mockMigrationPlans.find((plan) => plan.id === planId)?.stages ?? [];
 
+/**
+ * The skills snapshot of a seeded run: the resolver on the fixture Plan the
+ * run was started with and the run's applications, as `createRun` does.
+ */
+const seedSkillsFor = (
+  planId: EntityId,
+  applications: PlanRun["applications"]
+): PlanRun["skills"] =>
+  resolveRunSkills(
+    {
+      stages: seedStagesFor(planId),
+      excludedSkills: mockMigrationPlans.find((plan) => plan.id === planId)
+        ?.excludedSkills,
+    },
+    applications.map((application) => application.id)
+  );
+
 const applicationRefs = (ids: number[]) =>
   ids
     .map((id) => findApplication(id))
@@ -444,6 +519,7 @@ const generateRun = (
   const base: PlanRun = {
     ...template,
     applications,
+    skills: seedSkillsFor(template.planId, applications),
     startedAt: new Date(baseMs).toISOString(),
     completedAt: undefined,
     status: phase,
@@ -505,6 +581,7 @@ const fixtureRun = (template: PlanRunTemplate): RunRecord => {
     run: {
       ...template,
       applications: template.applications.map((ref) => ({ ...ref })),
+      skills: seedSkillsFor(template.planId, template.applications),
       stageRuns: stages.map((stage) => {
         const content = template.stageRuns.find(
           (sr) => sr.stageId === stage.id
@@ -573,7 +650,10 @@ const ensureWorld = (): World => {
         getPrototypeScenario(),
         getPrototypeStageIndex(),
         Date.now()
-      ),
+      ).map((record) => ({
+        ...record,
+        run: commitsPerApplication(record.run),
+      })),
     };
   }
   return world;
@@ -627,12 +707,9 @@ const advance = (record: RunRecord, now: number) => {
     const stage = record.run.stageRuns[clock.index];
     const definition = { ...stage, id: stage.stageId };
     if (isGate(stage)) {
-      record.run.stageRuns[clock.index] = awaitingStage(
-        record.run.id,
-        definition,
-        clock.index,
-        clock.since,
-        end
+      record.run.stageRuns[clock.index] = stageCommitsPerApplication(
+        awaitingStage(record.run.id, definition, clock.index, clock.since, end),
+        record.run.applications
       );
       record.run.stageRuns[clock.index].approvedAt = undefined;
       record.run.status = "AwaitingApproval";
@@ -641,12 +718,15 @@ const advance = (record: RunRecord, now: number) => {
       return;
     }
     record.run.stageRuns[clock.index] = {
-      ...succeededStage(
-        record.run.id,
-        definition,
-        clock.index,
-        clock.since,
-        end
+      ...stageCommitsPerApplication(
+        succeededStage(
+          record.run.id,
+          definition,
+          clock.index,
+          clock.since,
+          end
+        ),
+        record.run.applications
       ),
       approvedAt: stage.approvedAt,
     };
@@ -669,27 +749,21 @@ const records = (): RunRecord[] => {
 // Presentation (names are resolved on read)
 // ---------------------------------------------------------------------------
 
+/** The run's skills snapshot with current names. */
+const presentRunSkills = (run: PlanRun): Pick<PlanRun, "skills"> =>
+  run.skills ? { skills: presentSkillsByStage(run.skills) } : {};
+
 const presentRun = (record: RunRecord, now = Date.now()): PlanRun => {
   const { run, live } = record;
+  const { skills: _skills, ...rest } = run;
   return {
-    ...run,
+    ...rest,
     planName: resolvePlanRef({ id: run.planId, name: run.planName }).name,
     applications: run.applications.map((ref) => ({
       id: ref.id,
       name: findApplication(ref.id)?.name ?? ref.name,
     })),
-    resolvedSkills: run.resolvedSkills?.map((entry) => ({
-      ...entry,
-      skill: resolveSkillRef(entry.skill),
-    })),
-    ...(run.excludedSkills
-      ? {
-          excludedSkills: run.excludedSkills.map((entry) => ({
-            ...entry,
-            skill: resolveSkillRef(entry.skill),
-          })),
-        }
-      : {}),
+    ...presentRunSkills(run),
     stageRuns: run.stageRuns.map((stageRun, index) => ({
       ...stageRun,
       agent: resolveAgentRef(stageRun.agent),
@@ -797,22 +871,6 @@ export const portfolioApplications = () =>
   selectPortfolio(mockApplicationArray);
 
 /**
- * The target profile an application migrates to: its fixture assignment
- * (`APPLICATION_TARGET_PROFILE_IDS`) when that profile belongs to its
- * archetype, otherwise the archetype's first profile.
- */
-export const targetProfileFor = (application: Application) => {
-  const archetypeId = application.archetypes?.[0]?.id;
-  const profiles =
-    archetypeId != null ? (findArchetype(archetypeId)?.profiles ?? []) : [];
-  if (archetypeId == null || profiles.length === 0) return undefined;
-  const assignedId = APPLICATION_TARGET_PROFILE_IDS[application.id];
-  const profile =
-    profiles.find((candidate) => candidate.id === assignedId) ?? profiles[0];
-  return { archetypeId, profile };
-};
-
-/**
  * The Plan a migration of this application resolves to: the default Plan of
  * the application's archetype + target profile (`migrationPath.isDefault`),
  * or none (not configured). Non-default Plans on the same path are only used
@@ -837,14 +895,14 @@ export const resolvePlanFor = (
 };
 
 /**
- * Number of portfolio applications whose migration uses the Plan: the Plan of
- * the application's latest run, or the Plan its migration path resolves to
- * when it has no run. This is the `plan` of the application migration view,
- * so the count matches the inventory filtered by Plan.
+ * Number of portfolio applications whose migration resolves to the Plan
+ * (`resolvePlanFor`, their archetype and target profile), whatever plan
+ * their latest run used. This is the `plan` of the application migration
+ * view, so the count matches the inventory filtered by Plan.
  */
 export const planImpact = (planId: EntityId) =>
   portfolioApplications().filter(
-    (application) => getApplicationMigration(application).plan?.id === planId
+    (application) => resolvePlanFor(application)?.id === planId
   ).length;
 
 /**
@@ -882,7 +940,7 @@ const scenarioPreflight = (
     return application.id % 2 === 0
       ? {
           preflight: "blocked",
-          preflightReason: "An approved Model is unavailable.",
+          preflightReason: "A verified model is unavailable.",
         }
       : {
           preflight: "reviewRequired",
@@ -924,28 +982,60 @@ const stageExecution = (
   completedAt: stageRun.completedAt,
 });
 
+/** What each stage of `plan` gets for these applications (the resolver). */
+export const resolveRunSkills = (
+  plan: Pick<StoredPlan, "stages" | "excludedSkills">,
+  applicationIds: number[]
+) =>
+  resolveSkillsByStage({
+    stages: stagesOfPlan(plan),
+    context: { kind: "applications", applicationIds },
+    excludedSkillIds: excludedSkillIdsOf(plan),
+  });
+
 /**
- * The application's skills: `effectiveSkills` are the ones its agents use,
- * `excludedSkills` (only when there are some) the ones its Plan turns off.
+ * The application's skills for `plan`: `skills` per stage plus its own
+ * every-stage group.
  */
-const effectiveSkillsFor = (
+const applicationSkillsFor = (
   plan: StoredPlan | undefined,
   applicationId: number
-): Pick<ApplicationMigrationView, "effectiveSkills" | "excludedSkills"> => {
-  const { used, excluded } = splitExcludedSkills(
-    uniqueEffectiveSkills([
-      ...(plan ? effectiveSkillsForPlan(plan) : []),
-      ...collectionSkillsForAgents(plan?.stages.map((s) => s.agent.id) ?? []),
-      ...applicationSkills(applicationId),
-    ]),
-    plan
-  );
+): Pick<ApplicationMigrationView, "skills"> => ({
+  skills: resolveRunSkills(plan ?? { stages: [] }, [applicationId]),
+});
+
+/**
+ * The application's migration chain: its own target profile (its
+ * archetype's), that profile's archetype, and the plan they resolve to.
+ */
+const migrationChain = (
+  application: Application,
+  resolved: StoredPlan | undefined
+): Pick<ApplicationMigrationView, "targetProfile" | "archetype" | "plan"> => {
+  const target = targetProfileFor(application);
+  const archetype =
+    target != null ? findArchetype(target.archetypeId) : undefined;
   return {
-    effectiveSkills: used,
-    ...(excluded.length > 0 ? { excludedSkills: excluded } : {}),
+    ...(target != null
+      ? {
+          targetProfile: { id: target.profile.id, name: target.profile.name },
+        }
+      : {}),
+    ...(archetype != null
+      ? { archetype: { id: archetype.id, name: archetype.name } }
+      : {}),
+    ...(resolved != null
+      ? { plan: { id: resolved.id, name: resolved.name } }
+      : {}),
   };
 };
 
+/**
+ * The migration view of an application. `plan` is always the plan its next
+ * run uses (`resolvePlanFor`: its archetype and target profile), never the
+ * plan of its latest run; that one is `planRunPlan`, beside `planRun`. The
+ * skills are the resolved plan's, for this application.
+ */
 export const getApplicationMigration = (
   application: Application
 ): ApplicationMigrationView => {
@@ -955,28 +1045,26 @@ export const getApplicationMigration = (
     if (!resolved) {
       return {
         configured: false,
+        ...migrationChain(application, resolved),
         intervention: "none",
+        skills: applicationSkillsFor(undefined, application.id).skills,
         stages: [],
-        preflightReason: "No Plan is assigned to this migration path.",
+        preflightReason:
+          "No migration plan is assigned to this migration path.",
       };
     }
-    const profile = targetProfileFor(application)?.profile;
     return {
       configured: true,
-      plan: { id: resolved.id, name: resolved.name },
-      targetProfile: profile
-        ? { id: profile.id, name: profile.name }
-        : resolved.migrationPath?.targetProfiles[0],
+      ...migrationChain(application, resolved),
       ...scenarioPreflight(application),
       intervention: "none",
-      ...effectiveSkillsFor(resolved, application.id),
+      ...applicationSkillsFor(resolved, application.id),
       stages: [],
       updatedAt: "2026-09-01T08:30:00Z",
     };
   }
 
   const run = presentRun(record);
-  const plan = db.plans.find((candidate) => candidate.id === run.planId);
   const awaiting = run.stageRuns.find((sr) => sr.status === "AwaitingApproval");
   const active =
     awaiting ??
@@ -986,14 +1074,14 @@ export const getApplicationMigration = (
     (run.status === "Succeeded"
       ? run.stageRuns[run.stageRuns.length - 1]
       : undefined);
-  const profileRef = plan?.migrationPath?.targetProfiles[0];
   const isActive = run.status !== "Succeeded" && run.status !== "Failed";
   const repositoryUrl = application.repository?.url;
   return {
-    configured: true,
-    plan: { id: run.planId, name: run.planName },
+    // Configured means a plan resolves for the next run, run or not.
+    configured: resolved != null,
+    ...migrationChain(application, resolved),
     planRun: { id: run.id, name: run.name },
-    targetProfile: profileRef,
+    planRunPlan: { id: run.planId, name: run.planName },
     ...(isActive
       ? {
           preflight: "blocked" as const,
@@ -1016,7 +1104,7 @@ export const getApplicationMigration = (
           requestedAction: "Review Migration Proposal",
         }
       : undefined,
-    ...effectiveSkillsFor(plan, application.id),
+    ...applicationSkillsFor(resolved, application.id),
     result:
       run.status === "Succeeded"
         ? {
@@ -1026,12 +1114,14 @@ export const getApplicationMigration = (
               ? `${repositoryUrl}/tree/${encodeURIComponent(run.targetBranch)}`
               : undefined,
             commits: run.stageRuns.flatMap((sr) =>
-              (sr.commits ?? []).map((commit) => ({
-                ...commit,
-                url: repositoryUrl
-                  ? `${repositoryUrl}/commit/${commit.hash}`
-                  : commit.url,
-              }))
+              (sr.commits ?? [])
+                .filter((commit) => isCommitOf(commit, application.id))
+                .map((commit) => ({
+                  ...commit,
+                  url: repositoryUrl
+                    ? `${repositoryUrl}/commit/${commit.hash}`
+                    : commit.url,
+                }))
             ),
           }
         : undefined,
@@ -1072,21 +1162,10 @@ const createRun = (
   now: number
 ): RunRecord => {
   const id = nextRunId();
-  const { used: resolvedSkills, excluded: excludedSkills } =
-    splitExcludedSkills(
-      uniqueEffectiveSkills([
-        ...effectiveSkillsForPlan(plan),
-        ...collectionSkillsForAgents(plan.stages.map((s) => s.agent.id)),
-        ...applications.flatMap((application) =>
-          applicationSkills(application.id)
-        ),
-      ]),
-      plan
-    );
   return {
     run: {
       id,
-      name: `Run #${id} — ${plan.name}`,
+      name: `Run #${id}: ${plan.name}`,
       planId: plan.id,
       planName: plan.name,
       applications: applications.map((application) => ({
@@ -1096,8 +1175,10 @@ const createRun = (
       status: "Pending",
       targetBranch,
       startedAt: new Date(now).toISOString(),
-      resolvedSkills,
-      ...(excludedSkills.length > 0 ? { excludedSkills } : {}),
+      skills: resolveRunSkills(
+        plan,
+        applications.map((application) => application.id)
+      ),
       stageRuns: [...plan.stages]
         .sort((a, b) => a.order - b.order)
         .map((stage) =>
@@ -1153,12 +1234,11 @@ export const startApplicationMigrations = (
     );
   }
 
+  // "Use each application's migration plan": the plan of the application's
+  // own archetype and target profile, never the plan of its last run.
   const groups = new Map<EntityId, { plan: StoredPlan; apps: Application[] }>();
   applications.forEach((application) => {
-    const view = getApplicationMigration(application);
-    const plan =
-      singlePlan ??
-      db.plans.find((candidate) => candidate.id === view.plan?.id);
+    const plan = singlePlan ?? resolvePlanFor(application);
     if (!plan) {
       throw conflict(`No Plan resolves for ${application.name}.`);
     }

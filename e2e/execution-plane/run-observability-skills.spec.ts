@@ -2,7 +2,8 @@
  * The plan skill review and run observability together on one run: a run
  * started after its plan excluded a skill shows the Excluded marker in its
  * Skills section next to the Stages table's Context column, both survive the
- * page's live refresh, and the stage's skill loader stages each used skill
+ * page's live refresh, and the stage's skill loader stages what that stage
+ * gets (its own group and the application's every-stage group), each skill
  * once and never the excluded one. No fixture excludes a skill and a reload
  * resets the mock, so the test saves an exclusion on plan 5 (the plan of
  * application 13) through the API and then navigates inside the app.
@@ -50,9 +51,14 @@ interface StoredPlan {
     isDefault?: boolean;
   };
 }
+interface StageSkillRow extends SkillEntry {
+  excluded: boolean;
+}
 interface Run {
-  resolvedSkills?: SkillEntry[];
-  excludedSkills?: SkillEntry[];
+  skills: {
+    stages: { skills: StageSkillRow[] }[];
+    everyStage: { skills: StageSkillRow[] }[];
+  };
 }
 
 /** Saves plan 5 with one excluded skill, as the plan wizard does. */
@@ -92,7 +98,7 @@ const names = (entries: SkillEntry[] = []) => [
 ];
 
 const skillsTable = (scope: Locator) =>
-  scope.getByRole("grid", { name: "Skills", exact: true });
+  scope.getByRole("grid", { name: "Skills by stage", exact: true });
 
 const stagesTable = (page: Page) =>
   main(page).getByRole("grid", { name: /Stages/ });
@@ -113,19 +119,27 @@ test("a run with an excluded skill: skills, context and the skill loader agree",
   await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
   const runId = appPath(new URL(page.url()).pathname).split("/")[2];
   const run = await agenticGet<Run>(page, `/plan-runs/${runId}`);
-  const used = names(run.resolvedSkills);
-  const excluded = names(run.excludedSkills);
+  const rows = [...run.skills.stages, ...run.skills.everyStage].flatMap(
+    (group) => group.skills
+  );
+  const used = names(rows.filter((row) => !row.excluded));
+  const excluded = names(rows.filter((row) => row.excluded));
   expect(excluded).toHaveLength(1);
-  const heading = `Skills (${used.length} of ${used.length + excluded.length} used)`;
+  expect(used.length).toBeGreaterThan(0);
 
-  // Feature 2's Skills section and feature 3's Context column, side by side.
+  // Feature 2's Skills by stage and feature 3's Context column, side by side.
   await expect(
-    main(page).getByRole("heading", { level: 2, name: heading })
+    main(page).getByRole("heading", { level: 2, name: "Skills by stage" })
   ).toBeVisible();
-  const excludedRow = skillsTable(main(page))
+  // An exclusion is per plan: every row of the skill is marked.
+  const excludedRows = skillsTable(main(page))
     .getByRole("row")
     .filter({ hasText: excluded[0] });
-  await expect(excludedRow).toContainText("Excluded");
+  await expect(excludedRows.first()).toContainText("Excluded");
+  const excludedRowCount = await excludedRows.count();
+  await expect(
+    skillsTable(main(page)).getByText("Excluded", { exact: true })
+  ).toHaveCount(excludedRowCount);
   await expect(
     stagesTable(page).getByRole("columnheader", { name: /^Context/ })
   ).toBeVisible();
@@ -141,7 +155,7 @@ test("a run with an excluded skill: skills, context and the skill loader agree",
   ).toHaveCount(1);
   await expect(
     skillsTable(main(page)).getByText("Excluded", { exact: true })
-  ).toHaveCount(1);
+  ).toHaveCount(excludedRowCount);
 
   // The stage page: tabs, the context row, and the skill loader's log.
   await firstStage.getByRole("link").first().click();
@@ -152,12 +166,18 @@ test("a run with an excluded skill: skills, context and the skill loader agree",
   await log.getByRole("button", { name: /^Container: / }).click();
   await page.getByRole("option", { name: /^Skill loader/ }).click();
   const loader = main(page).getByRole("region", { name: "Skill loader log" });
-  await expect(loader).toContainText(`sources: ${used.length} declared`);
+  // The first stage gets its own group and the application's context.
+  const stageGets = names(
+    [...run.skills.stages[0].skills, ...run.skills.everyStage[0].skills].filter(
+      ({ excluded }) => !excluded
+    )
+  );
+  await expect(loader).toContainText(`sources: ${stageGets.length} declared`);
   const staged = (
     await loader.locator(".pf-v6-c-log-viewer__text").allInnerTexts()
   )
     .filter((line) => / \((skill|rule)\) from /.test(line))
     .map((line) => line.split(" ")[0]);
-  expect(staged.sort()).toEqual(used.map(resourceName).sort());
+  expect(staged.sort()).toEqual(stageGets.map(resourceName).sort());
   expect(staged).not.toContain(resourceName(excluded[0]));
 });

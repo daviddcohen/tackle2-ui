@@ -13,12 +13,17 @@ import {
   StageAgentRun,
   StageRun,
   isTerminalRunPhase,
+  stageAgentRunsOf,
 } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
 import { formatTableDate } from "@app/utils/utils";
 
-import { ContextUsageCell } from "./agent-run/context-usage";
+import {
+  ContextUsageCell,
+  ContextUsageCellProps,
+} from "./agent-run/context-usage";
+import { contextPercent } from "./agent-run/usage-format";
 import { RunStatus } from "./agentic-status";
 
 /** The agent runs behind the stages, for the Context column. */
@@ -27,7 +32,47 @@ export interface StageAgentRunsState {
   isLoading: boolean;
   /** The agent runs could not be read. */
   isUnavailable: boolean;
+  /**
+   * How many applications the run is on. Above one, a stage has one agent
+   * run per application and the Context column shows the fullest one.
+   */
+  applicationCount?: number;
 }
+
+/**
+ * What the Context cell shows for one stage. One agent run: its reading.
+ * Several (one per application): the fullest one's reading, read as "Up to",
+ * with the lowest and how many applications reported, so the cell never
+ * passes one application's reading off as the stage's.
+ */
+const stageContext = (
+  stageAgentRuns: StageAgentRun[],
+  applicationCount: number
+): Pick<ContextUsageCellProps, "usage" | "several"> => {
+  const readings = stageAgentRuns
+    .map((agentRun) => ({
+      usage: agentRun.usage,
+      percent: contextPercent(agentRun.usage),
+    }))
+    .filter(
+      (
+        reading
+      ): reading is { usage: StageAgentRun["usage"]; percent: number } =>
+        reading.percent != null
+    );
+  if (applicationCount < 2 || readings.length === 0) {
+    return { usage: (readings[0] ?? stageAgentRuns[0])?.usage };
+  }
+  const fullest = readings.reduce((a, b) => (b.percent > a.percent ? b : a));
+  return {
+    usage: fullest.usage,
+    several: {
+      lowestPercent: Math.min(...readings.map((reading) => reading.percent)),
+      reported: readings.length,
+      applications: applicationCount,
+    },
+  };
+};
 
 interface PlanRunStagesProps {
   /** The run's stage snapshot; rendered in stage order. */
@@ -129,6 +174,7 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
   }
 
   const { stageRuns, runId, linkTo, origin = "", agentRuns } = props;
+  const several = (agentRuns?.applicationCount ?? 1) > 1;
   return (
     <Table aria-label={t("agentic.stageRunsTable.label")} variant="compact">
       <Thead>
@@ -141,10 +187,15 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
           <Th modifier="fitContent">{columns.duration}</Th>
           {agentRuns != null && (
             <Th
-              width={15}
+              // "Up to 88% (2 of 3 reported)" needs more room by its bar.
+              width={several ? 20 : 15}
               modifier="nowrap"
               info={{
-                popover: t("agentic.planRun.contextHelp"),
+                popover: several
+                  ? `${t("agentic.planRun.contextHelp")} ${t(
+                      "agentic.planRun.contextHelpSeveral"
+                    )}`
+                  : t("agentic.planRun.contextHelp"),
                 ariaLabel: t("agentic.planRun.contextHelpLabel"),
                 popoverProps: {
                   "aria-label": t("agentic.agentRun.context.title"),
@@ -162,9 +213,13 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
           .sort((a, b) => a.order - b.order)
           .map((stageRun) => {
             const duration = stageRunDurationSeconds(stageRun);
-            const agentRun = agentRuns?.agentRuns.find(
-              (candidate) => candidate.stageId === stageRun.stageId
-            );
+            const context =
+              agentRuns != null
+                ? stageContext(
+                    stageAgentRunsOf(agentRuns.agentRuns, stageRun.stageId),
+                    agentRuns.applicationCount ?? 1
+                  )
+                : undefined;
             return (
               <Tr key={stageRun.stageId}>
                 <Td dataLabel={columns.order}>{stageRun.order}</Td>
@@ -216,7 +271,8 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
                     <ContextUsageCell
                       stageName={stageRun.name}
                       phase={stageRun.status}
-                      usage={agentRun?.usage}
+                      usage={context?.usage}
+                      several={context?.several}
                       isLoading={agentRuns.isLoading}
                       isUnavailable={agentRuns.isUnavailable}
                     />

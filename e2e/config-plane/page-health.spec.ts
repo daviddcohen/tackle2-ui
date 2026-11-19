@@ -23,7 +23,7 @@ const PAGES: { path: string; heading: string | RegExp; adminOnly?: boolean }[] =
     { path: "/skills", heading: "Skills" },
     { path: "/skills/1", heading: "Spring Boot to Quarkus migration" },
     {
-      path: "/skills/1?tab=associations",
+      path: "/skills/1?tab=usage",
       heading: "Spring Boot to Quarkus migration",
     },
     { path: "/skills/collections/1", heading: "Java modernization foundation" },

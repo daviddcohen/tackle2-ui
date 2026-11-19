@@ -71,7 +71,7 @@ test.describe("Models list", () => {
     const claude = rowByText(page, "Claude 3.7 Sonnet");
     await expect(claude).toContainText("Default");
     await expect(claude).toContainText("Verified");
-    await expect(claude).toContainText("3 agents");
+    await expect(claude).toContainText("4 agents");
     const granite = rowByText(page, "Granite Code 20B");
     await expect(granite).toContainText("Unreachable");
     await expect(granite).toContainText(
@@ -110,14 +110,17 @@ test.describe("Models list", () => {
     page,
   }) => {
     const claude = rowByText(page, "Claude 3.7 Sonnet");
-    await claude.getByRole("button", { name: "3 agents" }).click();
-    const popover = page.getByRole("dialog", { name: "Used by 3 agents" });
+    await claude.getByRole("button", { name: "4 agents" }).click();
+    const popover = page.getByRole("dialog", { name: "Used by 4 agents" });
     await expect(popover.getByRole("link")).toHaveText([
       "Code Migrator",
+      "Java Code Migrator",
       "Migration Proposal Agent",
       "Security Review Agent",
     ]);
-    await popover.getByRole("link", { name: "Code Migrator" }).click();
+    await popover
+      .getByRole("link", { name: "Code Migrator", exact: true })
+      .click();
     await expect(mainHeading(page)).toHaveText("Code Migrator");
     expect(await breadcrumbTitles(page)).toEqual(["Models", "Code Migrator"]);
     await breadcrumb(page).getByRole("link", { name: "Models" }).click();
@@ -409,7 +412,7 @@ test.describe("Model form", () => {
       "Saving verifies the model again."
     );
     await expect(dialog(page)).toContainText(
-      "Used by 3 agents. Changes apply to them."
+      "Used by 4 agents. Changes apply to them."
     );
     await expect(
       dialog(page).getByRole("button", { name: "Save" })

@@ -6,7 +6,8 @@
  */
 import { isAxiosError } from "axios";
 
-import { AgentRunUsage, TranscriptEntry } from "@app/agentic";
+import { AgentRunUsage, PlanRun, TranscriptEntry } from "@app/agentic";
+import { toResourceName } from "@app/agentic/adapters";
 import {
   getAgentRunLog as fetchAgentRunLog,
   getAgentRunResource as fetchAgentRunResource,
@@ -16,12 +17,14 @@ import {
 import { server } from "@mocks/server";
 
 import { updatePlan } from "./catalog";
-import { db, resetAgenticDb } from "./db";
+import { db, findApplication, resetAgenticDb } from "./db";
 import {
   PENDING_MS,
   STAGE_MS,
+  approveStage,
   getPlanRun,
   resetExecutionWorld,
+  resolveApplicationRequest,
   startApplicationMigrations,
 } from "./execution";
 import handlers from "./handlers";
@@ -82,12 +85,20 @@ describe("observability mock", () => {
     it("lists started stages only, with the plan run's statuses", () => {
       const run = getPlanRun("1");
       const agentRuns = listPlanRunAgentRuns("1");
-      expect(agentRuns.map((agentRun) => agentRun.stageId)).toEqual(["1", "2"]);
+      // One per started stage per application (run 1 has three).
+      expect(agentRuns.map((agentRun) => agentRun.stageId)).toEqual([
+        "1",
+        "1",
+        "1",
+        "2",
+        "2",
+        "2",
+      ]);
       agentRuns.forEach((agentRun) => {
         const stage = run.stageRuns.find((s) => s.stageId === agentRun.stageId);
         expect(agentRun.phase).toBe(stage?.status);
       });
-      expect(agentRuns[1]).toMatchObject({
+      expect(agentRunOf("1", "2")).toMatchObject({
         name: "run-1-migrate",
         podName: "run-1-migrate",
         containers: ["skill-loader", "agent"],
@@ -349,11 +360,11 @@ describe("observability mock", () => {
       complete: false,
     });
   });
-  it("stages each skill once and never a skill the plan excluded", () => {
+  it("stages what this stage gets, each skill once, with its load policy, never an excluded one", () => {
     seed("configured");
     db.executionPolicy = { interactionMode: "unattended" };
-    // Application 13 resolves to plan 5; skill 8 reaches it through an agent
-    // and the archetype, skill 9 through several sources too.
+    // Application 13 resolves to plan 5; skill 8 reaches it through the
+    // archetype (and plan 5's Containerize stage), and the plan excludes it.
     const plan = db.plans.find((candidate) => candidate.id === "5")!;
     updatePlan("5", {
       name: plan.name,
@@ -374,24 +385,42 @@ describe("observability mock", () => {
       targetBranch: "main",
     });
     const run = getPlanRun(ref.id);
-    const distinct = new Set(run.resolvedSkills?.map(({ skill }) => skill.id));
-    expect(run.resolvedSkills!.length).toBeGreaterThan(distinct.size);
-    expect(new Set(run.excludedSkills?.map(({ skill }) => skill.id))).toEqual(
-      new Set(["8"])
-    );
     jest.advanceTimersByTime(PENDING_MS + 3000);
+
+    // The first stage's own group plus the application's every-stage group.
+    const rows = [
+      ...run.skills!.stages[0].skills,
+      ...run.skills!.everyStage[0].skills,
+    ];
+    const expected = new Map(
+      rows
+        .filter(({ excluded }) => !excluded)
+        .map(({ skill, loadPolicy }) => [
+          toResourceName(skill.name),
+          loadPolicy,
+        ])
+    );
 
     const [first] = listPlanRunAgentRuns(ref.id);
     const loader = getAgentRunLog(first.name, "skill-loader", null).text;
-    const staged = loader
+    const stagedLines = loader
       .split("\n")
-      .filter((line) => / \((skill|rule)\) from /.test(line))
-      .map((line) => line.split(" ")[0]);
-    expect(loader).toContain(`sources: ${distinct.size} declared`);
-    expect(loader).toContain(`${distinct.size} skill(s) valid`);
+      .filter((line) => / \((skill|rule)\) from /.test(line));
+    const staged = stagedLines.map((line) => line.split(" ")[0]);
+    expect(loader).toContain(`sources: ${expected.size} declared`);
+    expect(loader).toContain(`${expected.size} skill(s) valid`);
     expect(new Set(staged).size).toBe(staged.length);
-    expect(staged).toHaveLength(distinct.size);
+    expect([...staged].sort()).toEqual([...expected.keys()].sort());
     expect(staged).not.toContain("containerization-standards");
+    // Skills of other stages are not staged here: Java Code Migrator's
+    // collection skill, Build Validator's collection skill.
+    expect(staged).not.toContain("jakarta-ee-namespace-migration");
+    expect(staged).not.toContain("database-migration-patterns");
+    stagedLines.forEach((line) => {
+      const [name, type] = /^(\S+) \((skill|rule)\)/.exec(line)!.slice(1);
+      expect(type).toBe(expected.get(name));
+    });
+    expect(stagedLines.some((line) => line.includes("(rule)"))).toBe(true);
 
     const discovered = getAgentRunLog(first.name, "agent", null)
       .text.split("\n")
@@ -472,6 +501,407 @@ describe("observability mock", () => {
   });
 });
 
+describe("observability mock: runs on several applications", () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ now: START });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** The skill-loader's staged skill names of an agent run. */
+  const stagedOf = (name: string) =>
+    getAgentRunLog(name, "skill-loader", null)
+      .text.split("\n")
+      .filter((line) => / \((skill|rule)\) from /.test(line))
+      .map((line) => line.split(" ")[0])
+      .sort();
+
+  /** The stage's group plus the application's every-stage group, minus excluded. */
+  const expectedStaged = (
+    run: PlanRun,
+    stageId: string,
+    applicationId: number
+  ) =>
+    [
+      ...new Set(
+        [
+          ...(run.skills?.stages.find((group) => group.stageId === stageId)
+            ?.skills ?? []),
+          ...(run.skills?.everyStage.find(
+            (group) => group.application?.id === applicationId
+          )?.skills ?? []),
+        ]
+          .filter((row) => !row.excluded)
+          .map((row) => toResourceName(row.skill.name))
+      ),
+    ].sort();
+
+  describe("a running run on three applications", () => {
+    beforeEach(() => seed("running", 2));
+
+    it("has one agent run per started stage per application, each named and labelled for it", () => {
+      const run = getPlanRun("1");
+      expect(run.applications.map((application) => application.id)).toEqual([
+        1, 3, 8,
+      ]);
+      const agentRuns = listPlanRunAgentRuns("1");
+      const names = agentRuns.map((agentRun) => agentRun.name);
+      expect(new Set(names).size).toBe(names.length);
+      ["1", "2"].forEach((stageId) => {
+        const forStage = agentRuns.filter(
+          (agentRun) => agentRun.stageId === stageId
+        );
+        expect(forStage.map((agentRun) => agentRun.application)).toEqual(
+          run.applications
+        );
+        // The first application keeps the stage's name; the others add
+        // their application id.
+        const [first, ...others] = forStage;
+        expect(first.name).not.toContain("-app-");
+        others.forEach((agentRun) =>
+          expect(agentRun.name).toBe(
+            `${first.name}-app-${agentRun.application?.id}`
+          )
+        );
+      });
+      agentRuns.forEach((agentRun) => {
+        const resource = getAgentRunResource(agentRun.name);
+        const id = String(agentRun.application?.id);
+        expect(resource.metadata.labels?.["konveyor.io/application"]).toBe(id);
+        expect(resource.spec.env).toContainEqual({ name: "APP_ID", value: id });
+      });
+    });
+
+    it("gives every application its own phase: all follow a running or succeeded stage", () => {
+      const run = getPlanRun("1");
+      listPlanRunAgentRuns("1").forEach((agentRun) =>
+        expect(agentRun.phase).toBe(
+          run.stageRuns.find((stage) => stage.stageId === agentRun.stageId)
+            ?.status
+        )
+      );
+    });
+
+    it("stages the stage's skills plus that application's every-stage skills only", () => {
+      const run = getPlanRun("1");
+      const agentRuns = listPlanRunAgentRuns("1");
+      agentRuns.forEach((agentRun) =>
+        expect(stagedOf(agentRun.name)).toEqual(
+          expectedStaged(run, agentRun.stageId, agentRun.application!.id)
+        )
+      );
+      // An application's own skill reaches its own agent runs, never the
+      // other applications'.
+      const forStage = agentRuns.filter((agentRun) => agentRun.stageId === "2");
+      const lists = forStage.map((agentRun) => stagedOf(agentRun.name));
+      const ownSkills = lists.flatMap((list, index) =>
+        list.filter((skill) =>
+          lists.every((other, j) => j === index || !other.includes(skill))
+        )
+      );
+      expect(ownSkills.length).toBeGreaterThan(0);
+    });
+
+    it("clones and names each application in its own transcript and log", () => {
+      jest.setSystemTime(START + 30000);
+      listPlanRunAgentRuns("1")
+        .filter((agentRun) => agentRun.stageId === "2")
+        .forEach((agentRun) => {
+          const name = findApplication(agentRun.application!.id)!.name;
+          const repo = toResourceName(name);
+          expect(getAgentRunLog(agentRun.name, "agent", null).text).toContain(
+            `cloning ${repo}...`
+          );
+          const plan = getAgentRunTranscript(agentRun.name).entries.find(
+            (entry) => entry.kind === "plan"
+          );
+          expect(JSON.stringify(plan)).toContain(`clone ${repo} on`);
+        });
+    });
+
+    it("keeps the stage's messages on the first application's transcript only", () => {
+      jest.setSystemTime(START + 15000);
+      const messages = getPlanRun("1").stageRuns[1].messages ?? [];
+      expect(messages.length).toBeGreaterThan(0);
+      const [first, ...others] = listPlanRunAgentRuns("1").filter(
+        (agentRun) => agentRun.stageId === "2"
+      );
+      const shown = texts(getAgentRunTranscript(first.name).entries);
+      messages.forEach((message) => expect(shown).toContain(message.content));
+      others.forEach((agentRun) => {
+        const other = texts(getAgentRunTranscript(agentRun.name).entries);
+        messages.forEach((message) =>
+          expect(other).not.toContain(message.content)
+        );
+      });
+    });
+  });
+
+  it("names its application in the transcript, also where the instructions say the application", () => {
+    seed("configured");
+    db.executionPolicy = { interactionMode: "unattended" };
+    // Record plan 1's first stage ("Analyze the application ..."): no
+    // approve mode.
+    const plan = db.plans.find((candidate) => candidate.id === "1")!;
+    updatePlan("1", {
+      name: plan.name,
+      description: plan.description,
+      migrationPath: plan.migrationPath && {
+        archetype: { id: plan.migrationPath.archetype.id },
+        targetProfiles: plan.migrationPath.targetProfiles,
+        isDefault: plan.migrationPath.isDefault,
+      },
+      stages: plan.stages.map((stage) => ({
+        ...stage,
+        requiresApproval: false,
+      })),
+      excludedSkills: plan.excludedSkills,
+    });
+    const {
+      planRuns: [ref],
+    } = startApplicationMigrations({
+      applicationIds: [1, 13],
+      planSelection: "single",
+      planId: "1",
+      targetBranch: "main",
+    });
+    jest.advanceTimersByTime(PENDING_MS + 3000);
+    const run = getPlanRun(ref.id);
+    const stage = run.stageRuns[0];
+    expect(stage.instructions).toMatch(/the application/);
+    const forStage = listPlanRunAgentRuns(ref.id).filter(
+      (agentRun) => agentRun.stageId === stage.stageId
+    );
+    expect(forStage).toHaveLength(2);
+    forStage.forEach((agentRun, index) => {
+      const name = findApplication(agentRun.application!.id)!.name;
+      const thoughts = getAgentRunTranscript(agentRun.name)
+        .entries.flatMap((entry) =>
+          entry.kind === "thought" ? [entry.text] : []
+        )
+        .join(" ");
+      expect(thoughts).toContain(
+        `I work on ${name} (application ${index + 1} of 2 in this run).`
+      );
+      expect(thoughts).toContain(`the ${name} application`);
+    });
+  });
+
+  it("varies context usage between the applications of a stage", () => {
+    seed("completed");
+    const forStage = listPlanRunAgentRuns("1").filter(
+      (agentRun) => agentRun.stageId === "2"
+    );
+    const used = forStage.map((agentRun) => agentRun.usage?.contextUsed);
+    expect(new Set(used).size).toBe(used.length);
+    const input = forStage.map((agentRun) => agentRun.usage?.inputTokens);
+    expect(new Set(input).size).toBe(input.length);
+  });
+
+  it("fails a failed stage for the first application only; the others succeeded", () => {
+    seed("failed", 2);
+    const run = getPlanRun("1");
+    const stage = run.stageRuns[1];
+    expect(stage.status).toBe("Failed");
+    const [first, ...others] = listPlanRunAgentRuns("1").filter(
+      (agentRun) => agentRun.stageId === stage.stageId
+    );
+    expect(first).toMatchObject({
+      application: run.applications[0],
+      phase: "Failed",
+      completedAt: stage.completedAt,
+    });
+    expect(
+      getAgentRunResource(first.name).status?.terminationData
+    ).toMatchObject({ exitCode: 1, stopReason: stage.output });
+    expect(getAgentRunLog(first.name, "agent", null).text).toContain(
+      "stage failed: "
+    );
+    expect(others).toHaveLength(2);
+    others.forEach((agentRun) => {
+      expect(agentRun).toMatchObject({
+        phase: "Succeeded",
+        completedAt: stage.completedAt,
+        logSource: "saved",
+      });
+      const resource = getAgentRunResource(agentRun.name);
+      expect(resource.status).toMatchObject({ phase: "Succeeded" });
+      expect(resource.status?.terminationData).toMatchObject({
+        exitCode: 0,
+        outcome: "succeeded",
+        stopReason: "end_turn",
+      });
+      const log = getAgentRunLog(agentRun.name, "agent", null).text;
+      expect(log).not.toContain("stage failed: ");
+      expect(log).toContain(`[ok] ${stage.name} succeeded`);
+    });
+  });
+
+  it("waits for approval on the first application only; the others finished when the proposal was ready", () => {
+    seed("actionRequired", 2);
+    const stage = getPlanRun("1").stageRuns[1];
+    expect(stage.status).toBe("AwaitingApproval");
+    const readyAt = stage.messages?.[stage.messages.length - 1]?.timestamp;
+    const [first, ...others] = listPlanRunAgentRuns("1").filter(
+      (agentRun) => agentRun.stageId === stage.stageId
+    );
+    expect(first).toMatchObject({
+      phase: "AwaitingApproval",
+      logSource: "live",
+    });
+    expect(first).not.toHaveProperty("completedAt");
+    expect(others).toHaveLength(2);
+    others.forEach((agentRun) => {
+      expect(agentRun).toMatchObject({
+        phase: "Succeeded",
+        completedAt: readyAt,
+        logSource: "saved",
+      });
+      // Finished: not recording any more (stage 2 has the demo gap).
+      expect(getAgentRunTranscript(agentRun.name).status).toMatch(
+        /^(complete|incomplete)$/
+      );
+      expect(getAgentRunLog(agentRun.name, "agent", null).complete).toBe(true);
+    });
+  });
+
+  it("labels each application's agent runs with its own workflow run", () => {
+    seed("running", 2);
+    listPlanRunAgentRuns("1").forEach((agentRun, index) => {
+      const label = getAgentRunResource(agentRun.name).metadata.labels?.[
+        "konveyor.io/agentworkflowrun"
+      ];
+      expect(label).toBe(
+        index % 3 === 0 ? "run-1" : `run-1-app-${agentRun.application?.id}`
+      );
+    });
+  });
+
+  it("keeps names unique and short for long, near-identical stage names", () => {
+    seed("configured");
+    db.executionPolicy = { interactionMode: "unattended" };
+    const long =
+      "Migrate the customer facing order management service and its batch jobs";
+    const plan = db.plans.find((candidate) => candidate.id === "1")!;
+    updatePlan("1", {
+      name: plan.name,
+      description: plan.description,
+      migrationPath: plan.migrationPath && {
+        archetype: { id: plan.migrationPath.archetype.id },
+        targetProfiles: plan.migrationPath.targetProfiles,
+        isDefault: plan.migrationPath.isDefault,
+      },
+      stages: plan.stages.map((stage, index) => ({
+        ...stage,
+        name: index < 2 ? `${long} ${index + 1}` : stage.name,
+      })),
+      excludedSkills: plan.excludedSkills,
+    });
+    const {
+      planRuns: [ref],
+    } = startApplicationMigrations({
+      applicationIds: [1, 13],
+      planSelection: "single",
+      planId: "1",
+      targetBranch: "main",
+    });
+    jest.advanceTimersByTime(PENDING_MS + STAGE_MS + 1000);
+    const agentRuns = listPlanRunAgentRuns(ref.id);
+    expect(agentRuns).toHaveLength(4);
+    const names = agentRuns.map((agentRun) => agentRun.name);
+    expect(new Set(names).size).toBe(names.length);
+    names.forEach((name) => {
+      expect(name.length).toBeLessThanOrEqual(63);
+      expect(name).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/);
+      // Every name finds its own agent run.
+      expect(getAgentRunResource(name).metadata.name).toBe(name);
+    });
+    expect(names.filter((name) => name.endsWith("-app-13"))).toHaveLength(2);
+  });
+
+  it.each([
+    ["approve", "Succeeded"],
+    ["reject", "Failed"],
+  ])(
+    "never moves the other applications' finished runs when the proposal is decided (%s)",
+    (decision, decided) => {
+      seed("actionRequired", 2);
+      const stageId = getPlanRun("1").stageRuns[1].stageId;
+      const others = () =>
+        listPlanRunAgentRuns("1")
+          .filter((agentRun) => agentRun.stageId === stageId)
+          .slice(1)
+          .map((agentRun) => ({
+            agentRun,
+            log: getAgentRunLog(agentRun.name, "agent", null).text,
+          }));
+      const before = others();
+      expect(before).toHaveLength(2);
+      jest.setSystemTime(START + 10 * 60 * 1000);
+      if (decision === "approve") {
+        approveStage("1", stageId);
+      } else {
+        resolveApplicationRequest(getPlanRun("1").applications[0].id, {
+          decision: "reject",
+        });
+      }
+      const stage = getPlanRun("1").stageRuns[1];
+      expect(stage.status).toBe(decided);
+      expect(stage.completedAt).toBe(new Date(START + 600000).toISOString());
+      const [first] = listPlanRunAgentRuns("1").filter(
+        (agentRun) => agentRun.stageId === stageId
+      );
+      expect(first).toMatchObject({
+        phase: decided,
+        completedAt: stage.completedAt,
+      });
+      expect(others()).toEqual(before);
+    }
+  );
+
+  it.each([
+    ["running", 2],
+    ["failed", 2],
+    ["actionRequired", 2],
+    ["completed", 1],
+  ])("leaves a run on one application unchanged (%s)", (scenario, stage) => {
+    seed(scenario, stage);
+    const run = getPlanRun("3");
+    expect(run.applications).toHaveLength(1);
+    const agentRuns = listPlanRunAgentRuns("3");
+    const started = run.stageRuns.filter(
+      (stageRun) => stageRun.status !== "Pending"
+    );
+    expect(agentRuns.map((agentRun) => agentRun.stageId)).toEqual(
+      started.map((stageRun) => stageRun.stageId)
+    );
+    agentRuns.forEach((agentRun, index) => {
+      expect(agentRun.name).toBe(
+        toResourceName(`run-3-${started[index].name}`, 58)
+      );
+      expect(agentRun.application).toEqual(run.applications[0]);
+      expect(agentRun.phase).toBe(started[index].status);
+      expect(stagedOf(agentRun.name)).toEqual(
+        expectedStaged(run, agentRun.stageId, run.applications[0].id)
+      );
+    });
+  });
+
+  it("keeps one agent run per stage in the configured world's runs on one application", () => {
+    seed("configured");
+    const run = getPlanRun("3");
+    const agentRuns = listPlanRunAgentRuns("3");
+    expect(
+      agentRuns.every((agentRun) => !agentRun.name.includes("-app-"))
+    ).toBe(true);
+    expect(new Set(agentRuns.map((agentRun) => agentRun.stageId)).size).toBe(
+      agentRuns.length
+    );
+    expect(run.stageRuns.some((stage) => stage.status === "Failed")).toBe(true);
+  });
+});
+
 describe("observability handlers", () => {
   const statusOf = async (promise: Promise<unknown>) => {
     try {
@@ -494,8 +924,14 @@ describe("observability handlers", () => {
     const agentRuns = await getPlanRunAgentRuns("1");
     expect(agentRuns.map((agentRun) => agentRun.name)).toEqual([
       "run-1-prepare-proposal",
+      "run-1-prepare-proposal-app-8",
       "run-1-migrate",
+      "run-1-migrate-app-8",
       "run-1-validate",
+      "run-1-validate-app-8",
+    ]);
+    expect(agentRuns.map((agentRun) => agentRun.application?.id)).toEqual([
+      3, 8, 3, 8, 3, 8,
     ]);
     expect((await fetchAgentRunResource("run-1-validate")).kind).toBe(
       "AgentRun"

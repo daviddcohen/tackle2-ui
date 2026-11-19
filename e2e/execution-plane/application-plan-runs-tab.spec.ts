@@ -113,5 +113,7 @@ test("an application without a migration path offers no run in the empty section
       params: { tab: "migration" },
     })
   );
-  await expect(main(page).getByText("No migration path")).toBeVisible();
+  await expect(
+    main(page).getByRole("heading", { name: "No migration plan" })
+  ).toBeVisible();
 });
