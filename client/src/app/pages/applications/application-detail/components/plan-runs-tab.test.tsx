@@ -3,10 +3,17 @@ jest.unmock("react-router-dom");
 import { createMemoryHistory } from "history";
 import { Router } from "react-router-dom";
 
-import { PlanRun } from "@app/agentic";
+import { ApplicationMigrationView, PlanRun } from "@app/agentic";
 import { render, screen } from "@app/test-config/test-utils";
 
 import { PlanRunsTab } from "./plan-runs-tab";
+
+const readyMigration: ApplicationMigrationView = {
+  configured: true,
+  intervention: "none",
+  preflight: "ready",
+  stages: [],
+};
 
 const mockState: {
   planRuns: PlanRun[];
@@ -14,6 +21,9 @@ const mockState: {
   isLoading?: boolean;
   canRun: boolean;
   open: jest.Mock;
+  migration?: ApplicationMigrationView;
+  migrationsLoading?: boolean;
+  migrationsError?: unknown;
 } = { planRuns: [], canRun: true, open: jest.fn() };
 
 jest.mock("@app/queries/agentic", () => ({
@@ -21,6 +31,11 @@ jest.mock("@app/queries/agentic", () => ({
     planRuns: mockState.planRuns,
     isLoading: mockState.isLoading ?? false,
     fetchError: mockState.fetchError ?? null,
+  }),
+  useFetchApplicationMigrations: () => ({
+    migrations: mockState.migration != null ? { 1: mockState.migration } : {},
+    isLoading: mockState.migrationsLoading ?? false,
+    fetchError: mockState.migrationsError ?? null,
   }),
 }));
 
@@ -66,6 +81,9 @@ describe("PlanRunsTab", () => {
     mockState.isLoading = undefined;
     mockState.canRun = true;
     mockState.open = jest.fn();
+    mockState.migration = readyMigration;
+    mockState.migrationsLoading = undefined;
+    mockState.migrationsError = undefined;
   });
 
   it("lists only the runs that include the application, under a counted heading", () => {
@@ -104,6 +122,74 @@ describe("PlanRunsTab", () => {
       .getByRole("button", { name: "agentic.execution.startMigration" })
       .click();
     expect(mockState.open).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["has no migration path", undefined],
+    [
+      "is blocked",
+      {
+        ...readyMigration,
+        preflight: "blocked",
+        preflightReason: "No migration plan is assigned.",
+      } as ApplicationMigrationView,
+    ],
+    [
+      "needs a review before it starts",
+      {
+        ...readyMigration,
+        preflight: "reviewRequired",
+      } as ApplicationMigrationView,
+    ],
+  ])(
+    "offers no start when the application %s, like the Migration tab",
+    (_case, migration) => {
+      mockState.migration = migration;
+      renderTab();
+      expect(
+        screen.getByText("agentic.applicationDetail.planRunsEmpty")
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: "agentic.execution.startMigration",
+        })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it("waits for the application's status before it draws the section", () => {
+    mockState.migrationsLoading = true;
+    renderTab();
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "agentic.execution.startMigration",
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it("leaves the start to the dialog when the status cannot be read", () => {
+    mockState.migration = undefined;
+    mockState.migrationsError = new Error("503");
+    renderTab();
+    expect(
+      screen.getByRole("button", { name: "agentic.execution.startMigration" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a blocked status it already read when a refresh fails", () => {
+    mockState.migration = {
+      ...readyMigration,
+      preflight: "blocked",
+      preflightReason: "No migration plan is assigned.",
+    };
+    mockState.migrationsError = new Error("503");
+    renderTab();
+    expect(
+      screen.queryByRole("button", {
+        name: "agentic.execution.startMigration",
+      })
+    ).not.toBeInTheDocument();
   });
 
   it("has no start in the empty section without the run write scope", () => {

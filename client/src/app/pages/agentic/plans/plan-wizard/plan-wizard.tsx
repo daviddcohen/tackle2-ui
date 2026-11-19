@@ -704,6 +704,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
                 toggleId="plan-target-profiles"
                 toggleAriaLabel={t("agentic.plan.selectTargetProfiles")}
                 ariaLabel={t("terms.targetProfiles")}
+                inputAriaLabel={t("terms.targetProfiles")}
                 values={targetProfileIds.map(String)}
                 options={targetProfiles.map((profile) => ({
                   value: String(profile.id),

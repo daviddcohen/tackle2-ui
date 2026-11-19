@@ -406,9 +406,15 @@ describe("MigrationPlansPage", () => {
       name: "agentic.execution.startMigration",
     });
     expect(runItem).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(runItem).toHaveAccessibleDescription(
+      "agentic.plan.runBlocked.noApplications"
+    );
     await user.hover(runItem);
     expect(
-      await screen.findByText("agentic.plan.runBlocked.noApplications")
+      await screen.findByText("agentic.plan.runBlocked.noApplications", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
   });
 
@@ -432,6 +438,9 @@ describe("MigrationPlansPage", () => {
     for (let step = 0; step < 4 && document.activeElement !== runItem; step++)
       await user.keyboard("{ArrowDown}");
     expect(runItem).toHaveFocus();
+    expect(runItem).toHaveAccessibleDescription(
+      "agentic.plan.runBlocked.noApplications"
+    );
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "agentic.plan.runBlocked.noApplications"
     );
@@ -506,7 +515,9 @@ describe("MigrationPlansPage", () => {
     // No edit fix for a user who cannot edit.
     await user.hover(within(menu).getByRole("menuitem"));
     expect(
-      await screen.findByText("agentic.plan.runBlocked.noStages")
+      await screen.findByText("agentic.plan.runBlocked.noStages", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
   });
 

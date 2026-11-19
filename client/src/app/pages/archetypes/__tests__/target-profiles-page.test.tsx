@@ -348,16 +348,28 @@ describe("TargetProfilesPage", () => {
       name: "Assign migration plan",
     });
     expect(assign).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(assign).toHaveAccessibleDescription(
+      "Migration plans are not loaded yet."
+    );
     await userEvent.hover(assign);
     expect(
-      await screen.findByText("Migration plans are not loaded yet.")
+      await screen.findByText("Migration plans are not loaded yet.", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
 
     const remove = screen.getByRole("menuitem", { name: "Delete" });
     expect(remove).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(remove).toHaveAccessibleDescription(
+      "Usage could not be checked. Try again later."
+    );
     await userEvent.hover(remove);
     expect(
-      await screen.findByText("Usage could not be checked. Try again later.")
+      await screen.findByText("Usage could not be checked. Try again later.", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
   });
 
@@ -375,9 +387,15 @@ describe("TargetProfilesPage", () => {
     ).not.toHaveAttribute("aria-disabled", "true");
     const remove = screen.getByRole("menuitem", { name: "Delete" });
     expect(remove).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(remove).toHaveAccessibleDescription(
+      "Usage could not be checked. Try again later."
+    );
     await userEvent.hover(remove);
     expect(
-      await screen.findByText("Usage could not be checked. Try again later.")
+      await screen.findByText("Usage could not be checked. Try again later.", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
   });
 

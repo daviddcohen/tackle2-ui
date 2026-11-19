@@ -154,12 +154,14 @@ const ModelsPage: React.FC = () => {
       },
     ],
     initialItemsPerPage: 10,
-    sortableColumns: ["name", "provider", "model"],
+    // Status sorts as on Model providers (same column, same behavior).
+    sortableColumns: ["name", "provider", "model", "status"],
     initialSort: { columnKey: "name", direction: "asc" },
     getSortValues: (item) => ({
       name: item.name,
       provider: item.provider.name,
       model: item.model,
+      status: item.verificationStatus,
     }),
     isLoading,
   });
@@ -456,7 +458,8 @@ const ModelsPage: React.FC = () => {
                                       ),
                                     ...disabledActionProps(
                                       getSetDefaultBlocker(model),
-                                      "left"
+                                      "left",
+                                      `models-table-row-${model.id}-set-default`
                                     ),
                                   },
                                   { isSeparator: true },
@@ -466,7 +469,10 @@ const ModelsPage: React.FC = () => {
                                       openModalAfterMenuClose(() =>
                                         setModelToDelete(model)
                                       ),
-                                    ...deleteActionProps(deleteBlocker),
+                                    ...deleteActionProps(
+                                      deleteBlocker,
+                                      `models-table-row-${model.id}-delete`
+                                    ),
                                   },
                                 ]}
                               />

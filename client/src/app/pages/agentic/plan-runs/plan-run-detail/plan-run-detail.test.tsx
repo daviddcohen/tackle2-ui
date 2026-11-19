@@ -189,7 +189,7 @@ describe("PlanRunDetail", () => {
         /^Started November 10, 2026 .* · Completed November 10, 2026/
       )
     ).toBeInTheDocument();
-    expect(fact("Duration")).toHaveTextContent("135m");
+    expect(fact("Duration")).toHaveTextContent("2h 15m");
     expect(fact("Commits")).toHaveTextContent("3");
   });
 

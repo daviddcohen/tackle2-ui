@@ -207,7 +207,11 @@ export const AgentsPage: React.FC = () => {
             title: t("actions.edit"),
             onClick: () =>
               openModalAfterMenuClose(() => setCreateUpdateModalState(agent)),
-            ...disabledActionProps(managedReason),
+            ...disabledActionProps(
+              managedReason,
+              undefined,
+              `agents-table-row-${agent.id}-edit`
+            ),
           },
         ]
       : [];
@@ -235,7 +239,8 @@ export const AgentsPage: React.FC = () => {
               hasPlans
                 ? getPlansUsingAgent(agent.id, migrationPlans).length
                 : undefined
-            )
+            ),
+          `agents-table-row-${agent.id}-delete`
         ),
       },
     ];

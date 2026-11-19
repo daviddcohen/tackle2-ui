@@ -273,10 +273,15 @@ describe("AgentsPage", () => {
       const del = screen.getByRole("menuitem", { name: "Delete" });
       expect(del).toHaveAttribute("aria-disabled", "true");
       expect(del).not.toHaveClass("pf-m-danger");
+      // The reason is the item's description and its tooltip on hover.
+      expect(del).toHaveAccessibleDescription(
+        "Used by 1 migration plan. Remove it from its stages before deleting it."
+      );
       await user.hover(del);
       expect(
         await screen.findByText(
-          "Used by 1 migration plan. Remove it from its stages before deleting it."
+          "Used by 1 migration plan. Remove it from its stages before deleting it.",
+          { selector: '[role="tooltip"] *' }
         )
       ).toBeInTheDocument();
     });
@@ -317,9 +322,15 @@ describe("AgentsPage", () => {
       const user = await openMenu("Test Runner");
       const del = screen.getByRole("menuitem", { name: "Delete" });
       expect(del).toHaveAttribute("aria-disabled", "true");
+      expect(del).toHaveAccessibleDescription(
+        "Usage could not be checked. Try again later."
+      );
       await user.hover(del);
       expect(
-        await screen.findByText("Usage could not be checked. Try again later.")
+        await screen.findByText(
+          "Usage could not be checked. Try again later.",
+          { selector: '[role="tooltip"] *' }
+        )
       ).toBeInTheDocument();
     });
 

@@ -146,10 +146,15 @@ describe("SkillsPage", () => {
     );
     const remove = await screen.findByRole("menuitem", { name: "Delete" });
     expect(remove).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(remove).toHaveAccessibleDescription(
+      "This skill has 3 associations and is in 1 skill collection. Remove them before deleting it."
+    );
     await user.hover(remove);
     expect(
       await screen.findByText(
-        "This skill has 3 associations and is in 1 skill collection. Remove them before deleting it."
+        "This skill has 3 associations and is in 1 skill collection. Remove them before deleting it.",
+        { selector: '[role="tooltip"] *' }
       )
     ).toBeInTheDocument();
   });
@@ -219,9 +224,15 @@ describe("SkillsPage", () => {
     );
     const remove = await screen.findByRole("menuitem", { name: "Delete" });
     expect(remove).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(remove).toHaveAccessibleDescription(
+      "Usage could not be checked. Try again later."
+    );
     await user.hover(remove);
     expect(
-      await screen.findByText("Usage could not be checked. Try again later.")
+      await screen.findByText("Usage could not be checked. Try again later.", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
   });
 

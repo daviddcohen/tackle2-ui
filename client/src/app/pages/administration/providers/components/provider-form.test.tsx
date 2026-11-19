@@ -218,6 +218,10 @@ describe("ProviderForm", () => {
     expect(
       screen.getByText("agentic.provider.pendingTitle")
     ).toBeInTheDocument();
+    // Only the reason, like the table: asking to fix the endpoint would
+    // contradict "being verified".
+    expect(screen.getByText("In progress.")).toBeInTheDocument();
+    expect(screen.queryByText(/agentic.provider.statusAlertAction/)).toBeNull();
     expect(screen.queryByText(/agentic.provider.lastVerified/)).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import type { ElementType } from "react";
 import { AxiosError } from "axios";
 import type { TooltipProps } from "@patternfly/react-core";
 
@@ -20,6 +21,7 @@ import {
   invalidTargetBranchReason,
 } from "@app/api/agentic/contract";
 import type { Application } from "@app/api/models";
+import { disabledMenuItemButton } from "@app/components/disabled-menu-item-button";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
 /**
@@ -37,12 +39,9 @@ export function isOperatorManaged(resource: {
 
 export interface DisabledActionProps {
   id?: string;
+  component?: ElementType;
   isAriaDisabled?: boolean;
-  tooltipProps?: {
-    content: string;
-    position?: TooltipProps["position"];
-    triggerRef?: () => HTMLElement;
-  };
+  tooltipProps?: { content: string; position?: TooltipProps["position"] };
 }
 
 /**
@@ -51,14 +50,14 @@ export interface DisabledActionProps {
  * kebab's Delete passes `position: "left"` so the tooltip does not cover
  * Edit.
  *
- * `triggerId` is for items of a PatternFly table `ActionsColumn`: it wraps the
- * whole list item in the tooltip, so the reason shows on hover only and is
- * never shown or announced when the item gets keyboard focus. With an id the
- * item's button carries it and the tooltip is bound to that button, so focus
- * shows it like a `Dropdown` item's tooltip. Screen readers may announce it
- * through the tooltip's polite live region (support varies by screen reader):
- * `ActionsColumn` gives no way to set `aria-describedby` on the button. Pass an
- * id unique on the page, such as `{tableName}-row-{id}-{action}`.
+ * Pass `triggerId` for an item of a PatternFly table `ActionsColumn` (a row
+ * kebab): that column puts `tooltipProps` around the whole list item, which
+ * never takes focus, so the reason would show on hover only and never be read
+ * out. With an id the item renders `disabledMenuItemButton` instead, which
+ * shows the same tooltip on hover and keyboard focus and carries the reason as
+ * its accessible description. The id must be unique on the page, such as
+ * `{tableName}-row-{id}-{action}`. Detail page Actions menus (PF `Dropdown`)
+ * bind `tooltipProps` to the item's button already and pass no id.
  */
 export function disabledActionProps(
   reason?: string,
@@ -66,16 +65,17 @@ export function disabledActionProps(
   triggerId?: string
 ): DisabledActionProps {
   if (reason == null) return {};
+  if (triggerId != null) {
+    return {
+      isAriaDisabled: true,
+      id: triggerId,
+      component: disabledMenuItemButton({ reason, position }),
+    };
+  }
   return {
     isAriaDisabled: true,
-    ...(triggerId != null && { id: triggerId }),
-    tooltipProps: {
-      content: reason,
-      ...(position != null && { position }),
-      ...(triggerId != null && {
-        triggerRef: () => document.getElementById(triggerId) as HTMLElement,
-      }),
-    },
+    tooltipProps:
+      position != null ? { content: reason, position } : { content: reason },
   };
 }
 
@@ -127,12 +127,18 @@ export function formatAge(creationTimestamp?: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
+/** 45s, 9m 5s, 2h 15m: hours from one hour on, without seconds. */
 export function formatDuration(seconds?: number): string {
   if (seconds == null) return "-";
   if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 /** Workflow-run status has no duration field — derive it from timestamps. */

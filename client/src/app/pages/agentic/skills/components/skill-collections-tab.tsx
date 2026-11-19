@@ -345,7 +345,9 @@ export const SkillCollectionsTab: React.FC = () => {
                                   ),
                                 ...managedActionProps(
                                   collection.operatorManaged,
-                                  managedTooltip
+                                  managedTooltip,
+                                  undefined,
+                                  `skill-collections-table-row-${collection.id}-edit`
                                 ),
                               },
                               { isSeparator: true },
@@ -358,7 +360,8 @@ export const SkillCollectionsTab: React.FC = () => {
                                 ...deleteActionProps(
                                   collection.operatorManaged
                                     ? managedTooltip
-                                    : deleteBlockedReason
+                                    : deleteBlockedReason,
+                                  `skill-collections-table-row-${collection.id}-delete`
                                 ),
                               },
                             ]}

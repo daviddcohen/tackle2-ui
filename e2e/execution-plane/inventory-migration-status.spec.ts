@@ -39,9 +39,11 @@ const secondLineByStatus: Record<string, RegExp | null> = {
   "Ready to start": null,
   Blocked: /^.+\.$/,
   "Review before start": /^.+\.$/,
-  // A pending run has no current stage yet: the plan alone.
-  Pending: /^[^·]+( · .+)?$/,
-  Running: /^.+ · .+$/,
+  // A pending run has no current stage yet: the plan alone. The space before
+  // the separator is non-breaking (\s matches it), so a narrow cell never
+  // starts a line with "·".
+  Pending: /^[^·]+(\s· .+)?$/,
+  Running: /^.+\s· .+$/,
   Failed: null,
   Succeeded: null,
 };

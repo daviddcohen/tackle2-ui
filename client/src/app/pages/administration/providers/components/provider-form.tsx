@@ -188,7 +188,14 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       >
         <Content>
           <Content component="p">
-            {[provider.statusReason, t("agentic.provider.statusAlertAction")]
+            {/* Same text as the Model providers table: asking to fix
+                the endpoint fits only an unreachable provider. */}
+            {[
+              provider.statusReason,
+              provider.verificationStatus === "unreachable"
+                ? t("agentic.provider.statusAlertAction")
+                : undefined,
+            ]
               .filter(Boolean)
               .join(" ")}
           </Content>

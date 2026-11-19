@@ -117,7 +117,7 @@ describe("PlanRunsTable", () => {
     // Its awaiting stage has no agent message to stop the clock: unknown.
     expect(cells(actionRequired)[5]).toBe("Unavailable");
     expect(cells(succeeded)[4]).toBe("2026-09-20 08:00");
-    expect(cells(succeeded)[5]).toBe("135m");
+    expect(cells(succeeded)[5]).toBe("2h 15m");
 
     // Every link carries the caller's origin; several applications open the run.
     expect(

@@ -8,6 +8,7 @@ import {
   Alert,
   Button,
   ButtonVariant,
+  Content,
   PageSection,
   Toolbar,
   ToolbarContent,
@@ -230,9 +231,11 @@ const TargetProfilesPage: React.FC = () => {
         <PageHeader
           title={leaf}
           description={
-            isAgenticEnabled
-              ? t("agentic.archetype.targetProfilesDescription")
-              : t("agentic.archetype.targetProfilesDescriptionWithoutPlans")
+            <Content component="p">
+              {isAgenticEnabled
+                ? t("agentic.archetype.targetProfilesDescription")
+                : t("agentic.archetype.targetProfilesDescriptionWithoutPlans")}
+            </Content>
           }
           breadcrumbs={breadcrumbs}
         />
@@ -327,7 +330,8 @@ const TargetProfilesPage: React.FC = () => {
                             isPlansError
                               ? t("agentic.archetype.plansNotLoaded")
                               : undefined,
-                            "left"
+                            "left",
+                            `target-profiles-table-row-${profile.id}-assign-plan`
                           ),
                         },
                       ]
@@ -378,7 +382,10 @@ const TargetProfilesPage: React.FC = () => {
                             openModalAfterMenuClose(() =>
                               setProfileToDelete(profile)
                             ),
-                          ...deleteActionProps(deleteBlocker),
+                          ...deleteActionProps(
+                            deleteBlocker,
+                            `target-profiles-table-row-${profile.id}-delete`
+                          ),
                         },
                       ]
                     : []),

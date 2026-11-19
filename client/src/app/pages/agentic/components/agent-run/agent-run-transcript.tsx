@@ -432,6 +432,8 @@ interface TranscriptRowProps {
   isExpanded: boolean;
   onToggle: (key: string) => void;
   isStageRunning: boolean;
+  /** False when no entry can expand: the table then has no toggle column. */
+  hasExpandColumn: boolean;
 }
 
 /**
@@ -446,6 +448,7 @@ const TranscriptRow = React.memo(function TranscriptRow({
   isExpanded: isExpandedKey,
   onToggle,
   isStageRunning,
+  hasExpandColumn,
 }: TranscriptRowProps) {
   const { t } = useTranslation();
   const columns = {
@@ -461,7 +464,7 @@ const TranscriptRow = React.memo(function TranscriptRow({
       <Tbody>
         <Tr>
           {/* Under the Time column, like every other row's text. */}
-          <Td />
+          {hasExpandColumn && <Td />}
           <Td colSpan={2} className={textStyles.textColorSubtle}>
             {t(`${KEY}.gap`, {
               duration: Number.isNaN(seconds)
@@ -491,7 +494,7 @@ const TranscriptRow = React.memo(function TranscriptRow({
             }}
           />
         ) : (
-          <Td />
+          hasExpandColumn && <Td />
         )}
         <Td dataLabel={columns.time} modifier="nowrap">
           <TimeCell at={entry.at} previous={previousAt} />
@@ -527,7 +530,13 @@ const TranscriptRow = React.memo(function TranscriptRow({
 const TranscriptTable: React.FC<{
   entries: TranscriptEntry[];
   isStageRunning: boolean;
-}> = ({ entries, isStageRunning }) => {
+  /**
+   * The toggle column. Fixed per table rather than derived from the entries,
+   * so a recording that gains its first expandable entry does not shift every
+   * row; live messages never expand, so their table has none.
+   */
+  hasExpandColumn: boolean;
+}> = ({ entries, isStageRunning, hasExpandColumn }) => {
   const { t } = useTranslation();
   const [expandedKeys, setExpandedKeys] = React.useState<string[]>([]);
   const toggle = React.useCallback(
@@ -543,10 +552,12 @@ const TranscriptTable: React.FC<{
       <Thead>
         <Tr>
           {/* As narrow as its toggle: free width goes to the entry. */}
-          <Th
-            modifier="fitContent"
-            screenReaderText={t(`${KEY}.rowExpansion`)}
-          />
+          {hasExpandColumn && (
+            <Th
+              modifier="fitContent"
+              screenReaderText={t(`${KEY}.rowExpansion`)}
+            />
+          )}
           <Th modifier="fitContent">{t(`${KEY}.time`)}</Th>
           <Th>{t(`${KEY}.entry`)}</Th>
         </Tr>
@@ -564,6 +575,7 @@ const TranscriptTable: React.FC<{
             isExpanded={expandedKeys.includes(key)}
             onToggle={toggle}
             isStageRunning={isStageRunning}
+            hasExpandColumn={hasExpandColumn}
           />
         );
       })}
@@ -700,7 +712,9 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
     );
     if (messages.length > 0) {
       // Not recorded, but the live session's messages are known: show them
-      // in the same table, after the sentence that says why.
+      // in the same table, after the sentence that says why. The
+      // View logs link next to it already points to the logs, so the
+      // sentence does not say so again.
       return withError(
         <Stack hasGutter>
           <StackItem>
@@ -723,6 +737,7 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
             <TranscriptTable
               entries={messageEntries}
               isStageRunning={phase === "Running"}
+              hasExpandColumn={false}
             />
           </StackItem>
         </Stack>
@@ -734,7 +749,9 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
         headingLevel="h2"
         titleText={t(`${KEY}.noTranscriptTitle`)}
       >
-        <EmptyStateBody>{body}</EmptyStateBody>
+        <EmptyStateBody>
+          {body} {t(`${KEY}.logsShowWhatAgentDid`)}
+        </EmptyStateBody>
         {onViewLogs != null && (
           <EmptyStateFooter>
             <EmptyStateActions>
@@ -769,6 +786,7 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
             <TranscriptTable
               entries={transcript.entries}
               isStageRunning={phase === "Running"}
+              hasExpandColumn
             />
           </div>
         ) : (

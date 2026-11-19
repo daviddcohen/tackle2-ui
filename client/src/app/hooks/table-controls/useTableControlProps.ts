@@ -8,7 +8,7 @@ import { useFilterPropHelpers } from "./filtering";
 import { usePaginationPropHelpers } from "./pagination";
 import { useSortPropHelpers } from "./sorting";
 import { ITableControls, IUseTableControlPropsArgs } from "./types";
-import { handlePropagatedRowClick } from "./utils";
+import { handlePropagatedRowClick, handlePropagatedRowKeyDown } from "./utils";
 
 /**
  * Returns derived state and prop helpers for all features. Used to make rendering the table components easier.
@@ -121,16 +121,18 @@ export const useTableControlProps = <
 
   const getTrProps: PropHelpers["getTrProps"] = ({ item, onRowClick }) => {
     const activeItemTrProps = getActiveItemTrProps({ item });
+    const handleRowClick = (event: React.KeyboardEvent | React.MouseEvent) => {
+      activeItemTrProps.onRowClick?.(event);
+      onRowClick?.(event);
+    };
     return {
       id: `${tableName}-row-item-${item[idProperty]}`,
       "data-item-id": item[idProperty],
       "data-item-name": dataNameProperty && item[dataNameProperty],
       ...(isActiveItemEnabled && activeItemTrProps),
-      onRowClick: (event) =>
-        handlePropagatedRowClick(event, () => {
-          activeItemTrProps.onRowClick?.(event);
-          onRowClick?.(event);
-        }),
+      onRowClick: (event) => handlePropagatedRowClick(event, handleRowClick),
+      // Overrides the keydown handler Tr derives from onRowClick (see handlePropagatedRowKeyDown).
+      onKeyDown: (event) => handlePropagatedRowKeyDown(event, handleRowClick),
     };
   };
 

@@ -86,40 +86,45 @@ export const OverflowActionMenu: FC<OverflowActionMenuProps> = ({
 
   return (
     <OverflowMenu breakpoint={breakpoint}>
-      <OverflowMenuContent isPersistent={isPersistent}>
-        <OverflowMenuGroup groupType="button" isPersistent={isPersistent}>
-          {sharedItems.map(
-            ({
-              itemKey,
-              title,
-              tooltipProps,
-              useOnlyIconWhenShared,
-              isPersistent,
-              ...rest
-            }) => (
-              <OverflowMenuItem key={itemKey} isPersistent={isPersistent}>
-                <ConditionalTooltip
-                  isTooltipEnabled={!!tooltipProps?.content}
-                  content={tooltipProps?.content}
-                >
-                  <Button
-                    onClick={rest.onClick}
-                    variant={rest.variant}
-                    aria-label={rest["aria-label"]}
-                    isAriaDisabled={rest.isAriaDisabled}
-                    isDisabled={rest.isDisabled}
-                    icon={rest.icon}
-                    ouiaId={rest.ouiaId}
-                    isDanger={rest.isDanger}
+      {/* An empty content group still takes part in the inline-flex baseline
+          and pushes the kebab below the row text, so render it only when it
+          has buttons. */}
+      {sharedItems.length > 0 && (
+        <OverflowMenuContent isPersistent={isPersistent}>
+          <OverflowMenuGroup groupType="button" isPersistent={isPersistent}>
+            {sharedItems.map(
+              ({
+                itemKey,
+                title,
+                tooltipProps,
+                useOnlyIconWhenShared,
+                isPersistent,
+                ...rest
+              }) => (
+                <OverflowMenuItem key={itemKey} isPersistent={isPersistent}>
+                  <ConditionalTooltip
+                    isTooltipEnabled={!!tooltipProps?.content}
+                    content={tooltipProps?.content}
                   >
-                    {useOnlyIconWhenShared ? null : title}
-                  </Button>
-                </ConditionalTooltip>
-              </OverflowMenuItem>
-            )
-          )}
-        </OverflowMenuGroup>
-      </OverflowMenuContent>
+                    <Button
+                      onClick={rest.onClick}
+                      variant={rest.variant}
+                      aria-label={rest["aria-label"]}
+                      isAriaDisabled={rest.isAriaDisabled}
+                      isDisabled={rest.isDisabled}
+                      icon={rest.icon}
+                      ouiaId={rest.ouiaId}
+                      isDanger={rest.isDanger}
+                    >
+                      {useOnlyIconWhenShared ? null : title}
+                    </Button>
+                  </ConditionalTooltip>
+                </OverflowMenuItem>
+              )
+            )}
+          </OverflowMenuGroup>
+        </OverflowMenuContent>
+      )}
       <OverflowMenuControl
         hasAdditionalOptions={items.length - sharedItems.length > 0}
       >

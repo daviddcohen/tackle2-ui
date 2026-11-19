@@ -435,7 +435,7 @@ describe("AgentRunTranscript", () => {
 
     expect(
       screen.getByText(
-        "Stages that require approval are not recorded. The logs show what the agent did. These are the agent's messages from the live session."
+        "Stages that require approval are not recorded. These are the agent's messages from the live session."
       )
     ).toBeInTheDocument();
     expect(
@@ -452,6 +452,13 @@ describe("AgentRunTranscript", () => {
     expect(rows[1]).toHaveTextContent(
       "21:21:00 (UTC 2026-11-16T21:21:00.000Z)Message from a userGo ahead."
     );
+    // Messages never expand, so there is no empty toggle column before Time.
+    expect(
+      within(screen.getByRole("grid", { name: "Transcript" }))
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent)
+    ).toEqual(["Time", "Entry"]);
+    expect(within(rows[0]).getAllByRole("cell")).toHaveLength(2);
     await user.click(screen.getByRole("button", { name: "View logs" }));
     expect(onViewLogs).toHaveBeenCalledTimes(1);
   });
