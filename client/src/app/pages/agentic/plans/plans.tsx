@@ -1,16 +1,15 @@
 import * as React from "react";
 import { LocationDescriptor } from "history";
 import { useTranslation } from "react-i18next";
-import { Link, generatePath } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Button,
   ButtonVariant,
   Content,
   Icon,
-  List,
-  ListItem,
+  Label,
+  LabelGroup,
   PageSection,
-  Popover,
   Skeleton,
   Stack,
   StackItem,
@@ -24,6 +23,7 @@ import { ExclamationTriangleIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
+  IAction,
   Table,
   Tbody,
   Td,
@@ -32,12 +32,12 @@ import {
   Tr,
 } from "@patternfly/react-table";
 
-import { DevPaths } from "@app/Paths";
 import {
   ConfigurationCheck,
   MigrationPlan,
   PlanRun,
   getPlanConfigurationChecks,
+  getShownPlanRun,
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
@@ -55,9 +55,9 @@ import {
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import {
-  archetypePath,
-  targetProfilePath,
-} from "@app/pages/agentic/entity-paths";
+  applicationDetailsPath,
+  planRunPath,
+} from "@app/pages/applications/components/agentic-migration/paths";
 import {
   useFetchAgents,
   useFetchGateways,
@@ -65,19 +65,33 @@ import {
   useFetchPlanRuns,
 } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
-import { deleteActionProps, managedActionProps } from "@app/utils/agentic";
-import { openModalAfterMenuClose } from "@app/utils/utils";
+import {
+  deleteActionProps,
+  disabledActionProps,
+  managedActionProps,
+} from "@app/utils/agentic";
+import { openModalAfterMenuClose, universalComparator } from "@app/utils/utils";
 
+import { RunStatus, statusPresentation } from "../components/agentic-status";
 import { CountLink } from "../components/count-link";
+import { useRunMigrationPlanLauncher } from "../components/run-migration-plan-launcher";
 
 import {
   getPlanDeleteBlocker,
   useDeletePlanDialog,
 } from "./components/plan-delete";
 import { planApplicationsLocation, planPath } from "./components/plan-paths";
+import { getRunBlocker, preflightPlanOf } from "./components/plan-run-blocker";
 import { PlanWizard } from "./plan-wizard/plan-wizard";
 
 type LinkTo = (pathname: string) => LocationDescriptor;
+
+/** Page-unique id of a row menu item, so its disabled reason shows on focus. */
+const rowActionId = (plan: MigrationPlan, action: string) =>
+  `migration-plans-table-row-${plan.id}-${action}`;
+
+/** Archetype filter value of the plans without a migration path. */
+const NOT_ASSIGNED = "notAssigned";
 
 /**
  * Name with the attention marker: a warning icon after the name
@@ -123,51 +137,67 @@ const PlanNameCell: React.FC<{
   );
 };
 
-/** One target profile is its name; several are a count that opens their list. */
-const TargetProfilesCell: React.FC<{
+/**
+ * The plan's applications in name order, two shown and "{n} more" for the
+ * rest, each a link to the application. A server that only
+ * counts them gets the count, which opens the filtered inventory.
+ */
+const ApplicationsCell: React.FC<{
   plan: MigrationPlan;
   linkTo: LinkTo;
-}> = ({ plan, linkTo }) => {
+  linkCrumbs: Parameters<typeof planApplicationsLocation>[1];
+}> = ({ plan, linkTo, linkCrumbs }) => {
   const { t } = useTranslation();
-  const path = plan.migrationPath;
-  if (path == null) {
-    // The real adapters do not report the path yet: unknown, not empty.
+  const impact = plan.applicationImpact;
+  if (impact == null) {
     return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
   }
-  if (path.targetProfiles.length === 0) {
+  if (impact.matching === 0 || impact.applications?.length === 0) {
     return <EmptyTextMessage message={t("terms.none")} />;
   }
-  const profileLink = (profileId: number) =>
-    linkTo(targetProfilePath(path.archetype.id, profileId));
-  if (path.targetProfiles.length === 1) {
-    const [profile] = path.targetProfiles;
-    return <Link to={profileLink(profile.id)}>{profile.name}</Link>;
+  if (impact.applications == null) {
+    return (
+      <CountLink to={planApplicationsLocation(plan.id, linkCrumbs)}>
+        {t("agentic.plan.applicationCount", { count: impact.matching })}
+      </CountLink>
+    );
   }
   return (
-    <Popover
-      bodyContent={
-        <List isPlain>
-          {path.targetProfiles.map((profile) => (
-            <ListItem key={profile.id}>
-              <Link to={profileLink(profile.id)}>{profile.name}</Link>
-            </ListItem>
-          ))}
-        </List>
-      }
+    <LabelGroup
+      numLabels={2}
+      aria-label={t("agentic.plan.applicationsOfPlan", { plan: plan.name })}
+      collapsedText={t("agentic.plan.moreApplications", {
+        count: impact.applications.length - 2,
+      })}
+      expandedText={t("terms.showLess")}
     >
-      <Button variant="link" isInline className={textStyles.textNowrap}>
-        {t("agentic.plan.targetProfileCount", {
-          count: path.targetProfiles.length,
-        })}
-      </Button>
-    </Popover>
+      {impact.applications.map((application) => (
+        <Label
+          key={application.id}
+          variant="outline"
+          isCompact
+          textMaxWidth="18ch"
+          render={({ className, content, componentRef }) => (
+            <Link
+              to={linkTo(applicationDetailsPath(application.id))}
+              className={className}
+              ref={componentRef}
+            >
+              {content}
+            </Link>
+          )}
+        >
+          {application.name}
+        </Label>
+      ))}
+    </LabelGroup>
   );
 };
 
 /**
- * Runs of the plan: one run is its name, several are a
- * count opening the Runs tab. The single run's name needs the runs query;
- * until it answers the cell is a skeleton, and without it the count stays.
+ * The status of the plan's shown run (`getShownPlanRun`), linked to that
+ * run, with "{n} runs" below when there are several. Only this cell waits
+ * for the runs query.
  */
 const RunsCell: React.FC<{
   plan: MigrationPlan;
@@ -176,34 +206,31 @@ const RunsCell: React.FC<{
   linkTo: LinkTo;
 }> = ({ plan, runs, isLoadingRuns, linkTo }) => {
   const { t } = useTranslation();
-  const count = plan.runCount;
-  if (count == null) {
+  if (isLoadingRuns) {
+    return <Skeleton screenreaderText={t("terms.loading")} />;
+  }
+  if (runs == null) {
     return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
   }
-  if (count === 0) {
-    return <EmptyTextMessage message={t("terms.none")} />;
+  const shown = getShownPlanRun(runs, plan.id);
+  if (shown == null) {
+    return <EmptyTextMessage message={t("agentic.plan.notRun")} />;
   }
-  if (count === 1) {
-    if (isLoadingRuns) {
-      return <Skeleton screenreaderText={t("terms.loading")} />;
-    }
-    const run = runs?.find((candidate) => candidate.planId === plan.id);
-    if (run != null) {
-      return (
-        <Link
-          to={linkTo(
-            generatePath(DevPaths.planRunDetails, { runId: String(run.id) })
-          )}
-        >
-          {run.name}
-        </Link>
-      );
-    }
-  }
+  const count = runs.filter((run) => run.planId === plan.id).length;
   return (
-    <CountLink to={linkTo(planPath(plan.id, "runs"))}>
-      {t("agentic.plan.runCount", { count })}
-    </CountLink>
+    <RunStatus
+      status={shown.status}
+      to={linkTo(planRunPath(shown.id))}
+      linkAriaLabel={t("agentic.plan.runStatusLabel", {
+        status: t(
+          statusPresentation.run[shown.status]?.labelKey ?? shown.status
+        ),
+        run: shown.name,
+      })}
+      supportingText={
+        count > 1 ? t("agentic.plan.runCount", { count }) : undefined
+      }
+    />
   );
 };
 
@@ -211,6 +238,9 @@ const MigrationPlansPage: React.FC = () => {
   const { t } = useTranslation();
   const { to, linkCrumbs } = useBreadcrumbs(t("sidebar.plans"), []);
   const canManagePlans = useHasSomeScopes(plansWriteScopes);
+  const launcher = useRunMigrationPlanLauncher({ linkCrumbs });
+  const canRunPlans = launcher.open != null;
+  const hasRowActions = canManagePlans || canRunPlans;
 
   const { requestDelete, dialog: deleteDialog } = useDeletePlanDialog();
 
@@ -249,6 +279,22 @@ const MigrationPlansPage: React.FC = () => {
         )
       : [];
 
+  // The archetypes of the listed plans, by name.
+  const archetypeOptions = [
+    ...new Map(
+      migrationPlans.flatMap((plan) =>
+        plan.migrationPath != null
+          ? [[plan.migrationPath.archetype.id, plan.migrationPath.archetype]]
+          : []
+      )
+    ).values(),
+  ]
+    .sort((a, b) => universalComparator(a.name, b.name))
+    .map((archetype) => ({
+      value: String(archetype.id),
+      label: archetype.name,
+    }));
+
   const tableControls = useLocalTableControls({
     persistTo: "urlParams",
     persistenceKeyPrefix: "plans",
@@ -258,15 +304,13 @@ const MigrationPlansPage: React.FC = () => {
     items: migrationPlans,
     columnNames: {
       name: t("terms.name"),
-      archetype: t("terms.archetype"),
-      targetProfiles: t("terms.targetProfiles"),
       applications: t("terms.applications"),
       runs: t("agentic.plan.runs"),
     },
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    hasActionsColumn: canManagePlans,
+    hasActionsColumn: hasRowActions,
     filterCategories: [
       {
         categoryKey: "name",
@@ -275,13 +319,26 @@ const MigrationPlansPage: React.FC = () => {
         placeholderText: t("agentic.plan.filterByName"),
         getItemValue: (item) => item?.name || "",
       },
+      {
+        categoryKey: "archetype",
+        title: t("terms.archetype"),
+        type: FilterType.multiselect,
+        placeholderText: t("agentic.plan.filterByArchetype"),
+        selectOptions: [
+          ...archetypeOptions,
+          { value: NOT_ASSIGNED, label: t("agentic.execution.notAssigned") },
+        ],
+        matcher: (filter: string, item: MigrationPlan) =>
+          filter === NOT_ASSIGNED
+            ? item.migrationPath == null
+            : String(item.migrationPath?.archetype.id) === filter,
+      },
     ],
     initialItemsPerPage: 10,
-    sortableColumns: ["name", "archetype"],
+    sortableColumns: ["name"],
     initialSort: { columnKey: "name", direction: "asc" },
     getSortValues: (item) => ({
       name: item?.name || "",
-      archetype: item?.migrationPath?.archetype.name || "",
     }),
     isLoading: isFetching,
   });
@@ -301,6 +358,63 @@ const MigrationPlansPage: React.FC = () => {
     },
     expansionDerivedState: { isCellExpanded },
   } = tableControls;
+
+  // Edit, Run migration plan, a separator and Delete; each only with its scope.
+  const rowActions = (plan: MigrationPlan): IAction[] => [
+    ...(canManagePlans
+      ? [
+          {
+            title: t("actions.edit"),
+            onClick: () => {
+              openModalAfterMenuClose(() => {
+                setPlanToEdit(plan);
+                setIsWizardOpen(true);
+              });
+            },
+            ...managedActionProps(
+              plan.operatorManaged,
+              t("agentic.common.managedByKonveyor"),
+              undefined,
+              rowActionId(plan, "edit")
+            ),
+          },
+        ]
+      : []),
+    ...(launcher.open != null
+      ? [
+          {
+            title: t("agentic.execution.startMigration"),
+            onClick: () =>
+              openModalAfterMenuClose(() =>
+                launcher.open?.(
+                  plan.applicationImpact?.applications ?? [],
+                  preflightPlanOf(plan)
+                )
+              ),
+            ...disabledActionProps(
+              getRunBlocker(plan, canManagePlans, t),
+              "left",
+              rowActionId(plan, "run")
+            ),
+          },
+        ]
+      : []),
+    ...(canManagePlans
+      ? [
+          { isSeparator: true },
+          {
+            title: t("actions.delete"),
+            onClick: () => openModalAfterMenuClose(() => requestDelete(plan)),
+            ...deleteActionProps(
+              plan.operatorManaged
+                ? t("agentic.common.managedByKonveyor")
+                : getPlanDeleteBlocker(plan, t),
+              rowActionId(plan, "delete")
+            ),
+          },
+        ]
+      : []),
+  ];
 
   const closeWizard = () => {
     setIsWizardOpen(false);
@@ -366,11 +480,22 @@ const MigrationPlansPage: React.FC = () => {
                 <Tr>
                   <TableHeaderContentWithControls {...tableControls}>
                     <Th {...getThProps({ columnKey: "name" })} />
-                    <Th {...getThProps({ columnKey: "archetype" })} />
-                    <Th {...getThProps({ columnKey: "targetProfiles" })} />
-                    <Th {...getThProps({ columnKey: "applications" })} />
-                    <Th {...getThProps({ columnKey: "runs" })} />
-                    {canManagePlans && (
+                    <Th
+                      {...getThProps({ columnKey: "applications" })}
+                      info={{
+                        popover: t("agentic.plan.applicationsHelp"),
+                        ariaLabel: t("agentic.plan.applicationsHelpLabel"),
+                        popoverProps: {
+                          closeBtnAriaLabel: t("actions.close"),
+                          "aria-label": t("agentic.plan.applicationsHelpLabel"),
+                        },
+                      }}
+                    />
+                    <Th
+                      {...getThProps({ columnKey: "runs" })}
+                      modifier="fitContent"
+                    />
+                    {hasRowActions && (
                       <Th screenReaderText={t("actions.rowActions")} />
                     )}
                   </TableHeaderContentWithControls>
@@ -427,43 +552,22 @@ const MigrationPlansPage: React.FC = () => {
                             linkTo={to}
                           />
                         </Td>
-                        <Td {...getTdProps({ columnKey: "archetype" })}>
-                          {plan.migrationPath ? (
-                            <Link
-                              to={to(
-                                archetypePath(plan.migrationPath.archetype.id)
-                              )}
-                            >
-                              {plan.migrationPath.archetype.name}
-                            </Link>
-                          ) : (
-                            <EmptyTextMessage
-                              message={t("agentic.common.unavailable")}
-                            />
-                          )}
+                        {/* The width sits on the cells: on a Th with info, PF
+                            also applies it to the header text, which truncates. */}
+                        <Td
+                          {...getTdProps({ columnKey: "applications" })}
+                          width={45}
+                        >
+                          <ApplicationsCell
+                            plan={plan}
+                            linkTo={to}
+                            linkCrumbs={linkCrumbs}
+                          />
                         </Td>
-                        <Td {...getTdProps({ columnKey: "targetProfiles" })}>
-                          <TargetProfilesCell plan={plan} linkTo={to} />
-                        </Td>
-                        <Td {...getTdProps({ columnKey: "applications" })}>
-                          {plan.applicationImpact == null ? (
-                            <EmptyTextMessage
-                              message={t("agentic.common.unavailable")}
-                            />
-                          ) : plan.applicationImpact.matching === 0 ? (
-                            <EmptyTextMessage message={t("terms.none")} />
-                          ) : (
-                            // A count even at 1: the plan has no application refs.
-                            <CountLink
-                              to={planApplicationsLocation(plan.id, linkCrumbs)}
-                            >
-                              {t("agentic.plan.applicationCount", {
-                                count: plan.applicationImpact.matching,
-                              })}
-                            </CountLink>
-                          )}
-                        </Td>
-                        <Td {...getTdProps({ columnKey: "runs" })}>
+                        <Td
+                          {...getTdProps({ columnKey: "runs" })}
+                          modifier="nowrap"
+                        >
                           <RunsCell
                             plan={plan}
                             runs={runsFetchError == null ? planRuns : undefined}
@@ -471,38 +575,9 @@ const MigrationPlansPage: React.FC = () => {
                             linkTo={to}
                           />
                         </Td>
-                        {canManagePlans && (
+                        {hasRowActions && (
                           <Td isActionCell>
-                            <ActionsColumn
-                              items={[
-                                {
-                                  title: t("actions.edit"),
-                                  onClick: () => {
-                                    openModalAfterMenuClose(() => {
-                                      setPlanToEdit(plan);
-                                      setIsWizardOpen(true);
-                                    });
-                                  },
-                                  ...managedActionProps(
-                                    plan.operatorManaged,
-                                    t("agentic.common.managedByKonveyor")
-                                  ),
-                                },
-                                { isSeparator: true },
-                                {
-                                  title: t("actions.delete"),
-                                  onClick: () =>
-                                    openModalAfterMenuClose(() =>
-                                      requestDelete(plan)
-                                    ),
-                                  ...deleteActionProps(
-                                    plan.operatorManaged
-                                      ? t("agentic.common.managedByKonveyor")
-                                      : getPlanDeleteBlocker(plan, t)
-                                  ),
-                                },
-                              ]}
-                            />
+                            <ActionsColumn items={rowActions(plan)} />
                           </Td>
                         )}
                       </TableRowContentWithControls>
@@ -527,6 +602,7 @@ const MigrationPlansPage: React.FC = () => {
       />
 
       {deleteDialog}
+      {launcher.modal}
     </>
   );
 };

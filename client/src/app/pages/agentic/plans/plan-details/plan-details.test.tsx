@@ -115,7 +115,10 @@ const useEndpoints = (
       res(ctx.json(models))
     ),
     rest.get(AGENTIC_ENDPOINTS.planRuns, (_req, res, ctx) => res(ctx.json([]))),
-    rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.json([])))
+    rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.json([]))),
+    rest.get(AGENTIC_ENDPOINTS.applicationMigrations, (_req, res, ctx) =>
+      res(ctx.json({}))
+    )
   );
 
 const renderAt = (url = "/migration-plans/1") => {
@@ -389,7 +392,7 @@ describe("PlanDetailsPage", () => {
     });
   });
 
-  it("has no Actions menu and no start sentence without the write scopes", async () => {
+  it("has no Actions menu without the write scopes", async () => {
     mockGrantedScopes.all = false;
     mockGrantedScopes.scopes = ["agentic.workflows:get"];
     useEndpoints({ ...plan, runCount: 1 });
@@ -421,8 +424,75 @@ describe("PlanDetailsPage", () => {
     ).toBeNull();
   });
 
-  it("says No runs yet with a link to the inventory when the plan has no runs", async () => {
-    useEndpoints(plan);
+  const runnable: MigrationPlan = {
+    ...plan,
+    applicationImpact: {
+      matching: 2,
+      applications: [
+        { id: 2, name: "Billing" },
+        { id: 1, name: "Customer Management" },
+      ],
+    },
+  };
+  const runItemName = "agentic.execution.startMigration";
+  const openActions = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(
+      await screen.findByRole("button", { name: "agentic.common.actions" })
+    );
+
+  it("lists Run migration plan between Edit and Delete and opens the dialog on the plan", async () => {
+    const user = userEvent.setup();
+    useEndpoints(runnable);
+    renderAt();
+    await openActions(user);
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual(["actions.edit", runItemName, "actions.delete"]);
+    const runItem = screen.getByRole("menuitem", { name: runItemName });
+    expect(runItem).not.toHaveAttribute("aria-disabled", "true");
+    await user.click(runItem);
+    const dialog = await screen.findByRole("dialog", { name: runItemName });
+    expect(
+      within(dialog).getByText(
+        "agentic.execution.preflightDescriptionPlanProfile"
+      )
+    ).toBeInTheDocument();
+    expect(
+      await within(dialog).findByRole("link", { name: "Billing" })
+    ).toBeInTheDocument();
+  });
+
+  it("disables Run migration plan with the reason", async () => {
+    const user = userEvent.setup();
+    useEndpoints({ ...runnable, migrationPath: undefined });
+    renderAt();
+    await openActions(user);
+    const runItem = screen.getByRole("menuitem", { name: runItemName });
+    expect(runItem).toHaveAttribute("aria-disabled", "true");
+    await user.hover(runItem);
+    expect(
+      await screen.findByText("agentic.plan.runBlocked.notAssigned")
+    ).toBeInTheDocument();
+  });
+
+  it("offers only Run migration plan with the run scope alone", async () => {
+    const user = userEvent.setup();
+    mockGrantedScopes.all = false;
+    mockGrantedScopes.scopes = [
+      "agentic.workflows:get",
+      "agentic.workflowruns:post",
+    ];
+    useEndpoints(runnable);
+    renderAt();
+    await openActions(user);
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual([runItemName]);
+  });
+
+  it("says No runs yet and offers Run migration plan when the plan has no runs", async () => {
+    const user = userEvent.setup();
+    useEndpoints(runnable);
     renderAt("/migration-plans/1?tab=runs");
     expect(
       await screen.findByText("agentic.planDetail.runsEmptyTitle")
@@ -430,9 +500,71 @@ describe("PlanDetailsPage", () => {
     expect(
       screen.getByRole("heading", { name: "agentic.planDetail.runsTitleEmpty" })
     ).toBeInTheDocument();
+    const runButton = screen.getByRole("button", { name: runItemName });
+    expect(runButton).toHaveClass("pf-m-link");
+    await user.click(runButton);
     expect(
-      screen.getByRole("link", { name: "agentic.planDetail.goToInventory" })
-    ).toHaveAttribute("href", expect.stringMatching(/^\/applications/));
+      await screen.findByRole("dialog", { name: runItemName })
+    ).toBeInTheDocument();
+  });
+
+  it("disables the empty state's Run migration plan with the reason", async () => {
+    const user = userEvent.setup();
+    useEndpoints({ ...runnable, stages: [] });
+    renderAt("/migration-plans/1?tab=runs");
+    const runButton = await screen.findByRole("button", { name: runItemName });
+    expect(runButton).toHaveAttribute("aria-disabled", "true");
+    await user.hover(runButton);
+    expect(
+      await screen.findByText("agentic.plan.runBlocked.noStagesEdit")
+    ).toBeInTheDocument();
+  });
+
+  it("offers Edit and Delete but no Run with the plan scope alone", async () => {
+    const user = userEvent.setup();
+    mockGrantedScopes.all = false;
+    mockGrantedScopes.scopes = [
+      "agentic.workflows:get",
+      "agentic.workflows:post",
+      "agentic.workflows:put",
+      "agentic.workflows:delete",
+    ];
+    useEndpoints(runnable);
+    renderAt();
+    await openActions(user);
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual(["actions.edit", "actions.delete"]);
+    expect(
+      within(screen.getByRole("menu")).getByRole("separator")
+    ).toBeInTheDocument();
+  });
+
+  it("offers no run in the Runs tab with the plan scope alone", async () => {
+    mockGrantedScopes.all = false;
+    mockGrantedScopes.scopes = [
+      "agentic.workflows:get",
+      "agentic.workflows:post",
+      "agentic.workflows:put",
+      "agentic.workflows:delete",
+    ];
+    useEndpoints(runnable);
+    renderAt("/migration-plans/1?tab=runs");
+    expect(
+      await screen.findByText("agentic.planDetail.runsEmptyTitle")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: runItemName })).toBeNull();
+  });
+
+  it("offers no run in the empty state without the run scope", async () => {
+    mockGrantedScopes.all = false;
+    mockGrantedScopes.scopes = ["agentic.workflows:get"];
+    useEndpoints(runnable);
+    renderAt("/migration-plans/1?tab=runs");
+    expect(
+      await screen.findByText("agentic.planDetail.runsEmptyTitle")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: runItemName })).toBeNull();
   });
 
   it("shows the runs table spinner, then its error row when runs fail to load", async () => {

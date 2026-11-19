@@ -1,6 +1,6 @@
 import * as React from "react";
 import { flushSync } from "react-dom";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { Link, generatePath, useHistory, useParams } from "react-router-dom";
 import {
   Button,
@@ -16,7 +16,6 @@ import {
   Tabs,
   Tooltip,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths } from "@app/Paths";
@@ -52,7 +51,7 @@ import {
   useFetchPlanRuns,
   useResolvePlanSkills,
 } from "@app/queries/agentic";
-import { agenticWorkflowRunsWriteScopes, plansWriteScopes } from "@app/scopes";
+import { plansWriteScopes } from "@app/scopes";
 
 import { ConfigurationStatus } from "../../components/agentic-status";
 import { CountLink } from "../../components/count-link";
@@ -64,6 +63,7 @@ import {
   SectionEmpty,
 } from "../../components/detail-section";
 import { PlanRunsTable } from "../../components/plan-runs-table";
+import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import {
   SkillsTable,
   planSkillRows,
@@ -75,6 +75,7 @@ import {
   useDeletePlanDialog,
 } from "../components/plan-delete";
 import { planApplicationsLocation } from "../components/plan-paths";
+import { getRunBlocker, preflightPlanOf } from "../components/plan-run-blocker";
 import { StagesTable } from "../components/stages-table";
 import { PlanWizard } from "../plan-wizard/plan-wizard";
 
@@ -146,7 +147,6 @@ const TargetProfilesFact: React.FC<{
 const PlanDetailsPage: React.FC = () => {
   const { t } = useTranslation();
   const canManagePlans = useHasSomeScopes(plansWriteScopes);
-  const canRunPlans = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
   const canOpenAdministration = useHasSomeScopes(adminViewScopes);
   const canReadModels = useHasSomeScopes(modelsReadScopes);
   const canViewModels = canOpenAdministration && canReadModels;
@@ -213,9 +213,7 @@ const PlanDetailsPage: React.FC = () => {
       },
     ]
   );
-  const inventoryLink = useLinkComponent(
-    breadcrumbTo(DevPaths.applications, "", planChildCrumbs)
-  );
+  const launcher = useRunMigrationPlanLauncher({ linkCrumbs: planChildCrumbs });
 
   if (!migrationPlan) {
     if (isLoading) {
@@ -246,6 +244,16 @@ const PlanDetailsPage: React.FC = () => {
     loadedAgents,
     loadedModels
   );
+  const runBlockedReason = getRunBlocker(migrationPlan, canManagePlans, t);
+  // Runs the plan's own applications, the plan fixed (undefined without the run scope).
+  const runPlan =
+    launcher.open != null
+      ? () =>
+          launcher.open?.(
+            impact?.applications ?? [],
+            preflightPlanOf(migrationPlan)
+          )
+      : undefined;
   const notEvaluatedDetails = configurationChecks
     .filter((check) => check.status === "notEvaluated")
     .map((check) => t(check.detailKey, check.detailValues))
@@ -350,10 +358,26 @@ const PlanDetailsPage: React.FC = () => {
             ) : undefined
           }
           btnActions={
-            canManagePlans ? (
+            canManagePlans || runPlan != null ? (
               <EntityDetailActions
-                onEdit={() => setIsEditOpen(true)}
-                onDelete={() => requestDelete(migrationPlan)}
+                items={
+                  runPlan != null
+                    ? [
+                        {
+                          key: "run",
+                          label: t("agentic.execution.startMigration"),
+                          onClick: runPlan,
+                          disabledReason: runBlockedReason,
+                        },
+                      ]
+                    : []
+                }
+                onEdit={canManagePlans ? () => setIsEditOpen(true) : undefined}
+                onDelete={
+                  canManagePlans
+                    ? () => requestDelete(migrationPlan)
+                    : undefined
+                }
                 deleteDisabledReason={getPlanDeleteBlocker(migrationPlan, t)}
                 managedReason={
                   migrationPlan.operatorManaged
@@ -497,20 +521,29 @@ const PlanDetailsPage: React.FC = () => {
             <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
               <EmptyState
                 headingLevel="h3"
-                icon={CubesIcon}
                 titleText={t("agentic.planDetail.runsEmptyTitle")}
-                variant="sm"
+                variant="xs"
               >
                 <EmptyStateBody>
                   {t("agentic.planDetail.runsEmptyDescription")}
                 </EmptyStateBody>
-                <EmptyStateFooter>
-                  <EmptyStateActions>
-                    <Button variant="link" component={inventoryLink}>
-                      {t("agentic.planDetail.goToInventory")}
-                    </Button>
-                  </EmptyStateActions>
-                </EmptyStateFooter>
+                {runPlan != null && (
+                  <EmptyStateFooter>
+                    <EmptyStateActions>
+                      {runBlockedReason != null ? (
+                        <Tooltip content={runBlockedReason}>
+                          <Button variant="link" isAriaDisabled>
+                            {t("agentic.execution.startMigration")}
+                          </Button>
+                        </Tooltip>
+                      ) : (
+                        <Button variant="link" onClick={runPlan}>
+                          {t("agentic.execution.startMigration")}
+                        </Button>
+                      )}
+                    </EmptyStateActions>
+                  </EmptyStateFooter>
+                )}
               </EmptyState>
             </DetailSection>
           ) : (
@@ -518,26 +551,7 @@ const PlanDetailsPage: React.FC = () => {
               title={t("agentic.planDetail.runsTitle", {
                 count: planRuns.length,
               })}
-              description={
-                canRunPlans ? (
-                  <Trans
-                    i18nKey="agentic.planDetail.runsDescriptionWithStart"
-                    components={{
-                      inventoryLink: (
-                        <Link
-                          to={breadcrumbTo(
-                            DevPaths.applications,
-                            "",
-                            planChildCrumbs
-                          )}
-                        />
-                      ),
-                    }}
-                  />
-                ) : (
-                  t("agentic.planDetail.runsDescription")
-                )
-              }
+              description={t("agentic.planDetail.runsDescription")}
             >
               <PlanRunsTable
                 runs={planRuns}
@@ -558,6 +572,7 @@ const PlanDetailsPage: React.FC = () => {
         onClose={() => setIsEditOpen(false)}
       />
       {deleteDialog}
+      {launcher.modal}
     </>
   );
 };

@@ -69,7 +69,7 @@ import {
   skillAssociations,
   startVerification,
 } from "./db";
-import { planImpact, runsUsingPlan } from "./execution";
+import { planApplications, planImpact, runsUsingPlan } from "./execution";
 
 const NAME_MAX = 120;
 const DESCRIPTION_MAX = 500;
@@ -755,7 +755,10 @@ export const presentPlan = (plan: StoredPlan): MigrationPlan => ({
     : undefined,
   effectiveSkills: effectiveSkillsForPlan(plan),
   ...presentExcludedSkills(plan),
-  applicationImpact: { matching: planImpact(plan.id) },
+  applicationImpact: {
+    matching: planImpact(plan.id),
+    applications: planApplications(plan.id),
+  },
   runCount: runsUsingPlan(plan.id).length,
 });
 

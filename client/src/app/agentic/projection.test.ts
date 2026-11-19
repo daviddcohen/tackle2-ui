@@ -8,6 +8,7 @@ import {
   getMigrationDisplayStatus,
   getOrderedStageRuns,
   getPlanConfigurationChecks,
+  getShownPlanRun,
   getStageDefinition,
   getStagesWithUnverifiedModel,
   isActivePlanRun,
@@ -235,5 +236,136 @@ describe("run helpers", () => {
       requiresApproval: true,
       order: 1,
     });
+  });
+});
+
+describe("getShownPlanRun", () => {
+  const run = (
+    id: string,
+    status: PlanRun["status"],
+    startedAt: string,
+    planId = "1"
+  ): PlanRun => ({
+    id,
+    name: `Run #${id}`,
+    planId,
+    planName: "Plan",
+    applications: [],
+    status,
+    targetBranch: "main",
+    startedAt,
+    stageRuns: [],
+  });
+
+  it("is undefined without runs of the plan", () => {
+    expect(getShownPlanRun([], "1")).toBeUndefined();
+    expect(
+      getShownPlanRun([run("1", "Failed", "2026-01-01", "2")], "1")
+    ).toBeUndefined();
+  });
+
+  it("shows a newer failure over an older running run", () => {
+    expect(
+      getShownPlanRun(
+        [run("1", "Running", "2026-01-01"), run("2", "Failed", "2026-01-02")],
+        "1"
+      )?.id
+    ).toBe("2");
+  });
+
+  it("shows a newer retry over an older failure", () => {
+    expect(
+      getShownPlanRun(
+        [run("1", "Failed", "2026-01-01"), run("2", "Running", "2026-01-02")],
+        "1"
+      )?.id
+    ).toBe("2");
+  });
+
+  it("counts a queued pending run as the newest", () => {
+    expect(
+      getShownPlanRun(
+        [
+          run("1", "Pending", "2026-01-01"),
+          run("2", "Succeeded", "2026-01-03"),
+        ],
+        "1"
+      )?.id
+    ).toBe("1");
+  });
+
+  it("sorts a run without a readable start last", () => {
+    expect(
+      getShownPlanRun(
+        [run("1", "Failed", ""), run("2", "Succeeded", "2026-01-02")],
+        "1"
+      )?.id
+    ).toBe("2");
+    expect(
+      getShownPlanRun(
+        [run("2", "Succeeded", "2026-01-02"), run("1", "Failed", "")],
+        "1"
+      )?.id
+    ).toBe("2");
+  });
+
+  it("shows a newer success over an older running run", () => {
+    expect(
+      getShownPlanRun(
+        [
+          run("1", "Running", "2026-01-01"),
+          run("2", "Succeeded", "2026-01-02"),
+        ],
+        "1"
+      )?.id
+    ).toBe("2");
+  });
+
+  it("keeps an older run that needs action over a newer running or succeeded one", () => {
+    for (const newer of ["Running", "Succeeded"] as const) {
+      expect(
+        getShownPlanRun(
+          [
+            run("1", "AwaitingApproval", "2026-01-01"),
+            run("2", newer, "2026-01-02"),
+          ],
+          "1"
+        )?.id
+      ).toBe("1");
+    }
+  });
+
+  it("shows a run that needs action over a failure, whichever is newer", () => {
+    expect(
+      getShownPlanRun(
+        [
+          run("1", "Failed", "2026-01-01"),
+          run("2", "AwaitingApproval", "2026-01-02"),
+        ],
+        "1"
+      )?.id
+    ).toBe("2");
+    expect(
+      getShownPlanRun(
+        [
+          run("1", "AwaitingApproval", "2026-01-01"),
+          run("2", "Failed", "2026-01-02"),
+        ],
+        "1"
+      )?.id
+    ).toBe("1");
+  });
+
+  it("shows a run that needs action over any newer run", () => {
+    expect(
+      getShownPlanRun(
+        [
+          run("1", "AwaitingApproval", "2026-01-01"),
+          run("2", "AwaitingApproval", "2026-01-02"),
+          run("3", "Failed", "2026-01-03"),
+        ],
+        "1"
+      )?.id
+    ).toBe("2");
   });
 });

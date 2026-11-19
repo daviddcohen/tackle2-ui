@@ -153,6 +153,22 @@ describe("useRunMigrationPlanLauncher", () => {
     expect(modalProps()?.applications).toEqual([run.applications[1]]);
   });
 
+  it("passes a fixed plan only when open is given one", () => {
+    const { result } = launch({});
+    act(() => result.current.open?.(run.applications));
+    expect(modalProps()?.plan).toBeUndefined();
+
+    const plan = { id: "3", name: "Java EE lift and shift" };
+    act(() => result.current.open?.([run.applications[0]], plan));
+    expect(modalProps()?.applications).toEqual([run.applications[0]]);
+    expect(modalProps()?.plan).toEqual(plan);
+    expect(modalProps()?.initialValues).toBeUndefined();
+
+    // Reopening without a plan drops it.
+    act(() => result.current.open?.(run.applications));
+    expect(modalProps()?.plan).toBeUndefined();
+  });
+
   it("treats a click event as no applications", () => {
     const { result } = launch({ applications: [run.applications[0]] });
     act(() =>

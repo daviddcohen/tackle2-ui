@@ -413,6 +413,7 @@ contain it (the reverse lookups of section 5).
 | `migrationPath`, `effectiveSkills`, `applicationImpact` | no source                                                           |                                                                                           |
 | `excludedSkills` (request `IdRef[]`)                    | no source (proposed: stage `skills.exclude[].ref`)                  | plan-level: the same entry on every stage (7.7); save ignores ids that are not skills     |
 | `runCount`                                              | no source                                                           | `toMigrationPlan(workflow, runs)` counts runs client-side                                 |
+| `applicationImpact.applications`                        | no source                                                           | Hub refs of the applications counted in `matching`, name order (see below)                |
 | `operatorManaged`                                       | label `app.kubernetes.io/managed-by`                                | the shipped `java-ee-to-quarkus` workflow                                                 |
 | (none)                                                  | `spec.guide`, `spec.params`, stage `execution` limits and `askUser` | kept from `base`                                                                          |
 
@@ -457,6 +458,19 @@ How the migration plan pages read these fields:
   the list (tooltip "No migration path assigned") and Configuration "1 issue"; a missing `effectiveSkills` makes the Skills
   check "Not evaluated" (an empty list passes). The path alert, the list marker and the Skills section therefore only work
   once the Hub serves these fields (7.2, 7.7).
+- **The plan's applications.** `applicationImpact.applications` (optional, additive) lists the applications counted
+  in `matching`: those whose migration view resolves to this plan, in name order. The plans list shows their names, and
+  "Run migration plan" on the plans list and the plan page runs exactly these applications. A server that only counts
+  them leaves the field out; the UI then shows the count and disables the run with a reason. The Hub needs the same plan
+  resolution it needs for `matching` (7.2). The run starts `planSelection: "single"` with the plan's id and the
+  applications the user keeps selected in the dialog (`StartApplicationMigrationsRequest`, unchanged). PatternFly
+  hard-codes the selection checkbox names ("Select row n", "Select all rows"); the Application cell is the row header, so
+  it names each row, and the checkboxes should not be replaced with custom ones to rename them.
+- **The plans list Runs column.** The list fetches every plan run once (`useFetchPlanRuns()`) and derives each plan's
+  shown run client-side (`getShownPlanRun`: the newest run awaiting approval, otherwise the newest by start, a Pending
+  run first) and its run count. That is fine for the mock, but a real backend would want a per-plan run summary on the
+  plan (shown run ref and status, run count) or at least a `spec.workflowRef` filter on the workflow run list, so the
+  list does not page through every run.
 - **Skill review.** The wizard and the plan page resolve a plan's skills with `resolvePlanSkills`, which includes the
   agents' collection skills (unlike `effectiveSkills`), and the skill page lists the plans that resolve a skill with
   `getSkillPlans`, from the same resolver. With the real backend the call is unwired (7.7, checklist step 8)

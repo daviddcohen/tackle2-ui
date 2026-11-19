@@ -136,6 +136,34 @@ describe("EntityDetailActions", () => {
     await user.click(screen.getByRole("menuitem", { name: "Test agent" }));
     expect(onTest).toHaveBeenCalledTimes(1);
   });
+
+  it("disables an item with its reason, keeping it in the menu", async () => {
+    const onRun = jest.fn();
+    render(
+      <EntityDetailActions
+        items={[
+          {
+            key: "run",
+            label: "Run migration plan",
+            onClick: onRun,
+            disabledReason: "No applications use this plan.",
+          },
+        ]}
+      />
+    );
+    const user = await openMenu();
+
+    const runItem = screen.getByRole("menuitem", {
+      name: "Run migration plan",
+    });
+    expect(runItem).toHaveAttribute("aria-disabled", "true");
+    await user.click(runItem);
+    expect(onRun).not.toHaveBeenCalled();
+    await user.hover(runItem);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "No applications use this plan."
+    );
+  });
 });
 
 const trail = [{ title: "Agents", path: "/agents" }, { title: "Agent" }];

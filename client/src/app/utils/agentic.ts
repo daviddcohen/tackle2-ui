@@ -36,8 +36,13 @@ export function isOperatorManaged(resource: {
 }
 
 export interface DisabledActionProps {
+  id?: string;
   isAriaDisabled?: boolean;
-  tooltipProps?: { content: string; position?: TooltipProps["position"] };
+  tooltipProps?: {
+    content: string;
+    position?: TooltipProps["position"];
+    triggerRef?: () => HTMLElement;
+  };
 }
 
 /**
@@ -45,32 +50,49 @@ export interface DisabledActionProps {
  * `reason` as its tooltip when a reason is given, enabled otherwise. A row
  * kebab's Delete passes `position: "left"` so the tooltip does not cover
  * Edit.
+ *
+ * `triggerId` is for items of a PatternFly table `ActionsColumn`: it wraps the
+ * whole list item in the tooltip, so the reason shows on hover only and is
+ * never shown or announced when the item gets keyboard focus. With an id the
+ * item's button carries it and the tooltip is bound to that button, so focus
+ * shows it like a `Dropdown` item's tooltip. Screen readers may announce it
+ * through the tooltip's polite live region (support varies by screen reader):
+ * `ActionsColumn` gives no way to set `aria-describedby` on the button. Pass an
+ * id unique on the page, such as `{tableName}-row-{id}-{action}`.
  */
 export function disabledActionProps(
   reason?: string,
-  position?: TooltipProps["position"]
+  position?: TooltipProps["position"],
+  triggerId?: string
 ): DisabledActionProps {
-  return reason != null
-    ? {
-        isAriaDisabled: true,
-        tooltipProps:
-          position != null
-            ? { content: reason, position }
-            : { content: reason },
-      }
-    : {};
+  if (reason == null) return {};
+  return {
+    isAriaDisabled: true,
+    ...(triggerId != null && { id: triggerId }),
+    tooltipProps: {
+      content: reason,
+      ...(position != null && { position }),
+      ...(triggerId != null && {
+        triggerRef: () => document.getElementById(triggerId) as HTMLElement,
+      }),
+    },
+  };
 }
 
 /**
  * Spread into a row kebab's Delete: disabled with `reason` as its tooltip on
  * the left, and danger only while it is enabled. Callers pass
  * the managed reason first, then the usage blocker
- * (`managedReason ?? usageReason`).
+ * (`managedReason ?? usageReason`). `triggerId`: see `disabledActionProps`.
  */
 export function deleteActionProps(
-  reason?: string
+  reason?: string,
+  triggerId?: string
 ): DisabledActionProps & { isDanger: boolean } {
-  return { isDanger: reason == null, ...disabledActionProps(reason, "left") };
+  return {
+    isDanger: reason == null,
+    ...disabledActionProps(reason, "left", triggerId),
+  };
 }
 
 /**
@@ -81,9 +103,14 @@ export function deleteActionProps(
 export function managedActionProps(
   isManaged: boolean | undefined,
   tooltip: string,
-  position?: TooltipProps["position"]
+  position?: TooltipProps["position"],
+  triggerId?: string
 ): DisabledActionProps {
-  return disabledActionProps(isManaged ? tooltip : undefined, position);
+  return disabledActionProps(
+    isManaged ? tooltip : undefined,
+    position,
+    triggerId
+  );
 }
 
 /** kubectl-style compact age: 45s, 12m, 3h, 2d. */
