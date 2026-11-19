@@ -635,7 +635,7 @@ test.describe("Transcript", () => {
     // so the tab shows the agent's messages from the live session.
     await page.goto(stageUrl("1", "1", "configured", { tab: "transcript" }));
     await expect(tabPanel(page)).toContainText(
-      "Stages that require approval are not recorded. The logs show what the agent did. These are the agent's messages from the live session."
+      "Stages that require approval are not recorded. These are the agent's messages from the live session."
     );
     await expect(
       transcriptTable(page).getByText(/Starting "Prepare proposal"/)

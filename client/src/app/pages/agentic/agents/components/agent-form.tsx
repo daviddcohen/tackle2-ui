@@ -429,6 +429,7 @@ export const AgentForm: React.FC<AgentFormProps> = ({
                     toggleId="gateway-select-toggle"
                     toggleAriaLabel={t("agentic.agent.modelSelect")}
                     ariaLabel={t("agentic.agent.model")}
+                    inputAriaLabel={t("agentic.agent.model")}
                     value={selectedModel}
                     options={gatewayOptions}
                     onSelect={(value) =>

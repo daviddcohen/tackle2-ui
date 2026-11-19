@@ -142,6 +142,40 @@ describe("ModelsPage", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
+  it("sorts by Status, like the Model providers page", async () => {
+    const user = userEvent.setup();
+    useEndpoints({
+      models: [
+        {
+          ...unusedModel,
+          id: "m1",
+          name: "Alpha",
+          verificationStatus: "verified",
+        },
+        {
+          ...unusedModel,
+          id: "m3",
+          name: "Beta",
+          verificationStatus: "pending",
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText("Alpha");
+    const names = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => within(row).getAllByRole("cell")[0].textContent);
+    expect(names()).toEqual(["Alpha", "Beta"]);
+    await user.click(
+      within(
+        screen.getByRole("columnheader", { name: "agentic.model.status" })
+      ).getByRole("button")
+    );
+    expect(names()).toEqual(["Beta", "Alpha"]);
+  });
+
   it("hides row actions without the models write scope", async () => {
     mockGrantedScopes.canWrite = false;
     useEndpoints({ models: [unusedModel] });
@@ -184,9 +218,15 @@ describe("ModelsPage", () => {
     await user.click(within(row).getByRole("button", { name: "Kebab toggle" }));
     const deleteItem = screen.getByRole("menuitem", { name: "actions.delete" });
     expect(deleteItem).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(deleteItem).toHaveAccessibleDescription(
+      "agentic.common.usageUnchecked"
+    );
     await user.hover(deleteItem);
     expect(
-      await screen.findByText("agentic.common.usageUnchecked")
+      await screen.findByText("agentic.common.usageUnchecked", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
   });
 

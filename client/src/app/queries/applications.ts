@@ -62,6 +62,14 @@ export const useFetchApplications = (
 
 const ApplicationQueryKey = "application";
 
+/**
+ * A missing application stays missing: asking again only delays the not-found
+ * state by several seconds. Other errors keep React Query's default 3 retries.
+ */
+export const retryUnlessNotFound = (failureCount: number, error: unknown) =>
+  !(axios.isAxiosError(error) && error.response?.status === 404) &&
+  failureCount < 3;
+
 export const useFetchApplicationById = (
   id?: number | string,
   refetchInterval: number | false = DEFAULT_REFETCH_INTERVAL
@@ -72,6 +80,7 @@ export const useFetchApplicationById = (
       id === undefined ? Promise.resolve(undefined) : getApplicationById(id),
     enabled: id !== undefined,
     refetchInterval,
+    retry: retryUnlessNotFound,
   });
 
   return {

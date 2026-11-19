@@ -78,6 +78,13 @@ describe("AgentForm", () => {
     );
   });
 
+  it("names the Model typeahead input after its field", async () => {
+    render(<AgentForm agent={agent} onClose={jest.fn()} />);
+    expect(
+      await screen.findByRole("combobox", { name: "agentic.agent.model" })
+    ).toBeInTheDocument();
+  });
+
   it("keeps selected Skills inside one searchable multi-select", async () => {
     const user = userEvent.setup();
     render(<AgentForm agent={agent} onClose={jest.fn()} />);

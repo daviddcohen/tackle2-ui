@@ -253,6 +253,7 @@ const TargetProfileFormInner: React.FC<TargetProfileFormPropsInner> = ({
                 )}
                 toggleAriaLabel={t("terms.analysisProfile")}
                 ariaLabel={t("terms.analysisProfile")}
+                inputAriaLabel={t("terms.analysisProfile")}
                 value={value ? value?.id.toString() : undefined}
                 options={analysisProfileOptions}
                 onSelect={(selectedId) =>

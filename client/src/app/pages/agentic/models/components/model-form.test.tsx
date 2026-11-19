@@ -226,6 +226,20 @@ describe("ModelForm", () => {
     expect(screen.getByText("agentic.model.providerHelp")).toBeInTheDocument();
   });
 
+  it("names each typeahead input after its field, not the default Type to filter", async () => {
+    renderForm({ model: null, onClose: jest.fn() });
+    for (const name of [
+      "agentic.model.provider",
+      "agentic.model.modelId",
+      "agentic.model.credential",
+    ]) {
+      expect(await screen.findByRole("combobox", { name })).toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("combobox", { name: "Type to filter" })
+    ).toBeNull();
+  });
+
   it("warns that changes apply to the agents using the model", async () => {
     agents = [agentUsing("a1", "m1"), agentUsing("a2", "m1")];
     renderForm({ model, onClose: jest.fn() });
@@ -268,6 +282,24 @@ describe("ModelForm", () => {
     expect(await screen.findByText("agentic.model.inUse")).toBeInTheDocument();
     // one alert carries both: the modal never stacks two
     expect(document.querySelectorAll(".pf-v6-c-alert")).toHaveLength(1);
+  });
+
+  it("says what a pending model means for agents, like the Models table, instead of asking to fix it", async () => {
+    renderForm({
+      model: {
+        ...model,
+        verificationStatus: "pending",
+        statusReason: "Not run yet.",
+      },
+      onClose: jest.fn(),
+    });
+    expect(
+      await screen.findByText("agentic.model.pendingTitle")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Not run yet. agentic.model.pendingEffect")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/agentic.model.statusAlertAction/)).toBeNull();
   });
 
   it("links to Credentials when no API-key credential exists", async () => {

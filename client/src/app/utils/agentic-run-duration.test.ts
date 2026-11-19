@@ -25,7 +25,7 @@ describe("stageRunDurationSeconds", () => {
       now
     );
     expect(seconds).toBe(8100);
-    expect(formatDuration(seconds)).toBe("135m");
+    expect(formatDuration(seconds)).toBe("2h 15m");
   });
 
   it("measures a running stage up to now, whatever its messages say", () => {
@@ -170,5 +170,18 @@ describe("planRunDurationSeconds", () => {
         now
       )
     ).toBeUndefined();
+  });
+});
+
+describe("formatDuration", () => {
+  it("rolls minutes up into hours from one hour on", () => {
+    expect(formatDuration(45)).toBe("45s");
+    expect(formatDuration(9 * 60)).toBe("9m");
+    expect(formatDuration(9 * 60 + 5)).toBe("9m 5s");
+    expect(formatDuration(59 * 60 + 59)).toBe("59m 59s");
+    expect(formatDuration(3600)).toBe("1h");
+    expect(formatDuration(3600 + 59)).toBe("1h");
+    expect(formatDuration(2 * 3600 + 15 * 60 + 30)).toBe("2h 15m");
+    expect(formatDuration(26 * 3600)).toBe("26h");
   });
 });

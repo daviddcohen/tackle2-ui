@@ -143,9 +143,15 @@ describe("ProvidersPage", () => {
     await user.click(within(row).getByRole("button", { name: "Kebab toggle" }));
     const deleteItem = screen.getByRole("menuitem", { name: "actions.delete" });
     expect(deleteItem).toHaveAttribute("aria-disabled", "true");
+    // The reason is the item's description and its tooltip on hover.
+    expect(deleteItem).toHaveAccessibleDescription(
+      "agentic.common.usageUnchecked"
+    );
     await user.hover(deleteItem);
     expect(
-      await screen.findByText("agentic.common.usageUnchecked")
+      await screen.findByText("agentic.common.usageUnchecked", {
+        selector: '[role="tooltip"] *',
+      })
     ).toBeInTheDocument();
   });
 

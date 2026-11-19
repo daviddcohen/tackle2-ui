@@ -258,7 +258,14 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
       >
         <Content>
           <Content component="p">
-            {[model.statusReason, t("agentic.model.statusAlertAction")]
+            {/* Same text as the Models table: asking to fix the
+                endpoint fits only an unreachable model, not one being verified. */}
+            {[
+              model.statusReason,
+              model.verificationStatus === "unreachable"
+                ? t("agentic.model.statusAlertAction")
+                : t("agentic.model.pendingEffect"),
+            ]
               .filter(Boolean)
               .join(" ")}
           </Content>
@@ -306,6 +313,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
             toggleId="model-provider-select"
             toggleAriaLabel={t("agentic.model.providerSelect")}
             ariaLabel={name}
+            inputAriaLabel={t("agentic.model.provider")}
             value={value}
             options={providerOptions}
             onSelect={(selection) => {
@@ -334,6 +342,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
             toggleId="model-id-select"
             toggleAriaLabel={t("agentic.model.modelSelect")}
             ariaLabel={name}
+            inputAriaLabel={t("agentic.model.modelId")}
             value={value}
             options={modelOptions}
             onSelect={(selection) => onChange(selection ?? "")}
@@ -366,6 +375,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
             toggleId="model-credential-select"
             toggleAriaLabel={t("agentic.model.credentialSelect")}
             ariaLabel={name}
+            inputAriaLabel={t("agentic.model.credential")}
             value={value}
             options={credentialOptions}
             onSelect={(selection) => onChange(selection ?? "")}

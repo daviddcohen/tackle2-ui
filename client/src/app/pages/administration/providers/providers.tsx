@@ -383,7 +383,10 @@ const ProvidersPage: React.FC = () => {
                                       openModalAfterMenuClose(() =>
                                         setProviderToDelete(provider)
                                       ),
-                                    ...deleteActionProps(deleteBlocker),
+                                    ...deleteActionProps(
+                                      deleteBlocker,
+                                      `providers-table-row-${provider.id}-delete`
+                                    ),
                                   },
                                 ]}
                               />

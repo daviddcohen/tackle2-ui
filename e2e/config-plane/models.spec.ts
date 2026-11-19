@@ -18,6 +18,7 @@ import {
   mainHeading,
   openRowActions,
   pickTypeahead,
+  rowActions,
   rowByText,
   spaNavigate,
   test,
@@ -143,6 +144,41 @@ test.describe("Models list", () => {
       page.getByRole("menuitem", { name: "Delete" }),
       "Choose another default model before deleting this one."
     );
+  });
+
+  test("a disabled row action says why from the keyboard too", async ({
+    page,
+  }) => {
+    const kebab = rowActions(rowByText(page, "Claude 3.7 Sonnet"));
+    await kebab.focus();
+    await page.keyboard.press("Enter");
+    await expect(kebab).toHaveAttribute("aria-expanded", "true");
+    // Arrow keys reach the disabled items right away, and focus shows their
+    // reason, not only a hover; screen readers get it as the description.
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("menuitem", { name: "Edit" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    const setDefault = page.getByRole("menuitem", { name: "Set as default" });
+    await expect(setDefault).toBeFocused();
+    await expect(setDefault).toHaveAccessibleDescription(
+      "Already the default model."
+    );
+    await expect(
+      page
+        .getByRole("tooltip")
+        .filter({ hasText: "Already the default model." })
+    ).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    const deleteItem = page.getByRole("menuitem", { name: "Delete" });
+    await expect(deleteItem).toBeFocused();
+    await expect(deleteItem).toHaveAccessibleDescription(
+      "Choose another default model before deleting this one."
+    );
+    await expect(
+      page.getByRole("tooltip").filter({
+        hasText: "Choose another default model before deleting this one.",
+      })
+    ).toBeVisible();
   });
 
   test("only verified models can be set as default", async ({ page }) => {
@@ -415,9 +451,7 @@ test.describe("Models scenarios and access", () => {
     });
     await expect(page.getByText("No models yet")).toBeVisible();
     await expect(
-      page.getByText(
-        "Every model connects through a model provider. Create a model provider first, then create models here."
-      )
+      page.getByText("Create a model provider first, then create models here.")
     ).toBeVisible();
     // without a model provider there is nothing to create a model from
     const create = page.getByRole("button", { name: "Create model" });
