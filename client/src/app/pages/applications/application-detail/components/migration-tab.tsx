@@ -315,7 +315,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
               <EmptyStateFooter>
                 <EmptyStateActions>
                   <Button
-                    variant="primary"
+                    variant="link"
                     onClick={() => runMigrationPlan.open?.()}
                   >
                     {t("agentic.execution.startMigration")}

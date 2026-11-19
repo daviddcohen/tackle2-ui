@@ -706,6 +706,7 @@
     "tokenKindOther": "other",
     "showExpiredTokens": "Show expired tokens",
     "agentRun": "Agent run",
+    "moreCount": "{{count}} more",
     "workflowRun": "Workflow run",
     "removeSelection": "Remove {{name}}"
   },
@@ -1569,6 +1570,12 @@
       "collectionCount_one": "{{count}} skill collection",
       "collectionCount_other": "{{count}} skill collections",
       "deleteBlockedAttached": "This skill is attached to {{attachments, list}}. Remove it from them before deleting it.",
+      "deleteBlockedAttachedOne": {
+        "agent": "This skill is attached to {{attachments, list}}. Remove it from that agent before deleting it.",
+        "archetype": "This skill is attached to {{attachments, list}}. Remove it from that archetype before deleting it.",
+        "targetProfile": "This skill is attached to {{attachments, list}}. Remove it from that target profile before deleting it.",
+        "application": "This skill is attached to {{attachments, list}}. Remove it from that application before deleting it."
+      },
       "deleteBlockedCollections_one": "This skill is in {{count}} skill collection. Remove it from that skill collection before deleting it.",
       "deleteBlockedCollections_other": "This skill is in {{count}} skill collections. Remove it from them before deleting it.",
       "deleteBlockedBoth": "This skill is attached to {{attachments, list}}, and is in {{collections}}. Remove it from them before deleting it.",
@@ -1709,7 +1716,8 @@
       "unavailableTitle": "Migration information unavailable",
       "columnTitle": "Migration",
       "detailsTab": "Migration",
-      "preflightDescription": "Starts migrating the selected applications. Each application is checked before it starts.",
+      "preflightDescription_one": "Starts migrating {{name}}. It is checked before it starts.",
+      "preflightDescription_other": "Starts migrating the selected applications. Each application is checked before it starts.",
       "preflightTable": "Selected applications",
       "readiness": "Readiness",
       "startMigration": "Run migration plan",
@@ -1895,7 +1903,7 @@
       "runBy": "Run by <agentLink>{{agent}}</agentLink>",
       "everyStage": "Every stage",
       "everyStageApplication": "Every stage: <applicationLink>{{application}}</applicationLink>",
-      "everyStagePlanNote": "Skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead.",
+      "everyStagePlanNote": "Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead.",
       "everyStageNoPath": "This plan has no archetype or target profile. When it runs, each application gets its own archetype, target profile and application skills in every stage.",
       "everyStageSubtitle": "Archetype, target profile and application skills",
       "everyStagePerApplication": "An application's archetype, target profile and own skills go to that application only.",
@@ -2186,7 +2194,6 @@
     },
     "planDetail": {
       "tabRuns": "Runs",
-      "runsEmptyTitle": "No runs yet",
       "runsEmptyDescription": "Runs appear here when this plan runs on applications.",
       "tabsLabel": "Plan details",
       "tabDetails": "Details",

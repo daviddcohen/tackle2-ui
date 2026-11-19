@@ -181,7 +181,7 @@ const skillsSection = async () =>
 
 /** The section sentence, then the note on application skills. */
 const description =
-  "What each stage's agent gets when this plan runs, and where each skill comes from. Skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead.";
+  "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead.";
 
 describe("PlanDetailsPage Skills by stage", () => {
   beforeEach(() => {
@@ -215,7 +215,7 @@ describe("PlanDetailsPage Skills by stage", () => {
       )
     ).toBeVisible();
     expect(
-      within(table).queryByText(/Skills of this plan's archetype/)
+      within(table).queryByText(/skills of this plan's archetype/)
     ).toBeNull();
     // The plan's own archetype: the profile has no archetype suffix.
     expect(

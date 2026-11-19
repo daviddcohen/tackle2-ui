@@ -534,7 +534,10 @@ export const MigrationPreflightModal: React.FC<
         title={t("agentic.execution.startMigration")}
         description={
           fixedPlan == null
-            ? t("agentic.execution.preflightDescription")
+            ? t("agentic.execution.preflightDescription", {
+                count: total,
+                name: applications[0]?.name,
+              })
             : fixedPlan.targetProfile != null
               ? t("agentic.execution.preflightDescriptionPlanProfile", {
                   plan: fixedPlan.name,

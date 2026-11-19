@@ -105,7 +105,20 @@ describe("getSkillDeleteBlockedReason", () => {
 
   it("names only the count that blocks", () => {
     expect(getSkillDeleteBlockedReason(t, skill(1), [])).toBe(
-      "This skill is attached to 1 agent. Remove it from them before deleting it."
+      "This skill is attached to 1 agent. Remove it from that agent before deleting it."
+    );
+    expect(
+      getSkillDeleteBlockedReason(
+        t,
+        { ...skill(0), associations: [application] },
+        []
+      )
+    ).toBe(
+      "This skill is attached to 1 application. Remove it from that application before deleting it."
+    );
+    // Counts things, not types: two agents are "them".
+    expect(getSkillDeleteBlockedReason(t, skill(2), [])).toBe(
+      "This skill is attached to 2 agents. Remove it from them before deleting it."
     );
     expect(
       getSkillDeleteBlockedReason(t, skill(0), [

@@ -725,6 +725,31 @@ describe("StageRunDetail", () => {
       ).toBeInTheDocument();
     });
 
+    it("says the agent never started on each view of a stage its ended run never reached", async () => {
+      useRun(
+        run(
+          [
+            stage(1, "Prepare proposal", "Failed", {
+              startedAt: "2026-11-10T10:06:00Z",
+              output: "Error: Unable to resolve dependency tree.",
+            }),
+            stage(2, "Migrate", "Pending"),
+          ],
+          "Failed"
+        )
+      );
+      for (const tab of ["transcript", "logs", "yaml"]) {
+        const { unmount } = renderStage("2", `?tab=${tab}`);
+        expect(
+          await screen.findByText("The agent did not start for this stage.")
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText(/appears? when this stage starts/)
+        ).toBeNull();
+        unmount();
+      }
+    });
+
     it("waits for the agent of a running stage whose agent run is not listed yet", async () => {
       useRun(running);
       // beforeEach: the plan run lists no agent runs yet.

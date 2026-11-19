@@ -157,7 +157,15 @@ export const getSkillDeleteBlockedReason = (
     });
   }
   if (attachments.length > 0) {
-    return t("agentic.skill.deleteBlockedAttached", { attachments });
+    // One attachment names the thing to remove it from; several are "them".
+    const attached = skill.associations.filter((association) =>
+      usageScopeKeys.some(([scope]) => scope === association.scope)
+    );
+    return attached.length === 1
+      ? t(`agentic.skill.deleteBlockedAttachedOne.${attached[0].scope}`, {
+          attachments,
+        })
+      : t("agentic.skill.deleteBlockedAttached", { attachments });
   }
   if (collectionCount > 0) {
     return t("agentic.skill.deleteBlockedCollections", {

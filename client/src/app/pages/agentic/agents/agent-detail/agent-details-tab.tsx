@@ -25,6 +25,7 @@ import {
   DetailSection,
   DetailSections,
   LinkLabels,
+  MAX_LABELS,
   SectionEmpty,
 } from "../../components/detail-section";
 import { AgentModel } from "../components/agent-model";
@@ -125,7 +126,14 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
       agent.capabilities.length === 0 ? (
         none
       ) : (
-        <LabelGroup numLabels={5}>
+        <LabelGroup
+          isCompact
+          numLabels={MAX_LABELS}
+          collapsedText={t("terms.moreCount", {
+            count: agent.capabilities.length - MAX_LABELS,
+          })}
+          expandedText={t("terms.showLess")}
+        >
           {agent.capabilities.map((capability, index) => (
             <Label key={index} variant="outline" isCompact>
               {capability}

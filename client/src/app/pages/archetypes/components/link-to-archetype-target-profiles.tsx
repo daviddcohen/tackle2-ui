@@ -2,7 +2,6 @@ import * as React from "react";
 import { LocationDescriptor } from "history";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import type { Archetype } from "@app/api/models";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
@@ -34,10 +33,7 @@ const LinkToArchetypeTargetProfiles: React.FC<{
     );
   }
   return (
-    <Link
-      className={textStyles.textNowrap}
-      to={linkTo(targetProfilesPath(archetype.id))}
-    >
+    <Link to={linkTo(targetProfilesPath(archetype.id))}>
       {t("agentic.archetype.targetProfileCount", { count: profiles.length })}
     </Link>
   );
