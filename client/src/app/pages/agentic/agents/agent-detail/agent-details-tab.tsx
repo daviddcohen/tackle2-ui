@@ -278,7 +278,17 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
                       {[...plan.stages]
                         .sort((a, b) => a.order - b.order)
                         .filter((stage) => stage.agent?.id === agent.id)
-                        .map((stage) => stage.name)
+                        // Numbered, as the skill page names stages.
+                        .map((stage) =>
+                          stage.name
+                            ? t("agentic.plan.stageTitle", {
+                                number: stage.order,
+                                stage: stage.name,
+                              })
+                            : t("agentic.plan.stageNumber", {
+                                number: stage.order,
+                              })
+                        )
                         .join(", ")}
                     </Td>
                   </Tr>

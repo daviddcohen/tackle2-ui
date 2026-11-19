@@ -23,6 +23,7 @@ import {
   ResolvePlanSkillsResponse,
   Skill,
   SkillCollection,
+  SkillLoadPolicy,
   SkillPlansResponse,
   SkillSourceType,
 } from "@app/agentic";
@@ -39,9 +40,7 @@ import {
   collectionsContainingSkill,
   conflict,
   db,
-  effectiveSkillsForPlan,
   entityIdOf,
-  excludedSkillIdsOf,
   findApplication,
   findArchetype,
   findHubResourceName,
@@ -56,20 +55,27 @@ import {
   observeVerification,
   optionalArray,
   optionalString,
-  planSkillInput,
   requiredArray,
   requiredString,
   resolveAgentRef,
   resolveCollectionRef,
   resolveCredential,
   resolveModelRef,
-  resolvePlanSkillsFor,
   resolveProviderRef,
   resolveSkillRef,
   skillAssociations,
   startVerification,
 } from "./db";
 import { planApplications, planImpact, runsUsingPlan } from "./execution";
+import {
+  ResolutionContext,
+  excludedSkillIdsOf,
+  placementsOf,
+  planContextOf,
+  resolveSkillsByStage,
+  resolvedSkillIds,
+  stagesOfPlan,
+} from "./skill-resolution";
 
 const NAME_MAX = 120;
 const DESCRIPTION_MAX = 500;
@@ -117,6 +123,7 @@ const isValidUrl = (value: string) => {
 // ---------------------------------------------------------------------------
 
 const SOURCE_TYPES: SkillSourceType[] = ["inline", "git", "oci"];
+const LOAD_POLICIES: SkillLoadPolicy[] = ["rule", "skill"];
 const HUB_SCOPES: HubSkillAssociationScope[] = [
   "archetype",
   "targetProfile",
@@ -153,6 +160,10 @@ const parseSkill = (input: unknown, selfId?: EntityId): ParsedSkill => {
   }
   if (sourceType === "oci" && (imageRef == null || imageRef.trim() === "")) {
     throw badRequest("imageRef is required for an OCI Skill.");
+  }
+  const loadPolicy = body.loadPolicy as SkillLoadPolicy | undefined;
+  if (loadPolicy != null && !LOAD_POLICIES.includes(loadPolicy)) {
+    throw badRequest('loadPolicy must be "rule" or "skill".');
   }
   const agentIds: EntityId[] = [];
   const associations: StoredSkill["associations"] = [];
@@ -191,6 +202,7 @@ const parseSkill = (input: unknown, selfId?: EntityId): ParsedSkill => {
       repoPath:
         sourceType === "git" ? optionalString(body, "repoPath") : undefined,
       imageRef: sourceType === "oci" ? imageRef : undefined,
+      ...(loadPolicy != null ? { loadPolicy } : {}),
       associations,
     },
     agentIds: [...new Set(agentIds)],
@@ -215,6 +227,8 @@ export const createSkill = (input: unknown) => {
   const time = nowIso();
   const skill: StoredSkill = {
     id: nextId("skills"),
+    // Absent means "skill" (the CRD default); reads always carry it.
+    loadPolicy: "skill",
     ...fields,
     createTime: time,
     updateTime: time,
@@ -226,6 +240,8 @@ export const createSkill = (input: unknown) => {
 
 export const updateSkill = (id: EntityId, input: unknown) => {
   const skill = findOr404(db.skills, id, "Skill");
+  // A body without loadPolicy keeps the stored one (forms that do not edit
+  // it yet must not reset it).
   const { fields, agentIds } = parseSkill(input, id);
   Object.assign(skill, fields, { updateTime: nowIso() });
   linkSkillToAgents(skill, agentIds);
@@ -729,6 +745,14 @@ const withoutExcludedSkills = ({
   ...plan
 }: StoredPlan) => plan;
 
+/** A saved Plan's preview resolution (no applications). */
+const planPreview = (plan: StoredPlan) =>
+  resolveSkillsByStage({
+    stages: stagesOfPlan(plan),
+    context: planContextOf(plan),
+    excludedSkillIds: excludedSkillIdsOf(plan),
+  });
+
 export const presentPlan = (plan: StoredPlan): MigrationPlan => ({
   ...withoutExcludedSkills(plan),
   stages: plan.stages.map((stage) => ({
@@ -753,7 +777,6 @@ export const presentPlan = (plan: StoredPlan): MigrationPlan => ({
         }),
       }
     : undefined,
-  effectiveSkills: effectiveSkillsForPlan(plan),
   ...presentExcludedSkills(plan),
   applicationImpact: {
     matching: planImpact(plan.id),
@@ -934,42 +957,62 @@ export const updatePlan = (id: EntityId, input: unknown) => {
 };
 
 /**
- * POST /plans/skills/resolve: the Skills a draft Plan resolves to (see
- * `resolvePlanSkillsFor`), for the plan wizard and plan pages. Malformed
- * bodies are a 400; ids that reference nothing (an agent, archetype, target
- * profile or Skill deleted meanwhile, or a draft still being edited) add
- * nothing, unlike a save, which rejects unknown agents.
+ * POST /plans/skills/resolve: what each stage of a draft Plan gets
+ * (`resolveSkillsByStage`), for the plan wizard and plan pages. Without
+ * `applications` it is the plan preview (context from the draft's
+ * migration path); with them, one `everyStage` group per application from
+ * its own context. Malformed bodies are a 400; ids that reference nothing
+ * (an agent, archetype, target profile, application or Skill deleted
+ * meanwhile, or a draft still being edited) add nothing, unlike a save,
+ * which rejects unknown agents.
  */
 export const resolvePlanSkills = (
   input: unknown
 ): ResolvePlanSkillsResponse => {
   const body = asBody(input);
-  const agentIds = requiredArray(body, "stages").map((value, index) =>
-    entityIdOf(asBody(value).agent, `stages[${index}].agent`)
-  );
-  let archetypeId: number | undefined;
-  let targetProfileIds: number[] = [];
+  const stages = requiredArray(body, "stages").map((value, index) => {
+    const stage = asBody(value);
+    return {
+      agentId: entityIdOf(stage.agent, `stages[${index}].agent`),
+      name: optionalString(stage, "name") || `Stage ${index + 1}`,
+    };
+  });
+  let context: ResolutionContext = { kind: "plan", targetProfileIds: [] };
   if (body.migrationPath != null) {
     const path = asBody(body.migrationPath);
-    archetypeId = hubIdOf(path.archetype, "migrationPath.archetype");
-    targetProfileIds = optionalArray(path, "targetProfiles").map((profile) =>
-      hubIdOf(profile, "migrationPath.targetProfiles")
-    );
+    context = {
+      kind: "plan",
+      archetypeId: hubIdOf(path.archetype, "migrationPath.archetype"),
+      targetProfileIds: optionalArray(path, "targetProfiles").map((profile) =>
+        hubIdOf(profile, "migrationPath.targetProfiles")
+      ),
+    };
   }
-  return {
-    skills: resolvePlanSkillsFor(
-      { agentIds, archetypeId, targetProfileIds },
-      new Set(excludedSkillIds(body))
-    ),
-  };
+  // An empty list is the same as none: the plan preview.
+  const applications = optionalArray(body, "applications");
+  if (applications.length > 0) {
+    context = {
+      kind: "applications",
+      applicationIds: applications.map((application, index) =>
+        hubIdOf(application, `applications[${index}]`)
+      ),
+    };
+  }
+  const resolution = resolveSkillsByStage({
+    stages,
+    context,
+    excludedSkillIds: new Set(excludedSkillIds(body)),
+  });
+  return resolution;
 };
 
 /**
- * GET /skills/:id/plans: every saved Plan whose resolution has the Skill,
- * with that entry's sources and `excluded` flag, from the same resolver as
- * POST /plans/skills/resolve (`resolvePlanSkillsFor`), in plan name order.
- * 404 for an unknown Skill. `hideSeeded` (the `initial` scenario) treats
- * fixture Skills and Plans as absent, as the list and detail reads do.
+ * GET /skills/:id/plans: every saved Plan whose preview resolution (the same
+ * resolver as POST /plans/skills/resolve, without applications) lists the
+ * Skill, with where it sits (`placements`: per stage, and every stage), in
+ * plan name order. 404 for an unknown
+ * Skill. `hideSeeded` (the `initial` scenario) treats fixture Skills and
+ * Plans as absent, as the list and detail reads do.
  */
 export const listSkillPlans = (
   skillId: EntityId,
@@ -983,19 +1026,14 @@ export const listSkillPlans = (
     plans: db.plans
       .filter((plan) => !(hideSeeded && isSeeded("plans", plan.id)))
       .flatMap((plan) => {
-        const entry = resolvePlanSkillsFor(
-          planSkillInput(plan),
-          excludedSkillIdsOf(plan)
-        ).find((candidate) => candidate.skill.id === skill.id);
-        return entry
-          ? [
-              {
-                plan: { id: plan.id, name: plan.name },
-                sources: entry.sources,
-                excluded: entry.excluded,
-              },
-            ]
-          : [];
+        const resolution = planPreview(plan);
+        if (!resolvedSkillIds(resolution).has(skill.id)) return [];
+        return [
+          {
+            plan: { id: plan.id, name: plan.name },
+            placements: placementsOf(resolution, skill.id),
+          },
+        ];
       })
       .sort((a, b) => a.plan.name.localeCompare(b.plan.name)),
   };

@@ -129,6 +129,7 @@ const skillRequest = (skill: Skill): SkillRequest => ({
   repoBranch: skill.repoBranch,
   repoPath: skill.repoPath,
   imageRef: skill.imageRef,
+  loadPolicy: skill.loadPolicy,
 });
 
 const collectionRequest = (
@@ -181,6 +182,18 @@ describe("agentic-controller default and sample objects", () => {
       Array(defaults.length).fill(true)
     );
     expect(samples.flatMap(managed).every((value) => !value)).toBe(true);
+  });
+
+  it("reads the operator's stage and house-rule cards as rules", () => {
+    const policies = ofKind("SkillCard").map((card) => [
+      card.metadata.name,
+      card.spec.type ?? "skill",
+      toSkill(card).loadPolicy,
+    ]);
+    policies.forEach(([, type, loadPolicy]) => expect(loadPolicy).toBe(type));
+    expect(policies.some(([, , loadPolicy]) => loadPolicy === "rule")).toBe(
+      true
+    );
   });
 
   it.each(named(ofKind("Agent")))("Agent %s round-trips", (_name, agent) => {

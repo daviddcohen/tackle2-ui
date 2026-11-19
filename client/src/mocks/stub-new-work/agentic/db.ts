@@ -13,7 +13,6 @@
 import {
   Agent,
   AgentTestRun,
-  EffectiveSkillAssociation,
   EntityId,
   EntityRef,
   ExecutionPolicy,
@@ -22,12 +21,9 @@ import {
   HubSkillAssociationScope,
   MigrationPlan,
   ModelProjection,
-  PlanSkill,
-  PlanSkillSource,
   Provider,
   Skill,
   SkillAssociation,
-  SkillAssociationScope,
   SkillCollection,
 } from "@app/agentic";
 import { Application } from "@app/api/models";
@@ -73,10 +69,7 @@ export type StoredSkill = Omit<Skill, "associations"> & {
 };
 
 /** A Plan as stored: server-derived fields are computed on read. */
-export type StoredPlan = Omit<
-  MigrationPlan,
-  "effectiveSkills" | "applicationImpact" | "runCount"
->;
+export type StoredPlan = Omit<MigrationPlan, "applicationImpact" | "runCount">;
 
 export type EntityKind =
   | "skills"
@@ -123,7 +116,6 @@ const toStoredSkill = (skill: Skill): StoredSkill => ({
 
 const toStoredPlan = (plan: MigrationPlan): StoredPlan => {
   const stored: MigrationPlan = { ...plan };
-  delete stored.effectiveSkills;
   delete stored.applicationImpact;
   delete stored.runCount;
   return stored;
@@ -392,281 +384,6 @@ export const skillAssociations = (skill: StoredSkill): SkillAssociation[] => [
     })
   ),
 ];
-
-/** What the plan skill resolver reads: ids only, so a draft works too. */
-interface PlanSkillInput {
-  agentIds: EntityId[];
-  archetypeId?: number;
-  targetProfileIds: number[];
-}
-
-/** One way a Skill reaches a Plan (resolution sources 1 to 4). */
-interface PlanSkillSourceEntry {
-  skill: EntityRef;
-  source: PlanSkillSource;
-}
-
-const toAssociation = ({
-  skill,
-  source,
-}: PlanSkillSourceEntry): EffectiveSkillAssociation => ({
-  skill,
-  scope: source.scope,
-  scopeName: source.scopeName,
-});
-
-export const planSkillInput = (
-  plan: Pick<StoredPlan, "stages" | "migrationPath">
-): PlanSkillInput => ({
-  agentIds: plan.stages.map((stage) => stage.agent.id),
-  archetypeId: plan.migrationPath?.archetype.id,
-  targetProfileIds:
-    plan.migrationPath?.targetProfiles.map((profile) => profile.id) ?? [],
-});
-
-/** Skills associated to the archetype or to one of the target profiles. */
-const hubSkillSources = (input: PlanSkillInput): PlanSkillSourceEntry[] =>
-  db.skills.flatMap((skill) =>
-    skill.associations.flatMap((association): PlanSkillSourceEntry[] => {
-      const skillRef = { id: skill.id, name: skill.name };
-      if (
-        association.scope === "archetype" &&
-        input.archetypeId === association.resource.id
-      ) {
-        const name =
-          findArchetype(association.resource.id)?.name ??
-          association.resource.name;
-        return [
-          {
-            skill: skillRef,
-            source: {
-              scope: "archetype",
-              scopeName: name,
-              resource: { id: association.resource.id, name },
-            },
-          },
-        ];
-      }
-      if (
-        association.scope === "targetProfile" &&
-        input.targetProfileIds.includes(association.resource.id)
-      ) {
-        const name =
-          findTargetProfile(association.resource.id)?.profile.name ??
-          association.resource.name;
-        return [
-          {
-            skill: skillRef,
-            source: {
-              scope: "targetProfile",
-              scopeName: name,
-              resource: { id: association.resource.id, name },
-            },
-          },
-        ];
-      }
-      return [];
-    })
-  );
-
-/** Skills the agents list directly (unknown agents and Skills are skipped). */
-const agentSkillSources = (agentIds: EntityId[]): PlanSkillSourceEntry[] =>
-  agentIds.flatMap((agentId) => {
-    const agent = db.agents.find((candidate) => candidate.id === agentId);
-    if (!agent) return [];
-    return agent.skills.flatMap((ref) => {
-      const skill = db.skills.find((candidate) => candidate.id === ref.id);
-      return skill
-        ? [
-            {
-              skill: { id: skill.id, name: skill.name },
-              source: {
-                scope: "agent" as const,
-                scopeName: agent.name,
-                resource: { id: agent.id, name: agent.name },
-              },
-            },
-          ]
-        : [];
-    });
-  });
-
-/** Skills the agents bring through their skill collections. */
-const collectionSkillSources = (agentIds: EntityId[]): PlanSkillSourceEntry[] =>
-  agentIds.flatMap((agentId) => {
-    const agent = db.agents.find((candidate) => candidate.id === agentId);
-    if (!agent) return [];
-    return (agent.skillCollections ?? []).flatMap((collectionRef) => {
-      const collection = db.skillCollections.find(
-        (candidate) => candidate.id === collectionRef.id
-      );
-      if (!collection) return [];
-      return collection.skills.map((skillRef) => ({
-        skill: resolveSkillRef(skillRef),
-        source: {
-          scope: "agent" as const,
-          scopeName: `${agent.name} via ${collection.name}`,
-          resource: { id: agent.id, name: agent.name },
-          collection: { id: collection.id, name: collection.name },
-        },
-      }));
-    });
-  });
-
-/**
- * Skills that apply to a Plan: Skills associated to an agent of one of its
- * stages, to its archetype, or to one of its target profiles. Application
- * scoped Skills apply per application (see the application migration view).
- */
-export const effectiveSkillsForPlan = (
-  plan: Pick<StoredPlan, "stages" | "migrationPath">
-): EffectiveSkillAssociation[] => {
-  const input = planSkillInput(plan);
-  return uniqueEffectiveSkills(
-    [...hubSkillSources(input), ...agentSkillSources(input.agentIds)].map(
-      toAssociation
-    )
-  );
-};
-
-/** Skills an agent brings through its skill collections. */
-export const collectionSkillsForAgents = (
-  agentIds: EntityId[]
-): EffectiveSkillAssociation[] =>
-  collectionSkillSources(agentIds).map(toAssociation);
-
-const SOURCE_RANK: Record<SkillAssociationScope, number> = {
-  agent: 0,
-  archetype: 2,
-  targetProfile: 3,
-  application: 4,
-};
-
-const sourceRank = (source: PlanSkillSource) =>
-  source.scope === "agent" && source.collection != null
-    ? 1
-    : SOURCE_RANK[source.scope];
-
-/**
- * The Skills a Plan (or a draft of one) resolves to, one entry per Skill:
- * the same sources as `effectiveSkillsForPlan` plus the agents' collection
- * skills (`collectionSkillsForAgents`), so the plan, run and application
- * views cannot drift from it. Sources are deduplicated and ordered agent,
- * collection, archetype, target profile; Skills follow the first source that
- * brings them. Unknown agents, archetypes and target profiles add nothing.
- */
-export const resolvePlanSkillsFor = (
-  input: PlanSkillInput,
-  excludedSkillIds: ReadonlySet<EntityId> = new Set()
-): PlanSkill[] => {
-  const entries = [
-    ...agentSkillSources(input.agentIds),
-    ...collectionSkillSources(input.agentIds),
-    ...hubSkillSources(input),
-  ]
-    .map((entry, index) => ({ entry, index }))
-    .sort(
-      (a, b) =>
-        sourceRank(a.entry.source) - sourceRank(b.entry.source) ||
-        a.index - b.index
-    )
-    .map(({ entry }) => entry);
-  const result: PlanSkill[] = [];
-  entries.forEach(({ skill, source }) => {
-    let planSkill = result.find((candidate) => candidate.skill.id === skill.id);
-    if (!planSkill) {
-      planSkill = {
-        skill,
-        sources: [],
-        excluded: excludedSkillIds.has(skill.id),
-      };
-      result.push(planSkill);
-    }
-    const isSameSource = (candidate: PlanSkillSource) =>
-      candidate.scope === source.scope &&
-      candidate.resource.id === source.resource.id &&
-      candidate.collection?.id === source.collection?.id;
-    if (!planSkill.sources.some(isSameSource)) planSkill.sources.push(source);
-  });
-  return result;
-};
-
-/** Ids of the Skills a Plan turns off. */
-export const excludedSkillIdsOf = (plan: Pick<StoredPlan, "excludedSkills">) =>
-  new Set((plan.excludedSkills ?? []).map((ref) => ref.id));
-
-/**
- * The Skills a Plan turns off now: its stored exclusions that its resolution
- * still returns. A Skill that no longer reaches the Plan through its agents,
- * their collections, the archetype or the target profiles is not excluded,
- * even if it reaches an application directly, so the plan page and the
- * application and run views agree (the wizard drops such an exclusion on
- * the next save).
- */
-const activeExcludedSkillIds = (
-  plan: Pick<StoredPlan, "excludedSkills" | "stages" | "migrationPath">
-): Set<EntityId> => {
-  const stored = excludedSkillIdsOf(plan);
-  if (stored.size === 0) return stored;
-  const resolved = new Set(
-    resolvePlanSkillsFor(planSkillInput(plan)).map(({ skill }) => skill.id)
-  );
-  return new Set([...stored].filter((id) => resolved.has(id)));
-};
-
-/**
- * Splits resolved skill associations into the ones the agents get and the
- * ones the Plan turns off (every source of an excluded Skill, including a
- * direct application association). Without exclusions `used` is `entries`
- * itself.
- */
-export const splitExcludedSkills = (
-  entries: EffectiveSkillAssociation[],
-  plan:
-    | Pick<StoredPlan, "excludedSkills" | "stages" | "migrationPath">
-    | undefined
-): {
-  used: EffectiveSkillAssociation[];
-  excluded: EffectiveSkillAssociation[];
-} => {
-  const excludedIds = plan ? activeExcludedSkillIds(plan) : new Set<EntityId>();
-  if (excludedIds.size === 0) return { used: entries, excluded: [] };
-  return {
-    used: entries.filter((entry) => !excludedIds.has(entry.skill.id)),
-    excluded: entries.filter((entry) => excludedIds.has(entry.skill.id)),
-  };
-};
-
-/** Skills associated directly to an application. */
-export const applicationSkills = (
-  applicationId: number
-): EffectiveSkillAssociation[] =>
-  db.skills
-    .filter((skill) =>
-      skill.associations.some(
-        (association) =>
-          association.scope === "application" &&
-          association.resource.id === applicationId
-      )
-    )
-    .map((skill) => ({
-      skill: { id: skill.id, name: skill.name },
-      scope: "application" as const,
-      scopeName: findApplication(applicationId)?.name ?? String(applicationId),
-    }));
-
-export const uniqueEffectiveSkills = (
-  entries: EffectiveSkillAssociation[]
-): EffectiveSkillAssociation[] =>
-  entries.filter(
-    (entry, index) =>
-      entries.findIndex(
-        (candidate) =>
-          candidate.skill.id === entry.skill.id &&
-          candidate.scope === entry.scope &&
-          candidate.scopeName === entry.scopeName
-      ) === index
-  );
 
 // ---------------------------------------------------------------------------
 // Verification (Models and Providers verify 2.5 s after a write)

@@ -52,6 +52,12 @@ export interface StagesTableProps {
   isLoading: boolean;
   /** Agent names link to the agent; without it (wizard Review) they are plain text. */
   agentLinkTo?: (agentId: EntityId) => LocationDescriptor;
+  /**
+   * Added to the row indexes PF names the toggles by (`simple-node{n}`):
+   * each `Td expand` table on one page needs its own range (the edit
+   * wizard's Review renders over the plan page).
+   */
+  rowIndexOffset?: number;
   "aria-label": string;
 }
 
@@ -77,6 +83,7 @@ export const StagesTable: React.FC<StagesTableProps> = ({
   models,
   isLoading,
   agentLinkTo,
+  rowIndexOffset = 0,
   "aria-label": ariaLabel,
 }) => {
   const { t } = useTranslation();
@@ -156,12 +163,16 @@ export const StagesTable: React.FC<StagesTableProps> = ({
       {rows.map((row, rowIndex) => {
         const isExpanded = expandedKeys.includes(row.key);
         const instructions = paragraphs(row.instructions);
+        const toggleIndex = rowIndexOffset + rowIndex;
+        // PF names the toggle by `simple-node{rowIndex}` and its own
+        // "Details": "{stage} Details".
+        const name = <span id={`simple-node${toggleIndex}`}>{row.name}</span>;
         return (
           <Tbody key={row.key} isExpanded={isExpanded}>
             <Tr>
               <Td
                 expand={{
-                  rowIndex,
+                  rowIndex: toggleIndex,
                   isExpanded,
                   expandId,
                   onToggle: () =>
@@ -179,7 +190,7 @@ export const StagesTable: React.FC<StagesTableProps> = ({
                     spaceItems={{ default: "spaceItemsSm" }}
                     alignItems={{ default: "alignItemsCenter" }}
                   >
-                    <FlexItem>{row.name}</FlexItem>
+                    <FlexItem>{name}</FlexItem>
                     <FlexItem>
                       <Label variant="outline" isCompact>
                         {t("agentic.plan.requiresApproval")}
@@ -187,7 +198,7 @@ export const StagesTable: React.FC<StagesTableProps> = ({
                     </FlexItem>
                   </Flex>
                 ) : (
-                  row.name
+                  name
                 )}
               </Td>
               <Td dataLabel={columns.agent}>{agentCell(row)}</Td>

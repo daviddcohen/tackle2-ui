@@ -7,7 +7,7 @@
  */
 import axios, { AxiosError, isAxiosError } from "axios";
 
-import { Skill, SkillCollection } from "@app/agentic";
+import { MigrationPlan, Skill, SkillCollection } from "@app/agentic";
 import {
   AGENTIC_ENDPOINTS,
   createSkill,
@@ -17,6 +17,7 @@ import {
   getSkillById,
   getSkillCollections,
   getSkills,
+  resolvePlanSkills,
   updateApplicationSkills,
   updateArchetypeSkills,
   updateSkill,
@@ -49,6 +50,20 @@ const messageOf = async (promise: Promise<unknown>) => {
     return data?.message ?? "";
   }
 };
+
+/** The skills a saved plan's preview gives every stage. */
+const everyStageOf = async (plan: MigrationPlan) =>
+  (
+    await resolvePlanSkills({
+      stages: plan.stages.map(({ agent }) => ({ agent: { id: agent.id } })),
+      migrationPath: plan.migrationPath && {
+        archetype: { id: plan.migrationPath.archetype.id },
+        targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
+          id,
+        })),
+      },
+    })
+  ).everyStage.flatMap((group) => group.skills);
 
 const hasAssociation = (skill: Skill, scope: string, id: number | string) =>
   (skill.associations ?? []).some(
@@ -105,23 +120,25 @@ describe("PUT /archetypes/:id/skills", () => {
     );
   });
 
-  it("feeds the plan's server-derived effective skills", async () => {
+  it("feeds the plan's server-derived skills for every stage", async () => {
     const plan = await getMigrationPlanById("1");
     expect(plan.migrationPath?.archetype.id).toBe(1);
+    const before = await everyStageOf(plan);
     const added = (await getSkills()).find(
-      (skill) =>
-        !plan.effectiveSkills?.some((entry) => entry.skill.id === skill.id)
+      (skill) => !before.some((entry) => entry.skill.id === skill.id)
     )!;
     await updateArchetypeSkills({ archetypeId: 1, skills: [{ id: added.id }] });
-    const after = await getMigrationPlanById("1");
-    expect(after.effectiveSkills).toContainEqual({
-      skill: { id: added.id, name: added.name },
-      scope: "archetype",
-      scopeName: "Java EE Application",
+    const after = await everyStageOf(plan);
+    const fromArchetype = after.filter((entry) =>
+      entry.from.some((origin) => origin.kind === "archetype")
+    );
+    expect(fromArchetype.map((entry) => entry.skill)).toEqual([
+      { id: added.id, name: added.name },
+    ]);
+    expect(fromArchetype[0].from).toContainEqual({
+      kind: "archetype",
+      archetype: { id: 1, name: "Java EE Application" },
     });
-    expect(
-      after.effectiveSkills?.filter((entry) => entry.scope === "archetype")
-    ).toHaveLength(1);
   });
 
   it("clears the set with an empty list", async () => {
@@ -262,15 +279,17 @@ describe("PUT /archetypes/:id/target-profiles/:profileId/skills", () => {
       otherAssociations(before, "targetProfile", 11)
     );
     const plan = await getMigrationPlanById("1");
-    expect(
-      plan.effectiveSkills?.filter((entry) => entry.scope === "targetProfile")
-    ).toEqual([
-      {
-        skill: { id: added.id, name: added.name },
-        scope: "targetProfile",
-        scopeName: "Quarkus 3.x",
-      },
+    const fromProfile = (await everyStageOf(plan)).filter((entry) =>
+      entry.from.some((origin) => origin.kind === "targetProfile")
+    );
+    expect(fromProfile.map((entry) => entry.skill)).toEqual([
+      { id: added.id, name: added.name },
     ]);
+    expect(fromProfile[0].from).toContainEqual({
+      kind: "targetProfile",
+      targetProfile: { id: 11, name: "Quarkus 3.x" },
+      archetype: { id: 1, name: "Java EE Application" },
+    });
   });
 
   it("answers 404 for a profile of another archetype or an unknown one", async () => {
@@ -313,9 +332,11 @@ describe("PUT /applications/:id/skills", () => {
       otherAssociations(before, "application", 1)
     );
     const migrations = await getApplicationMigrations([1]);
-    const sources = migrations[1].effectiveSkills?.filter(
-      (entry) => entry.scope === "application"
-    );
+    const sources = migrations[1].skills?.everyStage
+      .flatMap((group) => group.skills)
+      .filter((entry) =>
+        entry.from.some((origin) => origin.kind === "application")
+      );
     expect(sources?.map((entry) => entry.skill.id)).toEqual([added.id]);
     current.forEach((id) =>
       expect(sources?.some((entry) => entry.skill.id === id)).toBe(false)

@@ -167,6 +167,17 @@ describe("AgentRunLogs", () => {
     expect(shownLines()).toEqual(AGENT_LINES);
   });
 
+  it("says in plain words what the skill loader does", async () => {
+    renderLogs();
+    await userEvent.click(screen.getByRole("button", { name: /^Container:/ }));
+    expect(
+      screen.getByRole("option", { name: /^Skill loader/ })
+    ).toHaveTextContent(
+      "Skill loaderLoads this stage's skills before the agent starts"
+    );
+    expect(screen.queryByText("Init container")).toBeNull();
+  });
+
   it("offers the containers the agent run has, and All containers only for several", async () => {
     serve({ agent: withLines(AGENT_LINES), sidecar: withLines(["side"]) });
     const { unmount } = renderLogs({ containers: ["agent"] });

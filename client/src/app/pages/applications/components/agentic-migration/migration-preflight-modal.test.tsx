@@ -220,7 +220,7 @@ describe("MigrationPreflightModal", () => {
   });
 
   it("links the run a reason names, and offers the run otherwise", () => {
-    const run = { id: "1", name: "Run #1 — Java EE to Quarkus" };
+    const run = { id: "1", name: "Run #1: Java EE to Quarkus" };
     renderModal({
       migrations: {
         ...migrations,
@@ -249,7 +249,7 @@ describe("MigrationPreflightModal", () => {
   });
 
   it("does not link the page it was opened from", () => {
-    const run = { id: "1", name: "Run #1 — Java EE to Quarkus" };
+    const run = { id: "1", name: "Run #1: Java EE to Quarkus" };
     renderModal(
       {
         migrations: {
@@ -274,7 +274,7 @@ describe("MigrationPreflightModal", () => {
   });
 
   it("does not link the run it was opened from", () => {
-    const run = { id: "1", name: "Run #1 — Java EE to Quarkus" };
+    const run = { id: "1", name: "Run #1: Java EE to Quarkus" };
     renderModal(
       {
         migrations: {

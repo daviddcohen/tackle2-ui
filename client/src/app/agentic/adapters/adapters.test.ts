@@ -485,6 +485,7 @@ describe("SkillCard -> Skill", () => {
       repoBranch: undefined,
       repoPath: undefined,
       imageRef: undefined,
+      loadPolicy: "skill",
       associations: undefined,
       operatorManaged: false,
       createTime: created,
@@ -503,6 +504,42 @@ describe("SkillCard -> Skill", () => {
       imageRef: "quay.io/konveyor/skills:latest",
       repoPath: undefined,
     });
+  });
+
+  it("maps spec.type to the load policy, absent as skill", () => {
+    expect(toSkill(gitCard).loadPolicy).toBe("skill");
+    expect(
+      toSkill({ ...gitCard, spec: { ...gitCard.spec, type: "rule" } })
+        .loadPolicy
+    ).toBe("rule");
+    expect(toSkill(inlineCard).loadPolicy).toBe("skill");
+  });
+
+  it("writes the load policy to spec.type only when it changes", () => {
+    const request = {
+      name: "Rules",
+      description: "",
+      sourceType: "git" as const,
+      repoUrl: "https://github.com/konveyor/rulesets",
+    };
+    // A card without a type keeps it absent for "skill" or no policy.
+    expect(
+      toSkillCardSpec({ ...request, loadPolicy: "skill" }, gitCard.spec)
+    ).not.toHaveProperty("type");
+    expect(toSkillCardSpec(request, gitCard.spec)).not.toHaveProperty("type");
+    expect(
+      toSkillCardSpec({ ...request, loadPolicy: "rule" }, gitCard.spec).type
+    ).toBe("rule");
+    // A card with a type: a request without a policy keeps it, a policy
+    // replaces it.
+    const ruleCard = { ...gitCard.spec, type: "rule" as const };
+    expect(toSkillCardSpec(request, ruleCard).type).toBe("rule");
+    expect(
+      toSkillCardSpec({ ...request, loadPolicy: "skill" }, ruleCard).type
+    ).toBe("skill");
+    expect(toSkillCardSpec({ ...request, loadPolicy: "rule" }).type).toBe(
+      "rule"
+    );
   });
 
   it("derives agent associations from Agent.spec.skillCards", () => {
@@ -658,7 +695,6 @@ describe("AgentWorkflow -> Migration Plan", () => {
         },
       ],
       migrationPath: undefined,
-      effectiveSkills: undefined,
       applicationImpact: undefined,
       runCount: 1,
       operatorManaged: false,
@@ -775,7 +811,7 @@ describe("AgentWorkflowRun -> Plan run", () => {
           commits: undefined,
         },
       ],
-      resolvedSkills: undefined,
+      skills: undefined,
     });
   });
 

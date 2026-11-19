@@ -119,7 +119,7 @@ describe("invalidation matrix", () => {
 });
 
 describe("plan skill resolution key", () => {
-  it("gives equivalent drafts one key, keeps the stage order and ignores fields that do not resolve skills", () => {
+  it("gives equivalent drafts one key, keeps every stage in order and ignores fields that do not resolve skills", () => {
     const draft = {
       name: "Draft",
       description: "",
@@ -151,7 +151,11 @@ describe("plan skill resolution key", () => {
       excludedSkills: [{ id: "9" }, { id: "13" }, { id: "9" }],
     };
     const normalized = {
-      stages: [{ agent: { id: "2" } }, { agent: { id: "1" } }],
+      stages: [
+        { agent: { id: "2" }, name: "Migrate" },
+        { agent: { id: "1" }, name: "Plan" },
+        { agent: { id: "2" }, name: "Again" },
+      ],
       migrationPath: {
         archetype: { id: 3 },
         targetProfiles: [{ id: 31 }, { id: 32 }],
@@ -161,7 +165,11 @@ describe("plan skill resolution key", () => {
     expect(normalizeResolvePlanSkillsRequest(draft)).toEqual(normalized);
     expect(
       normalizeResolvePlanSkillsRequest({
-        stages: [{ agent: { id: "2" } }, { agent: { id: "1" } }],
+        stages: [
+          { agent: { id: "2" }, name: "Migrate" },
+          { agent: { id: "1" }, name: "Plan" },
+          { agent: { id: "2" }, name: "Again" },
+        ],
         migrationPath: {
           archetype: { id: 3 },
           targetProfiles: [{ id: 32 }, { id: 31 }, { id: 31 }],
@@ -169,14 +177,42 @@ describe("plan skill resolution key", () => {
         excludedSkills: [{ id: "9" }, { id: "13" }],
       })
     ).toEqual(normalized);
-    // The server orders sources by stage: reordered stages are another key.
+    // The response is keyed by stage: reordered or fewer stages, a renamed
+    // stage or other applications are another key.
     expect(
       normalizeResolvePlanSkillsRequest({
-        stages: [{ agent: { id: "1" } }, { agent: { id: "2" } }],
-        migrationPath: draft.migrationPath,
-        excludedSkills: draft.excludedSkills,
+        ...draft,
+        stages: [draft.stages[1], draft.stages[0], draft.stages[2]],
       })
     ).not.toEqual(normalized);
+    expect(
+      normalizeResolvePlanSkillsRequest({
+        ...draft,
+        stages: draft.stages.slice(0, 2),
+      })
+    ).not.toEqual(normalized);
+    expect(
+      normalizeResolvePlanSkillsRequest({
+        ...draft,
+        stages: [
+          { ...draft.stages[0], name: "Renamed" },
+          ...draft.stages.slice(1),
+        ],
+      })
+    ).not.toEqual(normalized);
+    expect(
+      normalizeResolvePlanSkillsRequest({
+        stages: [],
+        applications: [{ id: 3 }, { id: 1 }, { id: 3 }],
+      })
+    ).toEqual({
+      stages: [],
+      excludedSkills: [],
+      applications: [{ id: 3 }, { id: 1 }],
+    });
+    expect(
+      normalizeResolvePlanSkillsRequest({ stages: [], applications: [] })
+    ).toEqual({ stages: [], excludedSkills: [] });
     expect(normalizeResolvePlanSkillsRequest({ stages: [] })).toEqual({
       stages: [],
       excludedSkills: [],
@@ -201,7 +237,6 @@ describe("plan skill resolution key", () => {
 describe("plan skill resolution state", () => {
   const settled = (fetchError: unknown) =>
     planSkillsState({
-      planSkills: undefined,
       isFetching: false,
       fetchError,
       refetch: () => Promise.resolve({ isError: true }),
@@ -214,6 +249,45 @@ describe("plan skill resolution state", () => {
     expect(settled(axiosError(503))).toBe("error");
     expect(settled(axiosError(400))).toBe("error");
     expect(settled(new Error("Network Error"))).toBe("error");
+  });
+
+  it("is ready once the stages resolve, loading until then", () => {
+    const query = {
+      isFetching: false,
+      fetchError: null,
+      refetch: () => Promise.resolve({ isError: false }),
+    };
+    expect(
+      planSkillsState({
+        ...query,
+        skillsByStage: { stages: [], everyStage: [] },
+      })
+    ).toBe("ready");
+    expect(planSkillsState(query)).toBe("loading");
+  });
+
+  it("keeps resolved stages ready while they refetch, even without isAnswered", () => {
+    // Rows in hand are an answer: a background refetch does not hide them.
+    expect(
+      planSkillsState({
+        isFetching: true,
+        fetchError: null,
+        refetch: () => Promise.resolve({ isError: false }),
+        skillsByStage: { stages: [], everyStage: [] },
+      })
+    ).toBe("ready");
+  });
+
+  it("reads an answer without the per-stage groups as unavailable", () => {
+    // The surfaces show skills by stage; an answer without them cannot.
+    expect(
+      planSkillsState({
+        isFetching: false,
+        fetchError: null,
+        refetch: () => Promise.resolve({ isError: false }),
+        isAnswered: true,
+      })
+    ).toBe("unavailable");
   });
 });
 

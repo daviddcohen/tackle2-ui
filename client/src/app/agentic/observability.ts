@@ -2,9 +2,12 @@
  * Run observability: what one stage's agent run did, while it runs and after
  * its pod is gone (agentic-controller#341).
  *
- * On the real backend a plan run stage is one AgentRun
- * (`AgentWorkflowRun.status.stages[].agentRunName`): one sandbox pod, one ACP
- * session. A retry is a new AgentRun. So "per agent run" is "per stage".
+ * On the real backend a stage of one application's AgentWorkflowRun is one
+ * AgentRun (`AgentWorkflowRun.status.stages[].agentRunName`): one sandbox
+ * pod, one ACP session. A retry is a new AgentRun. A plan run on several
+ * applications is one AgentWorkflowRun per application, so a stage has one
+ * agent run per application (`StageAgentRun.application`), and the UI
+ * groups them by stage (`stageAgentRunsOf`).
  *
  * Shapes follow the real backend: usage uses the ADR 0021 field names
  * (agentic-controller PR 282), transcript entries are folded from recorded
@@ -12,7 +15,7 @@
  * hub branch endpoint. docs/agentic-handoff.md (section 4) maps every field to its
  * source and says which sources are merged, proposed or hub branch only.
  */
-import { ControllerRunPhase, EntityId } from "./types";
+import { ControllerRunPhase, EntityId, HubRef } from "./types";
 
 /**
  * State of an agent run's transcript recording (the hub branch recorder's
@@ -72,13 +75,20 @@ export interface AgentRunUsage {
   model?: string;
 }
 
-/** The AgentRun behind one plan run stage. */
+/** The AgentRun behind one plan run stage, for one application of the run. */
 export interface StageAgentRun {
   /** AgentRun `metadata.name`. Opaque: never parse it. */
   name: string;
   /** Plan run id. */
   runId: EntityId;
   stageId: EntityId;
+  /**
+   * The application this agent run works on (label
+   * `konveyor.io/application`, else env `APP_ID`). Absent when the AgentRun
+   * names none.
+   */
+  application?: HubRef;
+  /** This agent run's own phase (the stage's status is the aggregate). */
   phase: ControllerRunPhase;
   /** Sandbox pod (`status.sandboxName`). */
   podName?: string;
@@ -89,6 +99,77 @@ export interface StageAgentRun {
   usage?: AgentRunUsage;
   logSource?: AgentRunLogSource;
 }
+
+/**
+ * The agent runs of one stage, in the order given (the list endpoint answers
+ * stage order, then the run's application order).
+ */
+export const stageAgentRunsOf = (
+  agentRuns: readonly StageAgentRun[],
+  stageId: EntityId
+): StageAgentRun[] =>
+  agentRuns.filter((agentRun) => agentRun.stageId === stageId);
+
+/** The agent run of one application among a stage's agent runs. */
+export const stageAgentRunFor = (
+  stageAgentRuns: readonly StageAgentRun[],
+  applicationId: number | undefined
+): StageAgentRun | undefined =>
+  applicationId != null
+    ? stageAgentRuns.find(
+        (agentRun) => agentRun.application?.id === applicationId
+      )
+    : undefined;
+
+/**
+ * The agent run a stage page shows when no application is chosen: the first
+ * one waiting for a decision (AwaitingApproval), else the first Failed one,
+ * else the first in the run's application order (`applications`; agent runs
+ * of other applications, or without one, follow in list order).
+ */
+export const defaultStageAgentRun = (
+  stageAgentRuns: readonly StageAgentRun[],
+  applications: readonly HubRef[] = []
+): StageAgentRun | undefined => {
+  const position = (agentRun: StageAgentRun) => {
+    const index = applications.findIndex(
+      (application) => application.id === agentRun.application?.id
+    );
+    return index === -1 ? applications.length : index;
+  };
+  const ordered = stageAgentRuns
+    .map((agentRun, order) => ({ agentRun, order }))
+    .sort(
+      (a, b) => position(a.agentRun) - position(b.agentRun) || a.order - b.order
+    )
+    .map(({ agentRun }) => agentRun);
+  return (
+    ordered.find((agentRun) => agentRun.phase === "AwaitingApproval") ??
+    ordered.find((agentRun) => agentRun.phase === "Failed") ??
+    ordered[0]
+  );
+};
+
+/**
+ * The applications whose agent run for a stage needs a person: in a stage
+ * that waits for approval, those waiting; in a failed stage, those that
+ * failed. In the run's application order; empty for any other stage status
+ * or when the agent runs name no application.
+ */
+export const stageAttentionApplications = (
+  stageAgentRuns: readonly StageAgentRun[],
+  stageStatus: ControllerRunPhase | undefined,
+  applications: readonly HubRef[]
+): HubRef[] =>
+  stageStatus === "AwaitingApproval" || stageStatus === "Failed"
+    ? applications.filter((application) =>
+        stageAgentRuns.some(
+          (agentRun) =>
+            agentRun.phase === stageStatus &&
+            agentRun.application?.id === application.id
+        )
+      )
+    : [];
 
 export type TranscriptToolCallStatus =
   | "pending"

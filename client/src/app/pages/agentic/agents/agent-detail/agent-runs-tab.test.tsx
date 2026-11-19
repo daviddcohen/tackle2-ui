@@ -27,7 +27,7 @@ const stage = (
 
 const run = (id: string, stageRuns: StageRun[]): PlanRun => ({
   id,
-  name: `Run #${id} — Plan`,
+  name: `Run #${id}: Plan`,
   planId: "1",
   planName: "Plan",
   applications: [],
@@ -90,10 +90,10 @@ describe("AgentRunsTab", () => {
     ).toBeInTheDocument();
     const rows = rowsOf("Migration plan stages");
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent("Run #2 — Plan");
+    expect(rows[0]).toHaveTextContent("Run #2: Plan");
     expect(rows[0]).toHaveTextContent("Pending");
     expect(rows[0]).toHaveTextContent("Not started");
-    expect(rows[1]).toHaveTextContent("Run #1 — Plan");
+    expect(rows[1]).toHaveTextContent("Run #1: Plan");
     expect(rows[1]).toHaveTextContent("Succeeded");
     expect(rows[1]).toHaveTextContent("2026-11-01 10:00");
     expect(rows[1]).toHaveTextContent("52m");

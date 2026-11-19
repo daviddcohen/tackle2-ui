@@ -35,7 +35,7 @@ const coldLinks: [path: string, crumbs: string[]][] = [
     "/skills/9?from=run-7",
     [
       "Plan runs",
-      "Run #7 — Legacy Java runtime modernization",
+      "Run #7: Legacy Java runtime modernization",
       "Java runtime modernization",
     ],
   ],
@@ -56,18 +56,18 @@ const coldLinks: [path: string, crumbs: string[]][] = [
     [
       "Application inventory",
       "Customer Management",
-      "Run #1 — Java EE to Quarkus",
+      "Run #1: Java EE to Quarkus",
     ],
   ],
   [
     "/agents/2?from=run-1",
-    ["Plan runs", "Run #1 — Java EE to Quarkus", "Code Migrator"],
+    ["Plan runs", "Run #1: Java EE to Quarkus", "Code Migrator"],
   ],
   ["/plan-runs/1/stages/2?fromAgent=2", ["Agents", "Code Migrator", "Migrate"]],
   // Without (or with an unusable) origin the canonical hierarchy is used.
   [
     "/plan-runs/1/stages/2",
-    ["Plan runs", "Run #1 — Java EE to Quarkus", "Migrate"],
+    ["Plan runs", "Run #1: Java EE to Quarkus", "Migrate"],
   ],
   [
     "/migration-plans/1?from=bogus-1",
@@ -108,7 +108,7 @@ test("detail pages tag outgoing entity links with their own origin", async ({
     expect(href).toMatch(/[?&]from=agent-1(&|$)/);
 
   await page.goto(protoUrl("/plan-runs/1", state));
-  await expect(mainHeading(page)).toHaveText("Run #1 — Java EE to Quarkus");
+  await expect(mainHeading(page)).toHaveText("Run #1: Java EE to Quarkus");
   const runLinks = await hrefs(
     `a[href^="${withBase("/migration-plans/")}"], a[href^="${withBase("/agents/")}"], a[href^="${withBase("/skills/")}"]`
   );

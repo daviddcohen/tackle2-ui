@@ -1,8 +1,8 @@
 /**
  * Seed data for the agentic mock server. The store (`store.ts`) deep-copies
  * these arrays, so handlers never mutate them. Server-derived fields
- * (`effectiveSkills`, `applicationImpact`, `runCount`, agent-scope Skill
- * associations, ref names) are computed by the store on read.
+ * (`applicationImpact`, `runCount`, agent-scope Skill associations, ref
+ * names) are computed by the store on read.
  *
  * Ids are opaque strings; the values are numeric-looking so prototype URLs such
  * as `/agents/2` keep working. Hub references (applications, archetypes, target
@@ -30,8 +30,11 @@ export type StageRunTemplate = Omit<
   "name" | "agent" | "instructions" | "requiresApproval" | "order"
 >;
 
-/** Content for a seeded plan run (configured world). See `execution.ts`. */
-export type PlanRunTemplate = Omit<PlanRun, "stageRuns"> & {
+/**
+ * Content for a seeded plan run (configured world). See `execution.ts`. The
+ * skills snapshot is not written here: the resolver computes it.
+ */
+export type PlanRunTemplate = Omit<PlanRun, "stageRuns" | "skills"> & {
   stageRuns: StageRunTemplate[];
 };
 
@@ -124,6 +127,7 @@ export const mockSkills: Skill[] = [
     description:
       "Comprehensive guidance for migrating Spring Boot applications to Quarkus, covering dependency replacement, configuration changes, and runtime adaptation.",
     sourceType: "inline",
+    loadPolicy: "skill",
     associations: [
       {
         scope: "archetype",
@@ -133,7 +137,6 @@ export const mockSkills: Skill[] = [
         scope: "targetProfile",
         resource: { id: 21, name: "Quarkus 3.x" },
       },
-      { scope: "agent", resource: { id: "2", name: "Code Migrator" } },
     ],
     content: [
       "# Spring Boot to Quarkus Migration",
@@ -168,12 +171,12 @@ export const mockSkills: Skill[] = [
     description:
       "Patterns for converting Enterprise JavaBeans to CDI managed beans, covering stateless, stateful, and singleton bean patterns.",
     sourceType: "inline",
+    loadPolicy: "skill",
     associations: [
       {
         scope: "archetype",
         resource: { id: 1, name: "Java EE Application" },
       },
-      { scope: "agent", resource: { id: "2", name: "Code Migrator" } },
       {
         scope: "application",
         resource: applicationRef(3),
@@ -207,6 +210,7 @@ export const mockSkills: Skill[] = [
     description:
       "Rules and scripts for migrating javax.* imports to jakarta.* namespace as required by Jakarta EE 9+.",
     sourceType: "git",
+    loadPolicy: "skill",
     associations: [
       {
         scope: "archetype",
@@ -229,6 +233,7 @@ export const mockSkills: Skill[] = [
     description:
       "Community-maintained Quarkus patterns covering native compilation, dev services, and reactive programming.",
     sourceType: "oci",
+    loadPolicy: "skill",
     associations: [
       {
         scope: "targetProfile",
@@ -249,6 +254,7 @@ export const mockSkills: Skill[] = [
     description:
       "Organization-specific coding standards and architectural constraints for migrated applications.",
     sourceType: "inline",
+    loadPolicy: "rule",
     associations: [
       {
         scope: "application",
@@ -289,6 +295,7 @@ export const mockSkills: Skill[] = [
     description:
       "Guidance for migrating database access layers, covering JPA, Hibernate, and connection pooling changes.",
     sourceType: "inline",
+    loadPolicy: "skill",
     associations: [
       { scope: "agent", resource: { id: "4", name: "Test Runner" } },
     ],
@@ -317,16 +324,9 @@ export const mockSkills: Skill[] = [
     description:
       "Organization conventions for routes, health checks, resource limits, and deployment configuration on OpenShift.",
     sourceType: "git",
+    loadPolicy: "rule",
     associations: [
       { scope: "agent", resource: { id: "6", name: "Deployment Agent" } },
-      {
-        scope: "targetProfile",
-        resource: { id: 12, name: "OpenShift lift and shift" },
-      },
-      {
-        scope: "targetProfile",
-        resource: { id: 22, name: "Spring Boot 3 on OpenShift" },
-      },
       {
         scope: "targetProfile",
         resource: { id: 31, name: "Java 17 on OpenShift" },
@@ -334,10 +334,6 @@ export const mockSkills: Skill[] = [
       {
         scope: "targetProfile",
         resource: { id: 41, name: ".NET 8 on OpenShift" },
-      },
-      {
-        scope: "targetProfile",
-        resource: { id: 42, name: "OpenShift lift and shift" },
       },
       {
         scope: "targetProfile",
@@ -356,19 +352,12 @@ export const mockSkills: Skill[] = [
     description:
       "Approved container base images, build strategies, and runtime hardening guidance.",
     sourceType: "oci",
+    loadPolicy: "rule",
     associations: [
       { scope: "agent", resource: { id: "5", name: "Containerization Agent" } },
       {
         scope: "archetype",
         resource: { id: 3, name: "Legacy Java Application" },
-      },
-      {
-        scope: "targetProfile",
-        resource: { id: 12, name: "OpenShift lift and shift" },
-      },
-      {
-        scope: "targetProfile",
-        resource: { id: 42, name: "OpenShift lift and shift" },
       },
     ],
     imageRef: "quay.io/konveyor/skill-containerization:1.4",
@@ -381,6 +370,7 @@ export const mockSkills: Skill[] = [
     description:
       "Patterns for upgrading legacy Java applications to Java 17 and supported libraries.",
     sourceType: "git",
+    loadPolicy: "skill",
     associations: [
       {
         scope: "archetype",
@@ -390,7 +380,6 @@ export const mockSkills: Skill[] = [
         scope: "targetProfile",
         resource: { id: 31, name: "Java 17 on OpenShift" },
       },
-      { scope: "agent", resource: { id: "2", name: "Code Migrator" } },
     ],
     repoUrl: "https://github.com/konveyor/rulesets",
     repoBranch: "main",
@@ -404,6 +393,7 @@ export const mockSkills: Skill[] = [
     description:
       "Guidance for moving .NET Framework services to .NET 8, including package, API, and project format changes.",
     sourceType: "oci",
+    loadPolicy: "skill",
     associations: [
       {
         scope: "targetProfile",
@@ -420,6 +410,7 @@ export const mockSkills: Skill[] = [
     description:
       "Security review checklist for generated container and OpenShift resources.",
     sourceType: "inline",
+    loadPolicy: "rule",
     associations: [
       { scope: "agent", resource: { id: "7", name: "Security Review Agent" } },
       {
@@ -449,6 +440,7 @@ export const mockSkills: Skill[] = [
     description:
       "Dependency and runtime guidance for upgrading Node.js services to the current LTS release.",
     sourceType: "git",
+    loadPolicy: "skill",
     associations: [
       {
         scope: "agent",
@@ -468,6 +460,7 @@ export const mockSkills: Skill[] = [
     description:
       "Review criteria for preserving externally consumed API contracts during modernization.",
     sourceType: "inline",
+    loadPolicy: "rule",
     associations: [
       {
         scope: "agent",
@@ -508,8 +501,10 @@ export const mockSkills: Skill[] = [
     description:
       "Framework-neutral guidance for applying source changes in small, reviewable, and verifiable increments.",
     sourceType: "inline",
+    loadPolicy: "rule",
     associations: [
       { scope: "agent", resource: { id: "2", name: "Code Migrator" } },
+      { scope: "agent", resource: { id: "9", name: "Java Code Migrator" } },
       {
         scope: "archetype",
         resource: { id: 2, name: "Spring Boot Application" },
@@ -536,6 +531,7 @@ export const mockSkills: Skill[] = [
     description:
       "Framework-neutral build validation, diagnostic, and evidence requirements.",
     sourceType: "oci",
+    loadPolicy: "rule",
     associations: [
       { scope: "agent", resource: { id: "3", name: "Build Validator" } },
       {
@@ -557,12 +553,10 @@ export const mockSkills: Skill[] = [
     description:
       "Spring Boot 3, Spring Framework 6, Jakarta namespace, and Java 17 upgrade guidance.",
     sourceType: "git",
-    associations: [
-      {
-        scope: "targetProfile",
-        resource: { id: 22, name: "Spring Boot 3 on OpenShift" },
-      },
-    ],
+    loadPolicy: "skill",
+    // Attached to nothing: its target profile (Spring Boot 3 on OpenShift)
+    // was removed with the one-profile-per-archetype data change.
+    associations: [],
     repoUrl: "https://git.example.com/platform/spring-modernization",
     repoBranch: "main",
     repoPath: "skills/spring-boot-3",
@@ -597,7 +591,6 @@ export const mockAgents: Agent[] = [
       },
     ],
     skills: agentSkills("1"),
-    skillCollections: [{ id: "1", name: "Java modernization foundation" }],
     prompt:
       "Analyze the application source code and Konveyor analysis results to produce a detailed, prioritized migration proposal for this application. Identify high-risk areas, estimate effort per module, and recommend the order of changes to minimize build breakage during incremental migration.",
     createTime: "2026-07-20T10:00:00Z",
@@ -607,7 +600,7 @@ export const mockAgents: Agent[] = [
     id: "2",
     name: "Code Migrator",
     description:
-      "Applies code transformations to migrate source files according to the application-specific migration proposal and associated Skills.",
+      "Applies code transformations to migrate source files according to the application-specific migration proposal and its skills.",
     model: { id: "1", name: "Claude 3.7 Sonnet" },
     capabilities: ["Code transformation", "Incremental commits"],
     parameters: [
@@ -618,9 +611,8 @@ export const mockAgents: Agent[] = [
       },
     ],
     skills: agentSkills("2"),
-    skillCollections: [{ id: "1", name: "Java modernization foundation" }],
     prompt:
-      "Apply the transformations described in the application-specific migration proposal and associated Skills to the source code. Work file by file, make targeted changes, verify compilation, and commit changes incrementally.",
+      "Apply the transformations described in the application-specific migration proposal and your skills to the source code. Work file by file, make targeted changes, verify compilation, and commit changes incrementally.",
     createTime: "2026-07-20T10:00:00Z",
     updateTime: "2026-08-10T14:00:00Z",
   },
@@ -633,6 +625,7 @@ export const mockAgents: Agent[] = [
     capabilities: ["Build validation", "Compilation diagnostics"],
     parameters: [],
     skills: agentSkills("3"),
+    skillCollections: [{ id: "2", name: "OpenShift delivery checks" }],
     prompt:
       "You are a build validation agent. Run the application build process and analyze any compilation errors. For each error, determine whether it is a migration-related issue or a pre-existing problem. Propose fixes for migration-related build failures and report any issues that require human review.",
     createTime: "2026-07-22T10:00:00Z",
@@ -675,6 +668,7 @@ export const mockAgents: Agent[] = [
     capabilities: ["Manifest generation", "Deployment configuration"],
     parameters: [],
     skills: agentSkills("6"),
+    skillCollections: [{ id: "3", name: "Platform deployment pack" }],
     prompt:
       "Generate OpenShift deployment resources for the migrated application. Include probes, resource requests and limits, routes when required, and references to externalized configuration.",
     createTime: "2026-08-02T09:00:00Z",
@@ -689,6 +683,7 @@ export const mockAgents: Agent[] = [
     capabilities: ["Security review", "Exception reporting"],
     parameters: [],
     skills: agentSkills("7"),
+    skillCollections: [{ id: "4", name: "Security and compliance" }],
     prompt:
       "Review the migration output for security and API compatibility risks. Produce evidence for passed checks and request individual review for any exception that changes runtime privileges or public contracts.",
     createTime: "2026-08-04T09:00:00Z",
@@ -707,6 +702,27 @@ export const mockAgents: Agent[] = [
       "Upgrade the application runtime and dependencies in small groups. Run tests after each group, replace unsupported packages, and record compatibility decisions as migration evidence.",
     createTime: "2026-08-06T09:00:00Z",
     updateTime: "2026-08-27T15:00:00Z",
+  },
+  {
+    id: "9",
+    name: "Java Code Migrator",
+    description:
+      "Applies Java code transformations (Java EE, Spring Boot and Java runtime upgrades) according to the application-specific migration proposal.",
+    model: { id: "1", name: "Claude 3.7 Sonnet" },
+    capabilities: ["Java code transformation", "Incremental commits"],
+    parameters: [
+      {
+        name: "instructions",
+        type: "string",
+        description: "Optional code migration instructions.",
+      },
+    ],
+    skills: agentSkills("9"),
+    skillCollections: [{ id: "1", name: "Java modernization foundation" }],
+    prompt:
+      "Apply the Java transformations described in the application-specific migration proposal to the source code. Work file by file, make targeted changes, verify compilation, and commit changes incrementally.",
+    createTime: "2026-08-20T10:00:00Z",
+    updateTime: "2026-08-20T10:00:00Z",
   },
 ];
 
@@ -734,7 +750,7 @@ export const mockMigrationPlans: MigrationPlan[] = [
       {
         id: "2",
         name: "Migrate",
-        agent: { id: "2", name: "Code Migrator" },
+        agent: { id: "9", name: "Java Code Migrator" },
         instructions:
           "Execute the migration proposal produced in the previous Stage. Apply code transformations incrementally, committing each logical change separately.",
         requiresApproval: false,
@@ -776,7 +792,7 @@ export const mockMigrationPlans: MigrationPlan[] = [
       {
         id: "5",
         name: "Migrate",
-        agent: { id: "2", name: "Code Migrator" },
+        agent: { id: "9", name: "Java Code Migrator" },
         instructions:
           "Apply the modernization changes identified in the analysis stage. Prioritize dependency updates, then API migrations, then configuration changes.",
         requiresApproval: false,
@@ -800,11 +816,8 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: "Java EE lift and shift",
     description:
       "Containerizes Java EE applications with minimal code changes and deploys them to OpenShift.",
-    migrationPath: {
-      archetype: { id: 1, name: "Java EE Application" },
-      targetProfiles: [{ id: 12, name: "OpenShift lift and shift" }],
-      isDefault: true,
-    },
+    // No migration path: an alternative a user picks with "Use one
+    // migration plan for all applications".
     stages: [
       {
         id: "7",
@@ -851,11 +864,8 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: "Spring Boot 3 modernization",
     description:
       "Upgrades Spring Boot services to Spring Boot 3 and prepares them for OpenShift deployment.",
-    migrationPath: {
-      archetype: { id: 2, name: "Spring Boot Application" },
-      targetProfiles: [{ id: 22, name: "Spring Boot 3 on OpenShift" }],
-      isDefault: true,
-    },
+    // No migration path: an alternative a user picks with "Use one
+    // migration plan for all applications".
     stages: [
       {
         id: "11",
@@ -911,7 +921,7 @@ export const mockMigrationPlans: MigrationPlan[] = [
       {
         id: "15",
         name: "Upgrade Java",
-        agent: { id: "2", name: "Code Migrator" },
+        agent: { id: "9", name: "Java Code Migrator" },
         instructions:
           "Upgrade source, build configuration, and dependencies to Java 17.",
         requiresApproval: false,
@@ -995,11 +1005,8 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: ".NET lift and shift",
     description:
       "Containerizes compatible .NET Framework workloads with minimal application changes.",
-    migrationPath: {
-      archetype: { id: 4, name: ".NET Framework Application" },
-      targetProfiles: [{ id: 42, name: "OpenShift lift and shift" }],
-      isDefault: true,
-    },
+    // No migration path: an alternative a user picks with "Use one
+    // migration plan for all applications".
     stages: [
       {
         id: "22",
@@ -1099,7 +1106,7 @@ export const mockSkillCollections: SkillCollection[] = [
     id: "1",
     name: "Java modernization foundation",
     description:
-      "Focused Skills commonly used together for Java runtime and framework modernization.",
+      "Focused skills commonly used together for Java runtime and framework modernization.",
     skills: mockSkills
       .filter((skill) => ["1", "2", "3"].includes(skill.id))
       .map((skill) => ({ id: skill.id, name: skill.name })),
@@ -1126,7 +1133,7 @@ export const mockSkillCollections: SkillCollection[] = [
     id: "4",
     name: "Security and compliance",
     description:
-      "Security baseline and API compatibility review Skills applied to all migrations requiring compliance sign-off.",
+      "Security baseline and API compatibility review skills applied to all migrations requiring compliance sign-off.",
     skills: mockSkills
       .filter((skill) => ["11", "13"].includes(skill.id))
       .map((skill) => ({ id: skill.id, name: skill.name })),
@@ -1134,14 +1141,25 @@ export const mockSkillCollections: SkillCollection[] = [
 ];
 
 /**
+ * Seeded runs that used "Use one migration plan for all applications" on
+ * purpose: their applications resolve to another plan. Run #4 runs Java EE
+ * lift and shift (no migration path) on Partner Portal, whose own plan is
+ * Java EE to Quarkus.
+ */
+export const SINGLE_PLAN_RUN_IDS: ReadonlySet<string> = new Set(["4"]);
+
+/**
  * Plan runs of the "configured" world. `applications` is that world's
  * membership; the execution scenarios (queued, running, ...) re-seed the same
- * runs with their own membership and phases (see `execution.ts`).
+ * runs with their own membership and phases (see `execution.ts`). Every
+ * application of a run resolves to that run's plan (its archetype and target
+ * profile), except in Run #4 (`SINGLE_PLAN_RUN_IDS`). The skills snapshot of
+ * each run is computed by the skill resolver when the world is seeded.
  */
 export const mockPlanRuns: PlanRunTemplate[] = [
   {
     id: "1",
-    name: "Run #1 — Java EE to Quarkus",
+    name: "Run #1: Java EE to Quarkus",
     planId: "1",
     planName: "Java EE to Quarkus",
     applications: [applicationRef(3), applicationRef(8)],
@@ -1149,28 +1167,6 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     targetBranch: "konveyor/agentic-migration",
     startedAt: "2026-09-20T08:00:00Z",
     completedAt: "2026-09-20T10:15:00Z",
-    resolvedSkills: [
-      {
-        skill: { id: "3", name: "Jakarta EE namespace migration" },
-        scope: "archetype",
-        scopeName: "Java EE Application",
-      },
-      {
-        skill: { id: "4", name: "Quarkus best practices" },
-        scope: "targetProfile",
-        scopeName: "Quarkus 3.x",
-      },
-      {
-        skill: { id: "2", name: "EJB to CDI conversion patterns" },
-        scope: "archetype",
-        scopeName: "Java EE Application",
-      },
-      {
-        skill: { id: "5", name: "Corporate coding standards" },
-        scope: "application",
-        scopeName: "Customer Management",
-      },
-    ],
     stageRuns: [
       {
         stageId: "1",
@@ -1273,7 +1269,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
           {
             role: "agent",
             content:
-              "Build succeeded. 0 compilation errors, 2 warnings (deprecation in test class — pre-existing). All 47 unit tests passed.",
+              "Build succeeded. 0 compilation errors, 2 warnings (a pre-existing deprecation in a test class). All 47 unit tests passed.",
             timestamp: "2026-09-20T10:14:00Z",
           },
         ],
@@ -1283,20 +1279,13 @@ export const mockPlanRuns: PlanRunTemplate[] = [
   },
   {
     id: "2",
-    name: "Run #2 — Spring Boot to Quarkus",
+    name: "Run #2: Spring Boot to Quarkus",
     planId: "2",
     planName: "Spring Boot to Quarkus",
-    applications: [applicationRef(7), applicationRef(12)],
+    applications: [applicationRef(12)],
     status: "AwaitingApproval",
     targetBranch: "konveyor/spring-quarkus",
     startedAt: "2026-09-23T09:00:00Z",
-    resolvedSkills: [
-      {
-        skill: { id: "1", name: "Spring Boot to Quarkus migration" },
-        scope: "targetProfile",
-        scopeName: "Quarkus 3.x",
-      },
-    ],
     stageRuns: [
       {
         stageId: "4",
@@ -1342,7 +1331,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
   },
   {
     id: "3",
-    name: "Run #3 — Java EE to Quarkus",
+    name: "Run #3: Java EE to Quarkus",
     planId: "1",
     planName: "Java EE to Quarkus",
     applications: [applicationRef(2)],
@@ -1350,13 +1339,6 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     targetBranch: "konveyor/agentic-migration",
     startedAt: "2026-09-22T14:00:00Z",
     completedAt: "2026-09-22T14:08:00Z",
-    resolvedSkills: [
-      {
-        skill: { id: "3", name: "Jakarta EE namespace migration" },
-        scope: "archetype",
-        scopeName: "Java EE Application",
-      },
-    ],
     stageRuns: [
       {
         stageId: "1",
@@ -1367,7 +1349,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
           {
             role: "agent",
             content:
-              'Starting "Prepare proposal": analyzing Settlement Desktop API source code.',
+              'Starting "Prepare proposal": analyzing Policy Administration source code.',
             timestamp: "2026-09-22T14:00:15Z",
           },
           {
@@ -1393,20 +1375,13 @@ export const mockPlanRuns: PlanRunTemplate[] = [
   },
   {
     id: "4",
-    name: "Run #4 — Java EE lift and shift",
+    name: "Run #4: Java EE lift and shift",
     planId: "3",
     planName: "Java EE lift and shift",
-    applications: [applicationRef(16)],
+    applications: [applicationRef(7)],
     status: "Running",
     targetBranch: "konveyor/lift-shift",
     startedAt: "2026-09-23T10:30:00Z",
-    resolvedSkills: [
-      {
-        skill: { id: "8", name: "Containerization standards" },
-        scope: "archetype",
-        scopeName: "Java EE Application",
-      },
-    ],
     stageRuns: [
       {
         stageId: "7",
@@ -1416,19 +1391,19 @@ export const mockPlanRuns: PlanRunTemplate[] = [
           {
             role: "agent",
             content:
-              'Starting "Assess packaging": inventorying runtime dependencies and packaging constraints for Policy Engine and Claims API.',
+              'Starting "Assess packaging": inventorying runtime dependencies and packaging constraints for Partner Portal.',
             timestamp: "2026-09-23T10:30:20Z",
           },
           {
             role: "agent",
             content:
-              "Policy Engine: detected JBoss EAP 7.4 runtime dependency, proprietary JCA connector, and datasource JNDI bindings that require externalized configuration.",
+              "Detected a JBoss EAP 7.4 runtime dependency, a proprietary JCA connector, and datasource JNDI bindings that require externalized configuration.",
             timestamp: "2026-09-23T10:48:00Z",
           },
           {
             role: "agent",
             content:
-              "Claims API: detected embedded ActiveMQ broker — must be replaced by an external broker or a sidecar container in OpenShift. Documenting as a packaging constraint.",
+              "Detected an embedded ActiveMQ broker. It must be replaced by an external broker or a sidecar container in OpenShift. Documenting it as a packaging constraint.",
             timestamp: "2026-09-23T10:59:00Z",
           },
         ],
@@ -1441,47 +1416,30 @@ export const mockPlanRuns: PlanRunTemplate[] = [
   },
   {
     id: "5",
-    name: "Run #5 — Spring Boot 3 modernization",
-    planId: "4",
-    planName: "Spring Boot 3 modernization",
-    applications: [applicationRef(12)],
+    name: "Run #5: .NET Framework to .NET 8",
+    planId: "6",
+    planName: ".NET Framework to .NET 8",
+    applications: [applicationRef(16)],
     status: "Succeeded",
-    targetBranch: "konveyor/spring-boot-3",
+    targetBranch: "konveyor/dotnet-8",
     startedAt: "2026-09-21T07:00:00Z",
-    completedAt: "2026-09-21T09:45:00Z",
-    resolvedSkills: [
-      {
-        skill: { id: "16", name: "Spring Boot 3 upgrade" },
-        scope: "targetProfile",
-        scopeName: "Spring Boot 3 on OpenShift",
-      },
-      {
-        skill: { id: "7", name: "OpenShift deployment conventions" },
-        scope: "agent",
-        scopeName: "Deployment Agent",
-      },
-      {
-        skill: { id: "14", name: "Incremental transformation workflow" },
-        scope: "agent",
-        scopeName: "Code Migrator",
-      },
-    ],
+    completedAt: "2026-09-21T10:10:00Z",
     stageRuns: [
       {
-        stageId: "11",
+        stageId: "18",
         status: "Succeeded",
         startedAt: "2026-09-21T07:00:00Z",
         completedAt: "2026-09-21T07:50:00Z",
         commits: [
           {
             hash: "d4e5f6a1b2c3",
-            message: "Plan upgrade: dependency and API change inventory",
-            stageName: "Plan upgrade",
+            message: "Assess compatibility: unsupported API inventory",
+            stageName: "Assess compatibility",
           },
         ],
       },
       {
-        stageId: "12",
+        stageId: "19",
         status: "Succeeded",
         startedAt: "2026-09-21T07:50:00Z",
         completedAt: "2026-09-21T08:55:00Z",
@@ -1489,52 +1447,47 @@ export const mockPlanRuns: PlanRunTemplate[] = [
           {
             hash: "e5f6a1b2c3d4",
             message:
-              "Upgrade dependencies: Spring Boot 3 and Jakarta namespace",
-            stageName: "Upgrade dependencies",
+              "Migrate to .NET 8: SDK-style projects and package updates",
+            stageName: "Migrate to .NET 8",
           },
           {
             hash: "f6a1b2c3d4e5",
-            message: "Upgrade dependencies: Java 17 source and build config",
-            stageName: "Upgrade dependencies",
+            message: "Migrate to .NET 8: replace Windows-only APIs",
+            stageName: "Migrate to .NET 8",
           },
         ],
       },
       {
-        stageId: "13",
+        stageId: "20",
         status: "Succeeded",
         startedAt: "2026-09-21T08:55:00Z",
-        completedAt: "2026-09-21T09:45:00Z",
+        completedAt: "2026-09-21T09:30:00Z",
         commits: [
           {
             hash: "a1b2c3d4e5f7",
-            message: "Deploy and validate: OpenShift resources generated",
-            stageName: "Deploy and validate",
+            message: "Configure deployment: OpenShift resources generated",
+            stageName: "Configure deployment",
           },
         ],
+      },
+      {
+        stageId: "21",
+        status: "Succeeded",
+        startedAt: "2026-09-21T09:30:00Z",
+        completedAt: "2026-09-21T10:10:00Z",
+        commits: [],
       },
     ],
   },
   {
     id: "6",
-    name: "Run #6 — Node.js runtime modernization",
+    name: "Run #6: Node.js runtime modernization",
     planId: "8",
     planName: "Node.js runtime modernization",
     applications: [applicationRef(18)],
     status: "Running",
     targetBranch: "konveyor/nodejs-22",
     startedAt: "2026-09-29T11:00:00Z",
-    resolvedSkills: [
-      {
-        skill: { id: "12", name: "Node.js runtime modernization" },
-        scope: "archetype",
-        scopeName: "Node.js Service",
-      },
-      {
-        skill: { id: "13", name: "API compatibility checklist" },
-        scope: "agent",
-        scopeName: "Migration Proposal Agent",
-      },
-    ],
     stageRuns: [
       {
         stageId: "26",
@@ -1545,7 +1498,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
           {
             role: "agent",
             content:
-              'Starting "Assess dependencies": scanning Partner Events API and Document Preview Service for Node.js compatibility risks.',
+              'Starting "Assess dependencies": scanning Partner Events API for Node.js compatibility risks.',
             timestamp: "2026-09-29T11:00:20Z",
           },
           {
@@ -1557,7 +1510,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
           {
             role: "agent",
             content:
-              "Document Preview Service: dependency on node-gyp-based native bindings. Compatibility assessment complete — risks documented.",
+              "Compatibility assessment complete. Risks documented for review.",
             timestamp: "2026-09-29T11:28:00Z",
           },
         ],
@@ -1595,30 +1548,13 @@ export const mockPlanRuns: PlanRunTemplate[] = [
   },
   {
     id: "7",
-    name: "Run #7 — Legacy Java runtime modernization",
+    name: "Run #7: Legacy Java runtime modernization",
     planId: "5",
     planName: "Legacy Java runtime modernization",
-    applications: [applicationRef(7)],
+    applications: [applicationRef(14)],
     status: "AwaitingApproval",
     targetBranch: "konveyor/java17",
     startedAt: "2026-09-28T14:00:00Z",
-    resolvedSkills: [
-      {
-        skill: { id: "9", name: "Java runtime modernization" },
-        scope: "archetype",
-        scopeName: "Legacy Java Application",
-      },
-      {
-        skill: { id: "8", name: "Containerization standards" },
-        scope: "archetype",
-        scopeName: "Legacy Java Application",
-      },
-      {
-        skill: { id: "7", name: "OpenShift deployment conventions" },
-        scope: "targetProfile",
-        scopeName: "Java 17 on OpenShift",
-      },
-    ],
     stageRuns: [
       {
         stageId: "14",

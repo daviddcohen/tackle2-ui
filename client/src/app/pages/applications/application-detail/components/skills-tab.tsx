@@ -1,180 +1,230 @@
 import * as React from "react";
-import { useTranslation } from "react-i18next";
-import {
-  Button,
-  EmptyState,
-  EmptyStateActions,
-  EmptyStateBody,
-  EmptyStateFooter,
-} from "@patternfly/react-core";
+import { Trans, useTranslation } from "react-i18next";
+import { Link, useLocation } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
 import { Ref } from "@app/api/models";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
-import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
-import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
-  DetailSection,
-  DetailSections,
-} from "@app/pages/agentic/components/detail-section";
+  AttachedSkillsGroup,
+  AttachedSkillsList,
+  attachedSkillsFor,
+} from "@app/pages/agentic/components/attached-skills-list";
 import {
-  MANAGE_SKILLS_BUTTON_ID,
+  manageSkillsButtonId,
   useCanManageSkills,
 } from "@app/pages/agentic/components/manage-skills-modal";
+import { linkToPath } from "@app/pages/agentic/components/skill-origin";
 import {
-  SkillsTable,
-  groupSkillSources,
-  skillAssociationSources,
-  skillRowCounts,
-} from "@app/pages/agentic/components/skills-table";
+  archetypePath,
+  targetProfilePath,
+  targetProfilesPath,
+} from "@app/pages/agentic/entity-paths";
 import {
   useFetchApplicationMigrations,
   useFetchSkills,
 } from "@app/queries/agentic";
+import { universalComparator } from "@app/utils/utils";
+
+import { SKILLS_BY_STAGE_HASH } from "./skills-by-stage-anchor";
 
 interface SkillsTabProps {
   linkCrumbs: BreadcrumbEntry[];
   applicationId: number;
+  applicationName: string;
   archetypes: Ref[];
   /** Opens the page's Manage skills modal for this application. */
   onManageSkills: () => void;
 }
 
 /**
- * The skills the agents use for this application,
- * from its migration view. Without a migration plan there are no agents yet,
- * so the table shows the skills associated with the application and its
- * archetypes.
+ * The skills attached to this application and to its context,
+ * laid out like the Tags tab: the application's
+ * own group first, editable with Manage skills; then one read-only group
+ * per archetype, by name; then its target profile's group. Each group says
+ * how far its skills reach. What each stage gets, with the agents' own
+ * skills and the plan's exclusions, is the Migration tab's Skills by stage
+ * section, which the intro links to once a plan exists.
  */
 export const SkillsTab: React.FC<SkillsTabProps> = ({
   applicationId,
+  applicationName,
   linkCrumbs,
   archetypes,
   onManageSkills,
 }) => {
   const { t } = useTranslation();
+  const location = useLocation();
   const canManageSkills = useCanManageSkills();
-  const linkTo = (pathname: string) => breadcrumbTo(pathname, "", linkCrumbs);
-  const skillsLink = useLinkComponent(linkTo(DevPaths.skills));
+  const linkTo = (pathname: string, search = "") =>
+    breadcrumbTo(pathname, search, linkCrumbs);
   const {
     migrations,
-    isLoading: isLoadingMigrations,
-    fetchError: migrationsError,
+    isLoading: isLoadingMigration,
+    fetchError: migrationError,
   } = useFetchApplicationMigrations([applicationId]);
   const migration = migrations[applicationId];
-  const hasPlan = migration?.plan != null;
   const {
     skills,
     isLoading: isLoadingSkills,
-    isSuccess: isSkillsSuccess,
     fetchError: skillsError,
-  } = useFetchSkills({
-    // With a plan the rows come from the migration view; the list is still
-    // read for a manager, to know whether any skill exists to associate.
-    enabled: !isLoadingMigrations && (!hasPlan || canManageSkills),
-  });
+  } = useFetchSkills();
 
-  const rows = React.useMemo(() => {
-    if (hasPlan) {
-      // The server did not say which skills apply: unknown, not none.
-      // Skills its migration plan excludes stay in the table, marked.
-      return migration?.effectiveSkills != null
-        ? groupSkillSources(migration.effectiveSkills, migration.excludedSkills)
-        : undefined;
-    }
-    const archetypeIds = new Set(archetypes.map((archetype) => archetype.id));
-    return groupSkillSources(
-      skillAssociationSources(
-        skills,
-        (association) =>
-          (association.scope === "application" &&
-            association.resource.id === applicationId) ||
-          (association.scope === "archetype" &&
-            archetypeIds.has(association.resource.id))
-      )
-    );
-  }, [hasPlan, migration, skills, archetypes, applicationId]);
+  // Every group reads the skills list: without it, all of them would be wrong.
+  if (isLoadingSkills) return <AppPlaceholder />;
+  if (skillsError != null) return <StateError />;
 
-  const { used, total } = skillRowCounts(rows);
+  const ownerLink = (path: string) => <Link to={linkToPath(linkTo, path)} />;
 
-  if (isLoadingMigrations || (!hasPlan && isLoadingSkills)) {
-    return <AppPlaceholder />;
-  }
-
-  // With no skill to pick, the way on is to create one (the empty state's
-  // link). The direct skills do not depend on the effective set, so the
-  // action is offered whatever the server says applies, and when a read
-  // failed the modal says why.
-  const hasManageButton =
-    canManageSkills && !(isSkillsSuccess && skills.length === 0);
-
-  let title = t("agentic.applicationDetail.tabSkills");
-  let description: string | undefined;
-  let content: React.ReactNode;
-  if (migrationsError != null || (!hasPlan && skillsError != null)) {
-    // Without the button there is nothing to put on a section heading.
-    if (!hasManageButton) return <StateError />;
-    content = <StateError />;
-  } else if (rows == null) {
-    content = <EmptyTextMessage message={t("agentic.common.unavailable")} />;
-  } else if (rows.length === 0) {
-    content = (
-      <EmptyState variant="xs">
-        <EmptyStateBody>
-          {t("agentic.applicationDetail.skillsEmpty")}
-        </EmptyStateBody>
-        {!hasManageButton && (
-          <EmptyStateFooter>
-            <EmptyStateActions>
-              <Button variant="link" component={skillsLink}>
-                {t("agentic.applicationDetail.goToSkills")}
-              </Button>
-            </EmptyStateActions>
-          </EmptyStateFooter>
-        )}
-      </EmptyState>
-    );
-  } else {
-    title =
-      used < total
-        ? t("agentic.applicationDetail.skillsTitleUsed", {
-            used,
-            count: total,
-          })
-        : t("agentic.applicationDetail.skillsTitle", { count: total });
-    description = !hasPlan
-      ? t("agentic.applicationDetail.skillsAssociatedDescription")
-      : used < total
-        ? t("agentic.applicationDetail.skillsDescriptionExcluded")
-        : t("agentic.applicationDetail.skillsDescription");
-    content = <SkillsTable rows={rows} linkTo={linkTo} />;
-  }
-
-  // One section and one Manage skills button whatever the content, so the
-  // button is still mounted, and gets focus back, when a save turns the
-  // empty state into the table.
-  return (
-    <DetailSections>
-      <DetailSection
-        title={title}
-        description={description}
-        actions={
-          hasManageButton ? (
-            <Button
-              id={MANAGE_SKILLS_BUTTON_ID}
-              variant="link"
-              isInline
-              onClick={onManageSkills}
-            >
-              {t("agentic.skill.manageSkills.title")}
-            </Button>
-          ) : undefined
+  const applicationGroup: AttachedSkillsGroup = {
+    key: `application-${applicationId}`,
+    heading: t("agentic.attachedSkills.application"),
+    headingText: t("agentic.attachedSkills.application"),
+    description: t("agentic.skill.scopeSentence.application"),
+    skills: attachedSkillsFor(skills, "application", applicationId),
+    emptyText: t("agentic.attachedSkills.applicationEmpty"),
+    ...(canManageSkills
+      ? {
+          manage: {
+            onClick: onManageSkills,
+            buttonId: manageSkillsButtonId({
+              scope: "application",
+              id: applicationId,
+            }),
+            ariaLabel: t("agentic.skill.manageSkills.titleFor", {
+              name: applicationName,
+            }),
+          },
         }
-      >
-        {content}
-      </DetailSection>
-    </DetailSections>
+      : {}),
+  };
+
+  const sortedArchetypes = [...archetypes].sort((a, b) =>
+    universalComparator(a.name, b.name)
+  );
+  const archetypeGroups: AttachedSkillsGroup[] =
+    sortedArchetypes.length > 0
+      ? sortedArchetypes.map((archetype) => ({
+          key: `archetype-${archetype.id}`,
+          heading: (
+            <Trans
+              i18nKey="agentic.attachedSkills.archetype"
+              values={{ name: archetype.name }}
+              components={{
+                nameLink: ownerLink(archetypePath(archetype.id, "skills")),
+              }}
+            />
+          ),
+          description: t("agentic.skill.scopeSentence.archetype"),
+          skills: attachedSkillsFor(skills, "archetype", archetype.id),
+          emptyText: t("agentic.attachedSkills.archetypeEmpty"),
+        }))
+      : [
+          {
+            key: "archetype-none",
+            heading: t("agentic.attachedSkills.archetypeOwn"),
+            skills: [],
+            emptyText: t("agentic.attachedSkills.noArchetype"),
+            emptyAction: {
+              label: t("agentic.execution.goToArchetypes"),
+              to: linkTo(DevPaths.archetypes),
+            },
+          },
+        ];
+
+  // An application gets only its own target profile's skills: its
+  // archetype's. Without an archetype there is none to show.
+  const profile = migration?.targetProfile;
+  const profileArchetype = migration?.archetype;
+  const targetProfileNone = t("agentic.attachedSkills.targetProfileNone");
+  let targetProfileGroup: AttachedSkillsGroup | undefined;
+  if (sortedArchetypes.length === 0) {
+    targetProfileGroup = undefined;
+  } else if (isLoadingMigration) {
+    targetProfileGroup = {
+      key: "targetProfile-loading",
+      heading: targetProfileNone,
+      skills: [],
+      emptyText: "",
+      isLoading: true,
+    };
+  } else if (migrationError != null) {
+    targetProfileGroup = {
+      key: "targetProfile-unavailable",
+      heading: targetProfileNone,
+      skills: [],
+      emptyText: "",
+      isUnavailable: true,
+    };
+  } else if (profile != null && profileArchetype != null) {
+    targetProfileGroup = {
+      key: `targetProfile-${profile.id}`,
+      heading: (
+        <Trans
+          i18nKey="agentic.attachedSkills.targetProfile"
+          values={{ name: profile.name }}
+          components={{
+            nameLink: ownerLink(
+              targetProfilePath(profileArchetype.id, profile.id)
+            ),
+          }}
+        />
+      ),
+      description: t("agentic.skill.scopeSentence.targetProfile", {
+        archetype: profileArchetype.name,
+      }),
+      skills: attachedSkillsFor(skills, "targetProfile", profile.id),
+      emptyText: t("agentic.attachedSkills.targetProfileEmpty"),
+    };
+  } else {
+    const archetype = profileArchetype ?? sortedArchetypes[0];
+    targetProfileGroup = {
+      key: "targetProfile-none",
+      heading: targetProfileNone,
+      skills: [],
+      emptyText: t("agentic.attachedSkills.noTargetProfile", {
+        archetype: archetype.name,
+      }),
+      emptyAction: {
+        label: t("agentic.execution.viewTargetProfiles"),
+        to: linkTo(targetProfilesPath(archetype.id)),
+      },
+    };
+  }
+
+  // The Migration tab of this same page, at its Skills by stage section,
+  // keeping the breadcrumb trail. Only a plan has stages to show.
+  const migrationTab = new URLSearchParams(location.search);
+  migrationTab.set("tab", "migration");
+  const intro =
+    migration?.plan != null ? (
+      <>
+        {t("agentic.applicationDetail.skillsIntro")}{" "}
+        <Link
+          to={{
+            pathname: location.pathname,
+            search: `?${migrationTab.toString()}`,
+            hash: SKILLS_BY_STAGE_HASH,
+            state: location.state,
+          }}
+        >
+          {t("agentic.applicationDetail.seeSkillsByStage")}
+        </Link>
+      </>
+    ) : undefined;
+
+  return (
+    <AttachedSkillsList
+      groups={[
+        applicationGroup,
+        ...archetypeGroups,
+        ...(targetProfileGroup != null ? [targetProfileGroup] : []),
+      ]}
+      headingLevel="h2"
+      intro={intro}
+      linkTo={(pathname) => linkTo(pathname)}
+    />
   );
 };

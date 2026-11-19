@@ -3,7 +3,7 @@ jest.unmock("react-router-dom");
 import { createMemoryHistory } from "history";
 import { Router } from "react-router-dom";
 
-import { ApplicationMigrationView, PlanRun } from "@app/agentic";
+import { ApplicationMigrationView, PlanRun, SkillsByStage } from "@app/agentic";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import {
   createMockNotifications,
@@ -25,10 +25,9 @@ const mockState: {
   runError?: unknown;
   runLoading?: boolean;
   canRun: boolean;
-  archetypes: { id: number; name: string; profiles?: { id: number }[] }[];
   open: jest.Mock;
   decide: jest.Mock;
-} = { canRun: true, archetypes: [], open: jest.fn(), decide: jest.fn() };
+} = { canRun: true, open: jest.fn(), decide: jest.fn() };
 
 jest.mock("@app/auth", () => ({
   ...jest.requireActual("@app/auth"),
@@ -52,10 +51,6 @@ jest.mock("@app/queries/agentic", () => ({
   }),
 }));
 
-jest.mock("@app/queries/archetypes", () => ({
-  useFetchArchetypes: () => ({ archetypes: mockState.archetypes }),
-}));
-
 // The launcher gives no `open` without the run write scope, like the real one.
 jest.mock("@app/pages/agentic/components/run-migration-plan-launcher", () => ({
   useRunMigrationPlanLauncher: () => ({
@@ -71,6 +66,47 @@ const application = (archetypes: DecoratedApplication["archetypes"] = []) =>
     archetypes,
   }) as DecoratedApplication;
 
+const skillsByStage: SkillsByStage = {
+  stages: [
+    {
+      order: 1,
+      name: "Prepare proposal",
+      agent: { id: "a1", name: "Migration Proposal Agent" },
+      skills: [
+        {
+          skill: { id: "7", name: "API compatibility checklist" },
+          loadPolicy: "skill",
+          from: [
+            {
+              kind: "agent",
+              agent: { id: "a1", name: "Migration Proposal Agent" },
+            },
+          ],
+          excluded: false,
+        },
+      ],
+    },
+  ],
+  everyStage: [
+    {
+      application: { id: 1, name: "Customer Management" },
+      skills: [
+        {
+          skill: { id: "5", name: "Corporate coding standards" },
+          loadPolicy: "rule",
+          from: [
+            {
+              kind: "application",
+              application: { id: 1, name: "Customer Management" },
+            },
+          ],
+          excluded: false,
+        },
+      ],
+    },
+  ],
+};
+
 const view = (
   overrides: Partial<ApplicationMigrationView> = {}
 ): ApplicationMigrationView => ({
@@ -80,7 +116,8 @@ const view = (
   preflight: "ready",
   plan: { id: "1", name: "Java EE to Quarkus" },
   targetProfile: { id: 11, name: "Quarkus 3.x" },
-  effectiveSkills: [],
+  archetype: { id: 4, name: "Java EE Application" },
+  skills: skillsByStage,
   ...overrides,
 });
 
@@ -103,7 +140,7 @@ const run = (
   stageRuns: PlanRun["stageRuns"]
 ): PlanRun => ({
   id: "1",
-  name: "Run #1 — Java EE to Quarkus",
+  name: "Run #1: Java EE to Quarkus",
   planId: "1",
   planName: "Java EE to Quarkus",
   applications: [
@@ -116,15 +153,16 @@ const run = (
   stageRuns,
 });
 
-const runRef = { id: "1", name: "Run #1 — Java EE to Quarkus" };
+const runRef = { id: "1", name: "Run #1: Java EE to Quarkus" };
 
 const renderTab = (
   app = application(),
-  notifications = createMockNotifications()
+  notifications = createMockNotifications(),
+  initialEntry = "/applications/1?tab=migration"
 ) =>
   render(
     <NotificationsContext.Provider value={notifications}>
-      <Router history={createMemoryHistory()}>
+      <Router history={createMemoryHistory({ initialEntries: [initialEntry] })}>
         <MigrationTab application={app} applicationId={1} linkCrumbs={[]} />
       </Router>
     </NotificationsContext.Provider>
@@ -143,22 +181,60 @@ describe("MigrationTab", () => {
     mockState.runError = undefined;
     mockState.runLoading = undefined;
     mockState.canRun = true;
-    mockState.archetypes = [];
     mockState.open = jest.fn();
     mockState.decide = jest.fn().mockResolvedValue({});
   });
 
-  describe("no migration path", () => {
-    it("links to the target profiles of the application's archetype", () => {
-      renderTab(application([{ id: 3, name: "Java EE Application" }]));
+  describe("no migration plan", () => {
+    const unconfigured = (overrides: Partial<ApplicationMigrationView> = {}) =>
+      view({
+        configured: false,
+        plan: undefined,
+        preflight: undefined,
+        skills: undefined,
+        ...overrides,
+      });
+
+    it("names a target profile without a plan and links to its archetype's profiles", () => {
+      mockState.migration = unconfigured();
+      renderTab(application([{ id: 4, name: "Java EE Application" }]));
       expect(
         screen.getByRole("heading", {
           name: "agentic.execution.noMigrationPathTitle",
         })
       ).toBeInTheDocument();
       expect(
-        screen.getByText("agentic.execution.noMigrationPathBody")
+        screen.getByText("agentic.execution.noPlanForProfileBody")
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", {
+          name: "agentic.execution.viewTargetProfiles",
+        })
+      ).toHaveAttribute("href", "/archetypes/4/target-profiles");
+      // The chain facts say which link is missing.
+      expect(fact("agentic.entity.migrationPlan")).toHaveTextContent(
+        "agentic.execution.notAssigned"
+      );
+      expect(
+        screen.queryByRole("heading", { name: "agentic.stageSkills.title" })
+      ).toBeNull();
+    });
+
+    it("says the archetype has no target profile", () => {
+      mockState.migration = unconfigured({
+        targetProfile: undefined,
+        archetype: undefined,
+      });
+      renderTab(application([{ id: 3, name: "Node.js Service" }]));
+      expect(
+        screen.getByText("agentic.execution.noTargetProfileBody")
+      ).toBeInTheDocument();
+      expect(fact("agentic.execution.targetProfile")).toHaveTextContent(
+        "agentic.execution.none"
+      );
+      expect(
+        within(fact("agentic.execution.archetype")).getByRole("link")
+      ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=3&ar%3Atab=2");
       expect(
         screen.getByRole("link", {
           name: "agentic.execution.viewTargetProfiles",
@@ -171,6 +247,9 @@ describe("MigrationTab", () => {
       expect(
         screen.getByText("agentic.execution.noArchetypeBody")
       ).toBeInTheDocument();
+      expect(fact("agentic.execution.archetype")).toHaveTextContent(
+        "agentic.execution.none"
+      );
       expect(
         screen.getByRole("link", { name: "agentic.execution.goToArchetypes" })
       ).toHaveAttribute("href", "/archetypes");
@@ -220,28 +299,8 @@ describe("MigrationTab", () => {
           { stageName: "Prepare proposal", phase: "AwaitingApproval" },
           { stageName: "Migrate", phase: "Pending" },
         ],
-        effectiveSkills: [
-          {
-            skill: { id: "1", name: "A" },
-            scope: "agent",
-            scopeName: "Code Migrator",
-          },
-          {
-            skill: { id: "1", name: "A" },
-            scope: "archetype",
-            scopeName: "Java EE Application",
-          },
-          {
-            skill: { id: "2", name: "B" },
-            scope: "agent",
-            scopeName: "Code Migrator",
-          },
-        ] as ApplicationMigrationView["effectiveSkills"],
       });
       mockState.planRun = awaiting();
-      mockState.archetypes = [
-        { id: 4, name: "Java EE Application", profiles: [{ id: 11 }] },
-      ];
       renderTab();
 
       expect(screen.getByRole("heading", { level: 4 }).textContent).toContain(
@@ -256,7 +315,12 @@ describe("MigrationTab", () => {
       expect(
         within(fact("agentic.entity.planRun")).getByRole("link")
       ).toHaveAttribute("href", "/plan-runs/1");
-      // The profile's owner is found by profile id, not the application's archetype.
+      // The chain: archetype, its target profile, the plan they resolve to.
+      expect(
+        within(fact("agentic.execution.archetype")).getByRole("link", {
+          name: "Java EE Application",
+        })
+      ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=4&ar%3Atab=2");
       expect(
         within(fact("agentic.execution.targetProfile")).getByRole("link")
       ).toHaveAttribute(
@@ -266,12 +330,13 @@ describe("MigrationTab", () => {
       expect(fact("agentic.execution.targetBranch")).toHaveTextContent(
         "konveyor/agentic-migration"
       );
-      // Skills are counted once per skill and open the Skills tab.
       expect(
-        within(fact("agentic.applicationDetail.tabSkills")).getByRole("link", {
-          name: "agentic.execution.skillCount",
-        })
-      ).toHaveAttribute("href", "/?tab=skills");
+        within(fact("agentic.entity.migrationPlan")).getByRole("link")
+      ).toHaveAttribute("href", "/migration-plans/1");
+      // No pooled skills count: Skills by stage says what each stage gets.
+      expect(
+        screen.queryByText("agentic.applicationDetail.tabSkills")
+      ).toBeNull();
       expect(
         screen.getByRole("heading", { name: "agentic.stageRunsTable.label" })
       ).toBeInTheDocument();
@@ -301,7 +366,7 @@ describe("MigrationTab", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.getByRole("link", { name: "agentic.stageAttention.reviewStage" })
-      ).toHaveAttribute("href", "/plan-runs/1/stages/s1");
+      ).toHaveAttribute("href", "/plan-runs/1/stages/s1?application=1");
     });
 
     it.each([
@@ -342,8 +407,12 @@ describe("MigrationTab", () => {
       }
     );
 
-    it("keeps a profile no archetype owns as text", () => {
-      mockState.migration = view({ planRun: runRef, runPhase: "Running" });
+    it("keeps a profile without a known archetype as text", () => {
+      mockState.migration = view({
+        planRun: runRef,
+        runPhase: "Running",
+        archetype: undefined,
+      });
       mockState.planRun = run("Running", []);
       renderTab();
       expect(fact("agentic.execution.targetProfile")).toHaveTextContent(
@@ -354,60 +423,52 @@ describe("MigrationTab", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("says Unavailable when the server gives no skills", () => {
-      mockState.migration = view({
-        planRun: runRef,
-        runPhase: "Running",
-        effectiveSkills: undefined,
-      });
+    it("names every archetype, the target profile's first", () => {
+      mockState.migration = view({ planRun: runRef, runPhase: "Running" });
       mockState.planRun = run("Running", []);
-      renderTab();
-      expect(fact("agentic.applicationDetail.tabSkills")).toHaveTextContent(
-        "agentic.common.unavailable"
+      renderTab(
+        application([
+          { id: 2, name: "Batch Jobs" },
+          { id: 4, name: "Java EE Application" },
+        ])
       );
+      expect(
+        within(fact("agentic.execution.archetypes"))
+          .getAllByRole("link")
+          .map((link) => link.textContent)
+      ).toEqual(["Java EE Application", "Batch Jobs"]);
     });
 
-    it("counts the skills its plan excludes like the Skills tab heading", () => {
-      const skill = (id: string) => ({
-        skill: { id, name: `Skill ${id}` },
-        scope: "agent" as const,
-        scopeName: "Code Migrator",
-      });
+    it("says which plan the latest run ran when it is not the application's", () => {
       mockState.migration = view({
-        planRun: runRef,
-        runPhase: "Running",
-        effectiveSkills: [skill("1")],
-        excludedSkills: [skill("2"), skill("2")],
+        planRun: { id: "4", name: "Run #4: Java EE lift and shift" },
+        planRunPlan: { id: "3", name: "Java EE lift and shift" },
+        runPhase: "Failed",
       });
-      mockState.planRun = run("Running", []);
+      mockState.planRun = run("Failed", []);
       renderTab();
       expect(
-        within(fact("agentic.applicationDetail.tabSkills")).getByRole("link", {
-          name: "agentic.execution.skillCountUsed",
-        })
-      ).toHaveAttribute("href", "/?tab=skills");
-    });
-
-    it("links to the Skills tab when its plan excludes every skill", () => {
-      mockState.migration = view({
-        planRun: runRef,
-        runPhase: "Running",
-        effectiveSkills: [],
-        excludedSkills: [
-          {
-            skill: { id: "2", name: "Skill 2" },
-            scope: "archetype",
-            scopeName: "Java EE",
-          },
-        ],
-      });
-      mockState.planRun = run("Running", []);
-      renderTab();
-      expect(
-        within(fact("agentic.applicationDetail.tabSkills")).getByRole("link", {
-          name: "agentic.execution.skillCountUsed",
-        })
+        screen.getByText("agentic.execution.latestRunOtherPlan")
       ).toBeInTheDocument();
+    });
+
+    it("says nothing about the run's plan when it is the application's, or unknown", () => {
+      mockState.migration = view({
+        planRun: runRef,
+        planRunPlan: { id: "1", name: "Java EE to Quarkus" },
+        runPhase: "Running",
+      });
+      mockState.planRun = run("Running", []);
+      const { unmount } = renderTab();
+      expect(
+        screen.queryByText("agentic.execution.latestRunOtherPlan")
+      ).toBeNull();
+      unmount();
+      mockState.migration = view({ planRun: runRef, runPhase: "Running" });
+      renderTab();
+      expect(
+        screen.queryByText("agentic.execution.latestRunOtherPlan")
+      ).toBeNull();
     });
 
     it("sends the user to the run when it cannot be read and needs action", () => {
@@ -472,6 +533,103 @@ describe("MigrationTab", () => {
       );
       expect(commitLink).toHaveAttribute("target", "_blank");
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("skills by stage", () => {
+    it("comes last, says when it applies and lists each stage, then every stage", () => {
+      mockState.migration = view();
+      renderTab();
+      const headings = screen
+        .getAllByRole("heading", { level: 2 })
+        .map((heading) => heading.textContent);
+      expect(headings[headings.length - 1]).toBe("agentic.stageSkills.title");
+      expect(
+        screen.getByText("agentic.execution.skillsByStageNext")
+      ).toBeInTheDocument();
+      const table = screen.getByRole("grid", {
+        name: "agentic.stageSkills.title",
+      });
+      expect(
+        within(table).getByText("API compatibility checklist")
+      ).toBeInTheDocument();
+      // The application's own skill reads "This application".
+      expect(
+        within(table).getByText("agentic.stageSkills.origin.thisApplication")
+      ).toBeInTheDocument();
+      expect(
+        within(table).getByText("agentic.stageSkills.everyStageSubtitle")
+      ).toBeInTheDocument();
+    });
+
+    it("says Unavailable, never none, when the server does not report it", () => {
+      mockState.migration = view({ skills: undefined });
+      renderTab();
+      expect(
+        screen.getByRole("heading", { name: "agentic.stageSkills.title" })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("agentic.common.unavailable")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("agentic.execution.skillsByStageUnavailable")
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("agentic.execution.skillsByStageNext")
+      ).toBeNull();
+    });
+
+    it("takes focus when the tab opens at its section", async () => {
+      mockState.migration = view();
+      renderTab(
+        application(),
+        createMockNotifications(),
+        "/applications/1?tab=migration#skills-by-stage"
+      );
+      const heading = screen.getByRole("heading", {
+        name: "agentic.stageSkills.title",
+      });
+      expect(heading).toHaveAttribute("id", "skills-by-stage-heading");
+      await waitFor(() => expect(heading).toHaveFocus());
+    });
+
+    it("takes focus once per navigation, not again after a refetch", async () => {
+      mockState.migration = view();
+      const history = createMemoryHistory({
+        initialEntries: ["/applications/1?tab=migration#skills-by-stage"],
+      });
+      const tree = () => (
+        <NotificationsContext.Provider value={createMockNotifications()}>
+          <Router history={history}>
+            <MigrationTab
+              application={application()}
+              applicationId={1}
+              linkCrumbs={[]}
+            />
+          </Router>
+        </NotificationsContext.Provider>
+      );
+      const { rerender } = render(tree());
+      const heading = () =>
+        screen.getByRole("heading", { name: "agentic.stageSkills.title" });
+      await waitFor(() => expect(heading()).toHaveFocus());
+      heading().blur();
+      // A refetch shows the placeholder, then the content again.
+      mockState.migrationsLoading = true;
+      rerender(tree());
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
+      mockState.migrationsLoading = undefined;
+      rerender(tree());
+      await waitFor(() => expect(heading()).toBeInTheDocument());
+      expect(heading()).not.toHaveFocus();
+    });
+
+    it("leaves focus alone without the hash", () => {
+      mockState.migration = view();
+      renderTab();
+      expect(
+        screen.getByRole("heading", { name: "agentic.stageSkills.title" })
+      ).not.toHaveFocus();
     });
   });
 

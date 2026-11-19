@@ -6,7 +6,9 @@
  * the approve and start mutations invalidate (`MUTATION_EFFECTS`).
  *
  * Refresh: each hook takes the phase of what it shows (the plan run for the
- * list, the stage for the rest) and polls
+ * list, the agent run for the rest: `agentRun.phase`, which in a run on
+ * several applications can differ from the stage's aggregate status) and
+ * polls
  * - every 3 s (logs, transcript) or 5 s (summaries, resource) while Running
  *   or Pending,
  * - every 30 s while AwaitingApproval (nothing changes on its own),
@@ -27,6 +29,7 @@
  * Polling stops while a query is errored (`pollUnlessErrored`) and, as for
  * every TanStack query, in background tabs.
  */
+import { useEffect, useMemo, useRef } from "react";
 import {
   QueryKey,
   QueryStatus,
@@ -43,6 +46,7 @@ import {
   EntityId,
   StageAgentRun,
   isTerminalRunPhase,
+  stageAgentRunsOf,
 } from "@app/agentic";
 import type { AgentRun } from "@app/api/agentic/contract";
 import { isTerminalPhase } from "@app/api/agentic/contract";
@@ -157,9 +161,13 @@ const observabilityInterval = <T>(
   );
 };
 
+/** One list for "no agent runs", so a memo over it does not recompute. */
+const NO_AGENT_RUNS: StageAgentRun[] = [];
+
 /**
- * The AgentRun of every started stage of a plan run, in stage order (Pending
- * stages have none yet). `runPhase` is the plan run's status.
+ * The AgentRuns of a plan run: one per started stage per application of the
+ * run, in stage order, then the run's application order (Pending stages have
+ * none yet). `runPhase` is the plan run's status.
  */
 export const useFetchPlanRunAgentRuns = (
   runId: EntityId | undefined,
@@ -183,8 +191,23 @@ export const useFetchPlanRunAgentRuns = (
             agentRuns.every((agentRun) => isTerminalRunPhase(agentRun.phase)),
         }),
     });
+  // A run that stops for a decision is next polled in 30 s: read its agent
+  // runs now, so the stage that stopped shows its final usage at once.
+  const previousPhase = useRef(runPhase);
+  useEffect(() => {
+    const previous = previousPhase.current;
+    previousPhase.current = runPhase;
+    if (
+      previous != null &&
+      previous !== runPhase &&
+      runPhase === "AwaitingApproval" &&
+      isUsableId(runId)
+    ) {
+      void refetch();
+    }
+  }, [runPhase, runId, refetch]);
   return {
-    agentRuns: data || [],
+    agentRuns: data ?? NO_AGENT_RUNS,
     isFetching,
     isLoading: isInitialLoading,
     fetchError: error,
@@ -192,6 +215,30 @@ export const useFetchPlanRunAgentRuns = (
     lastUpdatedAt: dataUpdatedAt || undefined,
     refetch,
   };
+};
+
+/**
+ * The agent runs of one stage of a plan run, one per application of the run,
+ * in the run's application order (each carries its `application`). The same
+ * query as `useFetchPlanRunAgentRuns` (one cache entry and one poll per plan
+ * run), filtered: pick one with `stageAgentRunFor` (the URL's application)
+ * or `defaultStageAgentRun`, and read it with the name-based hooks below,
+ * passing that agent run's `phase`, not the stage's: in a run on several
+ * applications the stage shows the worst state, so another application's
+ * finished agent run would keep polling as if it were live.
+ */
+export const useFetchStageAgentRuns = (
+  runId: EntityId | undefined,
+  stageId: EntityId | undefined,
+  runPhase: ControllerRunPhase | undefined
+) => {
+  const { agentRuns, ...rest } = useFetchPlanRunAgentRuns(runId, runPhase);
+  const stageAgentRuns = useMemo(
+    () =>
+      stageId != null ? stageAgentRunsOf(agentRuns, stageId) : NO_AGENT_RUNS,
+    [agentRuns, stageId]
+  );
+  return { agentRuns: stageAgentRuns, ...rest };
 };
 
 /** The AgentRun resource (CRD shape) for the YAML/JSON view. */

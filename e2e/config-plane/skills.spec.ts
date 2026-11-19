@@ -86,19 +86,22 @@ test.describe("Skills list", () => {
     await expect(dataRows(page)).toHaveCount(4);
     const foundation = rowByText(page, "Java modernization foundation");
     await expect(foundation).toContainText("3 skills");
-    await expect(foundation).toContainText("2 agents");
+    await expect(foundation).toContainText("Java Code Migrator");
     await expect(rowByText(page, "OpenShift delivery checks")).toContainText(
-      "None"
+      "Build Validator"
     );
   });
 
-  test("associations count links to the skill's Associations tab", async ({
-    page,
-  }) => {
-    await rowByText(page, "Build validation standards")
-      .getByRole("link", { name: "3 associations" })
+  test("usage summary links to the skill's Usage tab", async ({ page }) => {
+    const row = rowByText(page, "Build validation standards");
+    // A rule carries the marker after its name.
+    await expect(row.getByText("Always followed")).toBeVisible();
+    await row
+      .getByRole("link", {
+        name: "1 agent, 1 collection, 1 archetype, 1 application",
+      })
       .click();
-    await expect(page).toHaveURL(/\/skills\/\d+\?tab=associations/);
+    await expect(page).toHaveURL(/\/skills\/\d+\?tab=usage/);
     await expect(
       page.getByRole("heading", {
         level: 1,
@@ -239,16 +242,16 @@ test.describe("Skill form", () => {
     expectHealthy(diagnostics);
   });
 
-  test("created inline skill associated to an agent is offered in the agent form", async ({
+  test("created inline skill attached to an agent is offered in the agent form", async ({
     page,
   }) => {
     await field(dialog(page), "Content").fill("# QA Skill\nGuidance.");
-    // The Associations fields are always visible.
+    // The Usage fields are always visible.
     await pickMulti(page, "skill-agents", ["Test Runner"]);
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill created")).toBeVisible();
     await filterByName(page, "QA Skill");
-    await expect(rowByText(page, "QA Skill")).toContainText("1 association");
+    await expect(rowByText(page, "QA Skill")).toContainText("1 agent");
 
     await spaNavigate(page, "/agents");
     await openRowActions(page, "Test Runner");
@@ -320,10 +323,7 @@ test.describe("Import skill", () => {
 });
 
 test.describe("Skill detail", () => {
-  test("details and associations tabs render", async ({
-    page,
-    diagnostics,
-  }) => {
+  test("details and usage tabs render", async ({ page, diagnostics }) => {
     await gotoProto(page, "/skills/1", { persona: ARCHITECT });
     await expect(
       page.getByRole("heading", {
@@ -337,17 +337,30 @@ test.describe("Skill detail", () => {
     ).toBeVisible();
     // The skill's own "# Spring Boot to Quarkus Migration" is not a second page title.
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-    // The Associations fact opens the Associations tab.
-    await main(page).getByRole("link", { name: "3 associations" }).click();
-    await expect(page).toHaveURL(/tab=associations/);
+    await expect(main(page).getByText("Available when needed")).toBeVisible();
+    // The Usage fact opens the Usage tab.
+    await main(page)
+      .getByRole("link", {
+        name: "1 collection, 1 archetype, 1 target profile",
+      })
+      .click();
+    await expect(page).toHaveURL(/tab=usage/);
     await expect(
-      page.getByRole("tab", { name: "Associations", selected: true })
+      page.getByRole("tab", { name: "Usage", selected: true })
+    ).toBeVisible();
+    const attachedTo = main(page).getByRole("region", {
+      name: /^Attached to/,
+    });
+    await expect(
+      attachedTo.getByRole("link", {
+        name: "Spring Boot Application",
+        exact: true,
+      })
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Code Migrator" })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Quarkus 3.x (Spring Boot Application)" })
+      attachedTo.getByRole("link", {
+        name: "Quarkus 3.x (Spring Boot Application)",
+      })
     ).toBeVisible();
     await expect(
       page.getByRole("grid", { name: /collections/i })
@@ -358,17 +371,20 @@ test.describe("Skill detail", () => {
   test("target profiles with the same name are told apart by archetype", async ({
     page,
   }) => {
-    await gotoProto(page, "/skills/7?tab=associations", { persona: ARCHITECT });
-    const grid = page.getByRole("grid", { name: "Associated with" });
-    await expect(grid.getByRole("row")).toHaveCount(8);
+    // Quarkus best practices: on the Quarkus 3.x profiles of two archetypes.
+    await gotoProto(page, "/skills/4?tab=usage", { persona: ARCHITECT });
+    const grid = main(page).getByRole("region", { name: /^Attached to/ });
+    await expect(
+      grid.getByRole("link", { name: /^Quarkus 3\.x \(/ })
+    ).toHaveCount(2);
     await expect(
       grid.getByRole("link", {
-        name: "OpenShift lift and shift (.NET Framework Application)",
+        name: "Quarkus 3.x (Spring Boot Application)",
       })
     ).toBeVisible();
     await expect(
       grid.getByRole("link", {
-        name: "OpenShift lift and shift (Java EE Application)",
+        name: "Quarkus 3.x (Java EE Application)",
       })
     ).toBeVisible();
   });
@@ -530,29 +546,29 @@ test.describe("Skill cross-entity consistency", () => {
     ).toBeVisible();
   });
 
-  // Regression guard: agent-form.tsx maps skills by NAME; the stale name no longer matches any skill so onSubmit silently drops it (Code Migrator 4 -> 3 skills)
+  // Regression guard: agent-form.tsx maps skills by NAME; the stale name no longer matches any skill so onSubmit silently drops it (Security Review Agent 2 -> 1 skills)
   test("saving an unrelated agent edit after a skill rename keeps all its skills", async ({
     page,
   }) => {
     await openSkills(page);
-    await filterByName(page, "Spring Boot to Quarkus");
-    await openRowActions(page, "Spring Boot to Quarkus migration");
+    await filterByName(page, "Platform security baseline");
+    await openRowActions(page, "Platform security baseline");
     await page.getByRole("menuitem", { name: "Edit" }).click();
-    await field(dialog(page), "Name").fill("Spring Boot to Quarkus RENAMED");
+    await field(dialog(page), "Name").fill("Platform security RENAMED");
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Skill updated")).toBeVisible();
 
     await spaNavigate(page, "/agents");
-    const row = rowByText(page, "Code Migrator");
-    // The Skills cell summarizes what the agent uses: its 4 skills
+    const row = rowByText(page, "Security Review Agent");
+    // The Skills cell summarizes what the agent uses: its 2 skills
     // and 1 collection.
     const skillsSummary = row.getByRole("link", { name: /^\d+ skills?\b/ });
-    await expect(skillsSummary).toHaveText("4 skills, 1 collection");
-    await openRowActions(page, "Code Migrator");
+    await expect(skillsSummary).toHaveText("2 skills, 1 collection");
+    await openRowActions(page, "Security Review Agent");
     await page.getByRole("menuitem", { name: "Edit" }).click();
     await dialog(page).locator("#agent-description").fill("Unrelated change");
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Agent updated")).toBeVisible();
-    await expect(skillsSummary).toHaveText("4 skills, 1 collection");
+    await expect(skillsSummary).toHaveText("2 skills, 1 collection");
   });
 });

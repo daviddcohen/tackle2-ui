@@ -1,7 +1,7 @@
 /**
  * Application Inventory "Migration" column, attention alert, row/bulk start actions
  * and the preflight modal. Expectations are derived from the projection in
- * client/src/app/prototype/agentic/projection.ts (portfolio is fixed at 12 applications).
+ * client/src/app/prototype/agentic/projection.ts (portfolio is fixed at 13 applications).
  */
 import {
   AGENTIC_STATUS,
@@ -95,9 +95,9 @@ test.describe("Inventory migration column", () => {
       await page.goto(protoUrl("/applications", { scenario }));
       await waitForInventory(page);
       await expect(
-        page.getByRole("button", { name: "1 - 10 of 12" }).first()
+        page.getByRole("button", { name: "1 - 10 of 13" }).first()
       ).toBeVisible();
-      expect(await countWithMigrationStatus(page, key)).toBe(12);
+      expect(await countWithMigrationStatus(page, key)).toBe(13);
     }
   });
 
@@ -427,7 +427,7 @@ test.describe("Preflight modal", () => {
     await expect(row).toContainText("Blocked");
     // The reason names the run and links to it.
     await expect(
-      row.getByRole("link", { name: /^Run #\d+ — / })
+      row.getByRole("link", { name: /^Run #\d+: / })
     ).toHaveAttribute("href", /\/plan-runs\/\d+/);
     await expect(dialog.getByRole("button", { name: /^Run on/ })).toHaveCount(
       0

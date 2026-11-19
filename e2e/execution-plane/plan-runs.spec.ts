@@ -109,7 +109,7 @@ test.describe("Plan run detail", () => {
     test(`header status follows the ${scenario} scenario`, async ({ page }) => {
       await page.goto(protoUrl("/plan-runs/1", { scenario, stage: 1 }));
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-        "Run #1 — Java EE to Quarkus"
+        "Run #1: Java EE to Quarkus"
       );
       await expect(
         page.getByRole("main").locator(AGENTIC_STATUS).first()
@@ -128,6 +128,56 @@ test.describe("Plan run detail", () => {
       "Prepare proposal"
     );
     await expect(page.getByRole("heading", { name: "Commits" })).toBeVisible();
+  });
+
+  // What each stage got, then one Every stage group per
+  // application, worked out when the run started.
+  test("Skills by stage: each stage, then each application's own group", async ({
+    page,
+  }) => {
+    await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
+    await expect(
+      main(page).getByRole("heading", { level: 2, name: "Skills by stage" })
+    ).toBeVisible();
+    // Several applications: the attribution is said once.
+    await expect(
+      main(page).getByText(
+        "Worked out when the run started. Each stage's agent reads its own skills when the stage starts, so a change to that agent before then can change what the stage gets. An application's archetype, target profile and own skills go to that application only."
+      )
+    ).toBeVisible();
+    const table = main(page).getByRole("grid", { name: "Skills by stage" });
+    const titles = table.getByRole("heading", { level: 3 });
+    await expect(titles.first()).toHaveText(/^Stage 1: /);
+    await expect(
+      table.getByRole("heading", { name: "Every stage: Claims Processing" })
+    ).toBeVisible();
+    // Claims Processing's own skill reads "This application" in its group
+    // only; the group title names the application.
+    const own = table
+      .getByRole("row")
+      .filter({ hasText: "EJB to CDI conversion patterns" })
+      .filter({ hasText: "This application" });
+    await expect(own).toHaveCount(1);
+    await expect(
+      table
+        .getByRole("row")
+        .filter({ hasText: "Application: Claims Processing" })
+    ).toHaveCount(0);
+    // Every Every stage title says what the group holds.
+    await expect(
+      table.getByRole("row").filter({
+        has: page.getByRole("heading", {
+          name: "Every stage: Claims Processing",
+        }),
+      })
+    ).toContainText("Archetype, target profile and application skills");
+    // Links keep their own query, with the run as origin.
+    await expect(
+      table
+        .getByRole("heading", { name: "Every stage: Claims Processing" })
+        .getByRole("link")
+    ).toHaveAttribute("href", /\/applications\/\d+\?tab=skills&from=run-1$/);
+    await expect(table.getByRole("checkbox")).toHaveCount(0);
   });
 
   test("unknown run and unknown stage show not-found states", async ({
@@ -185,7 +235,7 @@ test.describe("Status consistency across surfaces", () => {
           .first()
       ).toHaveText(detail);
       await page.goto(
-        protoUrl("/applications/7?tab=plan-runs", { scenario, stage: 1 })
+        protoUrl("/applications/12?tab=plan-runs", { scenario, stage: 1 })
       );
       await expect(
         page
@@ -196,19 +246,24 @@ test.describe("Status consistency across surfaces", () => {
     });
   }
 
-  // Regression guard: Partner Portal is a member of Run #2 (Spring Boot to Quarkus) but the inventory
-  // projection resolves it to "Java EE lift and shift" with an unrelated stage and status.
+  // Regression guard: Notification Service is a member of Run #2 (Spring Boot to Quarkus) but the
+  // inventory projection resolved it to an unrelated Plan, stage and status.
   test("an application in a run shows that run's Plan in the inventory", async ({
     page,
   }) => {
     await page.goto(protoUrl("/applications", { scenario: "running" }));
     await expect(
-      page.getByRole("row", { name: /Partner Portal/ })
+      page.getByRole("row", { name: /Notification Service/ })
     ).toContainText("Spring Boot to Quarkus");
+    // Partner Portal runs Java EE lift and shift, picked for all applications,
+    // while its own plan is Java EE to Quarkus: the row shows the run's plan.
+    await expect(
+      page.getByRole("row", { name: /Partner Portal/ })
+    ).toContainText("Java EE lift and shift");
   });
 
-  // Regression guard: Run #2 lists Claims Processing and Document Archive, which are not in the 12-app
-  // inventory produced by expandPrototypePortfolio().
+  // Regression guard: every application of a seeded run (Claims Processing is in Run #1) must be in
+  // the 13-application inventory.
   test("every application in a run is present in the inventory", async ({
     page,
   }) => {
@@ -240,16 +295,42 @@ test.describe("Plan run stages: context and failed stage logs", () => {
         name: "More information about context",
       })
     ).toBeVisible();
+    // Run 1 is on three applications: each stage shows its fullest agent
+    // run, with the lowest in the accessible value. Exact values from the
+    // mock's agent runs.
+    const run = await agenticGet<{
+      stageRuns: { stageId: string; name: string }[];
+    }>(page, "/plan-runs/1");
+    const agentRuns = await agenticGet<
+      {
+        stageId: string;
+        usage?: { contextUsed?: number; contextSize?: number };
+      }[]
+    >(page, "/plan-runs/1/agent-runs");
     for (const stage of ["Prepare proposal", "Migrate"]) {
+      const stageId = run.stageRuns.find((s) => s.name === stage)?.stageId;
+      const percents = agentRuns
+        .filter((agentRun) => agentRun.stageId === stageId)
+        .map(({ usage }) =>
+          Math.min(
+            100,
+            Math.floor(
+              ((usage?.contextUsed ?? 0) / (usage?.contextSize ?? 1)) * 100
+            )
+          )
+        );
+      expect(percents).toHaveLength(3);
+      const highest = Math.max(...percents);
+      const lowest = Math.min(...percents);
       const bar = contextCell(page, stage).getByRole("progressbar", {
         name: `Context window of ${stage}`,
       });
       await expect(bar).toBeVisible();
-      await expect(contextCell(page, stage)).toContainText(/^\d+%$/);
-      // The tokens are in the accessible value.
+      await expect(contextCell(page, stage)).toHaveText(`Up to ${highest}%`);
+      await expect(bar).toHaveAttribute("aria-valuenow", String(highest));
       await expect(bar).toHaveAttribute(
         "aria-valuetext",
-        /[\d.]+K of [\d.]+K tokens/
+        `Up to ${highest}% across 3 applications, lowest ${lowest}%`
       );
     }
     await expect(contextCell(page, "Validate")).toHaveText("Not started");

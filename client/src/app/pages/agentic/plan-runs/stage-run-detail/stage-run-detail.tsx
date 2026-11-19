@@ -25,10 +25,13 @@ import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { DevPaths, StageRunDetailsRoute } from "@app/Paths";
 import {
   ControllerRunPhase,
+  HubRef,
   StageAgentRun,
   getOrderedStageRuns,
   getStageDefinition,
   isTerminalRunPhase,
+  stageAgentRunFor,
+  stageAttentionApplications,
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
@@ -41,8 +44,11 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import { useFetchPlanRun } from "@app/queries/agentic";
-import { useFetchPlanRunAgentRuns } from "@app/queries/agentic-observability";
+import {
+  useFetchMigrationPlanById,
+  useFetchPlanRun,
+} from "@app/queries/agentic";
+import { useFetchStageAgentRuns } from "@app/queries/agentic-observability";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
 import { formatDate } from "@app/utils/utils";
@@ -69,10 +75,12 @@ import {
   DetailSection,
 } from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
+import { searchWithFrom } from "../../components/skill-origin";
 import {
   StageAttentionAlert,
   getStageAttention,
 } from "../../components/stage-attention-alert";
+import { StageSkillsTable } from "../../components/stage-skills-table";
 import {
   RunPageBody,
   RunStatusLine,
@@ -80,8 +88,10 @@ import {
 } from "../components/run-page-layout";
 import { StageCommits } from "../components/stage-run-content";
 import { useApproveStage } from "../components/use-approve-stage";
+import { useSelectedApplication } from "../components/use-selected-application";
 
 const STAGE_TABS = ["details", "transcript", "logs", "yaml"] as const;
+const NO_APPLICATIONS: HubRef[] = [];
 type StageTab = (typeof STAGE_TABS)[number];
 const TAB_PREFIX = "stage-run-detail";
 
@@ -233,20 +243,41 @@ const StageRunDetail: React.FC = () => {
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
+  // The plan's archetype, for the From values of the Skills section.
+  const { migrationPlan } = useFetchMigrationPlanById(planRun?.planId);
   // The stage definition comes from the run's snapshot, not the current Plan.
   const stageRun = planRun?.stageRuns.find((sr) => sr.stageId === stageId);
   const stageStatus = stageRun?.status;
   const {
-    agentRuns,
+    agentRuns: stageAgentRuns,
     isLoading: isLoadingAgentRuns,
     fetchError: agentRunsError,
     refetch: refetchAgentRuns,
     lastUpdatedAt: agentRunsUpdatedAt,
-  } = useFetchPlanRunAgentRuns(runId, planRun?.status);
-  const agentRun = agentRuns.find((candidate) => candidate.stageId === stageId);
+  } = useFetchStageAgentRuns(runId, stageId, planRun?.status);
+  const applications = planRun?.applications ?? NO_APPLICATIONS;
+  const {
+    isSeveral: hasSeveralApplications,
+    selectedId: selectedApplicationId,
+    select: selectApplication,
+  } = useSelectedApplication({
+    applications,
+    stageAgentRuns,
+    isReady: stageRun != null && !isLoadingAgentRuns,
+  });
+  // The selected application's agent run for this stage. A run on one
+  // application takes the stage's agent run even when it names no
+  // application; a run on several never shows another application's.
+  const agentRun = hasSeveralApplications
+    ? stageAgentRunFor(stageAgentRuns, selectedApplicationId)
+    : (stageAgentRunFor(stageAgentRuns, selectedApplicationId) ??
+      stageAgentRuns[0]);
+  // What the agent run views read: its own phase, which in a run on several
+  // applications can differ from the stage's (the worst one).
+  const agentRunPhase = agentRun?.phase ?? stageStatus ?? "Pending";
   const agentRunState: AgentRunFactsState = {
     agentRun,
-    phase: stageStatus ?? "Pending",
+    phase: agentRunPhase,
     isLoading: isLoadingAgentRuns,
     isUnavailable: agentRunsError != null,
   };
@@ -261,6 +292,29 @@ const StageRunDetail: React.FC = () => {
   const [logsFocus, setLogsFocus] = React.useState<
     "log" | "panel" | "scroll"
   >();
+  // In a run on several applications, the applications whose agent run
+  // waits for the stage's decision or failed.
+  // The decision alert shows on their pages only; on another application's
+  // page Details points to them instead.
+  const attentionApplications = hasSeveralApplications
+    ? stageAttentionApplications(stageAgentRuns, stageStatus, applications)
+    : NO_APPLICATIONS;
+  const isAttentionHere = attentionApplications.some(
+    (application) => application.id === selectedApplicationId
+  );
+  // Named only when one application needs the person.
+  const attentionName =
+    attentionApplications.length === 1
+      ? attentionApplications[0].name
+      : undefined;
+  // "Show {application}" moves focus to the application toggle once the
+  // selection changed and the pointer is gone.
+  const [focusToggle, setFocusToggle] = React.useState(false);
+  React.useEffect(() => {
+    if (!focusToggle) return;
+    setFocusToggle(false);
+    document.getElementById("stage-application-toggle")?.focus();
+  }, [focusToggle]);
   const requestLogsFocus = () =>
     setLogsFocus(agentRun != null ? "log" : "panel");
   const onLogsFocused = React.useCallback(() => setLogsFocus(undefined), []);
@@ -283,7 +337,7 @@ const StageRunDetail: React.FC = () => {
     if (stageStatus === "Failed" && activeTab === "logs")
       setLogsFocus("scroll");
   }, [stageStatus, agentRun, activeTab]);
-  // The Logs tab of this page, keeping the trail.
+  // The Logs tab of this page, keeping the trail and the application.
   const location = useLocation();
   const logsSearch = new URLSearchParams(location.search);
   logsSearch.set("tab", "logs");
@@ -354,13 +408,53 @@ const StageRunDetail: React.FC = () => {
     );
   }
 
+  // In a run on several applications the status line is the selected
+  // application's agent run; until it is known, the stage's.
+  const lineStatus =
+    hasSeveralApplications && agentRun != null
+      ? agentRun.phase
+      : stageRun.status;
+  const lineStartedAt =
+    hasSeveralApplications && agentRun != null
+      ? agentRun.startedAt
+      : stageRun.startedAt;
+  // Each application's agent run status for the Select's options. A pending
+  // stage has no agent runs: every application is pending.
+  const applicationStatuses = new Map<number, ControllerRunPhase>(
+    stageRun.status === "Pending"
+      ? planRun.applications.map((application) => [application.id, "Pending"])
+      : stageAgentRuns.flatMap((candidate) =>
+          candidate.application != null
+            ? [[candidate.application.id, candidate.phase]]
+            : []
+        )
+  );
+
   const ordered = getOrderedStageRuns(planRun);
   const position = {
     position: ordered.findIndex((s) => s.stageId === stageRun.stageId) + 1,
     total: ordered.length,
     run: planRun.name,
   };
-  const duration = stageRunDurationSeconds(stageRun);
+  // In a run on several applications, the selected agent run's own time,
+  // like the status line; a waiting one stops
+  // at the stage's last message.
+  const durationPhase =
+    hasSeveralApplications && agentRun != null
+      ? agentRun.phase
+      : stageRun.status;
+  const duration =
+    hasSeveralApplications && agentRun != null
+      ? stageRunDurationSeconds({
+          status: agentRun.phase,
+          startedAt: agentRun.startedAt,
+          completedAt: agentRun.completedAt,
+          messages:
+            agentRun.phase === "AwaitingApproval"
+              ? stageRun.messages
+              : undefined,
+        })
+      : stageRunDurationSeconds(stageRun);
   // The way back to the run, also on a trail that does not pass through it
   // (Agents > agent > stage).
   const runLink = (
@@ -400,9 +494,9 @@ const StageRunDetail: React.FC = () => {
       ) : (
         <EmptyTextMessage
           message={
-            stageRun.status === "Pending"
+            durationPhase === "Pending"
               ? t("terms.notStarted")
-              : isTerminalRunPhase(stageRun.status)
+              : isTerminalRunPhase(durationPhase)
                 ? t("agentic.common.unavailable")
                 : t("agentic.stageRunsTable.notFinished")
           }
@@ -432,7 +526,7 @@ const StageRunDetail: React.FC = () => {
       t("agentic.agentRun.context.title"),
       <ContextUsageValue
         key="context"
-        phase={stageRun.status}
+        phase={agentRunPhase}
         usage={agentRun?.usage}
         isLoading={isLoadingAgentRuns}
         isUnavailable={agentRunsError != null && agentRun == null}
@@ -462,6 +556,32 @@ const StageRunDetail: React.FC = () => {
     .filter(Boolean);
 
   const attention = getStageAttention(planRun, stageRun);
+  /**
+   * How the attention alert shows:
+   * - "decision": the full alert with its actions, on every tab that offers
+   *   a decision. A run on one application, the pending explanation, the
+   *   application that waits or failed, and a run whose agent runs name no
+   *   application (nothing tells the applications apart, as in a run on
+   *   one application).
+   * - "pointer": another application waits or failed: Details names it and
+   *   offers only "Show {application}".
+   * - "plain": the agent runs could not be read, so the application that
+   *   needs a person is unknown: Details says what happened to the stage,
+   *   with no actions.
+   * - none while the agent runs load in a run on several applications.
+   */
+  const alertMode: "decision" | "pointer" | "plain" | undefined =
+    attention == null
+      ? undefined
+      : attention.kind === "pending" || !hasSeveralApplications
+        ? "decision"
+        : isLoadingAgentRuns
+          ? undefined
+          : agentRunsError != null && stageAgentRuns.length === 0
+            ? "plain"
+            : attentionApplications.length === 0 || isAttentionHere
+              ? "decision"
+              : "pointer";
   // Transcript, Logs and YAML open with the alert of a stage that waits for
   // this user's decision (Approve, or Run migration plan after a failure),
   // in its own section above the view, without "View logs": those tabs
@@ -470,11 +590,12 @@ const StageRunDetail: React.FC = () => {
   const offersDecision =
     (attention?.kind === "approval" && canManageRun) ||
     (attention?.kind === "failed" && runMigrationPlan.open != null);
-  const viewAlert = offersDecision && (
+  const viewAlert = offersDecision && alertMode === "decision" && (
     <StageAttentionAlert
       surface="stage"
       planRun={planRun}
       stageRun={stageRun}
+      applicationName={attentionName}
       onApprove={canManageRun ? approve : undefined}
       isDeciding={isApproving}
       onRunMigrationPlan={runMigrationPlan.open}
@@ -553,14 +674,19 @@ const StageRunDetail: React.FC = () => {
                 applications={planRun.applications}
                 runId={planRun.id}
                 linkCrumbs={stageChildCrumbs}
+                selection={{
+                  selectedId: selectedApplicationId,
+                  onSelect: selectApplication,
+                  statuses: applicationStatuses,
+                }}
               />
-              <RunStatusLine status={stageRun.status}>
-                {stageRun.startedAt ? (
+              <RunStatusLine status={lineStatus}>
+                {lineStartedAt ? (
                   <Trans
                     i18nKey="agentic.stageRun.statusLineStarted"
                     values={{
                       ...position,
-                      started: formatDate(new Date(stageRun.startedAt)),
+                      started: formatDate(new Date(lineStartedAt)),
                     }}
                     components={{ runLink }}
                   />
@@ -623,11 +749,60 @@ const StageRunDetail: React.FC = () => {
         activeKey={activeTab}
       >
         <RunPageBody>
-          {attention != null && (
+          {attention != null &&
+            (alertMode === "pointer" || alertMode === "plain") && (
+              // Another application failed or waits (a pointer to it), or the
+              // agent runs could not be read: nothing to decide here.
+              <Alert
+                isInline
+                isPlain
+                variant={attention.kind === "failed" ? "danger" : "warning"}
+                title={
+                  attentionName == null
+                    ? attention.kind === "failed"
+                      ? t("agentic.stageAttention.failedTitle", {
+                          stage: stageRun.name,
+                        })
+                      : t("agentic.stageAttention.approvalTitle", {
+                          stage: stageRun.name,
+                        })
+                    : attention.kind === "failed"
+                      ? t("agentic.stageAttention.failedForApplication", {
+                          stage: stageRun.name,
+                          application: attentionName,
+                        })
+                      : t(
+                          "agentic.stageAttention.approvalTitleForApplication",
+                          {
+                            stage: stageRun.name,
+                            application: attentionName,
+                          }
+                        )
+                }
+                actionLinks={
+                  alertMode === "pointer" ? (
+                    <AlertActionLink
+                      onClick={() => {
+                        selectApplication(attentionApplications[0].id);
+                        // Like the Select, focus lands on the toggle, which
+                        // now names that application.
+                        setFocusToggle(true);
+                      }}
+                    >
+                      {t("agentic.stageAttention.showApplication", {
+                        application: attentionApplications[0].name,
+                      })}
+                    </AlertActionLink>
+                  ) : undefined
+                }
+              />
+            )}
+          {attention != null && alertMode === "decision" && (
             <StageAttentionAlert
               surface="stage"
               planRun={planRun}
               stageRun={stageRun}
+              applicationName={attentionName}
               viewLogsTo={viewLogsTo}
               onViewLogs={requestLogsFocus}
               onApprove={canManageRun ? approve : undefined}
@@ -642,7 +817,7 @@ const StageRunDetail: React.FC = () => {
             <DetailSection
               title={t("agentic.stageRun.agentRunTitle")}
               description={
-                stageRun.status === "Running" ? (
+                agentRunPhase === "Running" ? (
                   <>
                     {t("agentic.agentRun.refreshesWhileRunning")}
                     {agentRunsUpdatedAt != null && (
@@ -680,8 +855,63 @@ const StageRunDetail: React.FC = () => {
             </DetailSection>
           )}
 
+          {/* What this stage's agent gets: its own group and the selected
+              application's Every stage group, from the run's snapshot. */}
+          <DetailSection
+            title={t("agentic.stageRun.skillsTitle")}
+            headingId="stage-run-skills-heading"
+            description={
+              // Not reported: "Unavailable" and its reason say it all.
+              planRun.skills == null
+                ? undefined
+                : isStarted
+                  ? t("agentic.stageRun.skillsDescriptionStarted")
+                  : isTerminalRunPhase(planRun.status)
+                    ? // The run ended before this stage: it never will run.
+                      t("agentic.stageRun.skillsDescriptionNotRun")
+                    : t("agentic.stageRun.skillsDescriptionPending")
+            }
+          >
+            <StageSkillsTable
+              skills={planRun.skills}
+              context="run"
+              filter={{
+                stageId: stageRun.stageId,
+                applicationId: selectedApplicationId,
+              }}
+              linkTo={(pathname, search) =>
+                breadcrumbTo(
+                  pathname,
+                  searchWithFrom(search ?? "", `run-${runId}`),
+                  stageChildCrumbs
+                )
+              }
+              originOptions={{
+                archetypeId: migrationPlan?.migrationPath?.archetype.id,
+              }}
+              // The Run migration plan dialog's tables start at 400.
+              rowIndexOffset={100}
+              // Until the application is chosen the filter would keep every
+              // application's Every stage group.
+              isLoading={
+                hasSeveralApplications && selectedApplicationId == null
+              }
+              unavailableText={t("agentic.stageRun.skillsUnavailable")}
+              aria-label={t("agentic.stageRun.skillsTitle")}
+            />
+          </DetailSection>
+
           {/* A pending stage has done nothing yet; its alert says when it starts. */}
-          {isStarted && <StageCommits stageRun={stageRun} />}
+          {isStarted && (
+            <StageCommits
+              stageRun={stageRun}
+              applicationId={selectedApplicationId}
+              phase={agentRunPhase}
+              isLoading={
+                hasSeveralApplications && selectedApplicationId == null
+              }
+            />
+          )}
         </RunPageBody>
       </DetailTabPanel>
 
@@ -695,8 +925,13 @@ const StageRunDetail: React.FC = () => {
           {agentRunView(t("agentic.stageRun.transcriptNotStarted"), (shown) => (
             <AgentRunTranscript
               agentRun={shown}
-              messages={stageRun.messages}
-              phase={stageRun.status}
+              messages={
+                shown.application == null ||
+                shown.application.id === planRun.applications[0]?.id
+                  ? stageRun.messages
+                  : undefined
+              }
+              phase={shown.phase}
               onViewLogs={() => {
                 requestLogsFocus();
                 setActiveTab("logs");
@@ -721,7 +956,7 @@ const StageRunDetail: React.FC = () => {
               {(height) => (
                 <AgentRunLogs
                   agentRun={shown}
-                  phase={stageRun.status}
+                  phase={shown.phase}
                   height={height}
                   focusRequest={
                     logsFocus === "log"
@@ -751,7 +986,7 @@ const StageRunDetail: React.FC = () => {
               {(height) => (
                 <AgentRunResource
                   agentRun={shown}
-                  phase={stageRun.status}
+                  phase={shown.phase}
                   height={height}
                 />
               )}

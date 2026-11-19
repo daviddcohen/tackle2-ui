@@ -37,6 +37,7 @@ const skills: Skill[] = [
     name: "EJB to CDI conversion patterns",
     description: "Patterns for EJB.",
     sourceType: "inline",
+    loadPolicy: "rule",
   },
   {
     id: "2",
@@ -126,9 +127,19 @@ describe("SkillCollectionDetail", () => {
       await within(skillRows[2]).findByText("Guidance for Quarkus.")
     ).toBeInTheDocument();
     expect(within(skillRows[2]).getByText("Git")).toBeInTheDocument();
+    // Only the rule carries the marker.
+    expect(
+      await within(skillRows[1]).findByText("Always followed")
+    ).toBeInTheDocument();
+    expect(within(skillRows[2]).queryByText("Always followed")).toBeNull();
 
     expect(
       await screen.findByRole("heading", { name: "Used by agents (1)" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Agents that use this skill collection use all of its skills in every stage they run, unless a migration plan excludes them."
+      )
     ).toBeInTheDocument();
     const agentsGrid = screen.getByRole("grid", { name: "Used by agents" });
     expect(

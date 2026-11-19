@@ -5,9 +5,14 @@ import { createMemoryHistory } from "history";
 import { Router } from "react-router-dom";
 
 import { ApplicationMigrationView, Skill } from "@app/agentic";
-import { render, screen } from "@app/test-config/test-utils";
+import { Ref } from "@app/api/models";
+import { render, screen, within } from "@app/test-config/test-utils";
 
 import { SkillsTab } from "./skills-tab";
+
+jest.mock("react-i18next", () =>
+  jest.requireActual("@app/test-config/english-i18n")
+);
 
 const mockState: {
   migration?: ApplicationMigrationView;
@@ -16,7 +21,6 @@ const mockState: {
   skills: Skill[];
   skillsLoading?: boolean;
   skillsError?: unknown;
-  skillsSuccess?: boolean;
   canManageSkills: boolean;
 } = { skills: [], canManageSkills: false };
 
@@ -27,17 +31,59 @@ jest.mock("@app/pages/agentic/components/manage-skills-modal", () => ({
 
 jest.mock("@app/queries/agentic", () => ({
   useFetchApplicationMigrations: () => ({
-    migrations: mockState.migration ? { 1: mockState.migration } : {},
+    migrations: mockState.migration ? { 3: mockState.migration } : {},
     isLoading: mockState.migrationsLoading ?? false,
     fetchError: mockState.migrationsError ?? null,
   }),
   useFetchSkills: () => ({
     skills: mockState.skills,
     isLoading: mockState.skillsLoading ?? false,
-    isSuccess: mockState.skillsSuccess ?? false,
     fetchError: mockState.skillsError ?? null,
   }),
 }));
+
+const javaEe: Ref = { id: 1, name: "Java EE Application" };
+const legacyJava: Ref = { id: 3, name: "Legacy Java Application" };
+
+const skill = (
+  id: string,
+  name: string,
+  associations: Skill["associations"],
+  loadPolicy: Skill["loadPolicy"] = "skill"
+): Skill => ({
+  id,
+  name,
+  description: "",
+  sourceType: "inline",
+  associations,
+  loadPolicy,
+});
+
+const skills: Skill[] = [
+  skill("8", "EJB to CDI conversion patterns", [
+    { scope: "application", resource: { id: 3, name: "Claims Processing" } },
+    { scope: "archetype", resource: { id: 1, name: "Java EE Application" } },
+  ]),
+  skill("3", "Jakarta EE namespace migration", [
+    { scope: "archetype", resource: { id: 1, name: "Java EE Application" } },
+    { scope: "targetProfile", resource: { id: 11, name: "Quarkus 3.x" } },
+  ]),
+  skill(
+    "5",
+    "Corporate coding standards",
+    [
+      {
+        scope: "archetype",
+        resource: { id: 3, name: "Legacy Java Application" },
+      },
+    ],
+    "rule"
+  ),
+  // Another application's skill: never listed here.
+  skill("9", "Spring Boot 3 upgrade", [
+    { scope: "application", resource: { id: 4, name: "Other" } },
+  ]),
+];
 
 const view = (
   overrides: Partial<ApplicationMigrationView> = {}
@@ -45,246 +91,248 @@ const view = (
   configured: true,
   intervention: "none",
   stages: [],
+  archetype: { id: 1, name: "Java EE Application" },
+  targetProfile: { id: 11, name: "Quarkus 3.x" },
   plan: { id: "1", name: "Java EE to Quarkus" },
   ...overrides,
 });
 
 const onManageSkills = jest.fn();
 
-const renderTab = () =>
+const renderTab = (archetypes: Ref[] = [javaEe]) => {
+  const history = createMemoryHistory({
+    initialEntries: ["/applications/3?tab=skills"],
+  });
   render(
-    <Router history={createMemoryHistory()}>
+    <Router history={history}>
       <SkillsTab
-        applicationId={1}
+        applicationId={3}
+        applicationName="Claims Processing"
         linkCrumbs={[]}
-        archetypes={[]}
+        archetypes={archetypes}
         onManageSkills={onManageSkills}
       />
     </Router>
   );
+  return history;
+};
 
-const manageButtons = () =>
-  screen.queryAllByRole("button", {
-    name: "agentic.skill.manageSkills.title",
-  });
+const section = (name: string | RegExp) => screen.getByRole("region", { name });
+
+const listedSkills = (name: string | RegExp) =>
+  within(section(name))
+    .queryAllByRole("listitem")
+    .map((item) => item.textContent);
 
 describe("SkillsTab", () => {
   beforeEach(() => {
-    mockState.migration = undefined;
+    mockState.migration = view();
     mockState.migrationsLoading = undefined;
     mockState.migrationsError = undefined;
-    mockState.skills = [];
+    mockState.skills = skills;
     mockState.skillsLoading = undefined;
     mockState.skillsError = undefined;
     mockState.canManageSkills = false;
-    mockState.skillsSuccess = undefined;
     onManageSkills.mockClear();
   });
 
-  it("lists the effective skills, one row per skill, under a counted heading", () => {
-    mockState.migration = view({
-      effectiveSkills: [
-        {
-          skill: { id: "2", name: "EJB to CDI conversion patterns" },
-          scope: "agent",
-          scopeName: "Code Migrator",
-        },
-        {
-          skill: { id: "2", name: "EJB to CDI conversion patterns" },
-          scope: "archetype",
-          scopeName: "Java EE Application",
-        },
-      ] as ApplicationMigrationView["effectiveSkills"],
-    });
+  it("groups the attached skills by owner: application, archetype, target profile", () => {
     renderTab();
     expect(
-      screen.getByRole("heading", {
-        name: "agentic.applicationDetail.skillsTitle",
-      })
+      screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)
+    ).toEqual([
+      "Application skills (1)",
+      "Archetype skills: Java EE Application (2)",
+      "Target profile skills: Quarkus 3.x (1)",
+    ]);
+    expect(listedSkills(/^Application skills/)).toEqual([
+      "EJB to CDI conversion patterns",
+    ]);
+    expect(listedSkills(/^Archetype skills/)).toEqual([
+      "EJB to CDI conversion patterns",
+      "Jakarta EE namespace migration",
+    ]);
+    expect(listedSkills(/^Target profile skills/)).toEqual([
+      "Jakarta EE namespace migration",
+    ]);
+    // Each group says how far its skills reach.
+    expect(
+      within(section(/^Application skills/)).getByText(
+        "Agents also use these skills in every stage when they migrate this application."
+      )
     ).toBeInTheDocument();
     expect(
-      screen.getByText("agentic.applicationDetail.skillsDescription")
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("link", { name: "EJB to CDI conversion patterns" })
-    ).toHaveLength(1);
-  });
-
-  it("says where to add skills when none apply", () => {
-    mockState.migration = view({ effectiveSkills: [] });
-    renderTab();
-    expect(
-      screen.getByRole("heading", {
-        name: "agentic.applicationDetail.tabSkills",
-      })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("agentic.applicationDetail.skillsEmpty")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "agentic.applicationDetail.goToSkills" })
-    ).toHaveAttribute("href", "/skills");
-  });
-
-  it("says Unavailable, not empty, when the server gives no skills", () => {
-    mockState.migration = view({ effectiveSkills: undefined });
-    renderTab();
-    expect(screen.getByText("agentic.common.unavailable")).toBeInTheDocument();
-    expect(
-      screen.queryByText("agentic.applicationDetail.skillsEmpty")
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows the app placeholder while the migration loads", () => {
-    mockState.migrationsLoading = true;
-    renderTab();
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
-    expect(
-      screen.queryByText("agentic.applicationDetail.skillsEmpty")
-    ).not.toBeInTheDocument();
-  });
-
-  it("without a plan, waits for the skills before listing them", () => {
-    mockState.migration = view({ plan: undefined });
-    mockState.skillsLoading = true;
-    renderTab();
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
-  });
-
-  it("with a plan, does not wait for the skills list", () => {
-    mockState.migration = view({ effectiveSkills: [] });
-    mockState.skillsLoading = true;
-    mockState.skillsError = new Error("503");
-    renderTab();
-    expect(
-      screen.getByText("agentic.applicationDetail.skillsEmpty")
+      within(section(/^Target profile skills/)).getByText(
+        "Agents also use these skills in every stage when they migrate applications in Java EE Application that target this profile, unless a migration plan excludes them."
+      )
     ).toBeInTheDocument();
   });
 
-  it("shows the error state when the migration cannot be read", () => {
-    mockState.migrationsError = new Error("503");
+  it("links each owner where its skills are attached", () => {
     renderTab();
-    expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();
-    // Without Manage skills there is no section heading over the error.
     expect(
-      screen.queryByText("agentic.applicationDetail.tabSkills")
+      screen.getByRole("link", { name: "Java EE Application" })
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1&ar%3Atab=2");
+    expect(screen.getByRole("link", { name: "Quarkus 3.x" })).toHaveAttribute(
+      "href",
+      "/archetypes/1/target-profiles#target-profile-11"
+    );
+  });
+
+  it("gives an application in two archetypes one group per archetype, by name", () => {
+    renderTab([legacyJava, javaEe]);
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent);
+    expect(headings).toEqual([
+      "Application skills (1)",
+      "Archetype skills: Java EE Application (2)",
+      "Archetype skills: Legacy Java Application (1)",
+      "Target profile skills: Quarkus 3.x (1)",
+    ]);
+    // A rule carries the "Always followed" marker after its name.
+    expect(listedSkills(/Legacy Java Application/)).toEqual([
+      "Corporate coding standardsAlways followed",
+    ]);
+  });
+
+  it("links to Skills by stage on the Migration tab only when a plan exists", async () => {
+    const history = renderTab();
+    expect(
+      screen.getByText(/Each stage also gets the skills of its own agent./)
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("link", { name: "See skills by stage" })
+    );
+    expect(history.location.search).toBe("?tab=migration");
+    expect(history.location.hash).toBe("#skills-by-stage");
+  });
+
+  it("has no intro link without a plan", () => {
+    mockState.migration = view({ plan: undefined, configured: false });
+    renderTab();
+    expect(
+      screen.queryByRole("link", { name: "See skills by stage" })
     ).toBeNull();
   });
 
-  it("without a plan, shows the error state when the skills cannot be read", () => {
-    mockState.migration = view({ plan: undefined });
-    mockState.skillsError = new Error("503");
-    renderTab();
-    expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();
+  it("says when the application is in no archetype, with a way there", () => {
+    mockState.migration = view({
+      archetype: undefined,
+      targetProfile: undefined,
+      plan: undefined,
+      configured: false,
+    });
+    renderTab([]);
+    const group = section("Archetype skills");
+    expect(
+      within(group).getByText(
+        /This application is not in any archetype, so it gets no archetype or target profile skills./
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByRole("link", { name: "Go to archetypes" })
+    ).toHaveAttribute("href", "/archetypes");
+    expect(screen.queryByRole("region", { name: /Target profile/ })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "See skills by stage" })
+    ).toBeNull();
   });
 
-  it("without a plan, shows the skills associated with the application", () => {
-    mockState.migration = view({ plan: undefined });
+  it("says when the archetype has no target profile, with a way there", () => {
+    mockState.migration = view({
+      archetype: undefined,
+      targetProfile: undefined,
+      plan: undefined,
+      configured: false,
+    });
+    renderTab();
+    const group = section("Target profile skills");
+    expect(
+      within(group).getByText(/Java EE Application has no target profile yet./)
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByRole("link", { name: "View target profiles" })
+    ).toHaveAttribute("href", "/archetypes/1/target-profiles");
+  });
+
+  it("keeps an empty group with one sentence and no count", () => {
+    mockState.skills = [];
     renderTab();
     expect(
-      screen.getByText("agentic.applicationDetail.skillsEmpty")
+      screen.getByRole("heading", { name: "Application skills" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No skills are attached to this application.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No skills are attached to this archetype.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No skills are attached to this target profile.")
     ).toBeInTheDocument();
   });
 
-  describe("Manage skills", () => {
-    const effectiveSkills = [
-      {
-        skill: { id: "2", name: "EJB to CDI conversion patterns" },
-        scope: "application",
-        scopeName: "Customer Management",
-      },
-    ] as ApplicationMigrationView["effectiveSkills"];
+  it("offers Manage skills to a writer, only on the application group", async () => {
+    mockState.canManageSkills = true;
+    renderTab();
+    const buttons = screen.getAllByRole("button", { name: /Manage skills/ });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAccessibleName(
+      "Manage skills for Claims Processing"
+    );
+    expect(buttons[0]).toHaveAttribute("id", "manage-skills-application-3");
+    expect(within(section(/^Application skills/)).getByRole("button")).toBe(
+      buttons[0]
+    );
+    await userEvent.click(buttons[0]);
+    expect(onManageSkills).toHaveBeenCalled();
+  });
 
-    beforeEach(() => {
-      mockState.canManageSkills = true;
-    });
+  it("shows no Manage skills to a reader (read-only persona)", () => {
+    renderTab();
+    expect(screen.queryByRole("button", { name: /Manage skills/ })).toBeNull();
+    expect(listedSkills(/^Application skills/)).toEqual([
+      "EJB to CDI conversion patterns",
+    ]);
+  });
 
-    it("sits on the heading's line next to the skills", async () => {
-      mockState.migration = view({ effectiveSkills });
-      renderTab();
-      expect(manageButtons()).toHaveLength(1);
-      await userEvent.click(manageButtons()[0]);
-      expect(onManageSkills).toHaveBeenCalledTimes(1);
-    });
+  it("waits for the skills before it shows any group", () => {
+    mockState.skillsLoading = true;
+    renderTab();
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(screen.queryByRole("region")).toBeNull();
+  });
 
-    it("is offered when the server gives no skills (Unavailable)", () => {
-      mockState.migration = view({ effectiveSkills: undefined });
-      renderTab();
-      expect(manageButtons()).toHaveLength(1);
-    });
+  it("shows an error and no groups when the skills cannot be read", () => {
+    mockState.skillsError = new Error("boom");
+    renderTab();
+    expect(screen.queryByRole("region")).toBeNull();
+    expect(screen.queryByRole("list")).toBeNull();
+  });
 
-    it("replaces Go to skills in the empty state", async () => {
-      mockState.migration = view({ effectiveSkills: [] });
-      renderTab();
-      expect(manageButtons()).toHaveLength(1);
-      expect(
-        screen.queryByRole("link", {
-          name: "agentic.applicationDetail.goToSkills",
-        })
-      ).toBeNull();
-      await userEvent.click(manageButtons()[0]);
-      expect(onManageSkills).toHaveBeenCalledTimes(1);
-    });
+  it("keeps the attached groups while the migration view loads", () => {
+    mockState.migrationsLoading = true;
+    mockState.migration = undefined;
+    renderTab();
+    expect(listedSkills(/^Application skills/)).toEqual([
+      "EJB to CDI conversion patterns",
+    ]);
+    expect(
+      within(section("Target profile skills")).queryByRole("list")
+    ).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "See skills by stage" })
+    ).toBeNull();
+  });
 
-    it("gives way to Go to skills when no skill exists at all", () => {
-      mockState.migration = view({ effectiveSkills: [] });
-      mockState.skillsSuccess = true;
-      mockState.skills = [];
-      renderTab();
-      expect(manageButtons()).toHaveLength(0);
-      expect(
-        screen.getByRole("link", {
-          name: "agentic.applicationDetail.goToSkills",
-        })
-      ).toHaveAttribute("href", "/skills");
-    });
-
-    it("is not offered while loading", () => {
-      mockState.migrationsLoading = true;
-      renderTab();
-      expect(manageButtons()).toHaveLength(0);
-    });
-
-    it("stays offered next to the error state: the modal says why", () => {
-      mockState.migration = view({ plan: undefined });
-      mockState.skillsError = new Error("503");
-      renderTab();
-      expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();
-      expect(manageButtons()).toHaveLength(1);
-      expect(
-        screen.getByText("agentic.applicationDetail.tabSkills")
-      ).toBeInTheDocument();
-    });
-
-    it("keeps the same button when the empty state turns into the table", () => {
-      mockState.migration = view({ effectiveSkills: [] });
-      const { rerender } = renderTab();
-      const [button] = manageButtons();
-      button.focus();
-
-      mockState.migration = view({ effectiveSkills });
-      rerender(
-        <Router history={createMemoryHistory()}>
-          <SkillsTab
-            applicationId={1}
-            linkCrumbs={[]}
-            archetypes={[]}
-            onManageSkills={onManageSkills}
-          />
-        </Router>
-      );
-      expect(
-        screen.getByText("EJB to CDI conversion patterns")
-      ).toBeInTheDocument();
-      expect(manageButtons()).toEqual([button]);
-      expect(button).toHaveFocus();
-    });
-
-    it("is not offered without the skill write scope", () => {
-      mockState.canManageSkills = false;
-      mockState.migration = view({ effectiveSkills });
-      renderTab();
-      expect(manageButtons()).toHaveLength(0);
-    });
+  it("says Unavailable on the target profile group when the migration view fails", () => {
+    mockState.migrationsError = new Error("boom");
+    mockState.migration = undefined;
+    renderTab();
+    expect(
+      within(section("Target profile skills")).getByText("Unavailable")
+    ).toBeInTheDocument();
+    expect(listedSkills(/^Archetype skills/)).toHaveLength(2);
   });
 });

@@ -262,9 +262,7 @@ describe("SkillCollectionForm agents", () => {
 
     // Four fields: no FormSection groups.
     expect(screen.queryByText("terms.general")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("agentic.skill.associations")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("agentic.skill.usage")).not.toBeInTheDocument();
     await waitFor(() => expect(agentsInput()).toBeEnabled());
     expect(
       screen.getByRole("combobox", {

@@ -511,6 +511,10 @@ test.describe("Logs", () => {
     ).toBeVisible();
 
     await containerToggle(page).click();
+    // The name matches the YAML; the help says what it does.
+    await expect(
+      page.getByRole("option", { name: /^Skill loader/ })
+    ).toContainText("Loads this stage's skills before the agent starts");
     await page.getByRole("option", { name: /^Skill loader/ }).click();
     await expect(containerToggle(page)).toHaveAccessibleName(
       "Container: Skill loader"
@@ -802,21 +806,21 @@ test.describe("Stage header", () => {
     ).toBeVisible();
   });
 
-  test("the header names the run's applications, linking to them with the trail", async ({
+  test("the header names the run's application, linking to it with the trail", async ({
     page,
   }) => {
-    await page.goto(stageUrl("1", "1", "configured"));
+    // Run 2 is on one application: its name is a link (a run on several
+    // shows the application Select, stage-application-select.spec.ts).
+    await page.goto(stageUrl("2", "4", "configured"));
     const { runs } = await fixtureGraph(page);
-    const run = runs.find((candidate) => String(candidate.id) === "1");
+    const run = runs.find((candidate) => String(candidate.id) === "2");
     expect(run).toBeDefined();
     const names = run!.applications.map((application) => application.name);
+    expect(names).toHaveLength(1);
     const title = main(page).getByRole("heading", { level: 1 });
     const header = title.locator("xpath=ancestor::section[1]");
     await expect(
-      header.getByText(
-        `${names.length === 1 ? "Application:" : "Applications:"} ${names.join(", ")}`,
-        { exact: true }
-      )
+      header.getByText(`Application: ${names[0]}`, { exact: true })
     ).toBeVisible();
     const stageName = await title.textContent();
     await header.getByRole("link", { name: names[0], exact: true }).click();
@@ -827,6 +831,25 @@ test.describe("Stage header", () => {
     await expect(
       breadcrumb(page).getByRole("link", { name: stageName!, exact: true })
     ).toBeVisible();
+  });
+
+  test("the header of a run on several applications names the selected one in a Select", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "1", "configured"));
+    const { runs } = await fixtureGraph(page);
+    const run = runs.find((candidate) => String(candidate.id) === "1");
+    const names = run!.applications.map((application) => application.name);
+    expect(names.length).toBeGreaterThan(1);
+    const header = main(page)
+      .getByRole("heading", { level: 1 })
+      .locator("xpath=ancestor::section[1]");
+    await expect(
+      header.getByRole("button", { name: `Application: ${names[0]}` })
+    ).toBeVisible();
+    await expect(
+      header.getByRole("link", { name: names[0], exact: true })
+    ).toHaveCount(0);
   });
 });
 

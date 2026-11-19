@@ -479,12 +479,14 @@ export const AgentForm: React.FC<AgentFormProps> = ({
               name="skills"
               label={t("agentic.agent.skills")}
               fieldId="agent-skills"
+              helperText={t("agentic.agent.skillsHelp")}
               renderInput={() => (
                 <MultiSelect
                   toggleId="skills-select-toggle"
                   toggleAriaLabel={t("agentic.agent.skillsSelect")}
                   ariaLabel={t("agentic.agent.skills")}
                   inputAriaLabel={t("agentic.agent.skills")}
+                  inputAriaDescribedBy="agent-skills-helper"
                   maxMenuHeight={PICKER_MENU_HEIGHT}
                   popperProps={PICKER_MENU_POPPER}
                   values={selectedSkills}

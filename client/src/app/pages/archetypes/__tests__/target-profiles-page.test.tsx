@@ -78,18 +78,24 @@ const plans: MigrationPlan[] = [
   },
 ];
 
-const skill = (id: string, name: string, profileId: number): Skill => ({
+const skill = (
+  id: string,
+  name: string,
+  profileId: number,
+  loadPolicy?: Skill["loadPolicy"]
+): Skill => ({
   id,
   name,
   description: "",
   sourceType: "inline",
+  loadPolicy,
   associations: [
     { scope: "targetProfile", resource: { id: profileId, name: "" } },
   ],
 });
 const skills = [
   skill("3", "Jakarta EE namespace migration", 11),
-  skill("4", "Quarkus best practices", 11),
+  skill("4", "Quarkus best practices", 11, "rule"),
   skill("5", "Containerization standards", 12),
 ];
 
@@ -166,15 +172,27 @@ describe("TargetProfilesPage", () => {
     expect(
       within(quarkus).getByRole("link", { name: "Java EE to Quarkus" })
     ).toHaveAttribute("href", "/migration-plans/1");
-    await userEvent.click(
-      within(quarkus).getByRole("button", { name: "2 skills" })
+    const button = within(quarkus).getByRole("button", {
+      name: "2 skills for Quarkus 3.x",
+    });
+    expect(button).toHaveTextContent("2 skills");
+    await userEvent.click(button);
+    const popover = await screen.findByRole("dialog", {
+      name: "Target profile skills: Quarkus 3.x",
+    });
+    expect(
+      within(popover).getByRole("link", { name: "Quarkus best practices" })
+    ).toHaveAttribute("href", "/skills/4");
+    // Only the rule carries the marker.
+    expect(within(popover).getAllByText("Always followed")).toHaveLength(1);
+    // The sentence first, then the list.
+    const sentence = within(popover).getByText(
+      "Agents use these skills in every stage when they migrate applications in Java EE Application that target this profile, unless a migration plan excludes them."
     );
     expect(
-      await screen.findByRole("dialog", { name: "Skills for Quarkus 3.x" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Quarkus best practices" })
-    ).toHaveAttribute("href", "/skills/4");
+      sentence.compareDocumentPosition(within(popover).getByRole("list")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
 
     const liftAndShift = await row("OpenShift lift and shift");
     expect(within(liftAndShift).getByText("Not assigned")).toBeInTheDocument();
@@ -183,6 +201,31 @@ describe("TargetProfilesPage", () => {
       within(liftAndShift).getByRole("link", {
         name: "Containerization standards",
       })
+    ).toBeInTheDocument();
+  });
+
+  it("says a later profile's skills reach no agent in its popover", async () => {
+    serve({
+      skillsResolver: (_req, res, ctx) =>
+        res(
+          ctx.json([...skills, skill("6", "Database migration patterns", 12)])
+        ),
+    });
+    renderPage();
+
+    const liftAndShift = await row("OpenShift lift and shift");
+    await userEvent.click(
+      within(liftAndShift).getByRole("button", {
+        name: "2 skills for OpenShift lift and shift",
+      })
+    );
+    const popover = await screen.findByRole("dialog", {
+      name: "Target profile skills: OpenShift lift and shift",
+    });
+    expect(
+      within(popover).getByText(
+        "Applications in Java EE Application use Quarkus 3.x, so agents do not get these skills."
+      )
     ).toBeInTheDocument();
   });
 
@@ -643,7 +686,7 @@ describe("TargetProfilesPage", () => {
       ).toBeInTheDocument();
       expect(
         within(dialog).getByText(
-          "OpenShift lift and shift will be deleted. Skills associated with it are no longer used for applications in Java EE Application. This action cannot be undone."
+          "OpenShift lift and shift will be deleted. The skill attached to it is not deleted, but agents no longer get it from this target profile. This action cannot be undone."
         )
       ).toBeInTheDocument();
 

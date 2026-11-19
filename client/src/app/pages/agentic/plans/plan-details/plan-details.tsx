@@ -60,15 +60,11 @@ import {
   DetailSection,
   DetailSections,
   LinkLabels,
-  SectionEmpty,
 } from "../../components/detail-section";
 import { PlanRunsTable } from "../../components/plan-runs-table";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
-import {
-  SkillsTable,
-  planSkillRows,
-  skillRowCounts,
-} from "../../components/skills-table";
+import { searchWithFrom } from "../../components/skill-origin";
+import { StageSkillsTable } from "../../components/stage-skills-table";
 import { PlanConfigurationAlert } from "../components/plan-configuration-alert";
 import {
   getPlanDeleteBlocker,
@@ -113,8 +109,9 @@ const TargetProfilesFact: React.FC<{
       : breadcrumbTo(targetProfilesPath(path.archetype.id), "", linkCrumbs)
   );
   if (path == null) {
-    // The real adapters do not report the path yet: unknown, not empty.
-    return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+    // A plan without a migration path runs when someone picks it: "Not
+    // assigned", not a failed read.
+    return <EmptyTextMessage message={t("agentic.execution.notAssigned")} />;
   }
   if (path.targetProfiles.length === 0) {
     return <EmptyTextMessage message={t("terms.none")} />;
@@ -176,9 +173,12 @@ const PlanDetailsPage: React.FC = () => {
       migrationPlan == null
         ? undefined
         : {
-            stages: migrationPlan.stages.map((stage) => ({
-              agent: { id: stage.agent.id },
-            })),
+            stages: [...migrationPlan.stages]
+              .sort((a, b) => a.order - b.order)
+              .map((stage) => ({
+                agent: { id: stage.agent.id },
+                name: stage.name,
+              })),
             migrationPath:
               migrationPlan.migrationPath != null
                 ? {
@@ -267,12 +267,13 @@ const PlanDetailsPage: React.FC = () => {
   // After an edit the previous plan's rows are not shown while the saved
   // plan resolves: their exclusions can be out of date.
   const skillsState = planSkillsState(skillsQuery);
-  const isLoadingSkills = skillsState === "loading";
-  const skillRows =
-    skillsState === "ready" && skillsQuery.planSkills != null
-      ? planSkillRows(skillsQuery.planSkills)
-      : undefined;
-  const { used: usedSkillCount } = skillRowCounts(skillRows);
+  // Skill origins keep their own query or anchor, plus this page's origin.
+  const skillLinkTo = (pathname: string, search: string) =>
+    breadcrumbTo(
+      pathname,
+      searchWithFrom(search, `plan-${migrationPlan.id}`),
+      planChildCrumbs
+    );
 
   // The configuration alert says what is wrong; the Configuration fact
   // would repeat it with another count, so it shows only without the alert
@@ -294,7 +295,7 @@ const PlanDetailsPage: React.FC = () => {
           {path.archetype.name}
         </Link>
       ) : (
-        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+        <EmptyTextMessage message={t("agentic.execution.notAssigned")} />
       ),
     ],
     [
@@ -457,50 +458,36 @@ const PlanDetailsPage: React.FC = () => {
                 }
               />
             </DetailSection>
-            {skillRows == null ? (
-              <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
-                {isLoadingSkills ? (
-                  <Skeleton
-                    width="16rem"
-                    screenreaderText={t("agentic.plan.loadingSkillsShort")}
-                  />
-                ) : (
-                  <EmptyTextMessage
-                    message={
-                      skillsState === "unavailable"
-                        ? t("agentic.planDetail.skillsNotAvailable")
-                        : t("agentic.common.unavailable")
-                    }
-                  />
-                )}
-              </DetailSection>
-            ) : skillRows.length === 0 ? (
-              <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
-                <SectionEmpty>
-                  {t("agentic.planDetail.skillsEmpty")}
-                </SectionEmpty>
-              </DetailSection>
-            ) : (
-              <DetailSection
-                title={
-                  usedSkillCount < skillRows.length
-                    ? t("agentic.planDetail.skillsTitleUsed", {
-                        used: usedSkillCount,
-                        count: skillRows.length,
-                      })
-                    : t("agentic.planDetail.skillsTitle", {
-                        count: skillRows.length,
-                      })
+            <DetailSection
+              title={t("agentic.stageSkills.title")}
+              // The Every stage note sits here, after the first sentence:
+              // the table's Every stage title carries only the subtitle that
+              // every context shows.
+              description={t("agentic.planDetail.skillsByStageDescription", {
+                everyStage:
+                  path != null
+                    ? t("agentic.stageSkills.everyStagePlanNote")
+                    : t("agentic.stageSkills.everyStageNoPath"),
+              })}
+            >
+              <StageSkillsTable
+                skills={
+                  skillsState === "ready"
+                    ? skillsQuery.skillsByStage
+                    : undefined
                 }
-                description={
-                  usedSkillCount < skillRows.length
-                    ? t("agentic.planDetail.skillsDescriptionExcluded")
-                    : t("agentic.planDetail.skillsDescription")
-                }
-              >
-                <SkillsTable rows={skillRows} linkTo={childLink} />
-              </DetailSection>
-            )}
+                context="plan"
+                linkTo={skillLinkTo}
+                originOptions={{ archetypeId: path?.archetype.id }}
+                // The Stages table above uses 0 and up.
+                rowIndexOffset={100}
+                unavailableText={t("agentic.planDetail.skillsNotAvailable")}
+                aria-label={t("agentic.stageSkills.title")}
+                isLoading={skillsState === "loading"}
+                isError={skillsState === "error"}
+                onRetry={() => void skillsQuery.refetch()}
+              />
+            </DetailSection>
           </DetailSections>
         </PageSection>
       </DetailTabPanel>

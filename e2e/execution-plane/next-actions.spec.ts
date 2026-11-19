@@ -144,7 +144,7 @@ test.describe("Migration next actions", () => {
       /marked failed and the run stops\. This decision applies to all \d+ applications in Run #/
     );
     await confirm.getByRole("button", { name: "Reject", exact: true }).click();
-    await expect(page.getByText(/Run #\d+ .* rejected$/)).toBeVisible();
+    await expect(page.getByText(/Run #\d+: .* rejected$/)).toBeVisible();
     await expect(
       page.getByRole("tabpanel").getByRole("heading").first()
     ).toHaveText(/ failed$/);
@@ -266,7 +266,9 @@ test.describe("Migration next actions", () => {
     await expectMigrationTab(page, "Aardvark Unmapped Service");
     // Without an archetype there is no target profile to assign a plan to.
     await expect(
-      page.getByText("This application has no archetype.", { exact: false })
+      page.getByText("This application is not in any archetype.", {
+        exact: false,
+      })
     ).toBeVisible();
     await page
       .getByRole("main")
@@ -285,12 +287,13 @@ test.describe("Migration next actions", () => {
       })
     );
     await expect(
-      page.getByRole("heading", { name: "No migration path" })
+      page.getByRole("heading", { name: "No migration plan" })
     ).toBeVisible();
+    // The chain facts and the body name the missing link: no plan on the profile.
     await expect(
-      page.getByText("Check the target profiles of Java EE Application.", {
-        exact: false,
-      })
+      page.getByText(
+        "Quarkus 3.x has no migration plan assigned. Assign one on the target profiles page of Java EE Application."
+      )
     ).toBeVisible();
     await page
       .getByRole("main")

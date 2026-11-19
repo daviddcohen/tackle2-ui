@@ -4,9 +4,27 @@ import { TablePersistenceKeyPrefix } from "@app/Constants";
 import { DevPaths } from "@app/Paths";
 import { SkillAssociation } from "@app/agentic";
 import { Archetype } from "@app/api/models";
+import { ArchetypeDrawerTab } from "@app/pages/archetypes/components/archetype-drawer-tabs";
 
-export const archetypePath = (id: number) =>
-  `${DevPaths.archetypes}?${new URLSearchParams({ [`${TablePersistenceKeyPrefix.archetypes}:activeItem`]: String(id) })}`;
+/**
+ * An archetype, open in the drawer of the archetypes table; with "skills",
+ * on its Skills tab (every archetype link from a skills surface).
+ */
+export const archetypePath = (id: number, tab?: "skills") => {
+  const prefix = TablePersistenceKeyPrefix.archetypes;
+  return `${DevPaths.archetypes}?${new URLSearchParams({
+    [`${prefix}:activeItem`]: String(id),
+    ...(tab === "skills"
+      ? { [`${prefix}:tab`]: String(ArchetypeDrawerTab.Skills) }
+      : {}),
+  })}`;
+};
+
+/** An application's Skills tab, where its own skills are attached. */
+export const applicationSkillsPath = (applicationId: number) =>
+  `${generatePath(DevPaths.applicationDetails, {
+    applicationId: String(applicationId),
+  })}?tab=skills`;
 
 /** An archetype's target profiles page, where a migration plan is assigned to a profile. */
 export const targetProfilesPath = (archetypeId: number) =>
@@ -31,6 +49,11 @@ export const targetProfileOwnerPath = (
   return owner ? targetProfilePath(owner.id, profileId) : undefined;
 };
 
+/**
+ * Where a skill's attachment is edited: the agent page, the archetype
+ * drawer's Skills tab, the target profile on its archetype's page, the
+ * application's Skills tab.
+ */
 export const skillAssociationPath = (
   association: SkillAssociation,
   archetypes: Archetype[]
@@ -41,11 +64,9 @@ export const skillAssociationPath = (
         agentId: association.resource.id,
       });
     case "application":
-      return generatePath(DevPaths.applicationDetails, {
-        applicationId: String(association.resource.id),
-      });
+      return applicationSkillsPath(association.resource.id);
     case "archetype":
-      return archetypePath(association.resource.id);
+      return archetypePath(association.resource.id, "skills");
     case "targetProfile":
       return targetProfileOwnerPath(association.resource.id, archetypes);
   }

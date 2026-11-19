@@ -47,6 +47,14 @@ export type WithId<T> = T & { id: EntityId };
 
 export type SkillSourceType = "inline" | "git" | "oci";
 
+/**
+ * How an agent loads a Skill (SkillCard `spec.type`): `rule` is pasted into
+ * every prompt ("Always followed"); `skill` is offered by name and
+ * description and the agent opens it when relevant ("Available when
+ * needed"). Absent means `skill`, the CRD default.
+ */
+export type SkillLoadPolicy = "rule" | "skill";
+
 export type SkillAssociationScope =
   | "agent"
   | "archetype"
@@ -79,6 +87,8 @@ export interface Skill {
   repoBranch?: string;
   repoPath?: string;
   imageRef?: string;
+  /** Absent means `skill` (the CRD default). */
+  loadPolicy?: SkillLoadPolicy;
   associations?: SkillAssociation[];
   /**
    * Server-owned. True for a built-in object the agentic operator installs
@@ -102,6 +112,8 @@ export interface SkillRequest {
   repoBranch?: string;
   repoPath?: string;
   imageRef?: string;
+  /** Absent means `skill` (the CRD default). */
+  loadPolicy?: SkillLoadPolicy;
   associations?: SkillAssociationRequest[];
 }
 
@@ -315,44 +327,55 @@ export interface MigrationPathRequest {
   isDefault: boolean;
 }
 
-export interface EffectiveSkillAssociation {
-  skill: EntityRef;
-  scope: SkillAssociationScope;
-  scopeName: string;
-}
+/** Where one skill a stage gets comes from. Refs only; the UI writes the words. */
+export type SkillOrigin =
+  | { kind: "agent"; agent: EntityRef }
+  | { kind: "collection"; agent: EntityRef; collection: EntityRef }
+  | { kind: "archetype"; archetype: HubRef }
+  | { kind: "targetProfile"; targetProfile: HubRef; archetype: HubRef }
+  | { kind: "application"; application: HubRef };
 
-/**
- * One way a Skill reaches a migration plan's agents. Server-derived, like
- * `EffectiveSkillAssociation`, plus the ids of what it comes through.
- */
-export interface PlanSkillSource {
-  scope: SkillAssociationScope;
-  /**
-   * Display text, the same as `EffectiveSkillAssociation.scopeName`: the agent
-   * name, "{agent} via {collection}", the archetype name or the target
-   * profile name.
-   */
-  scopeName: string;
-  /**
-   * The stage agent (`scope: "agent"`, an `EntityRef`), archetype or target
-   * profile (Hub scopes, a `HubRef`) the Skill is associated with.
-   */
-  resource: EntityRef | HubRef;
-  /** Set when the Skill comes through one of the agent's skill collections. */
-  collection?: EntityRef;
-}
-
-/** A Skill a migration plan resolves to, with every way it arrives. */
-export interface PlanSkill {
+/** One Skill a stage (or every stage) gets. */
+export interface StageSkill {
   skill: EntityRef;
+  loadPolicy: SkillLoadPolicy;
   /**
-   * Server-deduplicated (each source once), in resolution order: the stage
-   * agents' own skills, their skill collections, the archetype, the target
-   * profiles.
+   * Every way it reaches this group, deduplicated, ordered agent, collection,
+   * archetype, target profile, application.
    */
-  sources: PlanSkillSource[];
-  /** True when the plan turns the Skill off (`excludedSkills`). */
+  from: SkillOrigin[];
+  /** The plan excludes it. Never true when one origin is the application itself. */
   excluded: boolean;
+}
+
+/** What one stage's agent gets: its own skills and its collections' skills. */
+export interface StageSkillsGroup {
+  /** 1-based. */
+  order: number;
+  /** The stage name. */
+  name: string;
+  agent: EntityRef;
+  /** Set in run snapshots: the stage run's `stageId`. */
+  stageId?: EntityId;
+  /** The stage agent's own skills and its collections' skills. */
+  skills: StageSkill[];
+}
+
+/** Context skills: every stage gets them. */
+export interface EveryStageSkillsGroup {
+  /**
+   * The application these belong to. Absent in a plan preview: then they
+   * come from the plan's archetype and target profiles.
+   */
+  application?: HubRef;
+  /** Archetype, target profile and application skills. */
+  skills: StageSkill[];
+}
+
+/** What each stage gets, per stage, plus the skills every stage gets. */
+export interface SkillsByStage {
+  stages: StageSkillsGroup[];
+  everyStage: EveryStageSkillsGroup[];
 }
 
 /**
@@ -361,40 +384,47 @@ export interface PlanSkill {
  * an agent are left out by the client.
  */
 export interface ResolvePlanSkillsRequest {
-  stages: { agent: IdRef }[];
+  /** In stage order; `name` labels the stage group (absent: ""). */
+  stages: { agent: IdRef; name?: string }[];
   migrationPath?: {
     archetype: IdRef<number>;
     targetProfiles: IdRef<number>[];
   };
   excludedSkills?: IdRef[];
+  /**
+   * Resolve for these applications: one `everyStage` group per application,
+   * from its own archetypes, target profile and attachments. Absent: the plan
+   * preview (one `everyStage` group from `migrationPath`).
+   */
+  applications?: IdRef<number>[];
 }
 
-export interface ResolvePlanSkillsResponse {
-  /**
-   * One entry per Skill from the stage agents (their own skills and their
-   * skill collections), the archetype and the target profiles. Application
-   * skills are added per application when the plan runs.
-   */
-  skills: PlanSkill[];
+/** The per-stage resolution of a draft plan. */
+export type ResolvePlanSkillsResponse = SkillsByStage;
+
+/** Where one Skill sits in a plan's resolution. */
+export interface SkillPlacement {
+  /** The stage that gets it; absent means every stage. */
+  stage?: { order: number; name: string };
+  from: SkillOrigin[];
+  excluded: boolean;
 }
 
 /**
- * A migration plan whose resolved skills include one Skill: the `PlanSkill`
- * entry for that Skill in the plan's resolution, keyed by the plan instead.
+ * A migration plan whose resolution (the plan preview, without
+ * applications) includes one Skill.
  */
 export interface SkillPlan {
   plan: EntityRef;
-  /** The `PlanSkill.sources` of this Skill in the plan's resolution. */
-  sources: PlanSkillSource[];
-  /** True when the plan excludes the Skill (`excludedSkills`). */
-  excluded: boolean;
+  /** One per stage that gets the Skill, plus one for every stage. */
+  placements: SkillPlacement[];
 }
 
 export interface SkillPlansResponse {
   /**
-   * One entry per migration plan that resolves the Skill (the same resolution
-   * as `ResolvePlanSkillsResponse`, for every saved plan), in plan name order.
-   * Application skills are not included: they are added when a plan runs.
+   * One entry per migration plan whose plan preview resolves the Skill, in
+   * plan name order. Application skills are not included: they are added
+   * per application when a plan runs.
    */
   plans: SkillPlan[];
 }
@@ -414,16 +444,6 @@ export interface MigrationPlan {
   description: string;
   stages: PlanStage[];
   migrationPath?: MigrationPathAssociation;
-  /**
-   * Server-derived from Skill associations: the stage agents' own skills, the
-   * archetype and the target profiles (resolution sources 1, 3 and 4), not
-   * the agents' skill collections. Skills in `excludedSkills` are included,
-   * unlike `ApplicationMigrationView.effectiveSkills` and
-   * `PlanRun.resolvedSkills`, which leave them out. The plan pages and the
-   * skill page read the full resolution instead (`ResolvePlanSkillsResponse`,
-   * `SkillPlansResponse`).
-   */
-  effectiveSkills?: EffectiveSkillAssociation[];
   /**
    * Skills this Plan turns off: no stage of its runs gets them, whatever
    * source they come through. Absent when the Plan excludes nothing (and on a
@@ -511,7 +531,22 @@ export interface ApplicationMigrationCommit {
   message: string;
   stageName: string;
   url?: string;
+  /**
+   * The application whose agent run made the commit, in a run on several
+   * applications (each application's agent run commits to its own
+   * repository). Absent in a run on one application.
+   */
+  application?: HubRef;
 }
+
+/** A commit belongs to an application when it names it or names none. */
+export const isCommitOf = (
+  commit: ApplicationMigrationCommit,
+  applicationId: number | undefined
+) =>
+  commit.application == null ||
+  applicationId == null ||
+  commit.application.id === applicationId;
 
 export interface ApplicationMigrationResult {
   repositoryName: string;
@@ -547,23 +582,31 @@ export interface StartApplicationMigrationsResponse {
 
 export interface ApplicationMigrationView {
   configured: boolean;
+  /** The application's own target profile: its archetype's. */
   targetProfile?: HubRef;
+  /** The archetype `targetProfile` belongs to. */
+  archetype?: HubRef;
+  /**
+   * The plan the next run uses: the default plan of the application's
+   * archetype and target profile. Never the latest run's plan.
+   */
   plan?: EntityRef;
   /** The application's latest plan run, if it has one. */
   planRun?: EntityRef;
+  /** The plan `planRun` used (it can differ from `plan`). */
+  planRunPlan?: EntityRef;
   preflight?: ApplicationPreflightStatus;
   preflightReason?: string;
   runPhase?: ControllerRunPhase;
   currentStage?: string;
   intervention: HumanInterventionState;
   action?: ApplicationMigrationAction;
-  /** Skills the agents use for this application, with their sources. */
-  effectiveSkills?: EffectiveSkillAssociation[];
   /**
-   * Skills the application's Plan resolves but turns off, with their
-   * sources; they are not in `effectiveSkills`. Absent when none are.
+   * What each stage of `plan` gets for this application, with one
+   * `everyStage` group for this application. Without a plan, `stages` is
+   * empty and only the context skills are listed.
    */
-  excludedSkills?: EffectiveSkillAssociation[];
+  skills?: SkillsByStage;
   result?: ApplicationMigrationResult;
   stages: ApplicationMigrationStageExecution[];
   startedAt?: string;
@@ -611,13 +654,11 @@ export interface PlanRun {
   startedAt: string;
   completedAt?: string;
   stageRuns: StageRun[];
-  /** Snapshot at start: the skills given to the agents, with their sources. */
-  resolvedSkills?: EffectiveSkillAssociation[];
   /**
-   * Snapshot at start: skills the Plan resolved but turned off, with their
-   * sources; they are not in `resolvedSkills`. Absent when none were.
+   * Snapshot at start, computed by the server's skill resolver: what each
+   * stage got (`stageId` set) and one `everyStage` group per application.
    */
-  excludedSkills?: EffectiveSkillAssociation[];
+  skills?: SkillsByStage;
 }
 
 export type ApplicationMigrationDisplayStatus =

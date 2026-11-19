@@ -87,23 +87,21 @@ describe("getPlanConfigurationChecks", () => {
     expect(checks.find((c) => c.id === "models")?.status).toBe("notEvaluated");
   });
 
-  it("flags a Plan without a migration path or stages", () => {
-    const checks = getPlanConfigurationChecks(
-      { ...plan, migrationPath: undefined, stages: [] },
-      [],
-      []
-    );
-    expect(checks.find((c) => c.id === "path")?.status).toBe("issue");
+  it("flags a Plan without stages", () => {
+    const checks = getPlanConfigurationChecks({ ...plan, stages: [] }, [], []);
     expect(checks.find((c) => c.id === "stages")?.status).toBe("issue");
   });
 
-  it("evaluates Skills only when the server reported them", () => {
-    const skillsStatus = (effectiveSkills: MigrationPlan["effectiveSkills"]) =>
-      getPlanConfigurationChecks({ ...plan, effectiveSkills }, [], []).find(
-        (c) => c.id === "skills"
-      )?.status;
-    expect(skillsStatus(undefined)).toBe("notEvaluated");
-    expect(skillsStatus([])).toBe("passed");
+  it("checks only stages and models: no path or skills check", () => {
+    // A plan without a migration path is run when someone picks it, so it is
+    // not a configuration problem; "Skills found" could never warn.
+    const checks = getPlanConfigurationChecks(
+      { ...plan, migrationPath: undefined },
+      [agent],
+      [model]
+    );
+    expect(checks.map((check) => check.id)).toEqual(["stages", "models"]);
+    expect(checks.every((check) => check.status === "passed")).toBe(true);
   });
 });
 

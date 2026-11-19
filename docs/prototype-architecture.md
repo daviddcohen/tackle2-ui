@@ -33,7 +33,7 @@ The projection layer combines:
 - Application-specific preflight and run views
 - Scenario state read only by mock handlers
 - Hub-owned default Model policy, separate from the controller-oriented Gateway shape
-- Effective Skill associations across Agent, archetype, target profile, and application scopes
+- What each stage gets: one skill resolver keyed by stage (`skill-resolution.ts`), from the stage agent and its collections, plus the archetype, target profile and application skills every stage gets (see "Skill resolution" in `docs/agentic-handoff.md`)
 
 The projection layer keeps configuration checks, application preflight, controller run phase, and human intervention independent.
 
@@ -55,7 +55,7 @@ Still to remove or replace at integration:
 
 - The switcher itself and the mock transport (strip steps in the hand-off guide)
 - Fixture-derived Model usage counts and Plan impact counts
-- Fixture-derived Configuration Checks and effective Skill provenance
+- Fixture-derived Configuration Checks and the per-stage skill resolution
 - `ModelProjection.isOrganizationDefault` and its simulated default-selection endpoint
 - Simulated preflight outcomes and result links
 - The remaining integration-boundary alerts on the Agent test and Skill association surfaces

@@ -38,13 +38,27 @@ const skills: Skill[] = [
     name: "API compatibility checklist",
     description: "Review criteria for external API contracts.",
     sourceType: "inline",
-    associations: ["1", "2", "3"].map(association),
+    loadPolicy: "rule",
+    associations: [
+      ...["1", "2", "3"].map(association),
+      {
+        scope: "archetype" as const,
+        resource: { id: 1, name: "Java EE Application" },
+      },
+    ],
   },
   {
     id: "2",
     name: "Jakarta EE namespace migration",
     description: "",
     sourceType: "oci",
+    associations: [],
+  },
+  {
+    id: "4",
+    name: "Unused skill",
+    description: "",
+    sourceType: "inline",
     associations: [],
   },
   // A real adapter without associations: usage is unknown.
@@ -81,13 +95,19 @@ const agents = [
 const useEndpoints = ({
   skillList = skills,
   collectionList = collections,
-}: { skillList?: Skill[]; collectionList?: SkillCollection[] } = {}) =>
+  collectionsResolver,
+}: {
+  skillList?: Skill[];
+  collectionList?: SkillCollection[];
+  collectionsResolver?: Parameters<typeof rest.get>[1];
+} = {}) =>
   server.use(
     rest.get(AGENTIC_ENDPOINTS.skills, (_req, res, ctx) =>
       res(ctx.json(skillList))
     ),
-    rest.get(AGENTIC_ENDPOINTS.skillCollections, (_req, res, ctx) =>
-      res(ctx.json(collectionList))
+    rest.get(
+      AGENTIC_ENDPOINTS.skillCollections,
+      collectionsResolver ?? ((_req, res, ctx) => res(ctx.json(collectionList)))
     ),
     rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
       res(ctx.json(agents))
@@ -114,29 +134,79 @@ describe("SkillsPage", () => {
     mockGrantedScopes.scopes = [];
   });
 
-  it("lists skills with their source and one associations count", async () => {
+  it("describes the page in attach words", async () => {
     useEndpoints();
     renderAt();
 
+    expect(
+      await screen.findByText(
+        "Skills give agents migration knowledge. Attach a skill to an agent, archetype, target profile or application, or add it to a skill collection, so agents use it."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("lists skills with their source, a rule marker and their usage", async () => {
+    useEndpoints();
+    renderAt();
+
+    expect(
+      await screen.findByRole("columnheader", { name: "Usage" })
+    ).not.toHaveAttribute("aria-sort");
     const checklist = await rowOf("API compatibility checklist");
     // The tab set has an accessible name, on the tablist itself.
     expect(
       screen.getByRole("tablist", { name: "Skills and skill collections" })
     ).toBeInTheDocument();
     expect(within(checklist).getByText("Inline")).toBeInTheDocument();
+    expect(within(checklist).getByText("Always followed")).toBeInTheDocument();
+    // Collections come after agents (origin order).
     expect(
-      within(checklist).getByRole("link", { name: "3 associations" })
-    ).toHaveAttribute("href", "/skills/1?tab=associations");
+      await within(checklist).findByRole("link", {
+        name: "3 agents, 1 collection, 1 archetype",
+      })
+    ).toHaveAttribute("href", "/skills/1?tab=usage");
 
     const jakarta = await rowOf("Jakarta EE namespace migration");
     expect(within(jakarta).getByText("OCI image")).toBeInTheDocument();
-    expect(within(jakarta).getByText("None")).toBeInTheDocument();
+    expect(within(jakarta).queryByText("Always followed")).toBeNull();
+    // In collections only: still in use, so not "None".
+    expect(
+      await within(jakarta).findByRole("link", { name: "2 collections" })
+    ).toBeInTheDocument();
 
     const unknown = await rowOf("Unknown usage");
     expect(within(unknown).getByText("Unavailable")).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Java modernization foundation" })
     ).not.toBeInTheDocument();
+  });
+
+  it("says None only for a skill with no usage once the collections are known", async () => {
+    useEndpoints();
+    renderAt();
+
+    const unused = await rowOf("Unused skill");
+    expect(await within(unused).findByText("None")).toBeInTheDocument();
+  });
+
+  it("shows a skeleton, not None, while the collections load", async () => {
+    useEndpoints({ collectionsResolver: () => new Promise(() => {}) });
+    renderAt();
+
+    const unused = await rowOf("Unused skill");
+    expect(within(unused).getByText("Loading")).toBeInTheDocument();
+    expect(within(unused).queryByText("None")).toBeNull();
+  });
+
+  it("says Unavailable, not None, when the collections fail", async () => {
+    useEndpoints({
+      collectionsResolver: (_req, res, ctx) => res(ctx.status(403)),
+    });
+    renderAt();
+
+    const unused = await rowOf("Unused skill");
+    expect(await within(unused).findByText("Unavailable")).toBeInTheDocument();
+    expect(within(unused).queryByText("None")).toBeNull();
   });
 
   it("disables Delete with the reason while the skill is in use", async () => {
@@ -152,12 +222,12 @@ describe("SkillsPage", () => {
     expect(remove).toHaveAttribute("aria-disabled", "true");
     // The reason is the item's description and its tooltip on hover.
     expect(remove).toHaveAccessibleDescription(
-      "This skill has 3 associations and is in 1 skill collection. Remove them before deleting it."
+      "This skill is attached to 3 agents and 1 archetype, and is in 1 skill collection. Remove it from them before deleting it."
     );
     await user.hover(remove);
     expect(
       await screen.findByText(
-        "This skill has 3 associations and is in 1 skill collection. Remove them before deleting it.",
+        "This skill is attached to 3 agents and 1 archetype, and is in 1 skill collection. Remove it from them before deleting it.",
         { selector: '[role="tooltip"] *' }
       )
     ).toBeInTheDocument();

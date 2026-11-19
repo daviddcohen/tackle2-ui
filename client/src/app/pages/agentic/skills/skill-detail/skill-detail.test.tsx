@@ -81,30 +81,47 @@ const collections: SkillCollection[] = [
 const skillPlans: SkillPlan[] = [
   {
     plan: { id: "1", name: ".NET Framework to .NET 8" },
-    sources: [
+    placements: [
       {
-        scope: "agent",
-        scopeName: "Code Migrator",
-        resource: { id: "2", name: "Code Migrator" },
+        stage: { order: 2, name: "Migrate" },
+        from: [{ kind: "agent", agent: { id: "2", name: "Code Migrator" } }],
+        excluded: false,
       },
     ],
-    excluded: false,
   },
   {
     plan: { id: "2", name: "Spring Boot to Quarkus" },
-    sources: [
+    placements: [
       {
-        scope: "agent",
-        scopeName: "Code Migrator",
-        resource: { id: "2", name: "Code Migrator" },
+        stage: { order: 2, name: "Migrate" },
+        from: [{ kind: "agent", agent: { id: "2", name: "Code Migrator" } }],
+        excluded: false,
       },
       {
-        scope: "targetProfile",
-        scopeName: "Quarkus 3.x",
-        resource: { id: 11, name: "Quarkus 3.x" },
+        from: [
+          {
+            kind: "targetProfile",
+            targetProfile: { id: 11, name: "Quarkus 3.x" },
+            archetype: { id: 1, name: "Java EE Application" },
+          },
+        ],
+        excluded: false,
       },
     ],
-    excluded: false,
+  },
+];
+
+/** Collection 1 is used by two agents, collection 2 by none. */
+const agents = [
+  {
+    id: "2",
+    name: "Code Migrator",
+    skillCollections: [{ id: "1", name: "Java modernization foundation" }],
+  },
+  {
+    id: "7",
+    name: "Java Code Migrator",
+    skillCollections: [{ id: "1", name: "Java modernization foundation" }],
   },
 ];
 
@@ -120,9 +137,14 @@ const useEndpoints = (
     skill?: Skill;
     plans?: Resolver;
     collections?: Resolver;
+    agents?: Resolver;
   } = {}
 ) =>
   server.use(
+    rest.get(
+      AGENTIC_ENDPOINTS.agents,
+      overrides.agents ?? ((_req, res, ctx) => res(ctx.json(agents)))
+    ),
     rest.get(`${AGENTIC_ENDPOINTS.skills}/:id`, (_req, res, ctx) =>
       res(ctx.json(overrides.skill ?? inlineSkill))
     ),
@@ -166,9 +188,14 @@ describe("SkillDetail, Details tab", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Guidance for Quarkus.")).toBeInTheDocument();
     expect(screen.getByText("Inline")).toBeInTheDocument();
+    // Absent load policy is the CRD default.
+    expect(screen.getByText("How agents use it")).toBeInTheDocument();
+    expect(screen.getByText("Available when needed")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "4 associations" })
-    ).toHaveAttribute("href", "/skills/1?tab=associations");
+      await screen.findByRole("link", {
+        name: "1 agent, 1 collection, 1 archetype, 1 target profile, 1 application",
+      })
+    ).toHaveAttribute("href", "/skills/1?tab=usage");
     expect(screen.getByText("Created")).toBeInTheDocument();
     expect(screen.getByText("Updated")).toBeInTheDocument();
     expect(
@@ -179,7 +206,15 @@ describe("SkillDetail, Details tab", () => {
     );
   });
 
-  it("keeps the origin and the breadcrumb trail on the Associations fact link", async () => {
+  it("shows a rule as Always followed", async () => {
+    useEndpoints({ skill: { ...inlineSkill, loadPolicy: "rule" } });
+    renderPage();
+
+    await findTitle();
+    expect(screen.getByText("Always followed")).toBeInTheDocument();
+  });
+
+  it("keeps the origin and the breadcrumb trail on the Usage fact link", async () => {
     useEndpoints();
     renderPage({
       pathname: "/skills/1",
@@ -196,15 +231,15 @@ describe("SkillDetail, Details tab", () => {
     });
 
     await findTitle();
-    const link = screen.getByRole("link", { name: "4 associations" });
+    const link = await screen.findByRole("link", { name: /^1 agent, / });
     expect(link).toHaveAttribute(
       "href",
-      "/skills/1?from=collection-1&tab=associations"
+      "/skills/1?from=collection-1&tab=usage"
     );
     await userEvent.click(link);
 
     expect(
-      await screen.findByRole("tab", { name: "Associations", selected: true })
+      await screen.findByRole("tab", { name: "Usage", selected: true })
     ).toBeInTheDocument();
     const crumbs = within(
       screen.getByRole("navigation", { name: "Breadcrumb" })
@@ -245,11 +280,14 @@ describe("SkillDetail, Details tab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says None without associations and Unavailable when the server leaves them out", async () => {
-    useEndpoints({ skill: { ...inlineSkill, associations: [] } });
+  it("says None without usage and Unavailable when the server leaves it out", async () => {
+    useEndpoints({
+      skill: { ...inlineSkill, associations: [] },
+      collections: (_req, res, ctx) => res(ctx.json([])),
+    });
     const { unmount } = renderPage();
     await findTitle();
-    expect(screen.getByText("None")).toBeInTheDocument();
+    expect(await screen.findByText("None")).toBeInTheDocument();
     unmount();
 
     useEndpoints({ skill: { ...inlineSkill, associations: undefined } });
@@ -258,9 +296,37 @@ describe("SkillDetail, Details tab", () => {
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
 
+  it("does not say None for usage while the collections load or fail", async () => {
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => (release = resolve));
+    useEndpoints({
+      skill: { ...inlineSkill, associations: [] },
+      collections: async (_req, res, ctx) => {
+        await pending;
+        return res(ctx.json([]));
+      },
+    });
+    const { unmount } = renderPage();
+    await findTitle();
+    expect(screen.getByText("Loading")).toBeInTheDocument();
+    expect(screen.queryByText("None")).toBeNull();
+    release();
+    expect(await screen.findByText("None")).toBeInTheDocument();
+    unmount();
+
+    useEndpoints({
+      skill: { ...inlineSkill, associations: [] },
+      collections: (_req, res, ctx) => res(ctx.status(403)),
+    });
+    renderPage();
+    await findTitle();
+    expect(await screen.findByText("Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("None")).toBeNull();
+  });
+
   it("disables Delete with the reason while the skill is in use", async () => {
     useEndpoints();
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
     const user = userEvent.setup();
 
     await screen.findByRole("heading", { name: "In skill collections (1)" });
@@ -270,7 +336,7 @@ describe("SkillDetail, Details tab", () => {
     await user.hover(remove);
     expect(
       await screen.findByText(
-        "This skill has 4 associations and is in 1 skill collection. Remove them before deleting it."
+        "This skill is attached to 1 agent, 1 archetype, 1 target profile, and 1 application, and is in 1 skill collection. Remove it from them before deleting it."
       )
     ).toBeInTheDocument();
   });
@@ -353,48 +419,278 @@ describe("SkillDetail, Details tab", () => {
   });
 });
 
-describe("SkillDetail, Associations tab", () => {
-  it("lists associations by type, the server's plans and the collections", async () => {
+/** The section a heading names: Flex > FlexItem > Title (detail-section.tsx). */
+const sectionOf = (heading: HTMLElement) =>
+  heading.parentElement?.parentElement as HTMLElement;
+
+describe("SkillDetail, Usage tab", () => {
+  it("lists what the skill is attached to as facts, one row per type", async () => {
     useEndpoints();
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
 
     await findTitle();
+    const section = within(
+      screen.getByRole("region", { name: "Attached to (4)" })
+    );
     expect(
-      screen.getByRole("heading", { name: "Associated with (4)" })
+      section.getByText(
+        "An agent uses this skill in every stage it runs. An archetype, target profile or application adds it to every stage when a matching application is migrated. A migration plan can exclude it, except where it is attached to the application itself."
+      )
     ).toBeInTheDocument();
-    const associationRows = within(
-      screen.getByRole("grid", { name: "Associated with" })
-    ).getAllByRole("row");
-    expect(associationRows.slice(1).map((row) => row.textContent)).toEqual([
-      "AgentCode Migrator",
-      "ArchetypeSpring Boot Application",
-      "Target profileQuarkus 3.x (Spring Boot Application)",
-      "ApplicationBilling",
-    ]);
-
     expect(
-      await screen.findByRole("heading", {
-        name: "Used in migration plans (2)",
+      section.getByRole("link", { name: "Code Migrator" })
+    ).toHaveAttribute("href", "/agents/2");
+    // Every archetype link from a skills surface opens its Skills tab.
+    expect(
+      section.getByRole("link", { name: "Spring Boot Application" })
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1&ar%3Atab=2");
+    expect(
+      await section.findByRole("link", {
+        name: "Quarkus 3.x (Spring Boot Application)",
       })
-    ).toBeInTheDocument();
-    const planRows = within(
-      screen.getByRole("grid", { name: "Used in migration plans" })
-    ).getAllByRole("row");
-    expect(planRows[1]).toHaveTextContent(".NET Framework to .NET 8");
-    // Sources in resolution order, one plain line each.
-    expect(planRows[2]).toHaveTextContent(
-      "Spring Boot to QuarkusAgent: Code MigratorTarget profile: Quarkus 3.x"
+    ).toHaveAttribute(
+      "href",
+      "/archetypes/1/target-profiles#target-profile-11"
+    );
+    expect(section.getByRole("link", { name: "Billing" })).toHaveAttribute(
+      "href",
+      "/applications/3?tab=skills"
+    );
+    expect(section.queryByRole("grid")).toBeNull();
+  });
+
+  it("keeps all four facts, None where nothing is attached", async () => {
+    useEndpoints({
+      skill: {
+        ...inlineSkill,
+        associations: [
+          { scope: "agent", resource: { id: "2", name: "Code Migrator" } },
+        ],
+      },
+    });
+    renderPage("/skills/1?tab=usage");
+
+    await findTitle();
+    const section = within(
+      sectionOf(screen.getByRole("heading", { name: "Attached to (1)" }))
+    );
+    for (const term of [
+      "Agents",
+      "Archetypes",
+      "Target profiles",
+      "Applications",
+    ]) {
+      expect(section.getByText(term)).toBeInTheDocument();
+    }
+    expect(section.getAllByText("None")).toHaveLength(3);
+  });
+
+  it("opens the Usage tab from an old Associations link and rewrites it", async () => {
+    useEndpoints();
+    render(
+      <MemoryRouter initialEntries={["/skills/1?tab=associations&from=x"]}>
+        <Route path={DevPaths.skillDetails}>
+          <SkillDetail />
+        </Route>
+        <Route
+          path="*"
+          render={({ location }) => (
+            <p data-testid="search">{location.search}</p>
+          )}
+        />
+      </MemoryRouter>
     );
 
-    const collectionsGrid = screen.getByRole("grid", {
-      name: "In skill collections",
+    expect(
+      await screen.findByRole("tab", { name: "Usage", selected: true })
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage&from=x");
+  });
+
+  it("lists the skill collections with the agents that use each", async () => {
+    useEndpoints({
+      collections: (_req, res, ctx) =>
+        res(
+          ctx.json([
+            ...collections,
+            {
+              id: "3",
+              name: "Single agent collection",
+              description: "",
+              skills: [{ id: "1", name: inlineSkill.name }],
+            },
+            {
+              id: "4",
+              name: "Unused collection",
+              description: "",
+              skills: [{ id: "1", name: inlineSkill.name }],
+            },
+          ])
+        ),
+      agents: (_req, res, ctx) =>
+        res(
+          ctx.json([
+            ...agents,
+            {
+              id: "9",
+              name: "Deployment Agent",
+              skillCollections: [{ id: "3", name: "Single agent collection" }],
+            },
+          ])
+        ),
+    });
+    renderPage("/skills/1?tab=usage");
+
+    const heading = await screen.findByRole("heading", {
+      name: "In skill collections (3)",
     });
     expect(
-      within(collectionsGrid).getByRole("link", {
-        name: "Java modernization foundation",
-      })
+      within(sectionOf(heading)).getByText(
+        "Agents that use these skill collections also use this skill in every stage they run, unless a migration plan excludes it."
+      )
     ).toBeInTheDocument();
-    expect(within(collectionsGrid).getByText("2 skills")).toBeInTheDocument();
+    const grid = within(
+      screen.getByRole("grid", { name: "In skill collections" })
+    );
+    expect(grid.getByRole("columnheader", { name: "Agents" })).toBeVisible();
+    expect(grid.getByRole("link", { name: "2 agents" })).toHaveAttribute(
+      "href",
+      "/skills/collections/1?from=skill-1#used-by-agents"
+    );
+    expect(
+      grid.getByRole("link", { name: "Deployment Agent" })
+    ).toHaveAttribute("href", "/agents/9?from=skill-1");
+    expect(grid.getByText("None")).toBeInTheDocument();
+    expect(grid.queryByText("Unrelated collection")).toBeNull();
+  });
+
+  it("says Unavailable for the agents of a collection when agents cannot be read", async () => {
+    useEndpoints({ agents: (_req, res, ctx) => res(ctx.status(403)) });
+    renderPage("/skills/1?tab=usage");
+
+    const grid = await screen.findByRole("grid", {
+      name: "In skill collections",
+    });
+    expect(await within(grid).findByText("Unavailable")).toBeInTheDocument();
+  });
+
+  it("lists each plan's stages that get the skill, then Every stage, with From", async () => {
+    useEndpoints();
+    renderPage("/skills/1?tab=usage");
+
+    const heading = await screen.findByRole("heading", {
+      name: "Used in migration plans (2)",
+    });
+    expect(
+      within(sectionOf(heading)).getByText(
+        "The stages of each migration plan that get this skill, and where it comes from. Application skills are added when a plan runs. For a plan without a migration path, archetype and target profile skills are added the same way, for each application."
+      )
+    ).toBeInTheDocument();
+    const grid = screen.getByRole("grid", { name: "Used in migration plans" });
+    const rows = within(grid).getAllByRole("row");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Migration planStageFrom",
+      ".NET Framework to .NET 8Stage 2: MigrateRun by Code MigratorAgent: Code Migrator",
+      "Spring Boot to QuarkusStage 2: MigrateRun by Code MigratorAgent: Code Migrator",
+      // The plan cell spans its rows: Every stage is one of its plan's rows,
+      // not a row without a plan.
+      "Every stageTarget profile: Quarkus 3.x (Java EE Application)",
+    ]);
+    const planCell = within(rows[2])
+      .getByRole("link", { name: "Spring Boot to Quarkus" })
+      .closest("td");
+    expect(planCell).toHaveAttribute("rowspan", "2");
+    expect(
+      within(rows[1])
+        .getByRole("link", { name: ".NET Framework to .NET 8" })
+        .closest("td")
+    ).toHaveAttribute("rowspan", "1");
+    // "Run by" names this skill as the origin, like the page's other
+    // entity links; the From value is the shared formatter's link.
+    expect(
+      within(rows[2])
+        .getAllByRole("link", { name: "Code Migrator" })
+        .map((link) => link.getAttribute("href"))
+    ).toEqual(["/agents/2?from=skill-1", "/agents/2"]);
+    expect(
+      within(rows[3]).getByRole("link", { name: "Quarkus 3.x" })
+    ).toHaveAttribute(
+      "href",
+      "/archetypes/1/target-profiles#target-profile-11"
+    );
+  });
+
+  it("orders stages, puts Every stage last and marks an excluded stage", async () => {
+    const plan: SkillPlan = {
+      plan: { id: "5", name: "Java EE to Quarkus" },
+      placements: [
+        {
+          from: [
+            {
+              kind: "archetype",
+              archetype: { id: 1, name: "Java EE Application" },
+            },
+          ],
+          excluded: false,
+        },
+        {
+          stage: { order: 3, name: "Validate" },
+          from: [
+            { kind: "agent", agent: { id: "4", name: "Build Validator" } },
+          ],
+          excluded: false,
+        },
+        {
+          stage: { order: 2, name: "Migrate" },
+          from: [
+            {
+              kind: "collection",
+              agent: { id: "7", name: "Java Code Migrator" },
+              collection: { id: "1", name: "Java modernization foundation" },
+            },
+          ],
+          excluded: true,
+        },
+      ],
+    };
+    useEndpoints({
+      plans: (_req, res, ctx) => res(ctx.json({ plans: [plan] })),
+    });
+    renderPage("/skills/1?tab=usage");
+
+    await screen.findByRole("heading", { name: "Used in migration plans (1)" });
+    const rows = within(
+      screen.getByRole("grid", { name: "Used in migration plans" })
+    ).getAllByRole("row");
+    expect(rows.slice(1).map((row) => row.textContent)).toEqual([
+      "Java EE to QuarkusStage 2: MigrateExcludedRun by Java Code MigratorCollection: Java modernization foundation",
+      "Stage 3: ValidateRun by Build ValidatorAgent: Build Validator",
+      "Every stageArchetype: Java EE Application",
+    ]);
+    expect(within(rows[1]).getByText("Excluded")).toBeInTheDocument();
+    expect(within(rows[2]).queryByText("Excluded")).toBeNull();
+  });
+
+  it("names a stage without a name by its number", async () => {
+    const plan: SkillPlan = {
+      plan: { id: "6", name: "Unnamed stages" },
+      placements: [
+        {
+          stage: { order: 1, name: "" },
+          from: [{ kind: "agent", agent: { id: "2", name: "Code Migrator" } }],
+          excluded: false,
+        },
+      ],
+    };
+    useEndpoints({
+      plans: (_req, res, ctx) => res(ctx.json({ plans: [plan] })),
+    });
+    renderPage("/skills/1?tab=usage");
+
+    const grid = await screen.findByRole("grid", {
+      name: "Used in migration plans",
+    });
+    expect(within(grid).getByText("Stage 1")).toBeInTheDocument();
   });
 
   it("keeps the server's order of the plans", async () => {
@@ -402,69 +698,22 @@ describe("SkillDetail, Associations tab", () => {
     useEndpoints({
       plans: (_req, res, ctx) => res(ctx.json({ plans: reversed })),
     });
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
 
     await screen.findByRole("heading", {
       name: "Used in migration plans (2)",
     });
-    const planRows = within(
+    const planLinks = within(
       screen.getByRole("grid", { name: "Used in migration plans" })
-    ).getAllByRole("row");
-    expect(planRows).toHaveLength(3);
-    expect(planRows[1]).toHaveTextContent("Spring Boot to Quarkus");
-    expect(planRows[2]).toHaveTextContent(".NET Framework to .NET 8");
-  });
-
-  it("lists a plan that gets the skill only through a skill collection, marked Excluded", async () => {
-    const collectionPlan: SkillPlan = {
-      plan: { id: "5", name: "Java EE to Quarkus" },
-      sources: [
-        {
-          scope: "agent",
-          scopeName: "Code Migrator via Java modernization foundation",
-          resource: { id: "2", name: "Code Migrator" },
-          collection: { id: "1", name: "Java modernization foundation" },
-        },
-      ],
-      excluded: true,
-    };
-    useEndpoints({
-      plans: (_req, res, ctx) =>
-        res(ctx.json({ plans: [...skillPlans, collectionPlan] })),
-    });
-    renderPage("/skills/1?tab=associations");
-
-    // The excluding plan is listed but does not use the skill.
-    await screen.findByRole("heading", {
-      name: "Used in migration plans (2 of 3)",
-    });
-    const planRows = within(
-      screen.getByRole("grid", { name: "Used in migration plans" })
-    ).getAllByRole("row");
-    expect(within(planRows[1]).queryByText("Excluded")).not.toBeInTheDocument();
-    expect(planRows[3]).toHaveTextContent(
-      "Java EE to QuarkusExcludedAgent: Code Migrator via Java modernization foundation"
-    );
-    expect(within(planRows[3]).getByText("Excluded")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Migration plans that get this skill from an agent, its skill collections, the archetype or the target profiles. Application skills are added when a plan runs. A plan marked Excluded does not give this skill to its agents."
-      )
-    ).toBeInTheDocument();
-  });
-
-  it("explains the sources without the Excluded sentence when no plan excludes the skill", async () => {
-    useEndpoints();
-    renderPage("/skills/1?tab=associations");
-
-    expect(
-      await screen.findByText(
-        "Migration plans that get this skill from an agent, its skill collections, the archetype or the target profiles. Application skills are added when a plan runs."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/A plan marked Excluded/)
-    ).not.toBeInTheDocument();
+    )
+      .getAllByRole("link")
+      .filter((link) =>
+        link.getAttribute("href")?.startsWith("/migration-plans")
+      );
+    expect(planLinks.map((link) => link.textContent)).toEqual([
+      "Spring Boot to Quarkus",
+      ".NET Framework to .NET 8",
+    ]);
   });
 
   it("shows a skeleton while the plans load", async () => {
@@ -476,7 +725,7 @@ describe("SkillDetail, Associations tab", () => {
         return res(ctx.json({ plans: [] }));
       },
     });
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
 
     await findTitle();
     expect(
@@ -487,7 +736,9 @@ describe("SkillDetail, Associations tab", () => {
     ).not.toBeInTheDocument();
     release();
     expect(
-      await screen.findByText("No migration plan uses this skill.")
+      await screen.findByText(
+        "No migration plan gets this skill from an agent, a collection, an archetype or a target profile. The applications it is attached to add it to every stage when they run."
+      )
     ).toBeInTheDocument();
   });
 
@@ -497,76 +748,103 @@ describe("SkillDetail, Associations tab", () => {
       plans: (_req, res, ctx) => res(ctx.json({ plans: [] })),
       collections: (_req, res, ctx) => res(ctx.json([])),
     });
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
 
     await findTitle();
-    expect(
-      await screen.findByText("No migration plan uses this skill.")
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByText("This skill is not in any skill collection.")
-    ).toBeInTheDocument();
+    // Left-aligned sentences, not centered empty states.
+    const noPlans = await screen.findByText(
+      "No migration plan gets this skill."
+    );
+    expect(noPlans.tagName).toBe("P");
+    expect(noPlans.closest(".pf-v6-c-empty-state")).toBeNull();
+    const noCollections = await screen.findByText(
+      "This skill is not in any skill collection."
+    );
+    expect(noCollections.tagName).toBe("P");
+    expect(noCollections.closest(".pf-v6-c-empty-state")).toBeNull();
     expect(
       screen.getByText(
-        "This skill is not associated with an agent, archetype, target profile or application."
+        "This skill is not attached to an agent, archetype, target profile or application."
       )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Attached to" })
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Used in migration plans" })
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Migration plans that get/)).toBeNull();
+    // The section sentence stays above the empty sentence.
+    expect(
+      screen.getByText(/^The stages of each migration plan/)
+    ).toBeInTheDocument();
   });
 
-  it("counts none used when the only plan excludes the skill", async () => {
+  it("says applications add the skill when no plan gets it otherwise", async () => {
     useEndpoints({
-      plans: (_req, res, ctx) =>
-        res(ctx.json({ plans: [{ ...skillPlans[0], excluded: true }] })),
+      skill: {
+        ...inlineSkill,
+        associations: [
+          { scope: "application", resource: { id: 3, name: "Billing" } },
+          { scope: "application", resource: { id: 4, name: "Claims" } },
+        ],
+      },
+      plans: (_req, res, ctx) => res(ctx.json({ plans: [] })),
     });
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
 
+    await findTitle();
+    const section = sectionOf(
+      screen.getByRole("heading", { name: "Used in migration plans" })
+    );
+    const empty = await within(section).findByText(
+      "No migration plan gets this skill from an agent, a collection, an archetype or a target profile. The applications it is attached to add it to every stage when they run."
+    );
+    expect(empty.tagName).toBe("P");
+    expect(empty.closest(".pf-v6-c-empty-state")).toBeNull();
+    // The section sentence says when application skills are added.
     expect(
-      await screen.findByRole("heading", {
-        name: "Used in migration plans (0 of 1)",
-      })
+      within(section).getByText(
+        "The stages of each migration plan that get this skill, and where it comes from. Application skills are added when a plan runs. For a plan without a migration path, archetype and target profile skills are added the same way, for each application."
+      )
     ).toBeInTheDocument();
+    expect(within(section).queryByText(/uses this skill/)).toBeNull();
   });
 
   it("says the plans are not available when the server has no endpoint for them", async () => {
     // A backend without the endpoint answers 404 (hand-off doc, step 8).
     useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(404)) });
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
 
     await findTitle();
-    const section = (
+    const section = sectionOf(
       await screen.findByRole("heading", { name: "Used in migration plans" })
-    ).parentElement?.parentElement as HTMLElement;
+    );
     expect(
       await within(section).findByText(
-        "This server cannot list the migration plans that use this skill."
+        "This server cannot list the migration plans that get this skill."
       )
     ).toBeInTheDocument();
     expect(within(section).queryByText("Unavailable")).toBeNull();
     expect(within(section).queryByRole("button")).toBeNull();
-    // No rows, so no description of them (as on plan Details).
-    expect(within(section).queryByText(/Migration plans that get/)).toBeNull();
+    expect(
+      within(section).queryByText(/The stages of each migration plan/)
+    ).toBeNull();
   });
 
   it("says Unavailable, not unused, when the plans fail to load", async () => {
     useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(500)) });
-    renderPage("/skills/1?tab=associations");
+    renderPage("/skills/1?tab=usage");
 
     await findTitle();
     expect(
       await screen.findByRole("heading", { name: "In skill collections (1)" })
     ).toBeInTheDocument();
-    // The heading's section: Flex > FlexItem > Title (section.tsx).
-    const section = screen.getByRole("heading", {
-      name: "Used in migration plans",
-    }).parentElement?.parentElement as HTMLElement;
+    const section = sectionOf(
+      screen.getByRole("heading", { name: "Used in migration plans" })
+    );
     expect(await within(section).findByText("Unavailable")).toBeInTheDocument();
-    expect(within(section).queryByText(/Migration plans that get/)).toBeNull();
     expect(
-      screen.queryByText("No migration plan uses this skill.")
+      screen.queryByText(/^No migration plan gets/)
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("grid", { name: "Used in migration plans" })

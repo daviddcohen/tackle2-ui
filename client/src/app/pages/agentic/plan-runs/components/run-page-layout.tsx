@@ -12,6 +12,11 @@ import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { RunStatus } from "../../components/agentic-status";
 import { DetailSections } from "../../components/detail-section";
 
+import {
+  RunApplicationSelect,
+  RunApplicationSelectProps,
+} from "./run-application-select";
+
 /*
  * The text utilities are imported, not only named: the app loads PF's base
  * styles and per-component styles, so a utility class works only once its
@@ -48,6 +53,11 @@ const MAX_NAMED_APPLICATIONS = 5;
  * (which lists them) for more. Subtle text with the links in the link
  * color; the links keep the trail (`linkCrumbs`). Nothing renders for an
  * empty list.
+ *
+ * With `selection`, a run on several applications shows the application
+ * Select instead of the links: every tab of the stage page
+ * shows the selected application's agent run. A run on one application
+ * keeps its link.
  */
 export const StageApplicationRow: React.FC<{
   applications: HubRef[];
@@ -55,9 +65,20 @@ export const StageApplicationRow: React.FC<{
   runId: string;
   /** The trail the links carry (the stage page's child crumbs). */
   linkCrumbs: BreadcrumbEntry[];
-}> = ({ applications, runId, linkCrumbs }) => {
+  /** The selected application and how to change it (several applications). */
+  selection?: Omit<RunApplicationSelectProps, "applications">;
+}> = ({ applications, runId, linkCrumbs, selection }) => {
   const { t } = useTranslation();
   if (applications.length === 0) return null;
+  if (applications.length > 1 && selection != null) {
+    return (
+      <Flex spaceItems={{ default: "spaceItemsMd" }} className={spacing.mtSm}>
+        <FlexItem>
+          <RunApplicationSelect applications={applications} {...selection} />
+        </FlexItem>
+      </Flex>
+    );
+  }
   const linkTo = (pathname: string) => breadcrumbTo(pathname, "", linkCrumbs);
   return (
     <Flex spaceItems={{ default: "spaceItemsMd" }} className={spacing.mtSm}>

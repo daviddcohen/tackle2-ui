@@ -529,13 +529,7 @@ const Archetypes: React.FC = () => {
         breadcrumbs={breadcrumbs}
         archetype={activeItem}
         onCloseClick={clearActiveItem}
-        onManageSkills={(archetype) =>
-          setSkillsTarget({
-            scope: "archetype",
-            id: archetype.id,
-            name: archetype.name,
-          })
-        }
+        onManageSkills={setSkillsTarget}
       />
 
       {canManageSkills && (

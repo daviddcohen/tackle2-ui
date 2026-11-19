@@ -146,6 +146,13 @@ export const ContextUsageValue: React.FC<ContextUsageValueProps> = ({
 export interface ContextUsageCellProps extends ContextUsageSource {
   /** The stage's name, for the bar's accessible name. */
   stageName: string;
+  /**
+   * A stage of a run on several applications: `usage` is the fullest agent
+   * run's, and the cell reads "Up to {highest}", with "({reported} of
+   * {applications} reported)" while not every application reported. The
+   * accessible value adds the lowest reading.
+   */
+  several?: { lowestPercent: number; reported: number; applications: number };
 }
 
 /**
@@ -161,6 +168,7 @@ export const ContextUsageCell: React.FC<ContextUsageCellProps> = ({
   usage,
   isLoading,
   isUnavailable,
+  several,
 }) => {
   const { t } = useTranslation();
   const contextLabel = useContextLabel();
@@ -190,13 +198,47 @@ export const ContextUsageCell: React.FC<ContextUsageCellProps> = ({
       />
     );
   }
+  const severalValues =
+    several != null
+      ? {
+          lowest: formatPercent(several.lowestPercent),
+          highest: formatPercent(percent),
+          reported: several.reported,
+          applications: several.applications,
+        }
+      : undefined;
+  const isPartial = several != null && several.reported < several.applications;
+  const hasLowest =
+    several != null &&
+    several.reported > 1 &&
+    several.lowestPercent !== percent;
   return (
     <Progress
       size="sm"
       measureLocation="outside"
       value={percent}
-      label={formatPercent(percent)}
-      valueText={contextLabel(usage, percent, phase)}
+      label={
+        severalValues == null
+          ? formatPercent(percent)
+          : isPartial
+            ? t("agentic.agentRun.context.upToPartial", severalValues)
+            : t("agentic.agentRun.context.upTo", severalValues)
+      }
+      valueText={
+        severalValues == null
+          ? contextLabel(usage, percent, phase)
+          : // The lowest adds nothing for one reading or equal readings.
+            hasLowest
+            ? isPartial
+              ? t("agentic.agentRun.context.upToValuePartial", severalValues)
+              : t("agentic.agentRun.context.upToValue", severalValues)
+            : isPartial
+              ? t(
+                  "agentic.agentRun.context.upToValuePartialNoLowest",
+                  severalValues
+                )
+              : t("agentic.agentRun.context.upToValueNoLowest", severalValues)
+      }
       aria-label={t("agentic.agentRun.context.cellLabel", {
         stage: stageName,
       })}

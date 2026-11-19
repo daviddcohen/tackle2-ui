@@ -13,6 +13,7 @@ import {
   useFetchAgentRunResource,
   useFetchAgentRunTranscript,
   useFetchPlanRunAgentRuns,
+  useFetchStageAgentRuns,
 } from "./agentic-observability";
 
 /** One container's log. */
@@ -298,6 +299,53 @@ describe("summary and transcript hooks", () => {
     expect(transcript.result.current.transcript?.status).toBe("recording");
   });
 
+  it("lists one stage's agent runs, one per application, in the run's order", async () => {
+    const agentRun = (
+      stageId: string,
+      id: number,
+      phase: ControllerRunPhase
+    ) => ({
+      name: `run-1-${stageId}-app-${id}`,
+      runId: "1",
+      stageId,
+      application: { id, name: `App ${id}` },
+      phase,
+      containers: ["skill-loader", "agent"],
+    });
+    server.use(
+      rest.get(`${AGENTIC_ENDPOINTS.planRuns}/1/agent-runs`, (_req, res, ctx) =>
+        res(
+          ctx.json([
+            agentRun("1", 3, "Succeeded"),
+            agentRun("1", 8, "Succeeded"),
+            agentRun("2", 3, "Failed"),
+            agentRun("2", 8, "Succeeded"),
+          ])
+        )
+      )
+    );
+    const { result } = renderHook(() =>
+      useFetchStageAgentRuns("1", "2", "Failed")
+    );
+    await waitFor(() => expect(result.current.agentRuns).toHaveLength(2));
+    expect(
+      result.current.agentRuns.map((run) => [run.stageId, run.application?.id])
+    ).toEqual([
+      ["2", 3],
+      ["2", 8],
+    ]);
+    // The plan run hook still lists every agent run.
+    const all = renderHook(() => useFetchPlanRunAgentRuns("1", "Failed"));
+    await waitFor(() => expect(all.result.current.agentRuns).toHaveLength(4));
+  });
+
+  it("lists no agent runs for an absent stage", () => {
+    const { result } = renderHook(() =>
+      useFetchStageAgentRuns(undefined, undefined, undefined)
+    );
+    expect(result.current.agentRuns).toEqual([]);
+  });
+
   it("tells a missing plan run apart", async () => {
     server.use(
       rest.get(`${AGENTIC_ENDPOINTS.planRuns}/9/agent-runs`, (_req, res, ctx) =>
@@ -482,6 +530,40 @@ describe("polling", () => {
 
     await advance(20000);
     expect(requests).toBe(3);
+  });
+
+  it("reads the agent runs at once when the run stops for approval", async () => {
+    let phase = "Running";
+    let requests = 0;
+    server.use(
+      rest.get(
+        `${AGENTIC_ENDPOINTS.planRuns}/1/agent-runs`,
+        (_req, res, ctx) => {
+          requests += 1;
+          return res(ctx.json([agentRun(phase)]));
+        }
+      )
+    );
+    const { result, rerender } = renderHook(
+      ({ runPhase }) => useFetchPlanRunAgentRuns("1", runPhase),
+      {
+        initialProps: {
+          runPhase: "Running" as "Running" | "AwaitingApproval",
+        },
+      }
+    );
+    await waitFor(() => expect(result.current.agentRuns).toHaveLength(1));
+    expect(requests).toBe(1);
+
+    // Without this read the next one would come 30 s later.
+    phase = "AwaitingApproval";
+    rerender({ runPhase: "AwaitingApproval" });
+    await waitFor(() =>
+      expect(result.current.agentRuns[0].phase).toBe("AwaitingApproval")
+    );
+    expect(requests).toBe(2);
+    await advance(29000);
+    expect(requests).toBe(2);
   });
 
   it("reads the agent runs of a finished run once, even before its phase is known", async () => {

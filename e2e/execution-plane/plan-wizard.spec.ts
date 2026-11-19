@@ -105,8 +105,12 @@ test.describe("Plan wizard", () => {
       dialog.getByRole("button", { name: /^Remove/ })
     ).toBeDisabled();
     await fillOpenStage(page, dialog, "Stage A", "Migration Proposal Agent");
+    // One line: the model and the skills, not the agent's name again.
     await expect(
-      dialog.getByText(/^Migration Proposal Agent uses /)
+      dialog.getByText(
+        "Uses Claude 3.7 Sonnet (Anthropic Production) and has 1 skill. The Skills step shows what each stage gets.",
+        { exact: true }
+      )
     ).toBeVisible();
     await collapseStage(dialog, "Stage 1: Stage A");
     await dialog.getByRole("button", { name: "Add stage" }).click();
@@ -147,9 +151,7 @@ test.describe("Plan wizard", () => {
     await next(dialog).click();
 
     // Skills step: the draft's resolved skills; Next is never blocked.
-    await expect(
-      dialog.getByText(/^\d+ of \d+ skills will be used$/)
-    ).toBeVisible();
+    await expect(dialog.getByText(/^No skills excluded\.$/)).toBeVisible();
     await next(dialog).click();
 
     const review = dialog.getByRole("grid", { name: "Stages to review" });
@@ -284,7 +286,7 @@ test.describe("Plan wizard", () => {
     const options = page.getByRole("option");
     await expect(options.first()).toBeVisible();
     await expect(
-      page.getByRole("option", { name: /Code Migrator/ })
+      page.getByRole("option", { name: /^Code Migrator/ })
     ).toContainText("Model: Claude 3.7 Sonnet");
     // Appended to the modal box, outside the card's overflow.
     await expect(dialog.locator(".pf-v6-c-card .pf-v6-c-menu")).toHaveCount(0);

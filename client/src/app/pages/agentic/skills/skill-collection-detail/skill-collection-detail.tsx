@@ -12,7 +12,9 @@ import {
 import {
   ButtonVariant,
   Content,
+  Flex,
   FlexItem,
+  Label,
   PageSection,
   Skeleton,
 } from "@patternfly/react-core";
@@ -234,15 +236,29 @@ const SkillCollectionDetail: React.FC = () => {
                       return (
                         <Tr key={member.id}>
                           <Td dataLabel={t("agentic.entity.skill")}>
-                            <Link
-                              to={childLink(
-                                generatePath(DevPaths.skillDetails, {
-                                  skillId: String(member.id),
-                                })
-                              )}
+                            <Flex
+                              spaceItems={{ default: "spaceItemsSm" }}
+                              alignItems={{ default: "alignItemsCenter" }}
                             >
-                              {member.name}
-                            </Link>
+                              <FlexItem>
+                                <Link
+                                  to={childLink(
+                                    generatePath(DevPaths.skillDetails, {
+                                      skillId: String(member.id),
+                                    })
+                                  )}
+                                >
+                                  {member.name}
+                                </Link>
+                              </FlexItem>
+                              {skill?.loadPolicy === "rule" && (
+                                <FlexItem>
+                                  <Label variant="outline" isCompact>
+                                    {t("agentic.skill.loadPolicy.rule")}
+                                  </Label>
+                                </FlexItem>
+                              )}
+                            </Flex>
                           </Td>
                           <Td
                             dataLabel={t("terms.description")}

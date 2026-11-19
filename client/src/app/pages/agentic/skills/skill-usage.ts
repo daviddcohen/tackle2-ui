@@ -10,7 +10,7 @@ import {
 } from "@app/agentic";
 import { Archetype } from "@app/api/models";
 
-/** "Associated with" row order: agent, archetype, target profile, application. */
+/** "Attached to" order: agent, archetype, target profile, application. */
 const associationScopeOrder: SkillAssociationScope[] = [
   "agent",
   "archetype",
@@ -25,8 +25,8 @@ export interface SkillAssociationRow {
 }
 
 /**
- * The "Associated with" rows of a skill: ordered by type,
- * then by name. A target profile reads "{profile} ({archetype})"; its
+ * The attachments of a skill: ordered by type, then by
+ * name. A target profile reads "{profile} ({archetype})"; its
  * archetype is found by profile id, and the name stays bare when the
  * archetypes are not known.
  */
@@ -82,41 +82,82 @@ export const getAgentsUsingCollection = (
     (agent.skillCollections ?? []).some((c) => c.id === collectionId)
   );
 
+/** The usage summary's count keys, in origin order. */
+const usageScopeKeys: [SkillAssociationScope, string][] = [
+  ["agent", "agents"],
+  ["archetype", "archetypes"],
+  ["targetProfile", "targetProfiles"],
+  ["application", "applications"],
+];
+
+/**
+ * What a skill is attached to, one count per type, zero types left out:
+ * ["2 agents", "1 archetype"]. Collections are not attachments.
+ */
+export const getSkillAttachmentParts = (
+  t: TFunction,
+  associations: SkillAssociation[]
+): string[] =>
+  usageScopeKeys.flatMap(([scope, key]) => {
+    const count = associations.filter((a) => a.scope === scope).length;
+    return count > 0 ? [t(`agentic.skill.usageSummary.${key}`, { count })] : [];
+  });
+
+/**
+ * The usage summary of a skill: its attachments and its skill
+ * collections, in origin order (agents, collections, archetypes, target
+ * profiles, applications), zero types left out. Undefined when the
+ * attachments are unknown; without `collectionCount` (not loaded) the
+ * collections are left out.
+ */
+export const getSkillUsageParts = (
+  t: TFunction,
+  skill: Pick<Skill, "associations">,
+  collectionCount: number | undefined
+): string[] | undefined => {
+  if (skill.associations == null) return undefined;
+  const [agents, ...others] = usageScopeKeys.map(([scope, key]) => {
+    const count = skill.associations!.filter((a) => a.scope === scope).length;
+    return count > 0 ? t(`agentic.skill.usageSummary.${key}`, { count }) : "";
+  });
+  const collections =
+    collectionCount != null && collectionCount > 0
+      ? t("agentic.skill.usageSummary.collections", { count: collectionCount })
+      : "";
+  return [agents, collections, ...others].filter((part) => part !== "");
+};
+
 /**
  * Why the Skill cannot be deleted yet, or `undefined` when it can. A Skill
- * with associations or skill collection memberships is in use; the server
- * refuses those deletes with 409. The association count is the server's
- * `skill.associations`: when it is missing, usage is unknown.
- * `collections` is undefined while the collections query has not succeeded.
- * Either unknown blocks the delete.
+ * attached to something or in a skill collection is in use; the server
+ * refuses those deletes with 409. The attachments are the server's
+ * `skill.associations`: when they are missing, usage is
+ * unknown. `collections` is undefined while the collections query has not
+ * succeeded. Either unknown blocks the delete.
  */
 export const getSkillDeleteBlockedReason = (
   t: TFunction,
   skill: Skill,
   collections: SkillCollection[] | undefined
 ): string | undefined => {
-  const associationCount = skill.associations?.length;
-  if (associationCount == null || collections == null) {
+  if (skill.associations == null || collections == null) {
     return t("agentic.common.usageUnchecked");
   }
+  const attachments = getSkillAttachmentParts(t, skill.associations);
   const collectionCount = getCollectionsContainingSkill(
     skill,
     collections
   ).length;
-  if (associationCount > 0 && collectionCount > 0) {
+  if (attachments.length > 0 && collectionCount > 0) {
     return t("agentic.skill.deleteBlockedBoth", {
-      associations: t("agentic.skill.associationCount", {
-        count: associationCount,
-      }),
+      attachments,
       collections: t("agentic.skill.collectionCount", {
         count: collectionCount,
       }),
     });
   }
-  if (associationCount > 0) {
-    return t("agentic.skill.deleteBlockedAssociations", {
-      count: associationCount,
-    });
+  if (attachments.length > 0) {
+    return t("agentic.skill.deleteBlockedAttached", { attachments });
   }
   if (collectionCount > 0) {
     return t("agentic.skill.deleteBlockedCollections", {

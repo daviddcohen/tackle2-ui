@@ -49,7 +49,7 @@ jest.mock("@app/pages/agentic/components/run-migration-plan-launcher", () => ({
 
 const run = (id: string, applicationIds: number[]): PlanRun => ({
   id,
-  name: `Run #${id} — Java EE to Quarkus`,
+  name: `Run #${id}: Java EE to Quarkus`,
   planId: "1",
   planName: "Java EE to Quarkus",
   applications: applicationIds.map((appId) => ({
@@ -98,13 +98,13 @@ describe("PlanRunsTab", () => {
       screen.getByText("agentic.applicationDetail.planRunsDescription")
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Run #1 — Java EE to Quarkus" })
+      screen.getByRole("link", { name: "Run #1: Java EE to Quarkus" })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Run #3 — Java EE to Quarkus" })
+      screen.getByRole("link", { name: "Run #3: Java EE to Quarkus" })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Run #2 — Java EE to Quarkus" })
+      screen.queryByRole("link", { name: "Run #2: Java EE to Quarkus" })
     ).not.toBeInTheDocument();
   });
 

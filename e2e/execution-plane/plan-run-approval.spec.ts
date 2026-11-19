@@ -21,7 +21,7 @@ test.describe("Plan run approval", () => {
     await page.goto(protoUrl("/plan-runs", { scenario: "actionRequired" }));
     await page.getByRole("link", { name: /Run #2/ }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Run #2 — Spring Boot to Quarkus"
+      "Run #2: Spring Boot to Quarkus"
     );
     await expect(
       page.getByRole("heading", { name: /Analyze needs approval/ })
@@ -61,7 +61,7 @@ test.describe("Plan run approval", () => {
     await expect(approveButton(page)).toBeVisible();
     await page
       .getByRole("navigation", { name: "Breadcrumb" })
-      .getByRole("link", { name: "Run #2 — Spring Boot to Quarkus" })
+      .getByRole("link", { name: "Run #2: Spring Boot to Quarkus" })
       .click();
     await expect(page).toHaveURL(/\/plan-runs\/2\?/);
   });

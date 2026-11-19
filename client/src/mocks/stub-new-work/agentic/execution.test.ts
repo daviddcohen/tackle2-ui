@@ -1,17 +1,13 @@
+import { SkillsByStage } from "@app/agentic";
+import { mockArchetypes } from "@mocks/stub-new-work/archetypes";
+
 import {
   assignPlanToTargetProfile,
   createPlan,
   getPlan,
   updatePlan,
 } from "./catalog";
-import {
-  applicationSkills,
-  collectionSkillsForAgents,
-  db,
-  effectiveSkillsForPlan,
-  resetAgenticDb,
-  uniqueEffectiveSkills,
-} from "./db";
+import { db, resetAgenticDb } from "./db";
 import {
   PENDING_MS,
   STAGE_MS,
@@ -19,11 +15,22 @@ import {
   getApplicationMigrations,
   getPlanRun,
   listPlanRuns,
+  planImpact,
   portfolioApplications,
   resetExecutionWorld,
+  resolvePlanFor,
+  resolveRunSkills,
   runPhases,
   startApplicationMigrations,
 } from "./execution";
+import { SINGLE_PLAN_RUN_IDS, mockMigrationPlans } from "./fixtures";
+
+/** Every entry of `skillId` in a resolution, stage groups first. */
+const entriesOf = (skills: SkillsByStage | undefined, skillId: string) =>
+  [
+    ...(skills?.stages ?? []).flatMap((group) => group.skills),
+    ...(skills?.everyStage ?? []).flatMap((group) => group.skills),
+  ].filter(({ skill }) => skill.id === skillId);
 
 const setScenario = (scenario: string, stage = 1) =>
   window.history.replaceState(
@@ -63,13 +70,104 @@ describe("seeded worlds", () => {
     expect(new Set(Object.values(runPhases()))).toEqual(new Set([phase]));
   });
 
-  it("covers the 12-app portfolio exactly once in execution worlds", () => {
+  it("covers the 13-app portfolio exactly once in execution worlds", () => {
     setScenario("running");
     const ids = listPlanRuns().flatMap((run) =>
       run.applications.map((a) => a.id)
     );
-    expect(ids).toHaveLength(12);
-    expect(new Set(ids).size).toBe(12);
+    expect(ids).toHaveLength(13);
+    expect(new Set(ids).size).toBe(13);
+  });
+
+  it.each(["configured", "queued", "running", "actionRequired", "completed"])(
+    "puts every application of a seeded run (%s) on that run's plan, except the one single-plan run",
+    (scenario) => {
+      setScenario(scenario);
+      expect(SINGLE_PLAN_RUN_IDS.size).toBeLessThanOrEqual(1);
+      listPlanRuns().forEach((run) => {
+        const resolved = run.applications.map(
+          (ref) =>
+            resolvePlanFor(
+              portfolioApplications().find((a) => a.id === ref.id)!
+            )?.id
+        );
+        expect(resolved).toEqual(
+          run.applications.map(() =>
+            SINGLE_PLAN_RUN_IDS.has(run.id)
+              ? expect.not.stringMatching(`^${run.planId}$`)
+              : run.planId
+          )
+        );
+      });
+    }
+  );
+
+  it.each(["configured", "running", "failed"])(
+    "computes every seeded run's skills snapshot with the resolver (%s)",
+    (scenario) => {
+      setScenario(scenario);
+      listPlanRuns().forEach((run) => {
+        const plan = mockMigrationPlans.find((p) => p.id === run.planId)!;
+        expect(run.skills).toEqual(
+          resolveRunSkills(
+            plan,
+            run.applications.map((a) => a.id)
+          )
+        );
+        expect(run.skills?.everyStage.map((g) => g.application)).toEqual(
+          run.applications
+        );
+        expect(run.skills?.stages.map((g) => g.stageId)).toEqual(
+          run.stageRuns.map((stageRun) => stageRun.stageId)
+        );
+      });
+    }
+  );
+
+  it("keeps Run #1 on two applications, Claims Processing with its own skill", () => {
+    const run = getPlanRun("1");
+    expect(run.applications.map((a) => a.id)).toEqual([3, 8]);
+    const [claims, underwriting] = run.skills!.everyStage;
+    const ejb = claims.skills.find((e) => e.skill.id === "2");
+    expect(ejb?.from).toContainEqual({
+      kind: "application",
+      application: { id: 3, name: "Claims Processing" },
+    });
+    expect(
+      underwriting.skills
+        .find((e) => e.skill.id === "2")
+        ?.from.some((origin) => origin.kind === "application")
+    ).toBe(false);
+  });
+
+  it("gives each application of a run its own commits, a run on one application none named", () => {
+    const run = getPlanRun("1");
+    const migrate = run.stageRuns.find((stage) => stage.stageId === "2");
+    const commits = migrate?.commits ?? [];
+    // Two seeded commits, one each per application, the first keeps its hash.
+    expect(commits.map((commit) => commit.application?.id)).toEqual([
+      3, 3, 8, 8,
+    ]);
+    expect(commits[0].hash).toBe("b2c3d4e5f6a1");
+    expect(new Set(commits.map((commit) => commit.hash)).size).toBe(4);
+    expect(
+      getPlanRun("2")
+        .stageRuns.flatMap((stage) => stage.commits ?? [])
+        .every((commit) => commit.application == null)
+    ).toBe(true);
+    // An application's view lists only its own commits.
+    setScenario("completed");
+    const completed = getPlanRun("1");
+    const views = getApplicationMigrations(
+      completed.applications.map((application) => application.id)
+    );
+    for (const application of completed.applications) {
+      const own = views[application.id].result?.commits ?? [];
+      expect(own.length).toBeGreaterThan(0);
+      expect(
+        own.every((commit) => commit.application?.id === application.id)
+      ).toBe(true);
+    }
   });
 
   it("keeps seeded runs frozen (no progression without a user action)", () => {
@@ -152,6 +250,87 @@ describe("timed progression of started runs", () => {
     expect(getPlanRun(ref.id).stageRuns[1].status).toBe("Running");
   });
 
+  it("gives each application its own commits in a started run on several applications", () => {
+    const {
+      planRuns: [ref],
+    } = startApplicationMigrations({
+      applicationIds: [1, 2],
+      planSelection: "recommended",
+      targetBranch: "main",
+    });
+    expect(getPlanRun(ref.id).applications.map((a) => a.id)).toEqual([1, 2]);
+    // Interactive: the first stage stops for approval with its proposal
+    // commit, one per application.
+    advanceTime(PENDING_MS + STAGE_MS);
+    const waiting = getPlanRun(ref.id);
+    expect(waiting.stageRuns[0].status).toBe("AwaitingApproval");
+    const owners = (index: number) =>
+      (getPlanRun(ref.id).stageRuns[index].commits ?? []).map(
+        (commit) => commit.application?.id
+      );
+    expect(owners(0)).toEqual([1, 2]);
+    // After the approval, the next stage finishes with one commit each.
+    approveStage(ref.id, waiting.stageRuns[0].stageId);
+    advanceTime(STAGE_MS);
+    expect(getPlanRun(ref.id).stageRuns[1].status).toBe("Succeeded");
+    expect(owners(1)).toEqual([1, 2]);
+    const hashes = (getPlanRun(ref.id).stageRuns[1].commits ?? []).map(
+      (commit) => commit.hash
+    );
+    expect(new Set(hashes).size).toBe(2);
+  });
+
+  it("gives each application its own commits after approving a seeded run", () => {
+    setScenario("actionRequired");
+    const run = getPlanRun("1");
+    expect(run.applications.length).toBeGreaterThan(1);
+    const waiting = run.stageRuns.find(
+      (stage) => stage.status === "AwaitingApproval"
+    );
+    expect(waiting).toBeDefined();
+    approveStage("1", waiting!.stageId);
+    advanceTime(STAGE_MS);
+    const after = getPlanRun("1");
+    const next = after.stageRuns.find(
+      (stage) => stage.order === waiting!.order + 1
+    );
+    expect(next?.status).not.toBe("Running");
+    expect(next?.status).not.toBe("Pending");
+    expect(
+      (next?.commits ?? []).map((commit) => commit.application?.id)
+    ).toEqual(run.applications.map((application) => application.id));
+  });
+
+  it("snapshots one every-stage group per application, each with only its own skills", () => {
+    db.skills
+      .find((skill) => skill.id === "6")!
+      .associations.push({
+        scope: "application",
+        resource: { id: 1, name: "Customer Management" },
+      });
+    const {
+      planRuns: [ref],
+    } = startApplicationMigrations({
+      applicationIds: [1, 2],
+      planSelection: "recommended",
+      targetBranch: "main",
+    });
+    const run = getPlanRun(ref.id);
+    expect(run.applications.map((a) => a.id)).toEqual([1, 2]);
+    const [first, second] = run.skills!.everyStage;
+    expect([first.application?.id, second.application?.id]).toEqual([1, 2]);
+    expect(first.skills.find((e) => e.skill.id === "6")?.from).toEqual([
+      {
+        kind: "application",
+        application: { id: 1, name: "Customer Management" },
+      },
+    ]);
+    expect(second.skills.some((e) => e.skill.id === "6")).toBe(false);
+    expect(run.skills?.stages.map((group) => group.stageId)).toEqual(
+      run.stageRuns.map((stageRun) => stageRun.stageId)
+    );
+  });
+
   it("snapshots the Plan's stages, so later Plan edits do not change the run", () => {
     const {
       planRuns: [ref],
@@ -172,10 +351,86 @@ describe("Plan resolution", () => {
     getApplicationMigrations([applicationId])[applicationId].plan;
 
   it("resolves through the target profile to its default Plan", () => {
-    // Applications 1 and 2 share archetype 1 and migrate to different profiles.
-    expect(recommendedPlan(1)?.id).not.toBe(recommendedPlan(2)?.id);
+    // Applications 1 (Java EE) and 4 (Spring Boot) are in different archetypes.
+    expect(recommendedPlan(1)?.id).not.toBe(recommendedPlan(4)?.id);
     const plan = db.plans.find((p) => p.id === recommendedPlan(1)?.id)!;
     expect(plan.migrationPath?.isDefault).toBe(true);
+    // Applications of one archetype share its target profile, so its plan.
+    expect(recommendedPlan(2)).toEqual(recommendedPlan(1));
+  });
+
+  it("uses the archetype's target profile, whatever the latest run used", () => {
+    portfolioApplications().forEach((application) => {
+      const view = getApplicationMigrations([application.id])[application.id];
+      const archetype = mockArchetypes[application.archetypes![0].id];
+      const profile = archetype.profiles![0];
+      expect(view.targetProfile).toEqual({
+        id: profile.id,
+        name: profile.name,
+      });
+      expect(view.archetype).toEqual({
+        id: archetype.id,
+        name: archetype.name,
+      });
+      expect(view.plan?.id).toBe(resolvePlanFor(application)?.id);
+      const plan = db.plans.find((p) => p.id === view.plan?.id)!;
+      expect(plan.migrationPath?.archetype.id).toBe(archetype.id);
+      expect(
+        plan.migrationPath?.targetProfiles.some((tp) => tp.id === profile.id)
+      ).toBe(true);
+    });
+  });
+
+  it("reports the latest run's plan beside the plan the next run uses", () => {
+    const view = getApplicationMigrations([3])[3];
+    const latest = listPlanRuns()
+      .filter((run) => run.applications.some((a) => a.id === 3))
+      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0];
+    expect(view.planRun).toEqual({ id: latest.id, name: latest.name });
+    expect(view.planRunPlan).toEqual({
+      id: latest.planId,
+      name: latest.planName,
+    });
+    expect(view.plan?.id).toBe("1");
+  });
+
+  it("counts applications by the plan they resolve to (plan impact)", () => {
+    const portfolio = portfolioApplications();
+    db.plans.forEach((plan) => {
+      expect(planImpact(plan.id)).toBe(
+        portfolio.filter(
+          (application) => resolvePlanFor(application)?.id === plan.id
+        ).length
+      );
+    });
+    expect(
+      db.plans.reduce((total, plan) => total + planImpact(plan.id), 0)
+    ).toBe(portfolio.length);
+  });
+
+  it("starts each application on its own plan with recommended plans", () => {
+    const { planRuns } = startApplicationMigrations({
+      applicationIds: [1, 4],
+      planSelection: "recommended",
+      targetBranch: "main",
+    });
+    expect(planRuns).toHaveLength(2);
+    const runs = planRuns.map((ref) => getPlanRun(ref.id));
+    expect(
+      runs.map((run) => [run.planId, run.applications.map((a) => a.id)])
+    ).toEqual([
+      [
+        resolvePlanFor(portfolioApplications().find((a) => a.id === 1)!)!.id,
+        [1],
+      ],
+      [
+        resolvePlanFor(portfolioApplications().find((a) => a.id === 4)!)!.id,
+        [4],
+      ],
+    ]);
+    runs.forEach((run) => {
+      expect(run.name).toBe(`Run #${run.id}: ${run.planName}`);
+    });
   });
 
   it("ignores a new non-default Plan on the same path", () => {
@@ -287,73 +542,80 @@ describe("skill exclusions", () => {
 
   const view = () => getApplicationMigrations([APPLICATION_ID])[APPLICATION_ID];
 
-  it("keeps runs and application views as they were when nothing is excluded", () => {
+  it("resolves runs and application views with the one resolver", () => {
     const plan = db.plans.find((p) => p.id === PLAN_ID)!;
-    const expected = (applicationIds: number[]) =>
-      uniqueEffectiveSkills([
-        ...effectiveSkillsForPlan(plan),
-        ...collectionSkillsForAgents(plan.stages.map((s) => s.agent.id)),
-        ...applicationIds.flatMap(applicationSkills),
-      ]);
+    const expected = resolveRunSkills(plan, [APPLICATION_ID]);
     expect(view().plan?.id).toBe(PLAN_ID);
-    expect(view()).not.toHaveProperty("excludedSkills");
-    expect(JSON.stringify(view().effectiveSkills)).toBe(
-      JSON.stringify(expected([APPLICATION_ID]))
-    );
+    expect(view().skills).toEqual(expected);
     const run = startRun();
-    expect(run).not.toHaveProperty("excludedSkills");
-    expect(JSON.stringify(run.resolvedSkills)).toBe(
-      JSON.stringify(expected([APPLICATION_ID]))
+    expect(run.skills).toEqual(expected);
+    expect(run.skills?.stages.map((group) => group.stageId)).toEqual(
+      run.stageRuns.map((stageRun) => stageRun.stageId)
     );
+    expect(run.skills?.everyStage.map((group) => group.application)).toEqual([
+      { id: APPLICATION_ID, name: "Branch Operations" },
+    ]);
+    // The plan excludes nothing: no entry of any group is excluded.
+    const entries = [
+      ...(run.skills?.stages ?? []),
+      ...(run.skills?.everyStage ?? []),
+    ].flatMap((group) => group.skills);
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.filter((entry) => entry.excluded)).toEqual([]);
   });
 
-  it("leaves excluded skills out of a started run and records them with their sources", () => {
+  it("marks excluded skills in a started run's snapshot and keeps it", () => {
     excludeOnPlan(["9"]);
     const run = startRun();
-    expect(run.resolvedSkills?.some((e) => e.skill.id === "9")).toBe(false);
-    expect(run.resolvedSkills?.some((e) => e.skill.id === "14")).toBe(true);
-    expect(run.excludedSkills).toEqual([
-      {
-        skill: { id: "9", name: "Java runtime modernization" },
-        scope: "archetype",
-        scopeName: "Legacy Java Application",
-      },
-      {
-        skill: { id: "9", name: "Java runtime modernization" },
-        scope: "targetProfile",
-        scopeName: "Java 17 on OpenShift",
-      },
-      {
-        skill: { id: "9", name: "Java runtime modernization" },
-        scope: "agent",
-        scopeName: "Code Migrator",
-      },
-    ]);
+    const entries = entriesOf(run.skills, "9");
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every(({ excluded }) => excluded)).toBe(true);
+    const others = entriesOf(run.skills, "14");
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.some(({ excluded }) => excluded)).toBe(false);
+    // Java runtime modernization reaches plan 5 through the archetype and
+    // the target profile, no longer through a general agent.
+    expect(
+      entries.flatMap(({ from }) => from.map((origin) => origin.kind))
+    ).toEqual(["archetype", "targetProfile"]);
 
     // The run keeps its snapshot when the Plan's exclusions change later.
     excludeOnPlan([]);
-    expect(getPlanRun(run.id).excludedSkills).toEqual(run.excludedSkills);
+    expect(getPlanRun(run.id).skills).toEqual(run.skills);
+    expect(entriesOf(getPlanRun(run.id).skills, "9")[0].excluded).toBe(true);
   });
 
-  it("splits the application view into skills used and skills excluded", () => {
-    const before = view().effectiveSkills ?? [];
+  it("marks only the excluded skills in the application view, in every group", () => {
+    const before = view().skills!;
     excludeOnPlan(["9", "3"]);
-    const after = view();
+    const after = view().skills!;
     const isExcluded = (skillId: string) => ["9", "3"].includes(skillId);
-    expect(after.effectiveSkills).toEqual(
-      before.filter((entry) => !isExcluded(entry.skill.id))
+    const mark = (groups: { skills: SkillsByStage["stages"][0]["skills"] }[]) =>
+      groups.map((group) =>
+        group.skills.map((entry) => ({
+          ...entry,
+          excluded: isExcluded(entry.skill.id),
+        }))
+      );
+    expect(after.stages.map((group) => group.skills)).toEqual(
+      mark(before.stages)
     );
-    expect(after.excludedSkills).toEqual(
-      before.filter((entry) => isExcluded(entry.skill.id))
+    expect(after.everyStage.map((group) => group.skills)).toEqual(
+      mark(before.everyStage)
     );
-    expect(after.excludedSkills?.map((e) => e.scopeName)).toContain(
-      "Code Migrator via Java modernization foundation"
-    );
+    expect(entriesOf(after, "3").flatMap(({ from }) => from)).toContainEqual({
+      kind: "collection",
+      agent: { id: "9", name: "Java Code Migrator" },
+      collection: {
+        id: "1",
+        name: "Java modernization foundation",
+      },
+    });
   });
 
-  it("applies an exclusion only while the plan still resolves the skill", () => {
-    // Spring Boot 3 upgrade reaches the plan through its archetype and the
-    // application directly; the plan excludes it.
+  it("never excludes a skill attached to the application itself", () => {
+    // Spring Boot 3 upgrade reaches the application through its archetype
+    // and directly; the plan excludes it.
     const skill = db.skills.find((s) => s.id === "16")!;
     skill.associations.push(
       {
@@ -363,25 +625,41 @@ describe("skill exclusions", () => {
       { scope: "application", resource: { id: 13, name: "Branch Operations" } }
     );
     excludeOnPlan(["16"]);
-    expect(view().excludedSkills?.map((e) => e.scope)).toEqual([
+    const entry = view().skills?.everyStage[0].skills.find(
+      (e) => e.skill.id === "16"
+    );
+    expect(entry?.excluded).toBe(false);
+    expect(entry?.from.map((origin) => origin.kind)).toEqual([
       "archetype",
       "application",
     ]);
-
-    // Without the archetype association the plan no longer resolves it, so
-    // the stored exclusion does not apply to the application skill, as the
-    // plan page shows.
-    skill.associations = skill.associations.filter(
-      (association) => association.scope !== "archetype"
-    );
-    expect(view()).not.toHaveProperty("excludedSkills");
-    expect(view().effectiveSkills).toContainEqual({
-      skill: { id: "16", name: "Spring Boot 3 upgrade" },
-      scope: "application",
-      scopeName: "Branch Operations",
+    expect(entry?.from).toContainEqual({
+      kind: "application",
+      application: { id: 13, name: "Branch Operations" },
     });
+
+    // Attached through the archetype only, the exclusion applies.
+    skill.associations = skill.associations.filter(
+      (association) => association.scope !== "application"
+    );
+    expect(
+      entriesOf(view().skills, "16").map(({ excluded, from }) => [
+        excluded,
+        from.map((origin) => origin.kind),
+      ])
+    ).toEqual([[true, ["archetype"]]]);
     const run = startRun();
-    expect(run).not.toHaveProperty("excludedSkills");
-    expect(run.resolvedSkills?.some((e) => e.skill.id === "16")).toBe(true);
+    const runEntries = entriesOf(run.skills, "16");
+    expect(runEntries.length).toBeGreaterThan(0);
+    expect(runEntries.every(({ excluded }) => excluded)).toBe(true);
+    // Only the excluded skill is marked, in every group.
+    const excludedIds = [
+      ...(run.skills?.stages ?? []),
+      ...(run.skills?.everyStage ?? []),
+    ]
+      .flatMap((group) => group.skills)
+      .filter((entry) => entry.excluded)
+      .map((entry) => entry.skill.id);
+    expect([...new Set(excludedIds)]).toEqual(["16"]);
   });
 });

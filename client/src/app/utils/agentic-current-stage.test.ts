@@ -18,7 +18,7 @@ const stage = (
 
 const run = (status: PlanRun["status"], stageRuns: StageRun[]): PlanRun => ({
   id: "1",
-  name: "Run #1 — Java EE to Quarkus",
+  name: "Run #1: Java EE to Quarkus",
   planId: "1",
   planName: "Java EE to Quarkus",
   applications: [],

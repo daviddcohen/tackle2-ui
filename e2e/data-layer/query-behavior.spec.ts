@@ -15,7 +15,7 @@ test("plan run detail renders from the run snapshot without failing requests", a
       planRequests.push(request.url());
   });
   await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
-  await expect(mainHeading(page)).toHaveText("Run #1 — Java EE to Quarkus");
+  await expect(mainHeading(page)).toHaveText("Run #1: Java EE to Quarkus");
   await expect(stageLinks(page).first()).toBeVisible();
   expect(planRequests.filter((url) => /\/plans\/0(\?|$)/.test(url))).toEqual(
     []

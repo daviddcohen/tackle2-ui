@@ -499,6 +499,7 @@ const ApplicationDetail: React.FC = () => {
           <SkillsTab
             linkCrumbs={linkCrumbs}
             applicationId={applicationId}
+            applicationName={application.name}
             archetypes={application.archetypes ?? []}
             onManageSkills={openManageSkills}
           />

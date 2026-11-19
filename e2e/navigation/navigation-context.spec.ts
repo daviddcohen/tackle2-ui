@@ -28,8 +28,7 @@ const view = (path: string) => protoUrl(path, state);
 const crumbItems = (page: Page) => breadcrumb(page).getByRole("listitem");
 const crumbTitles = async (page: Page) =>
   (await crumbItems(page).allTextContents()).map((text) => text.trim());
-const associationsTab = (page: Page) =>
-  page.getByRole("tab", { name: /^Associations/ });
+const usageTab = (page: Page) => page.getByRole("tab", { name: /^Usage/ });
 
 test("deep application, run, skill and association journeys retain tabs, survive reload and truncate cycles", async ({
   page,
@@ -41,12 +40,14 @@ test("deep application, run, skill and association journeys retain tabs, survive
     .click();
   await expect(page).toHaveURL(/\/plan-runs\/\d+/);
   const runURL = page.url();
+  // A skill shows in each Skills by stage group that gets it: open the first.
   await page
-    .getByRole("grid", { name: "Skills", exact: true })
+    .getByRole("grid", { name: "Skills by stage", exact: true })
     .getByRole("link", { name: "Jakarta EE namespace migration" })
+    .first()
     .click();
-  await associationsTab(page).click();
-  await expect(page).toHaveURL(/tab=associations/);
+  await usageTab(page).click();
+  await expect(page).toHaveURL(/tab=usage/);
   const skillURL = page.url();
   await expect(crumbItems(page)).toHaveCount(4);
   const skillTitles = await crumbTitles(page);
@@ -62,7 +63,7 @@ test("deep application, run, skill and association journeys retain tabs, survive
     .getByRole("link", { name: skillTitles.at(-1), exact: true })
     .click();
   await expect(page).toHaveURL(skillURL);
-  await expect(associationsTab(page)).toHaveAttribute("aria-selected", "true");
+  await expect(usageTab(page)).toHaveAttribute("aria-selected", "true");
   // Target profiles keep their owning archetype before the leaf.
   await page.locator('main a[href*="/target-profiles"]').first().click();
   await expect(crumbItems(page)).toHaveCount(6);
@@ -142,24 +143,31 @@ test("tabs, table filters, scenario changes and sidebar navigation have explicit
 test("returning through an Agent association restores the saved runs tab and truncates the cycle", async ({
   page,
 }) => {
-  await page.goto(view("/agents/2?tab=runs"));
+  // Java Code Migrator runs the Migrate stage of Run #1 and has
+  // Incremental transformation workflow (14) attached.
+  await page.goto(view("/agents/9?tab=runs"));
   await page
     .locator(`main a[href^="${withBase("/plan-runs/1/stages/2")}"]`)
     .click();
   // The stage page reaches skills through its run (the run's Skills section).
   await page.locator(`main a[href="${withBase("/plan-runs/1")}"]`).click();
-  await page.locator(`main a[href^="${withBase("/skills/2?")}"]`).click();
-  await associationsTab(page).click();
+  await page
+    .locator(`main a[href^="${withBase("/skills/14?")}"]`)
+    .first()
+    .click();
+  await usageTab(page).click();
   await page
     .locator(
-      `main a[href^="${withBase("/agents/2")}"]:not(.pf-v6-c-breadcrumb__link)`
+      `main a[href^="${withBase("/agents/9")}"]:not(.pf-v6-c-breadcrumb__link)`
     )
+    // The "Attached to" label; the plans table links the agent too.
+    .first()
     .click();
   await expect(crumbItems(page)).toHaveCount(2);
   await expect(
     page.getByRole("tab", { name: "Runs", exact: true })
   ).toHaveAttribute("aria-selected", "true");
-  await expect(currentCrumb(page)).toHaveText("Code Migrator");
+  await expect(currentCrumb(page)).toHaveText("Java Code Migrator");
 });
 
 test("every Agents list Skills link preserves the list context", async ({
@@ -272,7 +280,7 @@ test("launching a migration keeps the global scenario when returning to Inventor
 test("an unavailable associated entity retains breadcrumbs back to the originating view", async ({
   page,
 }) => {
-  await page.goto(view("/skills/2?tab=associations"));
+  await page.goto(view("/skills/2?tab=usage"));
   const applicationLink = page
     .locator(`main a[href^="${withBase("/applications/")}"]`)
     .first();
@@ -298,7 +306,7 @@ test("an unavailable associated entity retains breadcrumbs back to the originati
   await expect(page).toHaveURL(
     (url) =>
       appPath(url.pathname) === "/skills/2" &&
-      url.searchParams.get("tab") === "associations"
+      url.searchParams.get("tab") === "usage"
   );
 });
 
@@ -306,8 +314,17 @@ for (const action of ["persona", "reset"] as const) {
   test(`${action} changes start a fresh navigation trail even on the same Inventory route`, async ({
     page,
   }) => {
-    await page.goto(view("/skills/2?tab=associations"));
-    await page.locator(`main a[href^="${withBase("/archetypes?")}"]`).click();
+    await page.goto(view("/skills/2?tab=usage"));
+    // The "Attached to" label; the plans table links the archetype too.
+    await page
+      .locator(`main a[href^="${withBase("/archetypes?")}"]`)
+      .first()
+      .click();
+    // Archetype links from a skills surface open the drawer's Skills tab.
+    await page
+      .locator("#page-drawer-content")
+      .getByRole("tab", { name: "Details", exact: true })
+      .click();
     await page
       .locator(`#page-drawer-content a[href^="${withBase("/applications?")}"]`)
       .click();
@@ -335,15 +352,20 @@ test("Archetype application counts apply their filter when Inventory is an ances
   await page.goto(view("/applications"));
   await page.locator(`main a[href="${withBase("/applications/1")}"]`).click();
   await page.getByRole("tab", { name: "Skills", exact: true }).click();
-  // Skill sources are plain text: reach the archetype through the skill.
+  // Reach the archetype through one of its attached skills.
   await page
-    .getByRole("grid", { name: "Skills", exact: true })
+    .getByRole("region", { name: /^Archetype skills: Java EE Application/ })
     .getByRole("link", { name: "EJB to CDI conversion patterns" })
     .click();
-  await associationsTab(page).click();
+  await usageTab(page).click();
   await page
     .locator(`main a[href^="${withBase("/archetypes?")}"]`)
     .first()
+    .click();
+  // Archetype links from a skills surface open the drawer's Skills tab.
+  await page
+    .locator("#page-drawer-content")
+    .getByRole("tab", { name: "Details", exact: true })
     .click();
   await page
     .locator("#page-drawer-content")
@@ -415,10 +437,11 @@ for (const [name, viewport] of [
       .first()
       .click();
     await page
-      .getByRole("grid", { name: "Skills", exact: true })
+      .getByRole("grid", { name: "Skills by stage", exact: true })
       .getByRole("link", { name: "Jakarta EE namespace migration" })
+      .first()
       .click();
-    await associationsTab(page).click();
+    await usageTab(page).click();
     await page
       .locator(`main a[href^="${withBase("/migration-plans/")}"]`)
       .first()
@@ -430,10 +453,7 @@ for (const [name, viewport] of [
     await parent.focus();
     await expect(parent).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(associationsTab(page)).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
+    await expect(usageTab(page)).toHaveAttribute("aria-selected", "true");
     await expect(crumbItems(page)).toHaveCount(4);
     // The drawer trail lists ancestors only; the target profiles trail adds
     // the owning archetype before its leaf. Both end at the skill.
@@ -452,10 +472,7 @@ for (const [name, viewport] of [
           exact: true,
         })
         .click();
-      await expect(associationsTab(page)).toHaveAttribute(
-        "aria-selected",
-        "true"
-      );
+      await expect(usageTab(page)).toHaveAttribute("aria-selected", "true");
     }
   });
 }

@@ -419,6 +419,12 @@ const TargetProfilesPage: React.FC = () => {
                         >
                           <TargetProfileSkills
                             profile={profile}
+                            archetypeName={archetype?.name ?? ""}
+                            usedProfileName={
+                              profile.id === profiles[0]?.id
+                                ? undefined
+                                : profiles[0]?.name
+                            }
                             skills={profileSkills(profile)}
                             isError={isSkillsError}
                             linkTo={(pathname) => to(pathname)}
@@ -490,7 +496,7 @@ const TargetProfilesPage: React.FC = () => {
               (isAgenticEnabled && profileSkills(profileToDelete).length > 0
                 ? t("agentic.archetype.deleteBodyWithSkills", {
                     profile: profileToDelete.name,
-                    archetype: archetype.name,
+                    count: profileSkills(profileToDelete).length,
                   })
                 : t("agentic.archetype.deleteBody", {
                     profile: profileToDelete.name,

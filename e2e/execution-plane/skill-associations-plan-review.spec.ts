@@ -10,10 +10,10 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
+  addTargetProfile,
   dialog,
   expect,
   expectHealthy,
-  field,
   gotoProto,
   main,
   openRowActions,
@@ -35,7 +35,8 @@ const APPLICATION = "Branch Operations";
 // In no Legacy Java Application plan, archetype or agent in the fixtures.
 const SKILL = "Spring Boot 3 upgrade";
 const SKILL_ID = "16";
-const OTHER_SKILL = "Database migration patterns";
+// In no Legacy Java Application plan, archetype, agent or collection either.
+const OTHER_SKILL = ".NET 8 migration";
 
 const manageDialog = (page: Page) => dialog(page, /^Manage skills for /);
 
@@ -51,23 +52,32 @@ const addSkillInModal = async (page: Page, skill: string, saved: string) => {
   await expect(manageDialog(page)).toHaveCount(0);
 };
 
-const skillsGrid = (scope: Locator) =>
-  scope.getByRole("grid", { name: "Skills", exact: true });
+/** The application Skills tab's own group ("Application skills ({n})"). */
+const applicationSkills = (page: Page) =>
+  main(page).getByRole("region", { name: /^Application skills/ });
 
-const skillRow = (scope: Locator, skill: string) =>
-  skillsGrid(scope).getByRole("row").filter({ hasText: skill });
-
-/** The plan page's Skills heading, as [used, total]. */
-const planSkillCounts = async (page: Page): Promise<[number, number]> => {
-  const heading = main(page).getByRole("heading", {
-    name: /^Skills \(\d+( of \d+ used)?\)$/,
-  });
-  await expect(heading).toBeVisible();
-  const [, first, second] =
-    /\((\d+)(?: of (\d+) used)?\)/.exec((await heading.textContent()) ?? "") ??
-    [];
-  return [Number(first), Number(second ?? first)];
+/** Opens the Migration tab of the application page at Skills by stage. */
+const openSkillsByStage = async (page: Page) => {
+  await main(page).getByRole("link", { name: "See skills by stage" }).click();
+  await expect(
+    main(page).getByRole("heading", { name: "Skills by stage", level: 2 })
+  ).toBeVisible();
 };
+
+/** Skills by stage on the plan page and in the wizard's Skills step. */
+const stageSkillsGrid = (scope: Locator) =>
+  scope.getByRole("grid", { name: "Skills by stage", exact: true });
+
+/** Every row of a skill in Skills by stage: one per group that has it. */
+const stageSkillRows = (scope: Locator, skill: string) =>
+  stageSkillsGrid(scope).getByRole("row").filter({ hasText: skill });
+
+/** The Include checkbox of a skill in one group ("every stage", "stage 2"). */
+const includeBox = (scope: Locator, skill: string, group = "every stage") =>
+  scope.getByRole("checkbox", {
+    name: `Include ${skill} in ${group}`,
+    exact: true,
+  });
 
 const openPlanEdit = async (page: Page) => {
   await main(page).getByRole("button", { name: "Actions" }).click();
@@ -94,55 +104,58 @@ test.describe("Skill associations in the plan skill review", () => {
     diagnostics,
   }) => {
     await gotoProto(page, PLAN_PATH);
-    const [, before] = await planSkillCounts(page);
-    await expect(skillRow(main(page), SKILL)).toHaveCount(0);
+    await expect(stageSkillsGrid(main(page))).toBeVisible();
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(0);
 
     await spaNavigate(page, "/archetypes");
     await openRowActions(page, ARCHETYPE);
     await page.getByRole("menuitem", { name: MANAGE, exact: true }).click();
     await addSkillInModal(page, SKILL, `Skills for ${ARCHETYPE} updated`);
 
-    // The cached plan page refetches its resolution.
+    // The cached plan page refetches its resolution: every stage gets it.
     await spaNavigate(page, PLAN_PATH);
-    await expect(skillRow(main(page), SKILL)).toContainText(
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(1);
+    await expect(stageSkillRows(main(page), SKILL)).toContainText(
       `Archetype: ${ARCHETYPE}`
     );
-    expect(await planSkillCounts(page)).toEqual([before + 1, before + 1]);
 
     // The wizard's Skills step lists it, and excluding it sticks.
     const wizard = await openPlanEdit(page);
-    await expect(
-      wizard.getByText(`${before + 1} of ${before + 1} skills will be used`)
-    ).toBeVisible();
-    await expect(skillRow(wizard, SKILL)).toContainText(
+    await expect(wizard.getByText("No skills excluded.")).toBeVisible();
+    await expect(stageSkillRows(wizard, SKILL)).toContainText(
       `Archetype: ${ARCHETYPE}`
     );
-    await wizard
-      .getByRole("checkbox", { name: `Use ${SKILL}`, exact: true })
-      .uncheck();
+    await includeBox(wizard, SKILL).uncheck();
     await wizard.getByRole("button", { name: "Review", exact: true }).click();
-    await expect(wizard).toContainText(`Newly excluded: ${SKILL}`);
+    // Alone, the name needs no "Newly excluded:" under "Excluded skills".
+    await expect(wizard).toContainText(`${SKILL} (every stage)`);
+    await expect(wizard).not.toContainText("Newly excluded");
     await wizard.getByRole("button", { name: "Save", exact: true }).click();
     await expect(wizard).toBeHidden();
     await expect(toast(page, "Migration plan updated")).toBeVisible();
-    await expect(skillRow(main(page), SKILL)).toContainText("Excluded");
-    expect(await planSkillCounts(page)).toEqual([before, before + 1]);
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(1);
+    await expect(stageSkillRows(main(page), SKILL)).toContainText("Excluded");
 
-    // The skill page lists the plan, marked.
-    await spaNavigate(page, `/skills/${SKILL_ID}?tab=associations`);
+    // The skill page lists the plan, marked on the row it reaches: an
+    // archetype skill reaches every stage.
+    await spaNavigate(page, `/skills/${SKILL_ID}?tab=usage`);
     const plans = main(page).getByRole("grid", {
       name: "Used in migration plans",
     });
-    await expect(
-      plans.getByRole("row").filter({ hasText: PLAN })
-    ).toContainText("Excluded");
+    const planRow = plans.getByRole("row").filter({ hasText: PLAN });
+    await expect(planRow).toHaveCount(1);
+    await expect(planRow).toContainText("Every stage");
+    await expect(planRow).toContainText("Excluded");
     expectHealthy(diagnostics);
   });
 
   test("a target profile skill from Manage skills shows in the new plan's Skills step", async ({
     page,
   }) => {
-    await gotoProto(page, "/archetypes/3/target-profiles");
+    // A second profile for the archetype, which no plan is assigned to yet.
+    await gotoProto(page, "/migration-plans");
+    await addTargetProfile(page, 3, { id: 32, name: "Java 17 on RHEL" });
+    await spaNavigate(page, "/archetypes/3/target-profiles");
     await openRowActions(page, "Java 17 on RHEL");
     await page.getByRole("menuitem", { name: MANAGE, exact: true }).click();
     await addSkillInModal(
@@ -167,12 +180,11 @@ test.describe("Skill associations in the plan skill review", () => {
     await pickMenuOption(page, "Code Migrator");
     await wizard.getByRole("button", { name: "Next", exact: true }).click();
 
-    await expect(skillRow(wizard, SKILL)).toContainText(
+    await expect(stageSkillRows(wizard, SKILL)).toHaveCount(1);
+    await expect(stageSkillRows(wizard, SKILL)).toContainText(
       "Target profile: Java 17 on RHEL"
     );
-    await expect(
-      wizard.getByRole("checkbox", { name: `Use ${SKILL}`, exact: true })
-    ).toBeChecked();
+    await expect(includeBox(wizard, SKILL)).toBeChecked();
   });
 
   test("an application skill from Manage skills reaches the Skills tab, the Migration tab and the run dialog", async ({
@@ -180,37 +192,41 @@ test.describe("Skill associations in the plan skill review", () => {
     diagnostics,
   }) => {
     await gotoProto(page, `${APPLICATION_PATH}?tab=skills`);
-    await expect(skillsGrid(main(page))).toBeVisible();
-    await expect(skillRow(main(page), OTHER_SKILL)).toHaveCount(0);
-    const heading = main(page).getByRole("heading", {
-      name: /^Skills \(\d+\)$/,
-    });
-    const before = Number(/\d+/.exec((await heading.textContent()) ?? "")![0]);
+    await expect(applicationSkills(page)).toBeVisible();
+    await expect(
+      applicationSkills(page).getByRole("link", { name: OTHER_SKILL })
+    ).toHaveCount(0);
 
-    await main(page).getByRole("button", { name: MANAGE }).click();
+    await applicationSkills(page)
+      .getByRole("button", { name: `Manage skills for ${APPLICATION}` })
+      .click();
     await addSkillInModal(
       page,
       OTHER_SKILL,
       `Skills for ${APPLICATION} updated`
     );
-    // The tab refreshes in place, with the server's provenance.
-    await expect(skillRow(main(page), OTHER_SKILL)).toContainText(
-      `Application: ${APPLICATION}`
-    );
+    // The tab refreshes in place.
     await expect(
-      main(page).getByRole("heading", { name: `Skills (${before + 1})` })
+      applicationSkills(page).getByRole("link", { name: OTHER_SKILL })
     ).toBeVisible();
 
-    await page.getByRole("tab", { name: "Migration", exact: true }).click();
-    await expect(main(page)).toContainText(`${before + 1} skills`);
+    // Every stage gets it, from this application.
+    await openSkillsByStage(page);
+    const rows = stageSkillRows(main(page), OTHER_SKILL);
+    await expect(rows).toHaveCount(1);
+    await expect(rows).toContainText("This application");
+
+    // The Stages section's empty state offers the run (no run yet).
     await main(page)
+      .getByRole("region", { name: "Stages" })
       .getByRole("button", { name: "Run migration plan", exact: true })
       .click();
     const preflight = dialog(page, "Run migration plan");
+    await preflight.getByRole("button", { name: "Skills by stage" }).click();
     await preflight
-      .getByRole("button", { name: `Skills (${before + 1})` })
+      .getByRole("button", { name: new RegExp(`Every stage: ${APPLICATION}`) })
       .click();
-    await expect(skillRow(preflight, OTHER_SKILL)).toContainText(
+    await expect(stageSkillRows(preflight, OTHER_SKILL)).toContainText(
       `Application: ${APPLICATION}`
     );
     expectHealthy(diagnostics);
@@ -220,21 +236,23 @@ test.describe("Skill associations in the plan skill review", () => {
     page,
   }) => {
     await gotoProto(page, PLAN_PATH);
-    await expect(skillsGrid(main(page))).toBeVisible();
-    await expect(skillRow(main(page), SKILL)).toHaveCount(0);
+    await expect(stageSkillsGrid(main(page))).toBeVisible();
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(0);
     await expect(
-      skillRow(main(page), "Platform security baseline")
+      stageSkillRows(main(page), "Platform security baseline")
     ).toHaveCount(0);
 
     // Skill form: the skill joins a collection that the plan's agents use.
-    await spaNavigate(page, `/skills/${SKILL_ID}?tab=associations`);
+    await spaNavigate(page, `/skills/${SKILL_ID}?tab=usage`);
     const plans = main(page).getByRole("grid", {
       name: "Used in migration plans",
     });
-    await expect(plans).toBeVisible();
-    await expect(plans.getByRole("row").filter({ hasText: PLAN })).toHaveCount(
-      0
-    );
+    // The skill reaches no plan yet.
+    await expect(
+      main(page).getByText("No migration plan gets this skill.", {
+        exact: true,
+      })
+    ).toBeVisible();
     await editFromDetail(page);
     await pickMulti(page, "skill-skill-collections", [
       "Java modernization foundation",
@@ -242,29 +260,62 @@ test.describe("Skill associations in the plan skill review", () => {
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Skill updated")).toBeVisible();
     // The open skill page lists the plan without a reload.
-    await expect(
-      plans.getByRole("row").filter({ hasText: PLAN })
-    ).toContainText("Agent: Code Migrator via Java modernization foundation");
+    // On the stage its agent runs, from the agent's collection.
+    const planRow = plans.getByRole("row").filter({ hasText: PLAN });
+    await expect(planRow).toContainText("Run by Java Code Migrator");
+    await expect(planRow).toContainText(
+      "Collection: Java modernization foundation"
+    );
 
     // Collection form: a plan agent starts using another collection.
     await spaNavigate(page, "/skills/collections/4");
     await editFromDetail(page);
     await pickMulti(page, "skill-collection-agents", ["Build Validator"]);
     // Close the menu so it does not cover the footer buttons.
-    await field(dialog(page), "Description").click();
+    await dialog(page).getByRole("heading").first().click();
     await dialog(page).getByRole("button", { name: "Save" }).click();
     await expect(toast(page, "Skill collection updated")).toBeVisible();
 
     await spaNavigate(page, PLAN_PATH);
-    await expect(skillRow(main(page), SKILL)).toContainText(
-      "Agent: Code Migrator via Java modernization foundation"
+    // Each in the stage whose agent uses the collection, and only there.
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(1);
+    await expect(stageSkillRows(main(page), SKILL)).toContainText(
+      "Collection: Java modernization foundation"
     );
-    await expect(
-      skillRow(main(page), "Platform security baseline")
-    ).toContainText("Agent: Build Validator via Security and compliance");
+    const baseline = stageSkillRows(main(page), "Platform security baseline");
+    await expect(baseline).toHaveCount(1);
+    await expect(baseline).toContainText("Collection: Security and compliance");
   });
 
-  test("a plan's exclusion stops applying to an application once the plan no longer resolves the skill", async ({
+  test("a skill attached only to applications says the applications add it when they run", async ({
+    page,
+  }) => {
+    // Corporate coding standards: attached to three applications, nothing
+    // else.
+    await gotoProto(page, "/skills/5?tab=usage");
+    const section = main(page).getByRole("heading", {
+      name: "Used in migration plans",
+      exact: true,
+    });
+    await expect(section).toBeVisible();
+    await expect(
+      main(page).getByText(
+        "The stages of each migration plan that get this skill, and where it comes from. Application skills are added when a plan runs.",
+        { exact: false }
+      )
+    ).toBeVisible();
+    await expect(
+      main(page).getByText(
+        "No migration plan gets this skill from an agent, a collection, an archetype or a target profile. The applications it is attached to add it to every stage when they run.",
+        { exact: true }
+      )
+    ).toBeVisible();
+    await expect(
+      main(page).getByText(/migration plan uses this skill/)
+    ).toHaveCount(0);
+  });
+
+  test("a plan's exclusion never applies to a skill attached to the application itself", async ({
     page,
   }) => {
     const openManage = async (path: string, row: string) => {
@@ -279,18 +330,27 @@ test.describe("Skill associations in the plan skill review", () => {
 
     await spaNavigate(page, PLAN_PATH);
     const wizard = await openPlanEdit(page);
-    await wizard
-      .getByRole("checkbox", { name: `Use ${SKILL}`, exact: true })
-      .uncheck();
+    await includeBox(wizard, SKILL).uncheck();
     await wizard.getByRole("button", { name: "Review", exact: true }).click();
     await wizard.getByRole("button", { name: "Save", exact: true }).click();
     await expect(toast(page, "Migration plan updated")).toBeVisible();
 
     await spaNavigate(page, `${APPLICATION_PATH}?tab=skills`);
-    await main(page).getByRole("button", { name: MANAGE }).click();
+    await applicationSkills(page)
+      .getByRole("button", { name: `Manage skills for ${APPLICATION}` })
+      .click();
     await addSkillInModal(page, SKILL, `Skills for ${APPLICATION} updated`);
-    // Both the archetype and the application give it; the plan excludes it.
-    await expect(skillRow(main(page), SKILL)).toContainText("Excluded");
+    // Both the archetype and the application give it; the plan excludes it,
+    // but the application's own attachment wins.
+    await openSkillsByStage(page);
+    const everyStage = stageSkillRows(main(page), SKILL);
+    await expect(everyStage).toContainText("This application");
+    await expect(everyStage).toContainText(`Archetype: ${ARCHETYPE}`);
+    await expect(everyStage).not.toContainText("Excluded");
+    // The plan page still shows it excluded (it has no application).
+    await spaNavigate(page, PLAN_PATH);
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(1);
+    await expect(stageSkillRows(main(page), SKILL)).toContainText("Excluded");
 
     await openManage("/archetypes", ARCHETYPE);
     await manageDialog(page)
@@ -305,23 +365,27 @@ test.describe("Skill associations in the plan skill review", () => {
       .getByRole("heading", { name: `Manage skills for ${ARCHETYPE}` })
       .click();
     await manageDialog(page).getByRole("button", { name: "Save" }).click();
-    await expect(toast(page, `Skills for ${ARCHETYPE} updated`)).toBeVisible();
+    // The first save's toast can still be up: wait for the newest one.
+    await expect(
+      toast(page, `Skills for ${ARCHETYPE} updated`).last()
+    ).toBeVisible();
 
     // The plan page no longer lists it, so the application does not show it
     // as excluded by that plan either.
     await spaNavigate(page, PLAN_PATH);
-    await expect(skillsGrid(main(page))).toBeVisible();
-    await expect(skillRow(main(page), SKILL)).toHaveCount(0);
+    await expect(stageSkillsGrid(main(page))).toBeVisible();
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(0);
     await expect(main(page).getByText("Excluded", { exact: true })).toHaveCount(
       0
     );
     await spaNavigate(page, `${APPLICATION_PATH}?tab=skills`);
-    const row = skillRow(main(page), SKILL);
-    await expect(row).toContainText(`Application: ${APPLICATION}`);
-    await expect(row).not.toContainText("Excluded");
     await expect(
-      main(page).getByRole("heading", { name: /^Skills \(\d+\)$/ })
+      applicationSkills(page).getByRole("link", { name: SKILL })
     ).toBeVisible();
+    await openSkillsByStage(page);
+    const row = stageSkillRows(main(page), SKILL);
+    await expect(row).toContainText("This application");
+    await expect(row).not.toContainText("Excluded");
   });
 
   test("Manage skills in the archetype drawer refreshes the drawer, then the plan page shows the skill", async ({
@@ -333,12 +397,20 @@ test.describe("Skill associations in the plan skill review", () => {
       .click();
     await page.getByRole("tab", { name: "Skills", exact: true }).click();
     const drawer = page.locator("#page-drawer-content");
-    await drawer.getByRole("button", { name: MANAGE }).click();
+    // The archetype's own group; each target profile group has its own.
+    await drawer
+      .getByRole("button", { name: `${MANAGE} for ${ARCHETYPE}` })
+      .click();
     await addSkillInModal(page, SKILL, `Skills for ${ARCHETYPE} updated`);
-    await expect(skillRow(drawer, SKILL)).toBeVisible();
+    await expect(
+      drawer
+        .getByRole("region", { name: /^Archetype skills/ })
+        .getByRole("link", { name: SKILL })
+    ).toBeVisible();
 
     await spaNavigate(page, PLAN_PATH);
-    await expect(skillRow(main(page), SKILL)).toContainText(
+    await expect(stageSkillRows(main(page), SKILL)).toHaveCount(1);
+    await expect(stageSkillRows(main(page), SKILL)).toContainText(
       `Archetype: ${ARCHETYPE}`
     );
   });

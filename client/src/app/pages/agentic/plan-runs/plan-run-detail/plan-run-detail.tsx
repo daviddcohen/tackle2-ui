@@ -5,7 +5,13 @@ import { PageSection } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
-import { PlanRun, getOrderedStageRuns, isTerminalRunPhase } from "@app/agentic";
+import {
+  PlanRun,
+  getOrderedStageRuns,
+  isTerminalRunPhase,
+  stageAgentRunsOf,
+  stageAttentionApplications,
+} from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { PageHeader } from "@app/components/PageHeader";
@@ -15,7 +21,10 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import { useFetchPlanRun } from "@app/queries/agentic";
+import {
+  useFetchMigrationPlanById,
+  useFetchPlanRun,
+} from "@app/queries/agentic";
 import { useFetchPlanRunAgentRuns } from "@app/queries/agentic-observability";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import {
@@ -29,21 +38,21 @@ import {
   DetailFacts,
   DetailSection,
   LinkLabels,
-  SectionEmpty,
 } from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
-import {
-  SkillsTable,
-  groupSkillSources,
-  skillRowCounts,
-} from "../../components/skills-table";
+import { searchWithFrom } from "../../components/skill-origin";
 import {
   StageAttentionAlert,
   getStageAttention,
 } from "../../components/stage-attention-alert";
 import { StageRunsTable } from "../../components/stage-runs-table";
+import {
+  EVERY_STAGE_COLLAPSE_AFTER,
+  StageSkillsTable,
+} from "../../components/stage-skills-table";
 import { RunPageBody, RunStatusLine } from "../components/run-page-layout";
 import { useApproveStage } from "../components/use-approve-stage";
+import { APPLICATION_PARAM } from "../components/use-selected-application";
 
 /**
  * Where the run is: a pending run waits for its
@@ -103,14 +112,12 @@ const PlanRunDetail: React.FC = () => {
     isLoading: isLoadingAgentRuns,
     fetchError: agentRunsError,
   } = useFetchPlanRunAgentRuns(runId, planRun?.status);
-  // The run's snapshot of skills: render what the server returns, never
-  // more. Undefined is unknown, not "no skills". Skills the
-  // plan excluded stay in the table, marked.
-  const skillRows =
-    planRun?.resolvedSkills != null
-      ? groupSkillSources(planRun.resolvedSkills, planRun.excludedSkills)
-      : undefined;
-  const { used: usedSkillCount, total: skillCount } = skillRowCounts(skillRows);
+  // The plan's archetype, so its own target profiles need no archetype
+  // suffix in Skills by stage. It comes from the plan as it is now:
+  // the run snapshot does not record it, so if the plan's path changed after
+  // the run, the suffix follows the new path. Until the plan loads, or if it
+  // is gone, every profile names its archetype.
+  const { migrationPlan } = useFetchMigrationPlanById(planRun?.planId);
 
   const { approve, isApproving } = useApproveStage(runId);
 
@@ -147,6 +154,21 @@ const PlanRunDetail: React.FC = () => {
   );
   const runLink = (pathname: string, search = "") =>
     breadcrumbTo(pathname, search, runChildCrumbs);
+  // In a run on several applications, the applications whose agent run
+  // waits or failed at the stage that needs attention: the alert names the
+  // one and "Review stage" opens its agent run.
+  const attentionStage = getStageAttention(planRun);
+  const attentionApplications =
+    planRun.applications.length > 1 &&
+    attentionStage != null &&
+    attentionStage.kind !== "pending" &&
+    attentionStage.stageRun != null
+      ? stageAttentionApplications(
+          stageAgentRunsOf(agentRuns, attentionStage.stageRun.stageId),
+          attentionStage.stageRun.status,
+          planRun.applications
+        )
+      : [];
   const facts: [string, React.ReactNode][] = [
     [
       t("agentic.entity.migrationPlan"),
@@ -223,20 +245,34 @@ const PlanRunDetail: React.FC = () => {
       </PageSection>
 
       <RunPageBody>
-        {getStageAttention(planRun) != null && (
+        {attentionStage != null && (
           <StageAttentionAlert
             surface="run"
             planRun={planRun}
-            reviewStageTo={(stageRun) =>
-              runLink(
+            applicationName={
+              attentionApplications.length === 1
+                ? attentionApplications[0].name
+                : undefined
+            }
+            reviewStageTo={(stageRun) => {
+              const search = new URLSearchParams();
+              // A failure is read in the saved log.
+              if (stageRun.status === "Failed") search.set("tab", "logs");
+              if (attentionApplications.length > 0) {
+                search.set(
+                  APPLICATION_PARAM,
+                  String(attentionApplications[0].id)
+                );
+              }
+              const query = search.toString();
+              return runLink(
                 generatePath(DevPaths.stageRunDetails, {
                   runId: planRun.id,
                   stageId: stageRun.stageId,
                 }),
-                // A failure is read in the saved log.
-                stageRun.status === "Failed" ? "?tab=logs" : ""
-              )
-            }
+                query !== "" ? `?${query}` : ""
+              );
+            }}
             onApprove={canManageRun ? approve : undefined}
             isDeciding={isApproving}
             onRunMigrationPlan={runMigrationPlan.open}
@@ -255,39 +291,45 @@ const PlanRunDetail: React.FC = () => {
               agentRuns,
               isLoading: isLoadingAgentRuns,
               isUnavailable: agentRunsError != null && agentRuns.length === 0,
+              applicationCount: planRun.applications.length,
             }}
           />
         </DetailSection>
 
+        {/* The run's snapshot, rendered as given: undefined is not
+            reported, never "no skills". */}
         <DetailSection
-          title={
-            !skillRows?.length
-              ? t("agentic.planRun.skillsTitleEmpty")
-              : usedSkillCount < skillCount
-                ? t("agentic.planRun.skillsTitleUsed", {
-                    used: usedSkillCount,
-                    count: skillCount,
-                  })
-                : t("agentic.planRun.skillsTitle", { count: skillCount })
-          }
+          title={t("agentic.stageSkills.title")}
           description={
-            !skillRows?.length
+            // Not reported: "Unavailable" and its reason say it all.
+            planRun.skills == null
               ? undefined
-              : usedSkillCount < skillCount
-                ? t("agentic.planRun.skillsDescriptionExcluded")
-                : t("agentic.planRun.skillsDescription")
+              : planRun.applications.length > 1
+                ? `${t("agentic.planRun.skillsByStageDescription")} ${t(
+                    "agentic.stageSkills.everyStagePerApplication"
+                  )}`
+                : t("agentic.planRun.skillsByStageDescription")
           }
         >
-          {skillRows == null ? (
-            <EmptyTextMessage message={t("agentic.common.unavailable")} />
-          ) : skillRows.length > 0 ? (
-            <SkillsTable
-              rows={skillRows}
-              linkTo={(pathname) => runLink(pathname, `?from=run-${runId}`)}
-            />
-          ) : (
-            <SectionEmpty>{t("agentic.planRun.skillsEmpty")}</SectionEmpty>
-          )}
+          <StageSkillsTable
+            skills={planRun.skills}
+            context="run"
+            linkTo={(pathname, search) =>
+              runLink(pathname, searchWithFrom(search, `run-${runId}`))
+            }
+            originOptions={{
+              archetypeId: migrationPlan?.migrationPath?.archetype.id,
+            }}
+            // Many applications: their Every stage groups start collapsed,
+            // the stages stay open.
+            defaultExpanded={
+              planRun.applications.length > EVERY_STAGE_COLLAPSE_AFTER
+                ? "stages"
+                : "all"
+            }
+            unavailableText={t("agentic.planRun.skillsUnavailable")}
+            aria-label={t("agentic.stageSkills.title")}
+          />
         </DetailSection>
       </RunPageBody>
 

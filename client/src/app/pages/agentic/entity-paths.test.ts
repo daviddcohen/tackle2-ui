@@ -2,6 +2,7 @@ import { SkillAssociation } from "@app/agentic";
 import { Archetype } from "@app/api/models";
 
 import {
+  applicationSkillsPath,
   archetypePath,
   skillAssociationPath,
   targetProfileOwnerPath,
@@ -25,6 +26,16 @@ describe("entity paths", () => {
     expect(archetypePath(4)).toBe("/archetypes?ar%3AactiveItem=4");
   });
 
+  it("opens an archetype's drawer on its Skills tab", () => {
+    expect(archetypePath(4, "skills")).toBe(
+      "/archetypes?ar%3AactiveItem=4&ar%3Atab=2"
+    );
+  });
+
+  it("opens an application on its Skills tab", () => {
+    expect(applicationSkillsPath(3)).toBe("/applications/3?tab=skills");
+  });
+
   it("anchors a target profile on its owner's target profiles page", () => {
     expect(targetProfilePath(1, 11)).toBe(
       "/archetypes/1/target-profiles#target-profile-11"
@@ -40,8 +51,8 @@ describe("entity paths", () => {
 
   it.each([
     [association("agent", "7"), "/agents/7"],
-    [association("application", 5), "/applications/5"],
-    [association("archetype", 2), "/archetypes?ar%3AactiveItem=2"],
+    [association("application", 5), "/applications/5?tab=skills"],
+    [association("archetype", 2), "/archetypes?ar%3AactiveItem=2&ar%3Atab=2"],
     [
       association("targetProfile", 21),
       "/archetypes/2/target-profiles#target-profile-21",

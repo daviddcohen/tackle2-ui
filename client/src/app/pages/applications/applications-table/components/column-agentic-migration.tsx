@@ -61,13 +61,16 @@ export const ColumnAgenticMigration: React.FC<ColumnAgenticMigrationProps> = ({
 
   const status = getMigrationDisplayStatus(migration);
   let supportingText: string | undefined;
-  if (IN_RUN.includes(status) && migration.plan) {
+  // In a run, the plan that run uses (it can differ from the plan the next
+  // run uses, `migration.plan`).
+  const runPlan = migration.planRunPlan ?? migration.plan;
+  if (IN_RUN.includes(status) && runPlan) {
     supportingText = migration.currentStage
       ? t("agentic.execution.planStage", {
-          plan: migration.plan.name,
+          plan: runPlan.name,
           stage: migration.currentStage,
         })
-      : migration.plan.name;
+      : runPlan.name;
   } else if (BEFORE_START.includes(status)) {
     supportingText = migration.preflightReason;
   }

@@ -24,7 +24,7 @@ const toStage = (stage: Crd.AgentWorkflowStage, index: number): PlanStage => ({
  * gates every tool call of the stage, not the stage as a whole. Pass `runs`
  * (every AgentWorkflowRun) to count `runCount` client-side. No backend source
  * (documented defaults): `description` "" (`spec.guide` is guidance for the
- * agents, not a description), `migrationPath`, `effectiveSkills`,
+ * agents, not a description), `migrationPath`,
  * `excludedSkills` (no exclusion field; proposed per-stage
  * `skills.exclude[].ref`), `applicationImpact` and `updateTime` undefined. `operatorManaged` marks the
  * operator's built-in workflows.
@@ -40,7 +40,6 @@ export const toMigrationPlan = (
     description: "",
     stages: workflow.spec.stages.map(toStage),
     migrationPath: undefined,
-    effectiveSkills: undefined,
     excludedSkills: undefined,
     applicationImpact: undefined,
     runCount: runs?.filter((run) => run.spec.workflowRef === id).length,

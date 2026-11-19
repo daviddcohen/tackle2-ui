@@ -312,6 +312,25 @@ describe("MigrationPlansPage", () => {
     ).toHaveLength(1);
   });
 
+  it("marks no plan for having no migration path", async () => {
+    // Plans without a path run when someone picks them: not an issue.
+    useEndpoints({
+      plans: [
+        { ...basePlan, migrationPath: undefined },
+        { ...basePlan, id: "9", name: "No stages yet", stages: [] },
+      ],
+    });
+    renderList();
+    const plan = await row("Java EE to Quarkus");
+    // The checks have run once the plan without stages shows its marker.
+    expect(
+      await within(await row("No stages yet")).findByLabelText(
+        "agentic.plan.configurationCheck.stages.empty"
+      )
+    ).toBeInTheDocument();
+    expect(within(plan).queryByLabelText(/configurationCheck/)).toBeNull();
+  });
+
   it("shows no marker until agents and models load, and none if they fail", async () => {
     let releaseModels = () => {};
     const modelsReleased = new Promise<void>((resolve) => {
@@ -333,10 +352,10 @@ describe("MigrationPlansPage", () => {
     expect(await within(plan).findByLabelText(marker)).toBeInTheDocument();
     unmount();
 
-    // A plan without a path has an issue whatever agents say, but no marker
+    // A plan without stages has an issue whatever agents say, but no marker
     // is shown while the agents query has failed.
     let agentRequests = 0;
-    useEndpoints({ plans: [{ ...basePlan, migrationPath: undefined }] });
+    useEndpoints({ plans: [{ ...basePlan, stages: [] }] });
     server.use(
       rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) => {
         agentRequests += 1;

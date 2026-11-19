@@ -50,7 +50,7 @@ test.describe("Plan impact and lifecycle", () => {
     await expect(configuration).toHaveCount(0);
     await expect(alert.getByRole("listitem")).toHaveText([
       "Prepare proposal: Migration Proposal Agent uses Claude 3.7 Sonnet (Pending)",
-      "Migrate: Code Migrator uses Claude 3.7 Sonnet (Pending)",
+      "Migrate: Java Code Migrator uses Claude 3.7 Sonnet (Pending)",
       "Validate: Build Validator uses GPT-4o (Pending)",
     ]);
     // Architects cannot open Models (the route needs the admin view scopes), so no link.
@@ -73,6 +73,52 @@ test.describe("Plan impact and lifecycle", () => {
     await page.goto(protoUrl("/migration-plans/1", { scenario: "configured" }));
     await expect(configuration).toContainText("Checks passed");
     await expect(page.locator(".pf-v6-c-alert.pf-m-warning")).toHaveCount(0);
+  });
+
+  // A plan without a migration path runs when someone picks it ("Use one
+  // migration plan for all applications"): not a configuration issue, so no
+  // marker on the plans list and no alert on its page.
+  test("a plan without a migration path has no configuration issue", async ({
+    page,
+  }) => {
+    // With unverified models some plans get a marker: once one shows, the
+    // checks have run, and none names the missing path.
+    await page.goto(
+      protoUrl("/migration-plans", { scenario: "partialConfiguration" })
+    );
+    await expect(
+      page
+        .getByRole("row", { name: /Java EE to Quarkus/ })
+        .getByLabel(/not verified/)
+    ).toBeVisible();
+    const row = page.getByRole("row", { name: /Java EE lift and shift/ });
+    await expect(row).toBeVisible();
+    await expect(row.getByLabel(/migration path/i)).toHaveCount(0);
+
+    await page.goto(protoUrl("/migration-plans/3", { scenario: "configured" }));
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Java EE lift and shift" })
+    ).toBeVisible();
+    const configuration = page
+      .getByRole("main")
+      .locator("dl")
+      .locator(".pf-v6-c-description-list__group")
+      .filter({
+        has: page.getByRole("term").getByText("Configuration", { exact: true }),
+      });
+    await expect(configuration).toContainText("Checks passed");
+    await expect(page.locator(".pf-v6-c-alert.pf-m-warning")).toHaveCount(0);
+    // Its archetype and target profiles read "Not assigned".
+    for (const term of ["Archetype", "Target profiles"])
+      await expect(
+        page
+          .getByRole("main")
+          .locator("dl")
+          .locator(".pf-v6-c-description-list__group")
+          .filter({
+            has: page.getByRole("term").getByText(term, { exact: true }),
+          })
+      ).toContainText("Not assigned");
   });
 
   test("all fixture plans are protected from deletion while in use", async ({

@@ -64,8 +64,18 @@ export const DetailSections: React.FC<{ children: React.ReactNode }> = ({
 export interface DetailSectionProps {
   /** Anchors the section, for a link to it from elsewhere on the page. */
   id?: string;
-  /** The heading, with its count when the section has rows ("Test runs (1)"). */
-  title: string;
+  /**
+   * The heading, with its count when the section has rows ("Test runs (1)").
+   * A node lets a heading carry a link (an owner's name).
+   */
+  title: React.ReactNode;
+  /** "h2" (default, size lg) for a page section; "h3" (size md) for a sub-section. */
+  headingLevel?: "h2" | "h3";
+  /**
+   * The heading's id. With it the section is a `section` named by its
+   * heading, and the heading can take focus from a script (a link to it).
+   */
+  headingId?: string;
   /** At most one subtle sentence: what the rows are or how to get more. */
   description?: React.ReactNode;
   /** Actions on the heading's line, at its end (a link button). */
@@ -75,24 +85,34 @@ export interface DetailSectionProps {
 }
 
 /**
- * One section: `Title h2 lg` with its optional actions, its optional
- * sentence, then its content.
+ * One section: `Title h2 lg` (or `h3 md`) with its optional actions, its
+ * optional sentence, then its content.
  */
 export const DetailSection: React.FC<DetailSectionProps> = ({
   id,
   title,
+  headingLevel = "h2",
+  headingId,
   description,
   actions,
   children,
 }) => {
   const heading = (
-    <Title headingLevel="h2" size="lg">
+    <Title
+      headingLevel={headingLevel}
+      size={headingLevel === "h2" ? "lg" : "md"}
+      id={headingId}
+      // Out of the tab order; lets a script move focus to the heading.
+      tabIndex={headingId != null ? -1 : undefined}
+    >
       {title}
     </Title>
   );
   return (
     <Flex
       id={id}
+      component={headingId != null ? "section" : "div"}
+      aria-labelledby={headingId}
       direction={{ default: "column" }}
       gap={{ default: "gapMd" }}
       flexWrap={{ default: "nowrap" }}
@@ -169,7 +189,8 @@ export const DetailFacts: React.FC<DetailFactsProps> = ({
 export interface LinkLabelItem {
   id: React.Key;
   name: string;
-  to: LocationDescriptor;
+  /** Without it the label is plain text: the object has no page to open. */
+  to?: LocationDescriptor;
 }
 
 /**
@@ -179,20 +200,27 @@ export interface LinkLabelItem {
  */
 export const LinkLabels: React.FC<{ items: LinkLabelItem[] }> = ({ items }) => (
   <LabelGroup numLabels={5}>
-    {items.map((item) => (
-      <Label
-        key={item.id}
-        variant="outline"
-        isCompact
-        isClickable
-        render={({ className, content }) => (
-          <Link className={className} to={item.to}>
-            {content}
-          </Link>
-        )}
-      >
-        {item.name}
-      </Label>
-    ))}
+    {items.map((item) => {
+      const { to } = item;
+      return to != null ? (
+        <Label
+          key={item.id}
+          variant="outline"
+          isCompact
+          isClickable
+          render={({ className, content }) => (
+            <Link className={className} to={to}>
+              {content}
+            </Link>
+          )}
+        >
+          {item.name}
+        </Label>
+      ) : (
+        <Label key={item.id} variant="outline" isCompact>
+          {item.name}
+        </Label>
+      );
+    })}
   </LabelGroup>
 );

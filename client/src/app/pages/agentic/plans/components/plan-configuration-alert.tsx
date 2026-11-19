@@ -27,7 +27,7 @@ export interface PlanConfigurationAlertProps {
   models: ModelProjection[];
   /** Users who can open Models get "View models". */
   canViewModels: boolean;
-  /** Passed with the plan write scope: "Edit migration plan" for a missing path or stages. */
+  /** Passed with the plan write scope: "Edit migration plan" for missing stages. */
   onEdit?: () => void;
 }
 
@@ -61,13 +61,6 @@ export const PlanConfigurationAlert: React.FC<PlanConfigurationAlertProps> = ({
   }
 
   const issues: Issue[] = [];
-  if (issueIds.includes("path")) {
-    issues.push({
-      id: "path",
-      title: t("agentic.plan.noPathTitle"),
-      body: t("agentic.plan.noPathBody"),
-    });
-  }
   if (issueIds.includes("stages")) {
     issues.push({
       id: "stages",
@@ -114,9 +107,7 @@ export const PlanConfigurationAlert: React.FC<PlanConfigurationAlertProps> = ({
     });
   }
 
-  const hasEdit =
-    onEdit != null &&
-    (issueIds.includes("path") || issueIds.includes("stages"));
+  const hasEdit = onEdit != null && issueIds.includes("stages");
   const hasViewModels = canViewModels && issueIds.includes("models");
   const actionLinks =
     hasEdit || hasViewModels ? (

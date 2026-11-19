@@ -38,7 +38,7 @@ interface Stage extends Named {
 }
 interface Plan extends Named {
   stages: Stage[];
-  effectiveSkills: unknown[];
+  runCount?: number;
   migrationPath: {
     archetype: { id: number };
     targetProfiles: { id: number }[];
@@ -48,6 +48,7 @@ interface PlanRun extends Named {
   status: string;
   targetBranch: string;
   stageRuns: { stageId: string; status: string }[];
+  applications: { id: number; name: string }[];
 }
 
 const list = <T>(page: Page, path: string) => agenticGet<T[]>(page, path);
@@ -224,12 +225,11 @@ test("409: approving a stage that is not awaiting approval", async ({
   expect(after.stageRuns[0].status).toBe("Succeeded");
 });
 
-test("201: a created plan gets server-computed effectiveSkills", async ({
+test("201: a created plan gets server-computed fields and resolves its skills", async ({
   page,
 }) => {
   await bootMockApi(page);
   const [source] = await list<Plan>(page, "/plans");
-  expect(source.effectiveSkills.length).toBeGreaterThan(0);
   const created = await agenticRequest<Named>(page, "POST", "/plans", {
     name: "copy",
     description: "",
@@ -246,11 +246,34 @@ test("201: a created plan gets server-computed effectiveSkills", async ({
       })),
       isDefault: false,
     },
-    effectiveSkills: [],
+    // Server-derived: a client value is ignored.
+    runCount: 7,
   });
   expect(created.status).toBe(201);
   const plan = await agenticGet<Plan>(page, `/plans/${created.body.id}`);
-  expect(plan.effectiveSkills.length).toBeGreaterThan(0);
+  expect(plan.runCount).toBe(0);
+  const resolved = await agenticRequest<{
+    stages: { skills: unknown[] }[];
+    everyStage: { skills: unknown[] }[];
+  }>(page, "POST", "/plans/skills/resolve", {
+    stages: plan.stages.map((stage) => ({
+      agent: { id: stage.agent.id },
+      name: stage.name,
+    })),
+    migrationPath: {
+      archetype: { id: plan.migrationPath.archetype.id },
+      targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
+        id,
+      })),
+    },
+  });
+  expect(resolved.status).toBe(200);
+  expect(resolved.body.stages).toHaveLength(plan.stages.length);
+  expect(
+    [...resolved.body.stages, ...resolved.body.everyStage].flatMap(
+      (group) => group.skills
+    ).length
+  ).toBeGreaterThan(0);
 });
 
 test("503: the apiError scenario fails every agentic endpoint alike", async ({
@@ -285,10 +308,18 @@ test("run observability: agent runs, resource, transcript and logs by offset", a
     phase: string;
     containers: string[];
   }>(page, "/plan-runs/1/agent-runs");
-  expect(agentRuns.map((agentRun) => agentRun.stageId)).toEqual(
-    run.stageRuns
-      .filter((stage) => stage.status !== "Pending")
-      .map((stage) => stage.stageId)
+  // One agent run per started stage per application, stage by stage.
+  const started = run.stageRuns
+    .filter((stage) => stage.status !== "Pending")
+    .map((stage) => stage.stageId);
+  expect([...new Set(agentRuns.map((agentRun) => agentRun.stageId))]).toEqual(
+    started
+  );
+  started.forEach((stageId) =>
+    expect(
+      agentRuns.filter((agentRun) => agentRun.stageId === stageId),
+      stageId
+    ).toHaveLength(Math.max(run.applications.length, 1))
   );
   const [first] = agentRuns;
   expect(first.containers).toEqual(["skill-loader", "agent"]);

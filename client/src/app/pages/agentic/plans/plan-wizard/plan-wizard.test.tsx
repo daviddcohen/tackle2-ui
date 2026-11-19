@@ -59,7 +59,6 @@ const plan = {
       order: 2,
     },
   ],
-  effectiveSkills: [{ skill: { id: "3", name: "Skill" } }],
 } as unknown as MigrationPlan;
 
 const otherPlan = {
@@ -96,7 +95,7 @@ describe("PlanWizard", () => {
         )
       ),
       rest.post(AGENTIC_ENDPOINTS.planSkillsResolve, (_req, res, ctx) =>
-        res(ctx.json({ skills: [] }))
+        res(ctx.json({ stages: [], everyStage: [{ skills: [] }], skills: [] }))
       ),
       rest.put(`${AGENTIC_ENDPOINTS.plans}/:id`, async (req, res, ctx) => {
         updates.push(await req.json());
@@ -219,6 +218,8 @@ describe("PlanWizard", () => {
     expect(
       screen.getByText("agentic.plan.agentModelNotVerified")
     ).toBeInTheDocument();
+    // What is attached to the agent; the Skills step shows what stages get.
+    expect(screen.getByText("agentic.plan.agentHasSkills")).toBeInTheDocument();
   });
 
   it("warns when the chosen agent's model is not among the models", async () => {
@@ -238,6 +239,48 @@ describe("PlanWizard", () => {
     await user.click(firstToggle);
     expect(
       await screen.findByText("agentic.plan.agentModelNotVerified")
+    ).toBeInTheDocument();
+    // Migration Proposal Agent has no skills and no collections.
+    expect(
+      screen.getByText("agentic.plan.agentHasNoSkills")
+    ).toBeInTheDocument();
+  });
+
+  it("says the verified model and the agent's skills on one line, without the agent's name", async () => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
+        res(
+          ctx.json([
+            {
+              id: "m1",
+              name: "Claude",
+              provider: { id: "p", name: "Anthropic" },
+              verificationStatus: "verified",
+            },
+          ])
+        )
+      )
+    );
+    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "agentic.plan.stages" })
+    );
+    const toggles = await screen.findAllByRole("button", {
+      name: "agentic.plan.stageDetails",
+      expanded: false,
+    });
+    // Stage 2: Code Migrator, which has a skill and a collection.
+    await user.click(toggles[1]);
+    expect(
+      await screen.findByText("agentic.plan.agentModelAndSkills")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("agentic.plan.agentHasSkills")).toBeNull();
+    await user.click(toggles[0]);
+    // Migration Proposal Agent has no skills.
+    expect(
+      await screen.findByText("agentic.plan.agentModelNoSkills")
     ).toBeInTheDocument();
   });
 

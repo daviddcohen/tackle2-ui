@@ -11,15 +11,15 @@ import {
   withBase,
 } from "../support";
 
-test("skill associations list direct associations, plans and collections", async ({
+test("skill usage lists attachments, collections and plans", async ({
   page,
 }) => {
-  await page.goto(protoUrl("/skills/3?tab=associations"));
+  await page.goto(protoUrl("/skills/3?tab=usage"));
   await expect(mainHeading(page)).toHaveText("Jakarta EE namespace migration");
   for (const section of [
-    /^Associated with \(\d+\)$/,
-    /^Used in migration plans \(\d+\)$/,
+    /^Attached to \(\d+\)$/,
     /^In skill collections \(\d+\)$/,
+    /^Used in migration plans \(\d+\)$/,
   ])
     await expect(
       main(page).getByRole("heading", { level: 2, name: section })
@@ -32,13 +32,16 @@ test("skill associations list direct associations, plans and collections", async
   ).toBeVisible();
 });
 
-test("an application associated with a skill links to the application", async ({
+test("an application a skill is attached to links to its Skills tab", async ({
   page,
 }) => {
-  await page.goto(protoUrl("/skills/5?tab=associations"));
+  await page.goto(protoUrl("/skills/5?tab=usage"));
   await expect(
     main(page).getByRole("link", { name: "Customer Management" }).first()
-  ).toHaveAttribute("href", new RegExp(`^${withBase("/applications/1")}\\b`));
+  ).toHaveAttribute(
+    "href",
+    new RegExp(`^${withBase("/applications/1")}\\?tab=skills\\b`)
+  );
 });
 
 test("plan detail links its stage agents and skills and shows where each skill comes from", async ({
@@ -47,20 +50,22 @@ test("plan detail links its stage agents and skills and shows where each skill c
   await page.goto(protoUrl("/migration-plans/1"));
   await expect(mainHeading(page)).toHaveText("Java EE to Quarkus");
   await expect(
-    main(page).getByRole("heading", { name: /^Skills \(\d+\)$/ })
+    main(page).getByRole("heading", { level: 2, name: "Skills by stage" })
   ).toBeVisible();
-  const skills = page.getByRole("grid", { name: "Skills", exact: true });
+  const skills = page.getByRole("grid", { name: "Skills by stage" });
   await expect(
-    skills.getByRole("columnheader", { name: "Source" })
+    skills.getByRole("columnheader", { name: "From" })
   ).toBeVisible();
-  // One row per skill; every source is a plain-text line in that row.
+  // A skill shows in each group that gets it, with that group's origins, one
+  // line per origin, each name a link.
   const jakarta = skills.getByRole("row", {
     name: /Jakarta EE namespace migration/,
   });
-  await expect(jakarta).toHaveCount(1);
-  await expect(jakarta).toContainText("Archetype: Java EE Application");
-  await expect(jakarta).toContainText("Target profile: Quarkus 3.x");
-  await expect(jakarta.getByRole("link")).toHaveCount(1);
+  const everyStage = jakarta.filter({ hasText: "Archetype:" });
+  await expect(everyStage).toHaveCount(1);
+  await expect(everyStage).toContainText("Archetype: Java EE Application");
+  await expect(everyStage).toContainText("Target profile: Quarkus 3.x");
+  await expect(everyStage.getByRole("link")).toHaveCount(3);
   for (const name of [
     "Migration Proposal Agent",
     "API compatibility checklist",
@@ -77,31 +82,52 @@ test("agent detail lists the plans that use it", async ({ page }) => {
   await expect(
     main(page).getByRole("link", { name: "Java EE to Quarkus" })
   ).toBeVisible();
+  // Stages are numbered, as on the skill page.
+  await expect(
+    main(page).getByRole("row", { name: /Java EE to Quarkus/ })
+  ).toContainText("Stage 1: Prepare proposal");
   await expect(
     main(page).getByRole("link", { name: "API compatibility checklist" })
   ).toBeVisible();
 });
 
-test("application skills tab lists every skill the agents use with its sources", async ({
+test("application skills tab lists the skills attached to it and its context, by owner", async ({
   page,
 }) => {
   await page.goto(protoUrl("/applications/1?tab=skills"));
-  const skills = page.getByRole("grid", { name: "Skills", exact: true });
+  const group = (name: RegExp) => main(page).getByRole("region", { name });
   await expect(
-    skills.getByRole("row", { name: /Corporate coding standards/ })
-  ).toContainText("Application: Customer Management");
-  const ejb = skills.getByRole("row", {
-    name: /EJB to CDI conversion patterns/,
-  });
-  await expect(ejb).toContainText(/Agent: .+ via /);
-  await expect(ejb).toContainText("Archetype: Java EE Application");
-  await expect(ejb.getByRole("link")).toHaveCount(1);
+    group(/^Application skills/).getByRole("link", {
+      name: "Corporate coding standards",
+    })
+  ).toBeVisible();
+  const archetype = group(/^Archetype skills: Java EE Application/);
+  await expect(
+    archetype.getByRole("link", { name: "EJB to CDI conversion patterns" })
+  ).toBeVisible();
+  // The owner's name links where its skills are attached.
+  await expect(
+    archetype.getByRole("link", { name: "Java EE Application" })
+  ).toHaveAttribute("href", /\/archetypes\?.*activeItem=1/);
+  await expect(
+    group(/^Target profile skills: Quarkus 3\.x/).getByRole("link", {
+      name: "Quarkus 3.x",
+    })
+  ).toHaveAttribute(
+    "href",
+    /\/archetypes\/1\/target-profiles#target-profile-11/
+  );
+  // Agents' own skills are on the Migration tab, per stage, not here.
+  await expect(main(page).getByRole("grid")).toHaveCount(0);
 });
 
 test("plan run detail lists its skills below the stages", async ({ page }) => {
   await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
   const stages = page.getByRole("heading", { name: "Stages" });
-  const resolved = page.getByRole("heading", { name: /^Skills \(\d+\)$/ });
+  const resolved = page.getByRole("heading", {
+    level: 2,
+    name: "Skills by stage",
+  });
   await expect(stages).toBeVisible();
   await expect(resolved).toBeVisible();
   const [stagesBox, resolvedBox] = await Promise.all([
@@ -111,7 +137,8 @@ test("plan run detail lists its skills below the stages", async ({ page }) => {
   expect(resolvedBox!.y).toBeGreaterThan(stagesBox!.y);
   await expect(
     page
-      .getByRole("grid", { name: "Skills", exact: true })
+      .getByRole("grid", { name: "Skills by stage" })
       .getByRole("link", { name: "Jakarta EE namespace migration" })
+      .first()
   ).toBeVisible();
 });

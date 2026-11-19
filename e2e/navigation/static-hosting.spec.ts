@@ -53,14 +53,15 @@ test(
   smoke,
   async ({ page, pageErrors }) => {
     // A static host answers with 404.html and status 404; dev servers with 200.
-    const response = await page.goto(protoUrl("/skills/2?tab=associations"));
+    const response = await page.goto(protoUrl("/skills/2?tab=usage"));
     expect(response?.status()).toBeLessThan(500);
     await expect(mainHeading(page)).toHaveText(
       "EJB to CDI conversion patterns"
     );
-    await expect(
-      page.getByRole("tab", { name: /^Associations/ })
-    ).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: /^Usage/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     expect(pageErrors).toEqual([]);
   }
 );

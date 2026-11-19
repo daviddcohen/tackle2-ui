@@ -112,7 +112,35 @@ export const StageCard: React.FC<StageCardProps> = ({
   );
   const agentSkillsSummary = useAgentSkillsSummary();
   const skillsSummary = (agent: Agent) =>
-    agentSkillsSummary(agent) ?? t("terms.none");
+    agentSkillsSummary(agent) ?? t("agentic.plan.agentNoSkills");
+  // What is attached to the agent; what each stage gets is the Skills step's.
+  const agentSkillsHelper = (agent: Agent) => {
+    const summary = agentSkillsSummary(agent);
+    return (
+      <HelperTextItem>
+        {summary != null
+          ? t("agentic.plan.agentHasSkills", {
+              agent: agent.name,
+              skills: summary,
+            })
+          : t("agentic.plan.agentHasNoSkills", { agent: agent.name })}
+      </HelperTextItem>
+    );
+  };
+  // One line: the model and the skills, without the agent's name again.
+  const agentModelAndSkills = (agent: Agent) => {
+    const model =
+      selectedModel != null
+        ? t("agentic.plan.modelWithProvider", {
+            model: selectedModel.name,
+            provider: selectedModel.provider.name,
+          })
+        : agent.model.name;
+    const summary = agentSkillsSummary(agent);
+    return summary != null
+      ? t("agentic.plan.agentModelAndSkills", { model, skills: summary })
+      : t("agentic.plan.agentModelNoSkills", { model });
+  };
   const modelName = (agent: Agent) =>
     models?.find((model) => model.id === agent.model.id)?.name ??
     agent.model.name;
@@ -124,28 +152,20 @@ export const StageCard: React.FC<StageCardProps> = ({
       {t("agentic.plan.agentsLoadFailed")}
     </HelperTextItem>
   ) : selectedAgent == null ? (
-    <HelperTextItem>{t("agentic.plan.agentHelper")}</HelperTextItem>
+    <HelperTextItem>{t("agentic.plan.agentSelectHelper")}</HelperTextItem>
   ) : models != null && selectedModel?.verificationStatus !== "verified" ? (
-    // A model the models query does not list is not verified either (getStagesWithUnverifiedModel).
-    <HelperTextItem variant="warning">
-      {t("agentic.plan.agentModelNotVerified", {
-        agent: selectedAgent.name,
-        model: modelName(selectedAgent),
-      })}
-    </HelperTextItem>
+    <>
+      {/* A model the models query does not list is not verified either (getStagesWithUnverifiedModel). */}
+      <HelperTextItem variant="warning">
+        {t("agentic.plan.agentModelNotVerified", {
+          agent: selectedAgent.name,
+          model: modelName(selectedAgent),
+        })}
+      </HelperTextItem>
+      {agentSkillsHelper(selectedAgent)}
+    </>
   ) : (
-    <HelperTextItem>
-      {selectedModel != null
-        ? t("agentic.plan.agentUsesModel", {
-            agent: selectedAgent.name,
-            model: selectedModel.name,
-            provider: selectedModel.provider.name,
-          })
-        : t("agentic.plan.agentUsesModelNoProvider", {
-            agent: selectedAgent.name,
-            model: selectedAgent.model.name,
-          })}
-    </HelperTextItem>
+    <HelperTextItem>{agentModelAndSkills(selectedAgent)}</HelperTextItem>
   );
 
   const moveUpLabel = t("agentic.plan.moveStageUp", { stage: stageLabel });

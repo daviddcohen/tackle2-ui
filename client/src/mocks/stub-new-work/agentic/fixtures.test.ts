@@ -100,24 +100,28 @@ describe("agentic prototype fixtures", () => {
     });
   });
 
-  it("connects every Plan to one valid migration path and valid Agents", () => {
+  it("gives every archetype exactly one target profile", () => {
+    archetypes.forEach((archetype) =>
+      expect(archetype.profiles ?? []).toHaveLength(1)
+    );
+  });
+
+  it("connects every Plan to at most one valid migration path and valid Agents", () => {
     const agentIds = ids(mockAgents);
     const assignedTargetProfileIds = new Set<number>();
 
+    // The alternatives a user picks with "Use one migration plan for all
+    // applications" have no migration path.
+    expect(
+      mockMigrationPlans
+        .filter((plan) => plan.migrationPath == null)
+        .map((plan) => plan.name)
+    ).toEqual([
+      "Java EE lift and shift",
+      "Spring Boot 3 modernization",
+      ".NET lift and shift",
+    ]);
     mockMigrationPlans.forEach((plan) => {
-      expect(plan.migrationPath).toBeDefined();
-      const archetype = mockArchetypes[plan.migrationPath!.archetype.id];
-      expect(archetype?.name).toBe(plan.migrationPath!.archetype.name);
-      expect(plan.migrationPath!.targetProfiles.length).toBeGreaterThan(0);
-      plan.migrationPath!.targetProfiles.forEach((profileRef) => {
-        const profile = archetype.profiles?.find(
-          (candidate) => candidate.id === profileRef.id
-        );
-        expect(profile?.name).toBe(profileRef.name);
-        expect(assignedTargetProfileIds.has(profileRef.id)).toBe(false);
-        assignedTargetProfileIds.add(profileRef.id);
-      });
-      expect(plan.migrationPath!.isDefault).toBe(true);
       expect(plan.stages.map((stage) => stage.order)).toEqual(
         plan.stages.map((_, index) => index + 1)
       );
@@ -129,11 +133,82 @@ describe("agentic prototype fixtures", () => {
       });
     });
 
+    mockMigrationPlans
+      .filter((plan) => plan.migrationPath != null)
+      .forEach((plan) => {
+        const archetype = mockArchetypes[plan.migrationPath!.archetype.id];
+        expect(archetype?.name).toBe(plan.migrationPath!.archetype.name);
+        expect(plan.migrationPath!.targetProfiles.length).toBeGreaterThan(0);
+        plan.migrationPath!.targetProfiles.forEach((profileRef) => {
+          const profile = archetype.profiles?.find(
+            (candidate) => candidate.id === profileRef.id
+          );
+          expect(profile?.name).toBe(profileRef.name);
+          expect(assignedTargetProfileIds.has(profileRef.id)).toBe(false);
+          assignedTargetProfileIds.add(profileRef.id);
+        });
+        expect(plan.migrationPath!.isDefault).toBe(true);
+      });
+
+    // Every target profile has its default plan.
     expect(
       targetProfiles
         .filter((profile) => !assignedTargetProfileIds.has(profile.id))
         .map((profile) => profile.id)
-    ).toEqual([32]);
+    ).toEqual([]);
+  });
+
+  it("sets a load policy on every Skill: rules for process and house rules", () => {
+    mockSkills.forEach((skill) =>
+      expect(["rule", "skill"]).toContain(skill.loadPolicy)
+    );
+    expect(
+      mockSkills
+        .filter((skill) => skill.loadPolicy === "rule")
+        .map((skill) => skill.name)
+    ).toEqual(
+      expect.arrayContaining([
+        "Corporate coding standards",
+        "Platform security baseline",
+        "Build validation standards",
+        "Incremental transformation workflow",
+      ])
+    );
+  });
+
+  it("keeps Java skills off the general agents and gives every collection an agent", () => {
+    const general = mockAgents.filter((agent) =>
+      ["Migration Proposal Agent", "Code Migrator"].includes(agent.name)
+    );
+    expect(general).toHaveLength(2);
+    const javaSkillIds = ["1", "2", "3", "9"];
+    general.forEach((agent) => {
+      expect(agent.skillCollections ?? []).toEqual([]);
+      agent.skills.forEach((skill) =>
+        expect(javaSkillIds).not.toContain(skill.id)
+      );
+    });
+    const javaMigrator = mockAgents.find(
+      (agent) => agent.name === "Java Code Migrator"
+    )!;
+    expect(javaMigrator.skillCollections).toEqual([
+      { id: "1", name: "Java modernization foundation" },
+    ]);
+    // The Migrate stage of the Java plans uses it.
+    ["1", "2", "5"].forEach((planId) =>
+      expect(
+        mockMigrationPlans
+          .find((plan) => plan.id === planId)
+          ?.stages.map((stage) => stage.agent.id)
+      ).toContain(javaMigrator.id)
+    );
+    mockSkillCollections.forEach((collection) =>
+      expect(
+        mockAgents.some((agent) =>
+          (agent.skillCollections ?? []).some((c) => c.id === collection.id)
+        )
+      ).toBe(true)
+    );
   });
 
   it("resolves every Skill association to a real resource", () => {
@@ -253,9 +328,9 @@ describe("agentic prototype fixtures", () => {
     });
   });
 
-  it("shows every Archetype in the 12-application portfolio", () => {
+  it("shows every Archetype in the 13-application portfolio", () => {
     const portfolio = selectPortfolio(mockApplicationArray);
-    expect(portfolio).toHaveLength(12);
+    expect(portfolio).toHaveLength(13);
     expect(
       new Set(portfolio.map((application) => application.archetypes![0].id))
     ).toEqual(ids(archetypes));

@@ -2,7 +2,13 @@ import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
-import { PlanRun, StageAgentRun, StageRun } from "@app/agentic";
+import {
+  PlanRun,
+  SkillsByStage,
+  StageAgentRun,
+  StageRun,
+  StageSkill,
+} from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { render, screen, waitFor, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
@@ -38,7 +44,7 @@ const stage = (
 
 const run = (overrides: Partial<PlanRun>): PlanRun => ({
   id: "1",
-  name: "Run #1 — Java EE to Quarkus",
+  name: "Run #1: Java EE to Quarkus",
   planId: "1",
   planName: "Java EE to Quarkus",
   applications: [
@@ -54,7 +60,7 @@ const run = (overrides: Partial<PlanRun>): PlanRun => ({
     }),
     stage(2, "Migrate", "Pending"),
   ],
-  resolvedSkills: [],
+  skills: { stages: [], everyStage: [] },
   ...overrides,
 });
 
@@ -96,7 +102,8 @@ beforeEach(() => {
 
 describe("PlanRunDetail", () => {
   it("shows each stage's context window in the Stages table", async () => {
-    useRun(run({}));
+    // One application: the stage's one agent run (several: "Up to").
+    useRun(run({ applications: [{ id: 1, name: "Customer Management" }] }));
     useAgentRuns([
       {
         name: "run-1-prepare-proposal",
@@ -248,118 +255,210 @@ describe("PlanRunDetail", () => {
     );
   });
 
-  it("shows run skills that are unknown as unavailable, not as none", async () => {
-    useRun(run({ resolvedSkills: undefined }));
-    renderPage();
-    expect(
-      await screen.findByRole("heading", { level: 2, name: "Skills" })
-    ).toBeInTheDocument();
-    expect(screen.getByText("Unavailable")).toBeInTheDocument();
-  });
+  const javaCoder = { id: "9", name: "Java Code Migrator" };
+  const javaEE = { id: 1, name: "Java EE Application" };
+  const quarkus = { id: 11, name: "Quarkus 3.x" };
+  const claims = { id: 3, name: "Claims Processing" };
+  const customers = { id: 1, name: "Customer Management" };
 
-  it("says when a run gave its agents no skills", async () => {
-    useRun(run({ resolvedSkills: [] }));
-    renderPage();
-    expect(
-      await screen.findByText(
-        "No skills were given to the agents when this run started."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { level: 2, name: "Skills" })
-    ).toBeInTheDocument();
-  });
-
-  const skill = (
+  const stageSkill = (
     id: string,
     name: string,
-    scope: "agent" | "archetype" = "agent",
-    scopeName = "Code Migrator"
-  ) => ({ skill: { id, name }, scope, scopeName });
-
-  const skillsTable = () => screen.findByRole("grid", { name: "Skills" });
-
-  it("counts the run's skills when the plan excluded none", async () => {
-    useRun(
-      run({
-        resolvedSkills: [
-          skill("1", "Quarkus patterns"),
-          skill("2", "Java EE migration"),
-        ],
-      })
-    );
-    renderPage();
-    expect(
-      await screen.findByRole("heading", { level: 2, name: "Skills (2)" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Skills given to the agents when this run started.")
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Excluded")).not.toBeInTheDocument();
+    from: StageSkill["from"],
+    excluded = false
+  ): StageSkill => ({
+    skill: { id, name },
+    loadPolicy: "skill",
+    from,
+    excluded,
   });
 
-  it("keeps one excluded skill in the table, marked, and counts what was used", async () => {
-    useRun(
-      run({
-        resolvedSkills: [
-          skill("1", "Quarkus patterns"),
-          skill("2", "Java EE migration"),
+  /** Run #1's snapshot: two stages, then each application's Every stage. */
+  const snapshot = (
+    applications: { id: number; name: string }[]
+  ): SkillsByStage => ({
+    stages: [
+      {
+        order: 1,
+        name: "Prepare proposal",
+        agent: { id: "1", name: "Prepare proposal Agent" },
+        stageId: "1",
+        skills: [],
+      },
+      {
+        order: 2,
+        name: "Migrate",
+        agent: javaCoder,
+        stageId: "2",
+        skills: [
+          stageSkill(
+            "20",
+            "Spring Boot to Quarkus migration",
+            [{ kind: "agent", agent: javaCoder }],
+            true
+          ),
         ],
-        excludedSkills: [
-          skill("8", "Containerization standards", "archetype", "Java EE"),
-        ],
-      })
+      },
+    ],
+    everyStage: applications.map((application) => ({
+      application,
+      skills: [
+        stageSkill("3", "Quarkus best practices", [
+          { kind: "targetProfile", targetProfile: quarkus, archetype: javaEE },
+        ]),
+        ...(application.id === claims.id
+          ? [
+              stageSkill("8", "EJB to CDI conversion patterns", [
+                { kind: "application", application: claims },
+              ]),
+            ]
+          : []),
+      ],
+    })),
+  });
+
+  const usePlan = () =>
+    server.use(
+      rest.get(`${AGENTIC_ENDPOINTS.plans}/:id`, (_req, res, ctx) =>
+        res(
+          ctx.json({
+            id: "1",
+            name: "Java EE to Quarkus",
+            stages: [],
+            migrationPath: {
+              archetype: javaEE,
+              targetProfiles: [quarkus],
+              isDefault: true,
+            },
+          })
+        )
+      )
     );
+
+  const skillsTable = () =>
+    screen.findByRole("grid", { name: "Skills by stage" });
+
+  it("says Unavailable, with why, when the run reports no skills", async () => {
+    useRun(run({ skills: undefined }));
     renderPage();
     expect(
-      await screen.findByRole("heading", {
-        level: 2,
-        name: "Skills (2 of 3 used)",
-      })
+      await screen.findByRole("heading", { level: 2, name: "Skills by stage" })
     ).toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("This server does not report the skills of a run yet.")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("grid", { name: "Skills by stage" })).toBeNull();
+    // No snapshot: no sentence about how it was worked out.
+    expect(screen.queryByText(/^Worked out when the run started/)).toBeNull();
+  });
+
+  it("shows each stage, then each application's Every stage group", async () => {
+    usePlan();
+    useRun(run({ skills: snapshot([customers, claims]) }));
+    renderPage();
+    const table = await skillsTable();
+    expect(
+      within(table)
+        .getAllByRole("heading", { level: 3 })
+        .map((heading) => heading.textContent)
+    ).toEqual([
+      "Stage 1: Prepare proposal",
+      "Stage 2: Migrate",
+      "Every stage: Customer Management",
+      "Every stage: Claims Processing",
+    ]);
+    // The section sentence, then the attribution once: two applications.
     expect(
       screen.getByText(
-        "Skills for this run and where each one comes from. Excluded skills are not given to the agents."
+        "Worked out when the run started. Each stage's agent reads its own skills when the stage starts, so a change to that agent before then can change what the stage gets. An application's archetype, target profile and own skills go to that application only."
       )
     ).toBeInTheDocument();
-    const rows = within(await skillsTable())
-      .getAllByRole("row")
-      .slice(1);
-    // Name order: the excluded row does not move to the end.
-    expect(rows.map((row) => row.textContent)).toEqual([
-      "Containerization standardsExcludedArchetype: Java EE",
-      "Java EE migrationAgent: Code Migrator",
-      "Quarkus patternsAgent: Code Migrator",
-    ]);
     expect(
-      within(rows[0]).getByRole("link", { name: "Containerization standards" })
-    ).toHaveAttribute("href", expect.stringContaining("/skills/8"));
-    expect(within(rows[1]).queryByText("Excluded")).not.toBeInTheDocument();
+      within(table).getByRole("row", {
+        name: /Spring Boot to Quarkus migration/,
+      })
+    ).toHaveTextContent("Excluded");
+    // Under "Every stage: Claims Processing" its own skill reads "This
+    // application", as on the Migration tab.
+    expect(
+      within(table).getByRole("row", { name: /EJB to CDI conversion/ })
+    ).toHaveTextContent("This application");
+    // The application's group title links to its Skills tab.
+    expect(
+      within(
+        within(table).getByRole("heading", {
+          name: "Every stage: Claims Processing",
+        })
+      ).getByRole("link")
+    ).toHaveAttribute("href", "/applications/3?tab=skills&from=run-1");
   });
 
-  it("counts several excluded skills, and none used when all were excluded", async () => {
-    useRun(
-      run({
-        resolvedSkills: [],
-        excludedSkills: [
-          skill("1", "Quarkus patterns"),
-          skill("2", "Java EE migration"),
-        ],
-      })
-    );
+  it("links with the run as origin, keeping each link's own query and anchor", async () => {
+    usePlan();
+    useRun(run({ skills: snapshot([claims]) }));
     renderPage();
+    const table = await skillsTable();
     expect(
-      await screen.findByRole("heading", {
-        level: 2,
-        name: "Skills (0 of 2 used)",
-      })
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Excluded")).toHaveLength(2);
+      within(table).getByRole("link", { name: "Quarkus best practices" })
+    ).toHaveAttribute("href", "/skills/3?from=run-1");
     expect(
-      screen.queryByText(
-        "No skills were given to the agents when this run started."
+      within(table).getByRole("link", { name: "Quarkus 3.x" })
+    ).toHaveAttribute(
+      "href",
+      "/archetypes/1/target-profiles?from=run-1#target-profile-11"
+    );
+    expect(
+      within(table).getAllByRole("link", { name: "Claims Processing" })[0]
+    ).toHaveAttribute("href", "/applications/3?tab=skills&from=run-1");
+    // The plan's own archetype: its profile needs no archetype suffix.
+    await waitFor(() =>
+      expect(
+        within(table).getByRole("row", { name: /Quarkus best practices/ })
+      ).not.toHaveTextContent("(Java EE Application)")
+    );
+  });
+
+  it("says the section sentence without the attribution for one application", async () => {
+    useRun(run({ applications: [claims], skills: snapshot([claims]) }));
+    renderPage();
+    await skillsTable();
+    expect(
+      screen.getByText(
+        "Worked out when the run started. Each stage's agent reads its own skills when the stage starts, so a change to that agent before then can change what the stage gets."
       )
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
+  });
+
+  it("keeps every group open with three applications", async () => {
+    const applications = [11, 12, 13].map((id) => ({
+      id,
+      name: `Application ${id}`,
+    }));
+    useRun(run({ applications, skills: snapshot(applications) }));
+    renderPage();
+    const table = await skillsTable();
+    for (const toggle of within(table).getAllByRole("button", {
+      name: / Details$/,
+    }))
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("starts the Every stage groups collapsed above three applications", async () => {
+    const applications = [11, 12, 13, 14].map((id) => ({
+      id,
+      name: `Application ${id}`,
+    }));
+    useRun(run({ applications, skills: snapshot(applications) }));
+    renderPage();
+    const table = await skillsTable();
+    const expanded = (name: string) =>
+      within(table)
+        .getByRole("button", { name: `${name} Details` })
+        .getAttribute("aria-expanded");
+    expect(expanded("Stage 2: Migrate")).toBe("true");
+    expect(expanded("Every stage: Application 11")).toBe("false");
+    expect(within(table).getAllByText("1 skill")).toHaveLength(4);
   });
 
   it("offers no decision without the scope to approve", async () => {
@@ -413,5 +512,40 @@ describe("PlanRunDetail", () => {
     expect(
       screen.queryByRole("button", { name: "Run migration plan" })
     ).toBeNull();
+  });
+
+  it("names the application that failed, and reviews its agent run", async () => {
+    useRun(
+      run({
+        status: "Failed",
+        stageRuns: [
+          stage(1, "Prepare proposal", "Failed", { output: "Error: boom" }),
+          stage(2, "Migrate", "Pending"),
+        ],
+      })
+    );
+    useAgentRuns(
+      [
+        { id: 1, name: "Customer Management", phase: "Succeeded" as const },
+        { id: 3, name: "Claims Processing", phase: "Failed" as const },
+      ].map(({ id, name, phase }) => ({
+        name: `run-1-prepare-proposal-app-${id}`,
+        runId: "1",
+        stageId: "1",
+        application: { id, name },
+        phase,
+        containers: ["agent"],
+      }))
+    );
+    renderPage();
+    expect(
+      await screen.findByRole("heading", {
+        name: "Danger alert: Prepare proposal failed for Claims Processing",
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review stage" })).toHaveAttribute(
+      "href",
+      "/plan-runs/1/stages/1?tab=logs&application=3"
+    );
   });
 });

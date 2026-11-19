@@ -127,6 +127,15 @@ describe("AgentForm", () => {
     expect(within(control!).getByLabelText("Second Skill")).toBeVisible();
   });
 
+  it("says the agent uses its skills in every stage it runs", async () => {
+    render(<AgentForm agent={agent} onClose={jest.fn()} />);
+
+    await screen.findByLabelText("agentic.agent.skillsSelect");
+    expect(
+      screen.getByPlaceholderText("agentic.agent.selectSkills")
+    ).toHaveAccessibleDescription("agentic.agent.skillsHelp");
+  });
+
   it("opens the parameters group when the agent has parameters or one is added", async () => {
     const user = userEvent.setup();
     const { unmount } = render(

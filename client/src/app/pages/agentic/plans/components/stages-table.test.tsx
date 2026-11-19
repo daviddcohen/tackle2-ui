@@ -85,7 +85,7 @@ describe("StagesTable", () => {
   it("expands a stage to its instructions, one paragraph each", async () => {
     const user = userEvent.setup();
     renderTable({});
-    const [firstToggle] = screen.getAllByRole("button", { name: "Details" });
+    const firstToggle = screen.getByRole("button", { name: "Migrate Details" });
     await user.click(firstToggle);
     expect(screen.getByText("First.")).toBeVisible();
     expect(screen.getByText("Second.")).toBeVisible();
@@ -103,18 +103,57 @@ describe("StagesTable", () => {
         />
         <StagesTable
           aria-label="Review"
-          rows={rows}
+          rows={[
+            { ...rows[0], name: "Migrate renamed" },
+            { ...rows[1], key: "c", name: "Validate renamed" },
+          ]}
           agents={agents}
           models={models}
           isLoading={false}
+          rowIndexOffset={200}
         />
       </MemoryRouter>
     );
     const ids = screen
-      .getAllByRole("button", { name: "Details" })
+      .getAllByRole("button", { name: /Details$/ })
       .map((toggle) => toggle.id);
     expect(ids).toHaveLength(4);
     expect(new Set(ids).size).toBe(4);
+    // Each toggle is named by its own table's stage, the second row too.
+    for (const name of [
+      "Migrate",
+      "Validate",
+      "Migrate renamed",
+      "Validate renamed",
+    ]) {
+      expect(
+        screen.getByRole("button", { name: `${name} Details` })
+      ).toBeVisible();
+    }
+    expect(document.getElementById("simple-node200")).toHaveTextContent(
+      "Migrate renamed"
+    );
+    expect(document.getElementById("simple-node201")).toHaveTextContent(
+      "Validate renamed"
+    );
+  });
+
+  it("names each toggle after its stage", () => {
+    renderTable({});
+    expect(
+      screen
+        .getAllByRole("button", { name: /Details$/ })
+        .map((toggle) => toggle.getAttribute("aria-labelledby"))
+    ).toEqual([
+      expect.stringMatching(/^simple-node0 /),
+      expect.stringMatching(/^simple-node1 /),
+    ]);
+    expect(
+      screen.getByRole("button", { name: "Migrate Details" })
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Validate Details" })
+    ).toBeVisible();
   });
 
   it("marks a model the models query does not list", () => {
