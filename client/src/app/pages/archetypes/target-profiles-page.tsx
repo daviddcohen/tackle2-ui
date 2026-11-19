@@ -39,6 +39,11 @@ import { PageHeader } from "@app/components/PageHeader";
 import { ConditionalTableBody } from "@app/components/TableControls";
 import { LabelsFromItems } from "@app/components/labels/labels-from-items/labels-from-items";
 import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import {
+  ManageSkillsModal,
+  ManageSkillsTarget,
+  useCanManageSkills,
+} from "@app/pages/agentic/components/manage-skills-modal";
 import { EntityDetailUnavailable } from "@app/pages/agentic/entity-detail";
 import { archetypePath } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
@@ -74,6 +79,7 @@ const TargetProfilesPage: React.FC = () => {
   // writes the plan's migration path.
   const canWriteProfiles = useHasSomeScopes(archetypesWriteScopes);
   const canAssignPlans = useHasSomeScopes(plansWriteScopes);
+  const canManageSkills = useCanManageSkills();
 
   const [openCreateModal, setOpenCreateModal] = useState<boolean>(false);
   const [profileToEdit, setProfileToEdit] = useState<TargetProfile | null>(
@@ -83,6 +89,9 @@ const TargetProfilesPage: React.FC = () => {
     null
   );
   const [profileForPlan, setProfileForPlan] = useState<TargetProfile | null>(
+    null
+  );
+  const [skillsTarget, setSkillsTarget] = useState<ManageSkillsTarget | null>(
     null
   );
 
@@ -203,7 +212,7 @@ const TargetProfilesPage: React.FC = () => {
 
   const profiles = archetype?.profiles ?? [];
   const hasRowActions =
-    canWriteProfiles || (isAgenticEnabled && canAssignPlans);
+    canWriteProfiles || (isAgenticEnabled && canAssignPlans) || canManageSkills;
   const createButton = canWriteProfiles ? (
     <Button
       type="button"
@@ -323,6 +332,26 @@ const TargetProfilesPage: React.FC = () => {
                         },
                       ]
                     : []),
+                  ...(canManageSkills && archetype
+                    ? [
+                        {
+                          title: t("agentic.skill.manageSkills.title"),
+                          onClick: () =>
+                            openModalAfterMenuClose(() =>
+                              setSkillsTarget({
+                                scope: "targetProfile",
+                                id: profile.id,
+                                name: profile.name,
+                                archetype: {
+                                  id: archetype.id,
+                                  name: archetype.name,
+                                },
+                              })
+                            ),
+                          // When skills cannot be read, the modal says so.
+                        },
+                      ]
+                    : []),
                 ];
                 // An assigned plan blocks Delete; without the plans query
                 // that cannot be checked, and without the skills query the
@@ -434,6 +463,13 @@ const TargetProfilesPage: React.FC = () => {
               isPlansError={isPlansError}
               linkTo={(pathname) => to(pathname)}
               onClose={() => setProfileForPlan(null)}
+            />
+          )}
+
+          {canManageSkills && (
+            <ManageSkillsModal
+              target={skillsTarget}
+              onClose={() => setSkillsTarget(null)}
             />
           )}
 

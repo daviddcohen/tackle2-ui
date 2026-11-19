@@ -234,6 +234,12 @@ export function truncate(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1) + "…";
 }
 
+/** Whether two id lists hold the same ids, in any order; a repeated id counts once. */
+export const isSameSet = (a: string[], b: string[]): boolean => {
+  const setB = new Set(b);
+  return new Set(a).size === setB.size && a.every((id) => setB.has(id));
+};
+
 // ------------------------------------------- application <-> run label
 
 /** The label value runs carry: hub application id as a string. */

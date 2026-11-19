@@ -899,6 +899,175 @@ export const deletePlan = (id: EntityId) => {
 };
 
 // ---------------------------------------------------------------------------
+// Associations edited from the other side
+//
+// Each PUT replaces one entity's set and edits the rows the existing
+// endpoints read: Hub-scope rows on `StoredSkill.associations`, members on
+// `SkillCollection.skills`, collections on `Agent.skillCollections`. So the
+// next GET of skills, collections, agents, plans or application migrations
+// shows the change. Validation runs completely before any mutation.
+// ---------------------------------------------------------------------------
+
+/**
+ * Which Skills a caller can see. The handlers pass the same rule their GET
+ * /skills applies (the `initial` scenario hides fixture Skills), so a write
+ * can neither reference nor change a Skill that the read does not return.
+ */
+type SkillVisibility = (skillId: EntityId) => boolean;
+
+/** Makes `skillIds` exactly the visible Skills associated with one Hub entity. */
+const replaceHubScopeSkills = (
+  scope: HubSkillAssociationScope,
+  resourceId: number,
+  input: unknown,
+  isVisible: SkillVisibility
+) => {
+  const visibleSkills = db.skills.filter((skill) => isVisible(skill.id));
+  const skillIds = entityIds(
+    requiredArray(asBody(input), "skills"),
+    "skills",
+    visibleSkills,
+    "Skill"
+  );
+  const resourceName = findHubResourceName(scope, resourceId) ?? "";
+  visibleSkills.forEach((skill) => {
+    const has = skill.associations.some(
+      (a) => a.scope === scope && a.resource.id === resourceId
+    );
+    const wants = skillIds.includes(skill.id);
+    if (wants && !has) {
+      skill.associations.push({
+        scope,
+        resource: { id: resourceId, name: resourceName },
+      });
+    } else if (!wants && has) {
+      skill.associations = skill.associations.filter(
+        (a) => !(a.scope === scope && a.resource.id === resourceId)
+      );
+    }
+  });
+};
+
+/** PUT /archetypes/:archetypeId/skills */
+export const updateArchetypeSkills = (
+  archetypeId: number,
+  input: unknown,
+  isVisible: SkillVisibility
+) => {
+  if (!findArchetype(archetypeId)) {
+    throw notFound(`Archetype "${archetypeId}" not found.`);
+  }
+  replaceHubScopeSkills("archetype", archetypeId, input, isVisible);
+};
+
+/** PUT /archetypes/:archetypeId/target-profiles/:profileId/skills */
+export const updateTargetProfileSkills = (
+  archetypeId: number,
+  targetProfileId: number,
+  input: unknown,
+  isVisible: SkillVisibility
+) => {
+  const archetype = findArchetype(archetypeId);
+  if (!archetype) throw notFound(`Archetype "${archetypeId}" not found.`);
+  if (!archetype.profiles?.some((p) => p.id === targetProfileId)) {
+    throw notFound(
+      `Target profile "${targetProfileId}" not found in archetype "${archetype.name}".`
+    );
+  }
+  replaceHubScopeSkills("targetProfile", targetProfileId, input, isVisible);
+};
+
+/** PUT /applications/:applicationId/skills */
+export const updateApplicationSkills = (
+  applicationId: number,
+  input: unknown,
+  isVisible: SkillVisibility
+) => {
+  if (!findApplication(applicationId)) {
+    throw notFound(`Application "${applicationId}" not found.`);
+  }
+  replaceHubScopeSkills("application", applicationId, input, isVisible);
+};
+
+/**
+ * PUT /skills/:id/collections. Adds the Skill to every listed collection and
+ * removes it from every other one. The whole request is refused, with no
+ * partial change: 409 when a collection that would change is operator-managed
+ * (the operator reverts it), 400 when a collection would lose its last member
+ * (the SkillCollection CRD needs at least one `spec.skills` entry).
+ */
+export const updateSkillCollectionMemberships = (
+  skillId: EntityId,
+  input: unknown
+) => {
+  const skill = findOr404(db.skills, skillId, "Skill");
+  const collectionIds = entityIds(
+    requiredArray(asBody(input), "collections"),
+    "collections",
+    db.skillCollections,
+    "Skill collection"
+  );
+  const changes = db.skillCollections.flatMap((collection) => {
+    const has = collection.skills.some((s) => s.id === skillId);
+    const wants = collectionIds.includes(collection.id);
+    if (has === wants) return [];
+    if (collection.operatorManaged) {
+      throw conflict(
+        `${collection.name} is managed by Konveyor and cannot be changed here.`
+      );
+    }
+    if (has && collection.skills.length === 1) {
+      throw badRequest(
+        `${skill.name} is the only skill in ${collection.name}. A skill collection needs at least one skill.`
+      );
+    }
+    return [{ collection, wants }];
+  });
+  changes.forEach(({ collection, wants }) => {
+    collection.skills = wants
+      ? [...collection.skills, resolveSkillRef({ id: skillId, name: "" })]
+      : collection.skills.filter((s) => s.id !== skillId);
+  });
+};
+
+/**
+ * PUT /skill-collections/:id/agents. Adds the collection to every listed
+ * Agent and removes it from every other one. 409 when an Agent that would
+ * change is operator-managed (the operator reverts it).
+ */
+export const updateSkillCollectionAgents = (
+  collectionId: EntityId,
+  input: unknown
+) => {
+  findOr404(db.skillCollections, collectionId, "Skill collection");
+  const agentIds = entityIds(
+    requiredArray(asBody(input), "agents"),
+    "agents",
+    db.agents,
+    "Agent"
+  );
+  const changes = db.agents.flatMap((agent) => {
+    const has = (agent.skillCollections ?? []).some(
+      (c) => c.id === collectionId
+    );
+    const wants = agentIds.includes(agent.id);
+    if (has === wants) return [];
+    if (agent.operatorManaged) {
+      throw conflict(
+        `${agent.name} is managed by Konveyor and cannot be changed here.`
+      );
+    }
+    return [{ agent, wants }];
+  });
+  changes.forEach(({ agent, wants }) => {
+    const current = agent.skillCollections ?? [];
+    agent.skillCollections = wants
+      ? [...current, resolveCollectionRef({ id: collectionId, name: "" })]
+      : current.filter((c) => c.id !== collectionId);
+  });
+};
+
+// ---------------------------------------------------------------------------
 // Execution policy
 // ---------------------------------------------------------------------------
 

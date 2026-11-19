@@ -9,7 +9,11 @@ import { Archetype } from "@app/api/models";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { ARCHETYPE_QUERY_KEY } from "@app/queries/archetypes";
-import { archetypesWriteScopes, plansWriteScopes } from "@app/scopes";
+import {
+  archetypesWriteScopes,
+  plansWriteScopes,
+  skillsWriteScopes,
+} from "@app/scopes";
 import {
   act,
   createMockNotifications,
@@ -248,10 +252,70 @@ describe("TargetProfilesPage", () => {
     expect(items.map((item) => item.textContent)).toEqual([
       "Edit",
       "Change migration plan",
+      "Manage skills",
       "Delete",
     ]);
     expect(screen.getByRole("separator")).toBeInTheDocument();
-    expect(items[2]).toHaveAttribute("aria-disabled", "true");
+    expect(items[3]).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("opens Manage skills for the profile, named with its archetype", async () => {
+    serve();
+    renderPage();
+
+    const dialog = await openRowAction("Quarkus 3.x", "Manage skills");
+    expect(dialog).toHaveAccessibleName(
+      "Manage skills for Quarkus 3.x (Java EE Application)"
+    );
+    expect(
+      await within(dialog).findByRole("button", {
+        name: "Remove Quarkus best practices",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps Manage skills enabled when skills cannot be loaded: the modal says why", async () => {
+    serve({ skillsResolver: (_req, res, ctx) => res(ctx.status(403)) });
+    renderPage();
+
+    const dialog = await openRowAction("Quarkus 3.x", "Manage skills");
+    expect(
+      await within(dialog).findByText(
+        "Skills could not be loaded. Try again later."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the row actions for a user who can only manage skills", async () => {
+    mockGrantedScopes.denied = [archetypesWriteScopes, plansWriteScopes];
+    serve();
+    renderPage();
+
+    await userEvent.click(
+      within(await row("Quarkus 3.x")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Manage skills"]);
+  });
+
+  it("offers no Manage skills without the skill write scope", async () => {
+    mockGrantedScopes.denied = [skillsWriteScopes];
+    serve();
+    renderPage();
+
+    await userEvent.click(
+      within(await row("Quarkus 3.x")).getByRole("button", {
+        name: "Kebab toggle",
+      })
+    );
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Edit",
+      "Change migration plan",
+      "Delete",
+    ]);
   });
 
   it("offers Assign migration plan and Delete for a profile without a plan", async () => {
@@ -328,7 +392,11 @@ describe("TargetProfilesPage", () => {
       })
     );
     const items = await screen.findAllByRole("menuitem");
-    expect(items.map((item) => item.textContent)).toEqual(["Edit", "Delete"]);
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Edit",
+      "Manage skills",
+      "Delete",
+    ]);
     expect(
       screen.getByRole("button", { name: "Create target profile" })
     ).toBeInTheDocument();
@@ -347,6 +415,7 @@ describe("TargetProfilesPage", () => {
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "Change migration plan",
+      "Manage skills",
     ]);
     expect(screen.queryByRole("separator")).toBeNull();
     expect(

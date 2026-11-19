@@ -206,6 +206,183 @@ describe("Hub-backed agentic REST reference", () => {
     );
   });
 
+  describe("associations edited from the other side", () => {
+    const opsCollection: Crd.SkillCollection = {
+      metadata: { name: "ops" },
+      spec: { skills: [{ name: "probe", skillCardRef: "health-probe" }] },
+    };
+
+    const serve = (extra: Record<string, unknown>) =>
+      mockedAxios.get.mockImplementation((url: string) => {
+        const all = { ...responses, ...extra };
+        return url in all
+          ? Promise.resolve({ data: all[url] })
+          : Promise.reject(new Error(`unexpected GET ${url}`));
+      });
+
+    it("moves a Skill between collections with one PUT per changed collection", async () => {
+      serve({ [`${BASE}/skillcollections`]: [collection, opsCollection] });
+      await hubApi.updateSkillCollectionMemberships({
+        skillId: "ejb-to-cdi",
+        collections: [{ id: "ops" }],
+      });
+      expect(mockedAxios.put.mock.calls).toEqual([
+        [
+          `${BASE}/skillcollections/java`,
+          {
+            metadata: { name: "java" },
+            spec: {
+              skills: [
+                { name: "bundle", source: "https://git.example.com/skills" },
+              ],
+            },
+          },
+        ],
+        [
+          `${BASE}/skillcollections/ops`,
+          {
+            metadata: { name: "ops" },
+            spec: {
+              skills: [
+                { name: "probe", skillCardRef: "health-probe" },
+                { name: "ejb-to-cdi", skillCardRef: "ejb-to-cdi" },
+              ],
+            },
+          },
+        ],
+      ]);
+    });
+
+    const cardNamed = (name: string, displayName: string): Crd.SkillCard => ({
+      metadata: { name },
+      spec: { ...card.spec, displayName },
+    });
+    const cards = [
+      card,
+      cardNamed("java-bundle", "Java bundle"),
+      cardNamed("health-probe", "Health probe"),
+    ];
+
+    it("refuses membership changes the CRDs cannot hold, before any write", async () => {
+      serve({
+        [`${BASE}/skills`]: cards,
+        [`${BASE}/skillcollections`]: [
+          collection,
+          {
+            ...opsCollection,
+            metadata: {
+              name: "ops",
+              labels: {
+                "app.kubernetes.io/managed-by": "agentic-controller-defaults",
+              },
+            },
+          },
+        ],
+      });
+      // Provided by the collection's source entry.
+      await expect(
+        hubApi.updateSkillCollectionMemberships({
+          skillId: "java-bundle",
+          collections: [],
+        })
+      ).rejects.toThrow("image or source entry");
+      await expect(
+        hubApi.updateSkillCollectionMemberships({
+          skillId: "ejb-to-cdi",
+          collections: [{ id: "java" }, { id: "ops" }],
+        })
+      ).rejects.toThrow(
+        "ops is managed by Konveyor and cannot be changed here."
+      );
+      await expect(
+        hubApi.updateSkillCollectionMemberships({
+          skillId: "ejb-to-cdi",
+          collections: [{ id: "missing" }],
+        })
+      ).rejects.toThrow("not found: missing");
+      // The only entry of "ops"; "java" would change first but nothing is written.
+      serve({
+        [`${BASE}/skills`]: cards,
+        [`${BASE}/skillcollections`]: [collection, opsCollection],
+      });
+      await expect(
+        hubApi.updateSkillCollectionMemberships({
+          skillId: "health-probe",
+          collections: [{ id: "java" }],
+        })
+      ).rejects.toThrow(
+        "Health probe is the only skill in ops. A skill collection needs at least one skill."
+      );
+      expect(mockedAxios.put).not.toHaveBeenCalled();
+    });
+
+    it("refuses memberships of an unknown SkillCard, before any write", async () => {
+      serve({ [`${BASE}/skillcollections`]: [collection, opsCollection] });
+      await expect(
+        hubApi.updateSkillCollectionMemberships({
+          skillId: "missing-card",
+          collections: [{ id: "ops" }],
+        })
+      ).rejects.toThrow('Skill "missing-card" not found.');
+      expect(mockedAxios.put).not.toHaveBeenCalled();
+    });
+
+    it("sets the Agents of a collection with one PUT per changed Agent", async () => {
+      serve({ [`${BASE}/skillcollections`]: [collection] });
+      await hubApi.updateSkillCollectionAgents({
+        collectionId: "java",
+        agents: [{ id: "verify" }],
+      });
+      expect(mockedAxios.put.mock.calls).toEqual([
+        [
+          `${BASE}/agents/verify`,
+          {
+            metadata: { name: "verify" },
+            spec: { ...otherAgent.spec, skillCollections: [{ ref: "java" }] },
+          },
+        ],
+      ]);
+    });
+
+    it("refuses the Agents of an unknown collection, before any write", async () => {
+      serve({ [`${BASE}/skillcollections`]: [collection] });
+      await expect(
+        hubApi.updateSkillCollectionAgents({
+          collectionId: "missing",
+          agents: [{ id: "verify" }],
+        })
+      ).rejects.toThrow('Skill collection "missing" not found.');
+      expect(mockedAxios.put).not.toHaveBeenCalled();
+    });
+
+    it("refuses to change an operator-managed Agent", async () => {
+      serve({
+        [`${BASE}/skillcollections`]: [collection],
+        [`${BASE}/agents`]: [
+          {
+            ...agent,
+            metadata: {
+              name: "migrate",
+              labels: {
+                "app.kubernetes.io/managed-by": "agentic-controller-defaults",
+              },
+            },
+          },
+          otherAgent,
+        ],
+      });
+      await expect(
+        hubApi.updateSkillCollectionAgents({
+          collectionId: "java",
+          agents: [{ id: "migrate" }, { id: "verify" }],
+        })
+      ).rejects.toThrow(
+        "migrate is managed by Konveyor and cannot be changed here."
+      );
+      expect(mockedAxios.put).not.toHaveBeenCalled();
+    });
+  });
+
   it("lists test runs without workflow stage runs", async () => {
     expect(await hubApi.getAgentTestRuns("migrate")).toEqual([
       expect.objectContaining({

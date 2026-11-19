@@ -35,6 +35,11 @@ import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
 import { DrawerTabContent, ReviewFields } from "@app/components/detail-drawer";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
+import {
+  ManageSkillsModal,
+  ManageSkillsTarget,
+  useCanManageSkills,
+} from "@app/pages/agentic/components/manage-skills-modal";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
   useBulkDeleteApplicationMutation,
@@ -58,7 +63,11 @@ import {
   tasksWriteScopes,
 } from "@app/scopes";
 import { filterAndAddSeparator } from "@app/utils/grouping";
-import { formatPath, getAxiosErrorMessage } from "@app/utils/utils";
+import {
+  formatPath,
+  getAxiosErrorMessage,
+  openModalAfterMenuClose,
+} from "@app/utils/utils";
 
 import { TabDetailsContent } from "../application-detail-drawer/tab-details-content";
 import { TabPlatformContent } from "../application-detail-drawer/tab-platform-content";
@@ -136,6 +145,8 @@ const ApplicationDetail: React.FC = () => {
   const [isDiscardAssessmentOpen, setIsDiscardAssessmentOpen] =
     React.useState(false);
   const [isDiscardReviewOpen, setIsDiscardReviewOpen] = React.useState(false);
+  const [skillsTarget, setSkillsTarget] =
+    React.useState<ManageSkillsTarget | null>(null);
 
   // Stop polling once the application cannot be read: a refetch of a query
   // that never had data puts it back into the loading state, which would make
@@ -175,6 +186,7 @@ const ApplicationDetail: React.FC = () => {
   const analysesReadAccess = useHasSomeScopes(analysesReadScopes);
   const tasksReadAccess = useHasSomeScopes(tasksReadScopes);
   const tasksWriteAccess = useHasSomeScopes(tasksWriteScopes);
+  const canManageSkills = useCanManageSkills();
 
   const isTaskCancellable = (app: DecoratedApplication) => {
     const task = app.tasks.currentAnalyzer;
@@ -268,6 +280,16 @@ const ApplicationDetail: React.FC = () => {
     );
   }
 
+  const openManageSkills = () => {
+    if (application) {
+      setSkillsTarget({
+        scope: "application",
+        id: application.id,
+        name: application.name,
+      });
+    }
+  };
+
   const actionItems = application
     ? filterAndAddSeparator(
         (index) => (
@@ -343,6 +365,14 @@ const ApplicationDetail: React.FC = () => {
                 onClick={() => setIsCredentialsModalOpen(true)}
               >
                 {t("actions.manageCredentials")}
+              </DropdownItem>
+            ),
+            canManageSkills && (
+              <DropdownItem
+                key="manage-skills"
+                onClick={() => openModalAfterMenuClose(openManageSkills)}
+              >
+                {t("agentic.skill.manageSkills.title")}
               </DropdownItem>
             ),
           ],
@@ -524,6 +554,7 @@ const ApplicationDetail: React.FC = () => {
                   linkCrumbs={linkCrumbs}
                   applicationId={applicationId}
                   archetypes={application.archetypes ?? []}
+                  onManageSkills={openManageSkills}
                 />
               )}
             </TabContent>
@@ -539,6 +570,13 @@ const ApplicationDetail: React.FC = () => {
             applications={isCredentialsModalOpen ? [application] : null}
             onClose={() => setIsCredentialsModalOpen(false)}
           />
+
+          {canManageSkills && (
+            <ManageSkillsModal
+              target={skillsTarget}
+              onClose={() => setSkillsTarget(null)}
+            />
+          )}
 
           <RetrieveConfigWizard
             key={isRetrieveConfigOpen ? "retrieve-open" : "retrieve-closed"}

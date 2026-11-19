@@ -1,5 +1,6 @@
 jest.unmock("react-router-dom");
 
+import userEvent from "@testing-library/user-event";
 import { createMemoryHistory } from "history";
 import { Router } from "react-router-dom";
 
@@ -15,7 +16,14 @@ const mockState: {
   skills: Skill[];
   skillsLoading?: boolean;
   skillsError?: unknown;
-} = { skills: [] };
+  skillsSuccess?: boolean;
+  canManageSkills: boolean;
+} = { skills: [], canManageSkills: false };
+
+jest.mock("@app/pages/agentic/components/manage-skills-modal", () => ({
+  ...jest.requireActual("@app/pages/agentic/components/manage-skills-modal"),
+  useCanManageSkills: () => mockState.canManageSkills,
+}));
 
 jest.mock("@app/queries/agentic", () => ({
   useFetchApplicationMigrations: () => ({
@@ -26,6 +34,7 @@ jest.mock("@app/queries/agentic", () => ({
   useFetchSkills: () => ({
     skills: mockState.skills,
     isLoading: mockState.skillsLoading ?? false,
+    isSuccess: mockState.skillsSuccess ?? false,
     fetchError: mockState.skillsError ?? null,
   }),
 }));
@@ -40,12 +49,24 @@ const view = (
   ...overrides,
 });
 
+const onManageSkills = jest.fn();
+
 const renderTab = () =>
   render(
     <Router history={createMemoryHistory()}>
-      <SkillsTab applicationId={1} linkCrumbs={[]} archetypes={[]} />
+      <SkillsTab
+        applicationId={1}
+        linkCrumbs={[]}
+        archetypes={[]}
+        onManageSkills={onManageSkills}
+      />
     </Router>
   );
+
+const manageButtons = () =>
+  screen.queryAllByRole("button", {
+    name: "agentic.skill.manageSkills.title",
+  });
 
 describe("SkillsTab", () => {
   beforeEach(() => {
@@ -55,6 +76,9 @@ describe("SkillsTab", () => {
     mockState.skills = [];
     mockState.skillsLoading = undefined;
     mockState.skillsError = undefined;
+    mockState.canManageSkills = false;
+    mockState.skillsSuccess = undefined;
+    onManageSkills.mockClear();
   });
 
   it("lists the effective skills, one row per skill, under a counted heading", () => {
@@ -141,6 +165,10 @@ describe("SkillsTab", () => {
     mockState.migrationsError = new Error("503");
     renderTab();
     expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();
+    // Without Manage skills there is no section heading over the error.
+    expect(
+      screen.queryByText("agentic.applicationDetail.tabSkills")
+    ).toBeNull();
   });
 
   it("without a plan, shows the error state when the skills cannot be read", () => {
@@ -156,5 +184,107 @@ describe("SkillsTab", () => {
     expect(
       screen.getByText("agentic.applicationDetail.skillsEmpty")
     ).toBeInTheDocument();
+  });
+
+  describe("Manage skills", () => {
+    const effectiveSkills = [
+      {
+        skill: { id: "2", name: "EJB to CDI conversion patterns" },
+        scope: "application",
+        scopeName: "Customer Management",
+      },
+    ] as ApplicationMigrationView["effectiveSkills"];
+
+    beforeEach(() => {
+      mockState.canManageSkills = true;
+    });
+
+    it("sits on the heading's line next to the skills", async () => {
+      mockState.migration = view({ effectiveSkills });
+      renderTab();
+      expect(manageButtons()).toHaveLength(1);
+      await userEvent.click(manageButtons()[0]);
+      expect(onManageSkills).toHaveBeenCalledTimes(1);
+    });
+
+    it("is offered when the server gives no skills (Unavailable)", () => {
+      mockState.migration = view({ effectiveSkills: undefined });
+      renderTab();
+      expect(manageButtons()).toHaveLength(1);
+    });
+
+    it("replaces Go to skills in the empty state", async () => {
+      mockState.migration = view({ effectiveSkills: [] });
+      renderTab();
+      expect(manageButtons()).toHaveLength(1);
+      expect(
+        screen.queryByRole("link", {
+          name: "agentic.applicationDetail.goToSkills",
+        })
+      ).toBeNull();
+      await userEvent.click(manageButtons()[0]);
+      expect(onManageSkills).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives way to Go to skills when no skill exists at all", () => {
+      mockState.migration = view({ effectiveSkills: [] });
+      mockState.skillsSuccess = true;
+      mockState.skills = [];
+      renderTab();
+      expect(manageButtons()).toHaveLength(0);
+      expect(
+        screen.getByRole("link", {
+          name: "agentic.applicationDetail.goToSkills",
+        })
+      ).toHaveAttribute("href", "/skills");
+    });
+
+    it("is not offered while loading", () => {
+      mockState.migrationsLoading = true;
+      renderTab();
+      expect(manageButtons()).toHaveLength(0);
+    });
+
+    it("stays offered next to the error state: the modal says why", () => {
+      mockState.migration = view({ plan: undefined });
+      mockState.skillsError = new Error("503");
+      renderTab();
+      expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();
+      expect(manageButtons()).toHaveLength(1);
+      expect(
+        screen.getByText("agentic.applicationDetail.tabSkills")
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the same button when the empty state turns into the table", () => {
+      mockState.migration = view({ effectiveSkills: [] });
+      const { rerender } = renderTab();
+      const [button] = manageButtons();
+      button.focus();
+
+      mockState.migration = view({ effectiveSkills });
+      rerender(
+        <Router history={createMemoryHistory()}>
+          <SkillsTab
+            applicationId={1}
+            linkCrumbs={[]}
+            archetypes={[]}
+            onManageSkills={onManageSkills}
+          />
+        </Router>
+      );
+      expect(
+        screen.getByText("EJB to CDI conversion patterns")
+      ).toBeInTheDocument();
+      expect(manageButtons()).toEqual([button]);
+      expect(button).toHaveFocus();
+    });
+
+    it("is not offered without the skill write scope", () => {
+      mockState.canManageSkills = false;
+      mockState.migration = view({ effectiveSkills });
+      renderTab();
+      expect(manageButtons()).toHaveLength(0);
+    });
   });
 });

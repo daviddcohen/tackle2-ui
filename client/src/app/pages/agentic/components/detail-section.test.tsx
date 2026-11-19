@@ -75,6 +75,34 @@ describe("detail page stacks", () => {
     );
     expect(container.querySelector("#commits")).not.toBeNull();
   });
+  it("puts the actions on the heading's line, only when given", () => {
+    const { rerender } = render(
+      <DetailSection
+        title="Skills (2)"
+        actions={<button type="button">Manage skills</button>}
+      >
+        <p>Rows</p>
+      </DetailSection>
+    );
+    const heading = screen.getByRole("heading", {
+      level: 2,
+      name: "Skills (2)",
+    });
+    const action = screen.getByRole("button", { name: "Manage skills" });
+    expect(heading.closest(".pf-v6-l-split")).toContainElement(action);
+
+    rerender(
+      <DetailSection title="Skills (2)">
+        <p>Rows</p>
+      </DetailSection>
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(
+      screen
+        .getByRole("heading", { level: 2, name: "Skills (2)" })
+        .closest(".pf-v6-l-split")
+    ).toBeNull();
+  });
 });
 
 describe("DetailFacts and LinkLabels", () => {

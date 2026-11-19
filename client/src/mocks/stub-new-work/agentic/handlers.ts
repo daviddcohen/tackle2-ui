@@ -38,6 +38,7 @@ const {
   agentRuns: AGENT_RUNS,
   plans: PLANS,
   archetypes: ARCHETYPES,
+  applications: APPLICATIONS,
   planRuns: PLAN_RUNS,
   applicationMigrations: APPLICATION_MIGRATIONS,
   executionPolicy: EXECUTION_POLICY,
@@ -54,6 +55,19 @@ interface Reply {
 const LOADING_DELAY_MS = 10000;
 
 const param = (req: Req, name: string): EntityId => String(req.params[name]);
+
+/** A Hub entity id from the URL: 404 when it is not a number. */
+const hubParam = (req: Req, name: string, label: string): number => {
+  const value = Number(req.params[name]);
+  if (!Number.isInteger(value)) {
+    throw new MockHttpError(404, `${label} "${req.params[name]}" not found.`);
+  }
+  return value;
+};
+
+/** The Skills GET /skills returns in the current scenario (see `read()`). */
+const isSkillVisible = (skillId: EntityId) =>
+  getPrototypeScenario() !== "initial" || !isSeeded("skills", skillId);
 
 const readJson = async (req: Req): Promise<unknown> => {
   try {
@@ -375,6 +389,62 @@ const handlers = [
       catalog.assignPlanToTargetProfile(
         Number(req.params.archetypeId),
         Number(req.params.profileId),
+        await readJson(req)
+      );
+      return {};
+    })
+  ),
+
+  // Skill associations edited from the associated entity (replace the set)
+  rest.put(
+    `${ARCHETYPES}/:archetypeId/skills`,
+    write(async (req) => {
+      catalog.updateArchetypeSkills(
+        hubParam(req, "archetypeId", "Archetype"),
+        await readJson(req),
+        isSkillVisible
+      );
+      return {};
+    })
+  ),
+  rest.put(
+    `${ARCHETYPES}/:archetypeId/target-profiles/:profileId/skills`,
+    write(async (req) => {
+      catalog.updateTargetProfileSkills(
+        hubParam(req, "archetypeId", "Archetype"),
+        hubParam(req, "profileId", "Target profile"),
+        await readJson(req),
+        isSkillVisible
+      );
+      return {};
+    })
+  ),
+  rest.put(
+    `${APPLICATIONS}/:applicationId/skills`,
+    write(async (req) => {
+      catalog.updateApplicationSkills(
+        hubParam(req, "applicationId", "Application"),
+        await readJson(req),
+        isSkillVisible
+      );
+      return {};
+    })
+  ),
+  rest.put(
+    `${SKILLS}/:id/collections`,
+    write(async (req) => {
+      catalog.updateSkillCollectionMemberships(
+        param(req, "id"),
+        await readJson(req)
+      );
+      return {};
+    })
+  ),
+  rest.put(
+    `${SKILL_COLLECTIONS}/:id/agents`,
+    write(async (req) => {
+      catalog.updateSkillCollectionAgents(
+        param(req, "id"),
         await readJson(req)
       );
       return {};

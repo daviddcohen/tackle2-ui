@@ -20,6 +20,10 @@ import {
   DetailSections,
 } from "@app/pages/agentic/components/detail-section";
 import {
+  MANAGE_SKILLS_BUTTON_ID,
+  useCanManageSkills,
+} from "@app/pages/agentic/components/manage-skills-modal";
+import {
   SkillsTable,
   groupSkillSources,
   skillAssociationSources,
@@ -33,6 +37,8 @@ interface SkillsTabProps {
   linkCrumbs: BreadcrumbEntry[];
   applicationId: number;
   archetypes: Ref[];
+  /** Opens the page's Manage skills modal for this application. */
+  onManageSkills: () => void;
 }
 
 /**
@@ -45,8 +51,10 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
   applicationId,
   linkCrumbs,
   archetypes,
+  onManageSkills,
 }) => {
   const { t } = useTranslation();
+  const canManageSkills = useCanManageSkills();
   const linkTo = (pathname: string) => breadcrumbTo(pathname, "", linkCrumbs);
   const skillsLink = useLinkComponent(linkTo(DevPaths.skills));
   const {
@@ -59,8 +67,13 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
   const {
     skills,
     isLoading: isLoadingSkills,
+    isSuccess: isSkillsSuccess,
     fetchError: skillsError,
-  } = useFetchSkills({ enabled: !isLoadingMigrations && !hasPlan });
+  } = useFetchSkills({
+    // With a plan the rows come from the migration view; the list is still
+    // read for a manager, to know whether any skill exists to associate.
+    enabled: !isLoadingMigrations && (!hasPlan || canManageSkills),
+  });
 
   const rows = React.useMemo(() => {
     if (hasPlan) {
@@ -86,45 +99,70 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
     return <AppPlaceholder />;
   }
 
+  // With no skill to pick, the way on is to create one (the empty state's
+  // link). The direct skills do not depend on the effective set, so the
+  // action is offered whatever the server says applies, and when a read
+  // failed the modal says why.
+  const hasManageButton =
+    canManageSkills && !(isSkillsSuccess && skills.length === 0);
+
+  let title = t("agentic.applicationDetail.tabSkills");
+  let description: string | undefined;
+  let content: React.ReactNode;
   if (migrationsError != null || (!hasPlan && skillsError != null)) {
-    return <StateError />;
+    // Without the button there is nothing to put on a section heading.
+    if (!hasManageButton) return <StateError />;
+    content = <StateError />;
+  } else if (rows == null) {
+    content = <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+  } else if (rows.length === 0) {
+    content = (
+      <EmptyState variant="xs">
+        <EmptyStateBody>
+          {t("agentic.applicationDetail.skillsEmpty")}
+        </EmptyStateBody>
+        {!hasManageButton && (
+          <EmptyStateFooter>
+            <EmptyStateActions>
+              <Button variant="link" component={skillsLink}>
+                {t("agentic.applicationDetail.goToSkills")}
+              </Button>
+            </EmptyStateActions>
+          </EmptyStateFooter>
+        )}
+      </EmptyState>
+    );
+  } else {
+    title = t("agentic.applicationDetail.skillsTitle", { count: rows.length });
+    description = hasPlan
+      ? t("agentic.applicationDetail.skillsDescription")
+      : t("agentic.applicationDetail.skillsAssociatedDescription");
+    content = <SkillsTable rows={rows} linkTo={linkTo} />;
   }
 
+  // One section and one Manage skills button whatever the content, so the
+  // button is still mounted, and gets focus back, when a save turns the
+  // empty state into the table.
   return (
     <DetailSections>
-      {rows == null ? (
-        <DetailSection title={t("agentic.applicationDetail.tabSkills")}>
-          <EmptyTextMessage message={t("agentic.common.unavailable")} />
-        </DetailSection>
-      ) : rows.length === 0 ? (
-        <DetailSection title={t("agentic.applicationDetail.tabSkills")}>
-          <EmptyState variant="xs">
-            <EmptyStateBody>
-              {t("agentic.applicationDetail.skillsEmpty")}
-            </EmptyStateBody>
-            <EmptyStateFooter>
-              <EmptyStateActions>
-                <Button variant="link" component={skillsLink}>
-                  {t("agentic.applicationDetail.goToSkills")}
-                </Button>
-              </EmptyStateActions>
-            </EmptyStateFooter>
-          </EmptyState>
-        </DetailSection>
-      ) : (
-        <DetailSection
-          title={t("agentic.applicationDetail.skillsTitle", {
-            count: rows.length,
-          })}
-          description={
-            hasPlan
-              ? t("agentic.applicationDetail.skillsDescription")
-              : t("agentic.applicationDetail.skillsAssociatedDescription")
-          }
-        >
-          <SkillsTable rows={rows} linkTo={linkTo} />
-        </DetailSection>
-      )}
+      <DetailSection
+        title={title}
+        description={description}
+        actions={
+          hasManageButton ? (
+            <Button
+              id={MANAGE_SKILLS_BUTTON_ID}
+              variant="link"
+              isInline
+              onClick={onManageSkills}
+            >
+              {t("agentic.skill.manageSkills.title")}
+            </Button>
+          ) : undefined
+        }
+      >
+        {content}
+      </DetailSection>
     </DetailSections>
   );
 };
