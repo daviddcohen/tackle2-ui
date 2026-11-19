@@ -7,6 +7,8 @@ import {
   EmptyStateActions,
   EmptyStateBody,
   EmptyStateFooter,
+  Split,
+  SplitItem,
   Stack,
   StackItem,
 } from "@patternfly/react-core";
@@ -15,11 +17,14 @@ import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
-import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { StateError } from "@app/components/StateError";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
+import {
+  MANAGE_SKILLS_BUTTON_ID,
+  useCanManageSkills,
+} from "@app/pages/agentic/components/manage-skills-modal";
 import {
   SkillsTable,
   groupSkillSources,
@@ -27,15 +32,20 @@ import {
 } from "@app/pages/agentic/components/skills-table";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchSkills } from "@app/queries/agentic";
-import { skillsWriteScopes } from "@app/scopes";
+
+export interface TabAssociatedSkillsProps {
+  archetype: Archetype;
+  /** Opens the page's Manage skills modal for this archetype. */
+  onManageSkills: () => void;
+}
 
 /** Skills associated with the archetype and with its target profiles. */
-export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
+export const TabAssociatedSkills: React.FC<TabAssociatedSkillsProps> = ({
   archetype,
+  onManageSkills,
 }) => {
   const { t } = useTranslation();
-  // Associations are edited on each skill.
-  const canEditSkills = useHasSomeScopes(skillsWriteScopes);
+  const canManageSkills = useCanManageSkills();
   const { to } = useEntityBreadcrumbs(archetype.name, [
     { title: t("sidebar.archetypes"), path: DevPaths.archetypes },
   ]);
@@ -45,14 +55,6 @@ export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
     return (
       <DrawerTabContent>
         <AppPlaceholder />
-      </DrawerTabContent>
-    );
-  }
-  // A failed query is not "no skills".
-  if (fetchError) {
-    return (
-      <DrawerTabContent>
-        <StateError />
       </DrawerTabContent>
     );
   }
@@ -69,37 +71,74 @@ export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
           profileIds.has(association.resource.id))
     )
   );
+  // With no skill to pick, the way on is to create one (the empty state's
+  // link). When the read failed, the modal shows why.
+  const hasManageButton =
+    canManageSkills && (fetchError != null || skills.length > 0);
+  let content: React.ReactNode;
+  if (fetchError) {
+    // A failed query is not "no skills".
+    content = <StateError />;
+  } else if (rows.length) {
+    content = <SkillsTable rows={rows} linkTo={(pathname) => to(pathname)} />;
+  } else {
+    content = (
+      <EmptyState
+        headingLevel="h3"
+        titleText={t("agentic.archetype.noSkillsTitle")}
+        variant="sm"
+      >
+        <EmptyStateBody>{t("agentic.archetype.noSkillsBody")}</EmptyStateBody>
+        {canManageSkills && !hasManageButton && (
+          <EmptyStateFooter>
+            <EmptyStateActions>
+              <Button variant="link" component={SkillsLink}>
+                {t("agentic.archetype.goToSkills")}
+              </Button>
+            </EmptyStateActions>
+          </EmptyStateFooter>
+        )}
+      </EmptyState>
+    );
+  }
+  const hasDescription = rows.length > 0 && !fetchError;
+  // Without a description or a button the heading line would only add a gap,
+  // so the empty and error states keep their plain look.
+  if (!hasDescription && !hasManageButton) {
+    return <DrawerTabContent>{content}</DrawerTabContent>;
+  }
+  // One Manage skills button on the heading line whatever the content, so it
+  // is still mounted, and gets focus back, when a save turns the empty state
+  // into the table.
   return (
     <DrawerTabContent>
-      {rows.length ? (
-        <Stack hasGutter className={spacing.mtMd}>
-          <StackItem>
-            <Content component="p" className={textStyles.textColorSubtle}>
-              {t("agentic.archetype.skillsDescription")}
-            </Content>
-          </StackItem>
-          <StackItem>
-            <SkillsTable rows={rows} linkTo={(pathname) => to(pathname)} />
-          </StackItem>
-        </Stack>
-      ) : (
-        <EmptyState
-          headingLevel="h3"
-          titleText={t("agentic.archetype.noSkillsTitle")}
-          variant="sm"
-        >
-          <EmptyStateBody>{t("agentic.archetype.noSkillsBody")}</EmptyStateBody>
-          {canEditSkills && (
-            <EmptyStateFooter>
-              <EmptyStateActions>
-                <Button variant="link" component={SkillsLink}>
-                  {t("agentic.archetype.goToSkills")}
+      <Stack hasGutter className={spacing.mtMd}>
+        <StackItem>
+          <Split hasGutter>
+            <SplitItem isFilled>
+              {hasDescription && (
+                <Content component="p" className={textStyles.textColorSubtle}>
+                  {t("agentic.archetype.skillsDescription")}
+                </Content>
+              )}
+            </SplitItem>
+            {hasManageButton && (
+              <SplitItem>
+                <Button
+                  id={MANAGE_SKILLS_BUTTON_ID}
+                  variant="link"
+                  isInline
+                  className={textStyles.textNowrap}
+                  onClick={onManageSkills}
+                >
+                  {t("agentic.skill.manageSkills.title")}
                 </Button>
-              </EmptyStateActions>
-            </EmptyStateFooter>
-          )}
-        </EmptyState>
-      )}
+              </SplitItem>
+            )}
+          </Split>
+        </StackItem>
+        <StackItem>{content}</StackItem>
+      </Stack>
     </DrawerTabContent>
   );
 };

@@ -74,11 +74,16 @@ import {
   startAgentTestRun,
   startApplicationMigrations,
   updateAgent,
+  updateApplicationSkills,
+  updateArchetypeSkills,
   updateMigrationPlan,
   updateModel,
   updateProvider,
   updateSkill,
   updateSkillCollection,
+  updateSkillCollectionAgents,
+  updateSkillCollectionMemberships,
+  updateTargetProfileSkills,
 } from "@app/api/rest/agentic";
 
 import { AGENTIC_QUERY_RETRY, pollUnlessErrored } from "./agentic-polling";
@@ -424,6 +429,65 @@ export const useDeleteSkillMutation = (
   });
 };
 
+/**
+ * Replaces the Skills associated directly with an archetype, a target profile
+ * or an application (the same rows the skill form edits), so it invalidates
+ * like a Skill write. The new hooks here invalidate on success and on error:
+ * a write that fails part way may have changed some objects already.
+ */
+export const useUpdateArchetypeSkillsMutation = (
+  onSuccess: () => void,
+  onError: OnError
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateArchetypeSkills,
+    onSuccess,
+    onError,
+    onSettled: () => invalidateAgentic(queryClient, "skill"),
+  });
+};
+
+export const useUpdateTargetProfileSkillsMutation = (
+  onSuccess: () => void,
+  onError: OnError
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateTargetProfileSkills,
+    onSuccess,
+    onError,
+    onSettled: () => invalidateAgentic(queryClient, "skill"),
+  });
+};
+
+export const useUpdateApplicationSkillsMutation = (
+  onSuccess: () => void,
+  onError: OnError
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateApplicationSkills,
+    onSuccess,
+    onError,
+    onSettled: () => invalidateAgentic(queryClient, "skill"),
+  });
+};
+
+/** Sets the collections a Skill belongs to: a write to those collections. */
+export const useUpdateSkillCollectionMembershipsMutation = (
+  onSuccess: () => void,
+  onError: OnError
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateSkillCollectionMemberships,
+    onSuccess,
+    onError,
+    onSettled: () => invalidateAgentic(queryClient, "skillCollection"),
+  });
+};
+
 // ---------------------------------------------------------------------------
 // Skill collections
 // ---------------------------------------------------------------------------
@@ -505,6 +569,20 @@ export const useDeleteSkillCollectionMutation = (
       onSuccess();
     },
     onError,
+  });
+};
+
+/** Sets the Agents that use a collection: a write to those Agents. */
+export const useUpdateSkillCollectionAgentsMutation = (
+  onSuccess: () => void,
+  onError: OnError
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateSkillCollectionAgents,
+    onSuccess,
+    onError,
+    onSettled: () => invalidateAgentic(queryClient, "agent"),
   });
 };
 

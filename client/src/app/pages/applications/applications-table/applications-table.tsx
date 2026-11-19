@@ -66,6 +66,11 @@ import { useBulkSelection } from "@app/hooks/selection/useBulkSelection";
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { BreadcrumbState, useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import { statusPresentation } from "@app/pages/agentic/components/agentic-status";
+import {
+  ManageSkillsModal,
+  ManageSkillsTarget,
+  useCanManageSkills,
+} from "@app/pages/agentic/components/manage-skills-modal";
 import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
 import { useFetchApplicationMigrations } from "@app/queries/agentic";
 import {
@@ -103,6 +108,7 @@ import { normalizeRisk } from "@app/utils/type-utils";
 import {
   formatPath,
   getAxiosErrorMessage,
+  openModalAfterMenuClose,
   universalComparator,
 } from "@app/utils/utils";
 
@@ -862,6 +868,10 @@ export const ApplicationsTable: FC = () => {
   );
   const canStartMigrations = isAgenticEnabled && agenticWorkflowRunWriteAccess;
   const reviewsWriteAccess = useHasSomeScopes(reviewsWriteScopes);
+  const canManageSkills = useCanManageSkills();
+  const [skillsTarget, setSkillsTarget] = useState<ManageSkillsTarget | null>(
+    null
+  );
 
   const toolbarKebabItems = filterAndAddSeparator(
     (index) => (
@@ -1510,6 +1520,18 @@ export const ApplicationsTable: FC = () => {
                                       application,
                                     ]),
                                 },
+                              canManageSkills && {
+                                title: t("agentic.skill.manageSkills.title"),
+                                itemKey: "manageSkills",
+                                onClick: () =>
+                                  openModalAfterMenuClose(() =>
+                                    setSkillsTarget({
+                                      scope: "application",
+                                      id: application.id,
+                                      name: application.name,
+                                    })
+                                  ),
+                              },
                             ],
                             [
                               analysesReadAccess &&
@@ -1630,6 +1652,12 @@ export const ApplicationsTable: FC = () => {
         applications={applicationsCredentialsToUpdate}
         onClose={() => setSaveApplicationsCredentialsModalState(null)}
       />
+      {canManageSkills && (
+        <ManageSkillsModal
+          target={skillsTarget}
+          onClose={() => setSkillsTarget(null)}
+        />
+      )}
       <ApplicationFormModal
         isOpen={isCreateUpdateApplicationsModalOpen}
         application={createUpdateApplications ?? null}

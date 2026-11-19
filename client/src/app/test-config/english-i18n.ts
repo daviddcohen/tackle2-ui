@@ -25,8 +25,10 @@ export const englishT = (
       : undefined;
   const text = plural ?? parent?.[leaf];
   if (typeof text !== "string") return key;
-  return text.replace(/{{\s*(\w+)\s*}}/g, (_, name: string) =>
-    String(values[name])
+  return text.replace(/{{\s*(\w+)\s*(, list)?}}/g, (_, name: string, list) =>
+    list && Array.isArray(values[name])
+      ? new Intl.ListFormat("en").format(values[name] as string[])
+      : String(values[name])
   );
 };
 

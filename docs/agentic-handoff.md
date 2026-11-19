@@ -184,6 +184,11 @@ All real paths are under `/hub` (Hub routes in `shared/api/pkg.go`). Every Hub a
 | `createSkillCollection`               | `useCreateSkillCollectionMutation`              | POST `/skill-collections`                              | POST `/agentic/skillcollections`                                                                                                  | exists                                                                                                                             | `toSkillCollectionSpec`                    |
 | `updateSkillCollection`               | `useUpdateSkillCollectionMutation`              | PUT `/skill-collections/:id`                           | PUT `/agentic/skillcollections/:name`                                                                                             | exists                                                                                                                             | `toSkillCollectionSpec(req, current.spec)` |
 | `deleteSkillCollection`               | `useDeleteSkillCollectionMutation`              | DELETE `/skill-collections/:id`                        | DELETE `/agentic/skillcollections/:name`                                                                                          | exists                                                                                                                             |                                            |
+| `updateArchetypeSkills`               | `useUpdateArchetypeSkillsMutation`              | PUT `/archetypes/:id/skills`                           | none                                                                                                                              | missing (Hub join table, see [Skill associations from the associated entity](#skill-associations-from-the-associated-entity))      |                                            |
+| `updateTargetProfileSkills`           | `useUpdateTargetProfileSkillsMutation`          | PUT `/archetypes/:id/target-profiles/:id/skills`       | none                                                                                                                              | missing (same)                                                                                                                     |                                            |
+| `updateApplicationSkills`             | `useUpdateApplicationSkillsMutation`            | PUT `/applications/:id/skills`                         | none                                                                                                                              | missing (same)                                                                                                                     |                                            |
+| `updateSkillCollectionMemberships`    | `useUpdateSkillCollectionMembershipsMutation`   | PUT `/skills/:id/collections`                          | PUT `/agentic/skillcollections/:name` once per changed collection                                                                 | partial: fan-out, not atomic                                                                                                       | `toSkillCollectionSpec(req, current.spec)` |
+| `updateSkillCollectionAgents`         | `useUpdateSkillCollectionAgentsMutation`        | PUT `/skill-collections/:id/agents`                    | PUT `/agentic/agents/:name` once per changed Agent                                                                                | partial: fan-out, not atomic                                                                                                       |                                            |
 | `getModels`                           | `useFetchGateways`                              | GET `/models`                                          | GET `/agentic/gateways` (`getGateways`)                                                                                           | exists                                                                                                                             | `toModel`                                  |
 | `getModelById`                        | (unused)                                        | GET `/models/:id`                                      | GET `/agentic/gateways/:name` (`getGateway`)                                                                                      | exists                                                                                                                             | `toModel`                                  |
 | `createModel`                         | `useCreateGatewayMutation`                      | POST `/models`                                         | POST `/agentic/gateways` (`createGateway`)                                                                                        | partial: CRD needs `credentialRef` and `model.contextWindow`, which the form lacks                                                 | `toGatewaySpec`                            |
@@ -319,6 +324,62 @@ AgentRuns created for workflow stages carry the label `konveyor.io/agentworkflow
 
 The collection description is mock-only: the UI shows it in the collection page header and the Skill collections list
 when it is set, and omits it when it is empty, which is what the adapter returns.
+
+### Skill associations from the associated entity
+
+Five endpoints let the other side of an association edit it. Each replaces the whole set for one entity with
+body `{ skills | collections | agents: IdRef[] }` and answers 204. The shape follows the Hub's
+`PUT /applications/:id/tags` (a per-entity sub-resource whose PUT replaces the set; `internal/api/application.go`)
+and the existing prototype nesting `PUT /archetypes/:id/target-profiles/:id/plan`. Reads need no new endpoint: an
+entity's direct Skills are the Skills whose `associations` contain `{ scope, resource.id }`, a Skill's collections
+are the collections whose `skills` contain it, and a collection's Agents are the Agents whose `skillCollections`
+contain it (the reverse lookups of section 5).
+
+| Prototype route                                         | Stored as (mock)                                 | Real backend                                                                 | Invalidates as    |
+| ------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------- | ----------------- |
+| PUT `/archetypes/:id/skills`                            | `Skill.associations` rows with scope `archetype` | none: proposed Hub join table (SkillCard name, scope, Hub resource id)       | `skill`           |
+| PUT `/archetypes/:id/target-profiles/:profileId/skills` | rows with scope `targetProfile` (profile id)     | same table                                                                   | `skill`           |
+| PUT `/applications/:id/skills`                          | rows with scope `application`                    | same table                                                                   | `skill`           |
+| PUT `/skills/:id/collections`                           | `SkillCollection.skills`                         | `SkillCollection.spec.skills[].skillCardRef`, one PUT per changed collection | `skillCollection` |
+| PUT `/skill-collections/:id/agents`                     | `Agent.skillCollections`                         | `Agent.spec.skillCollections[].ref`, one PUT per changed Agent               | `agent`           |
+
+- **Same rows both ways.** The mock edits the rows `GET /skills`, `/skill-collections` and `/agents` already read,
+  so the skill form's `PUT /skills/:id` (with `associations`), the collection form and the agent form see the change
+  on the next read, and plan `effectiveSkills` and application migration `effectiveSkills` follow. Only
+  `PUT /skills/:id` sets the Skill's `updateTime`: an edit from the entity side (these five PUTs) leaves it as it is,
+  and the proposed join table would behave the same, since its rows are not part of the SkillCard.
+- **Prototype scenarios.** The three Hub-scope PUTs only see the Skills that `GET /skills` returns in the current
+  scenario. In `initial`, which hides the fixture Skills, they leave the fixture rows as they are and answer 400 for a
+  fixture Skill id, so switching back to `configured` shows the fixtures unchanged. Mock only: the real backend has no
+  scenarios.
+- **Hub scopes.** The Hub has no storage for archetype, target profile or application Skill associations (section 7
+  item 7). Proposal: one Hub DB join table with cascade on archetype, target profile and application delete, served
+  both as `associations` on the Skill view and as these sub-resources. A DB write makes the entity-side PUT one
+  transaction, unlike the CRD fan-out. Runs only load these Skills once the controller or Hub passes them to the run
+  (the controller reads Skills from the Agent only). `agentic-hub.ts` leaves these three functions out.
+- **Fan-outs.** `agentic-hub.ts` `updateSkillCollectionMemberships` and `updateSkillCollectionAgents` read every
+  collection (or Agent), check every change first, then PUT each changed object in turn, as `writeAgentAssociations`
+  does for the skill form. Not atomic: a failure mid-way leaves earlier objects written, so re-fetch and report a
+  partial failure. Last write wins: the Hub ignores the client `resourceVersion`, so a concurrent collection or agent
+  form save can overwrite the change.
+- **Errors.** 404 for an unknown entity in the URL (archetype, target profile within its archetype, application,
+  Skill, collection), 400 for a bad body or an unknown referenced id (as the existing writes do), 409 when a
+  collection or Agent that would change is `operatorManaged` (the operator reverts it; the prototype never sets the
+  flag). `PUT /skills/:id/collections` answers 400 naming the collection when the Skill is its only member, because
+  the SkillCollection CRD needs at least one `spec.skills` entry. Every refusal rejects the whole request with no
+  partial change. The fan-outs throw for the same cases, plus a member provided by an `image`/`source` entry and a
+  collection that enumerates `spec.image`, before any PUT. The forms show the response `message` as is in their
+  partial-failure toast, so the mock words it in the UI glossary ("{name} is managed by Konveyor and cannot be changed
+  here.", "{skill} is the only skill in {collection}. A skill collection needs at least one skill."); the real server's
+  message is shown unchanged. The `agentic-hub.ts` fan-outs throw with the same wording.
+- **Unknown is not none.** The Manage skills modal never reads an undefined `associations` as "no skills": when
+  any Skill lacks it, the modal shows "Skill associations are not available. Try again later." with Close only and
+  refuses to save, because the replace PUT would drop associations the UI cannot see.
+- **Real adapters today.** `agentic-hub.ts` `getSkills` passes the Agents, so `associations` is defined but holds
+  agent-scope rows only. That guard therefore does not trigger: the modal opens with an empty direct set, and Save
+  calls one of the three functions `agentic-hub.ts` leaves out. The skill form's archetype, target profile and
+  application pickers likewise start empty and `updateSkill` refuses a selection. Until the Hub serves Hub-scope
+  associations, the six Manage skills placements and those three pickers are not usable; see wiring checklist step 8.
 
 ### Plan ↔ AgentWorkflow (`/agentic/workflows`), Stage ↔ workflow stage
 
@@ -495,6 +556,7 @@ Do these in order; each step leaves the app working.
 3. **Decide the open questions.** [Design questions A to D](#design-questions-blocking-backend-integration), and section 7 items 9, 14 and 18: display names and descriptions, rename, where `image`, `credentialRef` and `contextWindow` come from, how a credential Secret gets created (the UI has no API for it), the run Model, and Provider. Add the form fields or Hub defaults.
 4. **Swap the catalog reads.** Move the read functions from `api/rest/agentic-hub.ts` into `api/rest/agentic.ts` (`getSkills`, `getSkillById`, `getSkillCollections`, `getSkillCollectionById`, `getModels`, `getModelById`, `getAgents`, `getAgentById`, `getMigrationPlans`, `getMigrationPlanById`). They make extra fetches for joins: Skills fetch the Agents, Agents and collections fetch every SkillCard for names, Plans fetch every workflow run for `runCount`. Decide whether joins stay in the REST function or move into hooks (shared cache, fewer refetches while polling). Update the page tests that stub `AGENTIC_ENDPOINTS` (section 2).
 5. **Swap the catalog writes.** Move the create/update/delete functions over. Each update calls `assertNotRenamed`, fetches the current object, then writes `to*Spec(request, current.spec)`. Add a helper that maps the Hub's 500 messages (AlreadyExists, Invalid, Forbidden; `isAgenticRbacError`) to form errors. `createModel` and `createAgent` wait for step 3. Render `operatorManaged` objects read-only.
+   Also move `updateSkillCollectionMemberships` and `updateSkillCollectionAgents` (fan-outs over the collection and Agent PUTs; see [Skill associations from the associated entity](#skill-associations-from-the-associated-entity)).
 6. **Swap runs.** Move `getPlanRuns`, `getPlanRunById`, `getAgentTestRuns`, `startAgentTestRun` and `startApplicationMigrations` over (single-Plan only until resolution exists). Collect the run Model, target branch and parameters first ([B](#b-runs-need-inputs-the-ui-does-not-collect)); runs of the shipped workflow fail without a Model. Settle partial failure of multi-application starts and the run grouping ([D](#d-one-workflow-run-per-application)). Join application names in the hooks.
 7. **Approvals over ACP.** Only after [A](#a-approvals-happen-inside-a-live-session-and-are-denied-when-nobody-is-watching) is decided. Port a session hook from upstream `ChatPanel.tsx` over `api/agentic/acp.ts` (`mintAcpNonce`, `getAgenticAcpUrl`); dial only while the AgentRun's `ACPReady` condition is True; gate on `agenticAcpScopes`. The approval mutations then take the AgentRun name, the permission request id and the option id; `AwaitingApproval` goes.
 8. **Gate what the backend does not serve.** MSW is not in production bundles, so a production build with `AGENTIC_ENABLED=true` sends every call for a missing group to `/hub/prototype/agentic/*`, which no Hub serves. The affected surfaces:
@@ -503,6 +565,14 @@ Do these in order; each step leaves the app working.
    - the organization default Model (`models.tsx`, "make default");
    - Plan migration paths: Assign/Change migration plan on the target profiles page (`assign-migration-plan-modal.tsx`), the wizard's path step (`plan-wizard.tsx`), path columns and details in `plans.tsx`, `plan-details.tsx`, the Skill form's archetype and profile scopes;
    - approvals (`plan-run-detail.tsx`, `stage-run-detail.tsx`, `migration-tab.tsx`) until step 7.
+   - Hub-scope Skill associations: the "Manage skills" actions on archetypes, target profiles and applications
+     (`updateArchetypeSkills`, `updateTargetProfileSkills`, `updateApplicationSkills`) until the Hub join table ships
+     ([Skill associations from the associated entity](#skill-associations-from-the-associated-entity)).
+     Decide one: (1) hide the Manage skills actions (gate `useCanManageSkills`) and the skill form's archetype, target
+     profile and application pickers until the join table ships, or (2) ship the join table first, served both as
+     `associations` on the Skill view and as the three PUTs. Shipping `associations` alone is not enough: the modal
+     would show the right set and fail on Save. **Recommended: (1)**, as a capability entry in option (b) below, so
+     the real adapter never shows an empty set as the truth.
 
    Options:
    - **(a) Do not enable in production until everything is wired.** Keep `AGENTIC_ENABLED` off in production builds. Simple and safe, but nothing ships until the last missing group has a backend.

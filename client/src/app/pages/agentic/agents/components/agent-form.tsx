@@ -39,6 +39,10 @@ import {
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
+  PICKER_MENU_HEIGHT,
+  PICKER_MENU_POPPER,
+} from "@app/pages/agentic/components/picker-menu";
+import {
   useCreateAgentMutation,
   useFetchAgents,
   useFetchGateways,
@@ -479,6 +483,9 @@ export const AgentForm: React.FC<AgentFormProps> = ({
                   toggleId="skills-select-toggle"
                   toggleAriaLabel={t("agentic.agent.skillsSelect")}
                   ariaLabel={t("agentic.agent.skills")}
+                  inputAriaLabel={t("agentic.agent.skills")}
+                  maxMenuHeight={PICKER_MENU_HEIGHT}
+                  popperProps={PICKER_MENU_POPPER}
                   values={selectedSkills}
                   options={skillOptions}
                   hasCheckbox
@@ -506,6 +513,10 @@ export const AgentForm: React.FC<AgentFormProps> = ({
                   toggleId="skill-collections-select-toggle"
                   toggleAriaLabel={t("agentic.agent.skillCollectionsSelect")}
                   ariaLabel={t("agentic.agent.skillCollections")}
+                  inputAriaLabel={t("agentic.agent.skillCollections")}
+                  inputAriaDescribedBy="agent-skill-collections-helper"
+                  maxMenuHeight={PICKER_MENU_HEIGHT}
+                  popperProps={PICKER_MENU_POPPER}
                   values={selectedSkillCollections}
                   options={skillCollectionOptions}
                   hasCheckbox

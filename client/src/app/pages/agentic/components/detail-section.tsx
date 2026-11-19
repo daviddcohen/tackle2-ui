@@ -13,6 +13,8 @@ import {
   FlexItem,
   Label,
   LabelGroup,
+  Split,
+  SplitItem,
   Title,
 } from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
@@ -66,39 +68,57 @@ export interface DetailSectionProps {
   title: string;
   /** At most one subtle sentence: what the rows are or how to get more. */
   description?: React.ReactNode;
+  /** Actions on the heading's line, at its end (a link button). */
+  actions?: React.ReactNode;
   /** The content; several children stack with the content gap. */
   children: React.ReactNode;
 }
 
-/** One section: `Title h2 lg`, its optional sentence, then its content. */
+/**
+ * One section: `Title h2 lg` with its optional actions, its optional
+ * sentence, then its content.
+ */
 export const DetailSection: React.FC<DetailSectionProps> = ({
   id,
   title,
   description,
+  actions,
   children,
-}) => (
-  <Flex
-    id={id}
-    direction={{ default: "column" }}
-    gap={{ default: "gapMd" }}
-    flexWrap={{ default: "nowrap" }}
-  >
-    <FlexItem>
-      <Title headingLevel="h2" size="lg">
-        {title}
-      </Title>
-      {description != null && description !== "" && (
-        <Content
-          component="p"
-          className={`${textStyles.textColorSubtle} ${spacing.mtXs}`}
-        >
-          {description}
-        </Content>
-      )}
-    </FlexItem>
-    {stackItems(children)}
-  </Flex>
-);
+}) => {
+  const heading = (
+    <Title headingLevel="h2" size="lg">
+      {title}
+    </Title>
+  );
+  return (
+    <Flex
+      id={id}
+      direction={{ default: "column" }}
+      gap={{ default: "gapMd" }}
+      flexWrap={{ default: "nowrap" }}
+    >
+      <FlexItem>
+        {actions != null ? (
+          <Split hasGutter>
+            <SplitItem isFilled>{heading}</SplitItem>
+            <SplitItem>{actions}</SplitItem>
+          </Split>
+        ) : (
+          heading
+        )}
+        {description != null && description !== "" && (
+          <Content
+            component="p"
+            className={`${textStyles.textColorSubtle} ${spacing.mtXs}`}
+          >
+            {description}
+          </Content>
+        )}
+      </FlexItem>
+      {stackItems(children)}
+    </Flex>
+  );
+};
 
 /** A section's empty state: one sentence, no icon, no "(0)" heading. */
 export const SectionEmpty: React.FC<{ children: string }> = ({ children }) => (

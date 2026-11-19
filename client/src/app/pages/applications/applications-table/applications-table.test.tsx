@@ -6,7 +6,7 @@ import { Router } from "react-router-dom";
 
 import { ApplicationMigrationView } from "@app/agentic";
 import { Application } from "@app/api/models";
-import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
+import { agenticWorkflowRunsWriteScopes, skillsWriteScopes } from "@app/scopes";
 import { render, screen, within } from "@app/test-config/test-utils";
 
 import { DecoratedApplication } from "../useDecoratedApplications";
@@ -20,9 +20,11 @@ import { ApplicationsTable } from "./applications-table";
 
 const mockState: {
   canRun: boolean;
+  canManageSkills: boolean;
   migration: ApplicationMigrationView;
 } = {
   canRun: true,
+  canManageSkills: true,
   migration: {
     configured: true,
     intervention: "none",
@@ -50,9 +52,11 @@ jest.mock("@app/Constants", () => ({
 jest.mock("@app/auth", () => ({
   ...jest.requireActual("@app/auth"),
   useHasSomeScopes: (scopes: string[]) =>
-    scopes.some((scope) => agenticWorkflowRunsWriteScopes.includes(scope))
-      ? mockState.canRun
-      : true,
+    scopes === skillsWriteScopes
+      ? mockState.canManageSkills
+      : scopes.some((scope) => agenticWorkflowRunsWriteScopes.includes(scope))
+        ? mockState.canRun
+        : true,
 }));
 
 const mockApplicationBase: Application = {
@@ -160,6 +164,7 @@ const openRowActions = (user: ReturnType<typeof userEvent.setup>) =>
 describe("ApplicationsTable agentic actions", () => {
   beforeEach(() => {
     mockState.canRun = true;
+    mockState.canManageSkills = true;
     mockState.migration = {
       ...mockState.migration,
       preflight: "ready",
@@ -221,5 +226,38 @@ describe("ApplicationsTable agentic actions", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "agentic.execution.readyOnly"
     );
+  });
+
+  it("offers Manage skills after Manage credentials and opens it for the application", async () => {
+    const user = userEvent.setup();
+    renderTable();
+    await openRowActions(user);
+    const items = screen
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent);
+    expect(items.indexOf("agentic.skill.manageSkills.title")).toBe(
+      items.indexOf("actions.manageCredentials") + 1
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "agentic.skill.manageSkills.title" })
+    );
+    expect(
+      await screen.findByRole("dialog", {
+        name: "agentic.skill.manageSkills.titleFor",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("offers no Manage skills without the skill write scope", async () => {
+    mockState.canManageSkills = false;
+    const user = userEvent.setup();
+    renderTable();
+    await openRowActions(user);
+    expect(screen.getAllByRole("menuitem").length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("menuitem", {
+        name: "agentic.skill.manageSkills.title",
+      })
+    ).not.toBeInTheDocument();
   });
 });

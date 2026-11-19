@@ -11,7 +11,9 @@
  *
  * Covered: the groups the Hub serves (Skills, Skill collections, Models
  * except create, Agents except create, Agent test runs, Plans, Plan runs, and
- * starting migrations with one selected Plan).
+ * starting migrations with one selected Plan), plus the collection
+ * memberships of a Skill and the Agents of a Skill collection (fanned out
+ * over the CRD PUTs).
  *
  * Not covered, because the backend has no contract or the UI does not collect
  * what the CRD requires (hand-off doc, "Design questions blocking backend
@@ -22,7 +24,10 @@
  *   answers inside a live session);
  * - Providers, available models, `setDefaultModel`, execution policy,
  *   `assignPlanToTargetProfile`, `getApplicationMigrations`, and "recommended
- *   Plan" starts.
+ *   Plan" starts;
+ * - `updateArchetypeSkills`, `updateTargetProfileSkills` and
+ *   `updateApplicationSkills` (Hub-scope Skill associations have no Hub
+ *   table; `updateSkill` refuses them too).
  *
  * Known limits, to settle when wiring:
  * - Run applications are named `#<id>`: pass an `ApplicationNameIndex` built
@@ -37,12 +42,14 @@
  */
 import { RESOURCE_NAME_PATTERN } from "@app/api/agentic/contract";
 import type * as Crd from "@app/api/agentic/contract";
+import { isOperatorManaged } from "@app/utils/agentic";
 import { parseSkillFrontmatter } from "@app/utils/skills";
 
 import {
   AgentRequest,
   AgentTestRunRequest,
   EntityId,
+  IdRef,
   MigrationPlanRequest,
   ModelRequest,
   SkillCollectionRequest,
@@ -207,6 +214,133 @@ export const updateSkillCollection = async ({
 
 export const deleteSkillCollection = (collectionId: EntityId) =>
   hub.deleteSkillCollection(collectionId).then(() => undefined);
+
+const assertAllExist = (
+  wanted: Set<string>,
+  names: string[],
+  label: string
+) => {
+  const missing = [...wanted].filter((name) => !names.includes(name));
+  if (missing.length > 0) {
+    throw new Error(`${label} not found: ${missing.join(", ")}.`);
+  }
+};
+
+/**
+ * Sets the collections a SkillCard is a member of: one PUT per collection
+ * whose membership changes (not atomic, last write wins). The SkillCard and
+ * every change are checked before the first write. Refused: an unknown
+ * SkillCard or collection, operator-managed collections, a
+ * collection that enumerates `spec.image` (`toSkillCollectionSpec` throws),
+ * removing a member an `image`/`source` entry provides, and removing the last
+ * entry (the CRD needs one).
+ */
+export const updateSkillCollectionMemberships = async ({
+  skillId,
+  collections,
+}: {
+  skillId: EntityId;
+  collections: IdRef[];
+}) => {
+  const wanted = new Set(collections.map(({ id }) => id));
+  const [cards, all] = await Promise.all([
+    hub.getSkillCards(),
+    hub.getSkillCollections(),
+  ]);
+  const card = cards.find(({ metadata }) => metadata.name === skillId);
+  if (!card) throw new Error(`Skill "${skillId}" not found.`);
+  const skillName = toSkill(card).name;
+  assertAllExist(
+    wanted,
+    all.map(({ metadata }) => metadata.name ?? ""),
+    "Skill collections"
+  );
+  const changes = all.flatMap((collection) => {
+    const current = toSkillCollection(collection);
+    const has = current.skills.some(({ id }) => id === skillId);
+    if (has === wanted.has(current.id)) return [];
+    if (current.operatorManaged) {
+      throw new Error(
+        `${current.name} is managed by Konveyor and cannot be changed here.`
+      );
+    }
+    const owned = controllerOwnedSkills(collection);
+    if (has && owned.includes(skillId)) {
+      throw new Error(
+        `Skill "${skillId}" comes from an image or source entry of Skill collection "${current.id}" and cannot be removed here.`
+      );
+    }
+    const skills = has
+      ? current.skills.filter(({ id }) => id !== skillId)
+      : [...current.skills, { id: skillId }];
+    const spec = toSkillCollectionSpec(
+      {
+        name: current.name,
+        description: "",
+        skills: skills.map(({ id }) => ({ id })),
+      },
+      collection.spec,
+      owned
+    );
+    if ((spec.skills ?? []).length === 0) {
+      throw new Error(
+        `${skillName} is the only skill in ${current.name}. A skill collection needs at least one skill.`
+      );
+    }
+    return [{ name: current.id, spec }];
+  });
+  for (const { name, spec } of changes) {
+    await hub.updateSkillCollection(name, spec);
+  }
+  return undefined;
+};
+
+/**
+ * Sets the Agents that use a SkillCollection: one PUT per Agent whose
+ * `spec.skillCollections` changes (not atomic, last write wins). The
+ * collection and every change are checked before the first write; an unknown
+ * collection or Agent and operator-managed Agents are refused.
+ */
+export const updateSkillCollectionAgents = async ({
+  collectionId,
+  agents,
+}: {
+  collectionId: EntityId;
+  agents: IdRef[];
+}) => {
+  const wanted = new Set(agents.map(({ id }) => id));
+  const [collections, all] = await Promise.all([
+    hub.getSkillCollections(),
+    hub.getAgents(),
+  ]);
+  if (!collections.some(({ metadata }) => metadata.name === collectionId)) {
+    throw new Error(`Skill collection "${collectionId}" not found.`);
+  }
+  assertAllExist(
+    wanted,
+    all.map(({ metadata }) => metadata.name ?? ""),
+    "Agents"
+  );
+  const changes = all.flatMap((agent) => {
+    const name = agent.metadata.name ?? "";
+    const refs = agent.spec.skillCollections ?? [];
+    const has = refs.some(({ ref }) => ref === collectionId);
+    if (has === wanted.has(name)) return [];
+    if (isOperatorManaged(agent)) {
+      throw new Error(
+        `${name} is managed by Konveyor and cannot be changed here.`
+      );
+    }
+    const skillCollections = has
+      ? refs.filter(({ ref }) => ref !== collectionId)
+      : [...refs, { ref: collectionId }];
+    return [{ name, spec: { ...agent.spec, skillCollections } }];
+  });
+  for (const { name, spec } of changes) {
+    await hub.updateAgent(name, spec);
+  }
+  return undefined;
+};
 
 // ---------------------------------------------------------------------------
 // Models (Gateways)

@@ -34,6 +34,8 @@ interface IArchetypeDetailDrawerProps {
   breadcrumbs: BreadcrumbEntry[];
   onCloseClick: () => void;
   archetype: Archetype | null;
+  /** Opens the page's Manage skills modal for the archetype. */
+  onManageSkills: (archetype: Archetype) => void;
 }
 
 enum TabKey {
@@ -47,6 +49,7 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
   breadcrumbs,
   onCloseClick,
   archetype,
+  onManageSkills,
 }) => {
   const { t } = useTranslation();
   // The title is the leaf, so the trail shows ancestors only, and none when
@@ -131,7 +134,10 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
                   <TabTitleText>{t("agentic.archetype.skills")}</TabTitleText>
                 }
               >
-                <TabAssociatedSkills archetype={archetype} />
+                <TabAssociatedSkills
+                  archetype={archetype}
+                  onManageSkills={() => onManageSkills(archetype)}
+                />
               </Tab>
             )}
             <Tab

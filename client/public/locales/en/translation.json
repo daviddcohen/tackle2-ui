@@ -1557,6 +1557,11 @@
           "label": "Applications",
           "helper": "Used when these applications are migrated.",
           "placeholder": "Select applications"
+        },
+        "skillCollections": {
+          "label": "Skill collections",
+          "helper": "Agents that use these skill collections also use this skill. This also updates each skill collection's skills.",
+          "placeholder": "Select skill collections"
         }
       },
       "agentsReadOnly": "You need permission to edit agents to change this field.",
@@ -1564,6 +1569,41 @@
         "both": "This skill has {{associations}} and is in {{collections}}. Changes apply wherever it is used.",
         "associationsOnly": "This skill has {{associations}}. Changes apply wherever it is used.",
         "collectionsOnly": "This skill is in {{collections}}. Changes apply wherever it is used."
+      },
+      "skillCollectionsReadOnly": "You need permission to edit skill collections to change this field.",
+      "skillCollectionsUnavailable": "Skill collections could not be loaded. Saving leaves them unchanged.",
+      "onlySkillOfCollection": "This skill is the only one in this skill collection. A skill collection needs at least one skill.",
+      "skillCollectionsLocked": {
+        "managedByKonveyor_one": "{{names, list}} is managed by Konveyor and cannot be removed here.",
+        "managedByKonveyor_other": "{{names, list}} are managed by Konveyor and cannot be removed here.",
+        "onlySkill_one": "{{names, list}} keeps this skill: a skill collection needs at least one skill.",
+        "onlySkill_other": "{{names, list}} keep this skill: a skill collection needs at least one skill."
+      },
+      "skillCollectionsLoading": "Loading skill collections.",
+      "collectionsSaveFailed": "Some skill collection changes could not be saved",
+      "collectionsSaveFailedUpdated": "The skill was saved. {{reason}}",
+      "collectionsSaveFailedCreated": "The skill was created. {{reason}}",
+      "manageSkills": {
+        "title": "Manage skills",
+        "titleFor": "Manage skills for {{name}}",
+        "field": "Skills",
+        "placeholder": "Select skills",
+        "description": {
+          "archetype": "Agents use these skills when they migrate applications in this archetype.",
+          "targetProfile": "Agents use these skills when they migrate applications in this archetype that use this target profile.",
+          "application": "Agents use these skills when they migrate this application."
+        },
+        "helper": {
+          "archetype": "Select the skills to associate directly with this archetype. Skills for its target profiles are managed on the target profiles page.",
+          "targetProfile": "Select the skills to associate directly with this target profile. Skills for {{archetype}} itself are managed on the archetypes page.",
+          "application": "Select the skills to associate directly with this application. The Skills tab shows every skill that applies and where it comes from."
+        },
+        "loadFailed": "Skills could not be loaded. Try again later.",
+        "unavailable": "Skill associations are not available. Try again later.",
+        "empty": "No skills exist yet. Create a skill first, then associate it here.",
+        "goToSkills": "Go to skills",
+        "saved": "Skills for {{name}} updated",
+        "saveFailed": "Skills for {{name}} could not be saved"
       }
     },
     "skillDetail": {
@@ -1699,7 +1739,17 @@
         "descriptionMaximum": "Description must be at most 500 characters.",
         "nameRequired": "Name is required.",
         "skillsRequired": "Select at least one skill."
-      }
+      },
+      "agents": "Agents",
+      "selectAgents": "Select agents",
+      "agentsHelper": "These agents use every skill in this collection. This also updates each agent's skill collections.",
+      "agentsLocked_one": "{{names, list}} is managed by Konveyor and cannot be removed here.",
+      "agentsLocked_other": "{{names, list}} are managed by Konveyor and cannot be removed here.",
+      "agentsLoading": "Loading agents.",
+      "agentsUnavailable": "Agents could not be loaded. Saving leaves them unchanged.",
+      "agentsSaveFailed": "Some agent changes could not be saved",
+      "agentsSaveFailedUpdated": "The skill collection was saved. {{reason}}",
+      "agentsSaveFailedCreated": "The skill collection was created. {{reason}}"
     },
     "runStatus": {
       "pending": "Pending",
@@ -1913,7 +1963,7 @@
       "planRunsTitle": "Plan runs ({{count}})",
       "planRunsDescription": "Plan runs that include this application.",
       "planRunsEmpty": "This application has not been in a plan run yet.",
-      "skillsEmpty": "No skills apply to this application yet. Associate skills with its archetype, target profile or agents.",
+      "skillsEmpty": "No skills apply to this application yet. Associate skills with it, or with its archetype, target profile or agents.",
       "goToSkills": "Go to skills"
     },
     "archetype": {
@@ -1939,7 +1989,7 @@
       "goToSkills": "Go to skills",
       "noPlansBody": "Create a migration plan for this archetype, then assign it to {{profile}}.",
       "noPlansTitle": "No migration plans for {{archetype}}",
-      "noSkillsBody": "Skills associated with this archetype or its target profiles appear here. Associations are edited on each skill.",
+      "noSkillsBody": "Skills associated with this archetype or its target profiles appear here.",
       "noSkillsTitle": "No skills yet",
       "noTargetProfilesBody": "Create a target profile for where applications in this archetype are going, then assign a migration plan to it.",
       "noTargetProfilesBodyReadOnly": "Target profiles appear here once they are created.",

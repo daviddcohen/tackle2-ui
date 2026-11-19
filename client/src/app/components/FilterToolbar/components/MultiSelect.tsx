@@ -8,6 +8,7 @@ import {
   MenuToggle,
   MenuToggleElement,
   MenuToggleProps,
+  PopperOptions,
   Select,
   SelectList,
   SelectOption,
@@ -47,6 +48,18 @@ export interface MultiSelectProps {
   toggleId: string;
   toggleAriaLabel?: string;
   toggleStatus?: MenuToggleProps["status"];
+  /**
+   * Accessible name of the typeahead input, usually the field label. Without
+   * it the input keeps the PatternFly default "Type to filter".
+   */
+  inputAriaLabel?: string;
+  /** Id(s) of the element(s) that describe the input, such as helper text. */
+  inputAriaDescribedBy?: string;
+  /**
+   * Passed to the menu popper, for example `{ width: "trigger" }` to keep the
+   * menu as wide as the toggle inside a modal.
+   */
+  popperProps?: PopperOptions;
   hasCheckbox?: boolean;
   hasBadge?: boolean;
   showSelectedInToggle?: boolean;
@@ -54,6 +67,12 @@ export interface MultiSelectProps {
   hasChips?: boolean;
   /** Maximum height of the open menu (PF `Select` `maxMenuHeight`), for example "24rem". */
   maxMenuHeight?: string;
+  /**
+   * Selected values the user cannot remove: their chips have no close button
+   * and selecting them again does nothing. `onClear` is still called for the
+   * clear button, so callers keep these values when they clear.
+   */
+  lockedValues?: string[];
 }
 
 export const MultiSelect: FC<MultiSelectProps> = ({
@@ -69,12 +88,16 @@ export const MultiSelect: FC<MultiSelectProps> = ({
   toggleId,
   toggleAriaLabel,
   toggleStatus,
+  inputAriaLabel,
+  inputAriaDescribedBy,
+  popperProps,
   hasCheckbox,
   hasBadge,
   showSelectedInToggle,
   closeMenuOnSelect,
   hasChips = false,
   maxMenuHeight,
+  lockedValues,
   onClear,
 }: MultiSelectProps): JSX.Element | null => {
   const { t } = useTranslation();
@@ -104,8 +127,11 @@ export const MultiSelect: FC<MultiSelectProps> = ({
         .some((it) => it.includes(inputValue?.trim().toLowerCase() ?? ""))
   );
 
+  const isLocked = (value: string) => lockedValues?.includes(value) ?? false;
+  const hasRemovableValue = values?.some((value) => !isLocked(value)) ?? false;
+
   const onSelect = (value: string | undefined) => {
-    if (!value || value === noResultsId(toggleId)) {
+    if (!value || value === noResultsId(toggleId) || isLocked(value)) {
       return;
     }
 
@@ -249,6 +275,12 @@ export const MultiSelect: FC<MultiSelectProps> = ({
             onOpenChangeKeyDown(isFilterDropdownOpen, event)
           }
           inputId={`${toggleId}-input`}
+          {...(inputAriaLabel != null && { "aria-label": inputAriaLabel })}
+          inputProps={
+            inputAriaDescribedBy == null
+              ? undefined
+              : { "aria-describedby": inputAriaDescribedBy }
+          }
           autoComplete="off"
           innerRef={textInputRef}
           placeholder={placeholderText}
@@ -266,9 +298,13 @@ export const MultiSelect: FC<MultiSelectProps> = ({
                 <Label
                   variant="outline"
                   key={value}
-                  closeBtnAriaLabel={t("terms.removeSelection", {
-                    name: getDisplayValue(value, options),
-                  })}
+                  closeBtnAriaLabel={
+                    isLocked(value)
+                      ? undefined
+                      : t("terms.removeSelection", {
+                          name: getDisplayValue(value, options),
+                        })
+                  }
                   /**
                    * for testing purposes, we cannot rely on text inside the chip as
                    * it can be truncated
@@ -277,10 +313,14 @@ export const MultiSelect: FC<MultiSelectProps> = ({
                    * aria-label is not used at the chip level
                    * as a workaround, we use a span with the aria-label
                    */
-                  onClose={(ev) => {
-                    ev.stopPropagation();
-                    onSelect(value);
-                  }}
+                  onClose={
+                    isLocked(value)
+                      ? undefined
+                      : (ev) => {
+                          ev.stopPropagation();
+                          onSelect(value);
+                        }
+                  }
                 >
                   <span aria-label={getDisplayValue(value, options)}>
                     {getDisplayValueForChip(value, options)}
@@ -292,7 +332,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
         </TextInputGroupMain>
 
         <TextInputGroupUtilities>
-          {(!!inputValue || !!values?.length) && (
+          {(!!inputValue || hasRemovableValue) && (
             <Button
               icon={<TimesIcon aria-hidden />}
               variant="plain"
@@ -320,6 +360,7 @@ export const MultiSelect: FC<MultiSelectProps> = ({
     <Select
       isScrollable={isScrollable}
       maxMenuHeight={maxMenuHeight}
+      popperProps={popperProps}
       aria-label={ariaLabel || htmlAriaLabel}
       toggle={toggle}
       selected={values}

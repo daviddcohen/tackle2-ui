@@ -40,6 +40,11 @@ import {
   deserializeFilterUrlParams,
   useLocalTableControls,
 } from "@app/hooks/table-controls";
+import {
+  ManageSkillsModal,
+  ManageSkillsTarget,
+  useCanManageSkills,
+} from "@app/pages/agentic/components/manage-skills-modal";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchArchetypes } from "@app/queries/archetypes";
 import {
@@ -48,7 +53,7 @@ import {
   reviewsWriteScopes,
 } from "@app/scopes";
 import { addSeparatorForOverflow } from "@app/utils/grouping";
-import { formatPath } from "@app/utils/utils";
+import { formatPath, openModalAfterMenuClose } from "@app/utils/utils";
 
 import ArchetypeDetailDrawer from "./components/archetype-detail-drawer";
 import { ArchetypeForm } from "./components/archetype-form";
@@ -231,6 +236,10 @@ const Archetypes: React.FC = () => {
   const archetypeWriteAccess = useHasSomeScopes(archetypesWriteScopes);
   const assessmentWriteAccess = useHasSomeScopes(assessmentWriteScopes);
   const reviewsWriteAccess = useHasSomeScopes(reviewsWriteScopes);
+  const canManageSkills = useCanManageSkills();
+  const [skillsTarget, setSkillsTarget] = useState<ManageSkillsTarget | null>(
+    null
+  );
 
   const clearFilters = () => {
     const currentPath = history.location.pathname;
@@ -393,6 +402,7 @@ const Archetypes: React.FC = () => {
                           {(archetypeWriteAccess ||
                             assessmentWriteAccess ||
                             reviewsWriteAccess ||
+                            canManageSkills ||
                             (archetype?.assessments?.length &&
                               assessmentWriteAccess) ||
                             (archetype?.review && reviewsWriteAccess)) && (
@@ -437,6 +447,20 @@ const Archetypes: React.FC = () => {
                                               }
                                             )
                                           )
+                                        ),
+                                    },
+                                    canManageSkills && {
+                                      title: t(
+                                        "agentic.skill.manageSkills.title"
+                                      ),
+                                      itemKey: "manageSkills",
+                                      onClick: () =>
+                                        openModalAfterMenuClose(() =>
+                                          setSkillsTarget({
+                                            scope: "archetype",
+                                            id: archetype.id,
+                                            name: archetype.name,
+                                          })
                                         ),
                                     },
                                     archetypeWriteAccess && {
@@ -505,7 +529,21 @@ const Archetypes: React.FC = () => {
         breadcrumbs={breadcrumbs}
         archetype={activeItem}
         onCloseClick={clearActiveItem}
+        onManageSkills={(archetype) =>
+          setSkillsTarget({
+            scope: "archetype",
+            id: archetype.id,
+            name: archetype.name,
+          })
+        }
       />
+
+      {canManageSkills && (
+        <ManageSkillsModal
+          target={skillsTarget}
+          onClose={() => setSkillsTarget(null)}
+        />
+      )}
 
       {/* Create modal */}
       <Modal

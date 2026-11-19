@@ -33,6 +33,7 @@ import {
   AvailableModel,
   EntityId,
   ExecutionPolicy,
+  IdRef,
   MigrationPlan,
   MigrationPlanRequest,
   ModelProjection,
@@ -64,6 +65,7 @@ export const AGENTIC_ENDPOINTS = {
   agentRuns: `${PROTOTYPE_BASE}/agent-runs`,
   plans: `${PROTOTYPE_BASE}/plans`,
   archetypes: `${PROTOTYPE_BASE}/archetypes`,
+  applications: `${PROTOTYPE_BASE}/applications`,
   planRuns: `${PROTOTYPE_BASE}/plan-runs`,
   applicationMigrations: `${PROTOTYPE_BASE}/application-migrations`,
   executionPolicy: `${PROTOTYPE_BASE}/execution-policy`,
@@ -78,6 +80,7 @@ const {
   agentRuns: AGENT_RUNS,
   plans: PLANS,
   archetypes: ARCHETYPES,
+  applications: APPLICATIONS,
   planRuns: PLAN_RUNS,
   applicationMigrations: APPLICATION_MIGRATIONS,
   executionPolicy: EXECUTION_POLICY,
@@ -110,6 +113,52 @@ export const deleteSkill = (skillId: EntityId) =>
   axios.delete<void>(`${SKILLS}/${id(skillId)}`).then(() => undefined);
 
 // ---------------------------------------------------------------------------
+// Skill associations edited from the associated entity. Each PUT replaces the
+// set and answers 204; the next `getSkills` shows it in `associations`.
+// Real backend: missing. The Hub has no table for archetype, target profile
+// or application Skill associations (needs a join table and these
+// sub-resources, modeled on Hub `PUT /applications/:id/tags`).
+// ---------------------------------------------------------------------------
+
+export const updateArchetypeSkills = ({
+  archetypeId,
+  skills,
+}: {
+  archetypeId: number;
+  skills: IdRef[];
+}) =>
+  axios
+    .put<void>(`${ARCHETYPES}/${archetypeId}/skills`, { skills })
+    .then(() => undefined);
+
+export const updateTargetProfileSkills = ({
+  archetypeId,
+  targetProfileId,
+  skills,
+}: {
+  archetypeId: number;
+  targetProfileId: number;
+  skills: IdRef[];
+}) =>
+  axios
+    .put<void>(
+      `${ARCHETYPES}/${archetypeId}/target-profiles/${targetProfileId}/skills`,
+      { skills }
+    )
+    .then(() => undefined);
+
+export const updateApplicationSkills = ({
+  applicationId,
+  skills,
+}: {
+  applicationId: number;
+  skills: IdRef[];
+}) =>
+  axios
+    .put<void>(`${APPLICATIONS}/${applicationId}/skills`, { skills })
+    .then(() => undefined);
+
+// ---------------------------------------------------------------------------
 // Skill collections. Real backend: exists. `/hub/agentic/skillcollections`.
 // Members are `spec.skills[].skillCardRef`; `description` has no CRD field.
 // ---------------------------------------------------------------------------
@@ -138,6 +187,40 @@ export const updateSkillCollection = ({
 export const deleteSkillCollection = (collectionId: EntityId) =>
   axios
     .delete<void>(`${SKILL_COLLECTIONS}/${id(collectionId)}`)
+    .then(() => undefined);
+
+/**
+ * Makes `collections` exactly the Skill collections the Skill is a member of
+ * (edits each collection's `skills`). Real backend: partial. No endpoint;
+ * one PUT `/agentic/skillcollections/:name` per changed collection
+ * (`spec.skills[].skillCardRef`), not atomic, last write wins.
+ */
+export const updateSkillCollectionMemberships = ({
+  skillId,
+  collections,
+}: {
+  skillId: EntityId;
+  collections: IdRef[];
+}) =>
+  axios
+    .put<void>(`${SKILLS}/${id(skillId)}/collections`, { collections })
+    .then(() => undefined);
+
+/**
+ * Makes `agents` exactly the Agents that use the Skill collection (edits each
+ * Agent's `skillCollections`). Real backend: partial. No endpoint; one PUT
+ * `/agentic/agents/:name` per changed Agent (`spec.skillCollections[].ref`),
+ * not atomic, last write wins.
+ */
+export const updateSkillCollectionAgents = ({
+  collectionId,
+  agents,
+}: {
+  collectionId: EntityId;
+  agents: IdRef[];
+}) =>
+  axios
+    .put<void>(`${SKILL_COLLECTIONS}/${id(collectionId)}/agents`, { agents })
     .then(() => undefined);
 
 // ---------------------------------------------------------------------------

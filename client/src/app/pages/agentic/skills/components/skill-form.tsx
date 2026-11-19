@@ -9,7 +9,10 @@ import {
   Button,
   ButtonVariant,
   Form,
+  FormHelperText,
   FormSection,
+  HelperText,
+  HelperTextItem,
   Modal,
   ModalBody,
   ModalFooter,
@@ -38,15 +41,21 @@ import {
 } from "@app/components/HookFormPFFields";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import {
+  PICKER_MENU_HEIGHT,
+  PICKER_MENU_POPPER,
+} from "@app/pages/agentic/components/picker-menu";
+import {
   useCreateSkillMutation,
   useFetchAgents,
   useFetchSkillCollections,
   useFetchSkills,
+  useUpdateSkillCollectionMembershipsMutation,
   useUpdateSkillMutation,
 } from "@app/queries/agentic";
 import { useFetchApplications } from "@app/queries/applications";
 import { useFetchArchetypes } from "@app/queries/archetypes";
-import { agentsWriteScopes } from "@app/scopes";
+import { agentsWriteScopes, skillCollectionsWriteScopes } from "@app/scopes";
+import { isSameSet } from "@app/utils/agentic";
 import {
   duplicateNameCheck,
   getAxiosErrorMessage,
@@ -58,6 +67,13 @@ import { getCollectionsContainingSkill } from "../skill-usage";
 
 const FORM_ID = "skill-form";
 const TITLE_ID = "skill-modal-title";
+const SUBMIT_ID = "skill-form-submit";
+const COLLECTIONS_TOGGLE_ID = "skill-skill-collections";
+const COLLECTIONS_HELPER_ID = `${COLLECTIONS_TOGGLE_ID}-input-helper`;
+
+/** Why the skill cannot leave a collection from this form. */
+const COLLECTION_LOCKS = ["managedByKonveyor", "onlySkill"] as const;
+type CollectionLock = (typeof COLLECTION_LOCKS)[number];
 
 type AssociationField =
   | "agents"
@@ -98,6 +114,7 @@ interface FormValues {
   archetypes: string[];
   targetProfiles: string[];
   applications: string[];
+  skillCollections: string[];
 }
 
 export interface SkillModalProps {
@@ -112,26 +129,45 @@ export const SkillModal: React.FC<SkillModalProps> = ({
   isOpen,
   skill,
   onClose,
-}) => (
-  <Modal
-    id="skill-modal"
-    variant="medium"
-    isOpen={isOpen}
-    onClose={onClose}
-    aria-labelledby={TITLE_ID}
-  >
-    {/* mounted only while open, so every opening starts from the skill */}
-    {isOpen && <SkillForm skill={skill} onClose={onClose} />}
-  </Modal>
-);
+}) => {
+  // Escape and the close button wait for the save: the skill and its
+  // memberships are two writes, and the second must not run out of sight.
+  const [isSaving, setIsSaving] = React.useState(false);
+  return (
+    <Modal
+      id="skill-modal"
+      variant="medium"
+      isOpen={isOpen}
+      onClose={() => {
+        if (!isSaving) onClose();
+      }}
+      aria-labelledby={TITLE_ID}
+    >
+      {/* mounted only while open, so every opening starts from the skill */}
+      {isOpen && (
+        <SkillForm
+          skill={skill}
+          onClose={onClose}
+          onSavingChange={setIsSaving}
+        />
+      )}
+    </Modal>
+  );
+};
 
 export interface SkillFormProps {
   skill: Skill | null;
   onClose: () => void;
+  /** Told when a save starts and ends, so the modal can stay open. */
+  onSavingChange?: (isSaving: boolean) => void;
 }
 
 /** The modal's header, body and footer. */
-export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
+export const SkillForm: React.FC<SkillFormProps> = ({
+  skill,
+  onClose,
+  onSavingChange,
+}) => {
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
 
@@ -142,12 +178,36 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
   const {
     skillCollections,
     isLoading: isLoadingCollections,
+    isFetching: isFetchingCollections,
     fetchError: collectionsError,
   } = useFetchSkillCollections();
   // Associating a skill with an agent writes the agent's skills, so the
   // Agents field needs agent write access. Without it the field is disabled
   // and its values are sent back unchanged.
   const canManageAgents = useHasSomeScopes(agentsWriteScopes);
+  // Membership is stored on each collection, so the Skill collections field
+  // needs collection write access. Without it nothing is sent.
+  const canManageCollections = useHasSomeScopes(skillCollectionsWriteScopes);
+  // Known after a fresh read, not from the cache alone: the save replaces
+  // the whole set, so a stale start could undo someone else's change.
+  const isCollectionsKnown =
+    !isLoadingCollections && !isFetchingCollections && collectionsError == null;
+  const collectionsOfSkill = React.useMemo(
+    () =>
+      skill == null
+        ? []
+        : getCollectionsContainingSkill(skill, skillCollections).map(
+            (collection) => collection.id
+          ),
+    [skill, skillCollections]
+  );
+  // Captured once, after the first fresh read, so a background refetch never
+  // resets the user's selection; the save compares against it.
+  const [initialCollections, setInitialCollections] = React.useState<
+    string[] | undefined
+  >(() => (isCollectionsKnown ? collectionsOfSkill : undefined));
+  const isCollectionsDisabled =
+    !canManageCollections || initialCollections == null;
 
   const idsOf = (scope: SkillAssociationScope) =>
     (skill?.associations ?? [])
@@ -195,25 +255,89 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
     return loaded;
   }, [agents, applications, archetypes, skill, t]);
 
-  const notify = (title: string) => () => {
-    pushNotification({ title, variant: "success" });
-    onClose();
+  // The skill cannot leave a collection the operator reconciles, or one it is
+  // the only member of (a collection needs at least one skill).
+  const collectionLock = (id: string): CollectionLock | undefined => {
+    const collection = skillCollections.find((c) => c.id === id);
+    if (collection?.operatorManaged) {
+      return "managedByKonveyor";
+    }
+    if (
+      skill != null &&
+      collection?.skills.length === 1 &&
+      collection.skills[0].id === skill.id
+    ) {
+      return "onlySkill";
+    }
+    return undefined;
   };
+  const lockReasons: Record<CollectionLock, string> = {
+    managedByKonveyor: t("agentic.common.managedByKonveyor"),
+    onlySkill: t("agentic.skill.onlySkillOfCollection"),
+  };
+  const collectionOptions: FilterSelectOptionProps[] = [...skillCollections]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((collection) => {
+      const lock = collectionLock(collection.id);
+      return {
+        value: collection.id,
+        label: collection.name,
+        optionProps:
+          lock == null
+            ? undefined
+            : { isAriaDisabled: true, description: lockReasons[lock] },
+      };
+    });
+  const lockedCollections = (initialCollections ?? []).filter(
+    (id) => collectionLock(id) != null
+  );
+  // A locked chip has no remove button to explain it, so the helper names
+  // each locked collection with the reason that applies to it.
+  const lockedHelpers = COLLECTION_LOCKS.map((lock) => {
+    const names = lockedCollections
+      .filter((id) => collectionLock(id) === lock)
+      .map((id) => skillCollections.find((c) => c.id === id)?.name ?? id);
+    return names.length > 0
+      ? t(`agentic.skill.skillCollectionsLocked.${lock}`, {
+          count: names.length,
+          names,
+        })
+      : undefined;
+  }).filter((helper) => helper != null);
+
   const notifyError = (title: string) => (error: AxiosError) =>
     pushNotification({
       title,
       message: getAxiosErrorMessage(error),
       variant: "danger",
     });
+  // The submit handler sequences the writes and shows the success toast once
+  // every write is done; the hooks only report their own failure.
+  const onWritten = () => undefined;
 
-  const { mutate: createSkill, isPending: isCreating } = useCreateSkillMutation(
-    notify(t("agentic.skill.created")),
-    notifyError(t("agentic.skill.createFailed"))
-  );
-  const { mutate: updateSkill, isPending: isUpdating } = useUpdateSkillMutation(
-    notify(t("agentic.skill.updated")),
-    notifyError(t("agentic.skill.updateFailed"))
-  );
+  const { mutateAsync: createSkill, isPending: isCreating } =
+    useCreateSkillMutation(
+      onWritten,
+      notifyError(t("agentic.skill.createFailed"))
+    );
+  const { mutateAsync: updateSkill, isPending: isUpdating } =
+    useUpdateSkillMutation(
+      onWritten,
+      notifyError(t("agentic.skill.updateFailed"))
+    );
+  const { mutateAsync: updateMemberships, isPending: isUpdatingMemberships } =
+    useUpdateSkillCollectionMembershipsMutation(onWritten, (error) =>
+      pushNotification({
+        title: t("agentic.skill.collectionsSaveFailed"),
+        message: t(
+          skill
+            ? "agentic.skill.collectionsSaveFailedUpdated"
+            : "agentic.skill.collectionsSaveFailedCreated",
+          { reason: getAxiosErrorMessage(error) }
+        ),
+        variant: "warning",
+      })
+    );
 
   const validationSchema = object().shape({
     name: string()
@@ -263,13 +387,16 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
     archetypes: array().of(string().required()).defined(),
     targetProfiles: array().of(string().required()).defined(),
     applications: array().of(string().required()).defined(),
+    skillCollections: array().of(string().required()).defined(),
   });
 
   const {
     handleSubmit,
-    formState: { isSubmitting, isValidating, isValid, isDirty },
+    formState: { isSubmitting, isValidating, isValid, dirtyFields },
     control,
     setValue,
+    getFieldState,
+    resetField,
   } = useForm<FormValues>({
     defaultValues: {
       name: skill?.name || "",
@@ -284,12 +411,39 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
       archetypes: idsOf("archetype"),
       targetProfiles: idsOf("targetProfile"),
       applications: idsOf("application"),
+      skillCollections: initialCollections ?? [],
     },
     resolver: yupResolver(validationSchema),
     mode: "all",
   });
 
   const selectedSourceType = useWatch({ control, name: "sourceType" });
+  const selectedCollections = useWatch({ control, name: "skillCollections" });
+  // Save turns on for what the submit writes: a picker that is back to its
+  // starting set in another order is no change.
+  const hasChanges =
+    Object.keys(dirtyFields).some((name) => name !== "skillCollections") ||
+    (!isCollectionsDisabled &&
+      initialCollections != null &&
+      !isSameSet(selectedCollections, initialCollections));
+
+  // The collections may load after the form opens: then they become the
+  // field's starting value, unless the user already changed it.
+  React.useEffect(() => {
+    if (initialCollections != null || !isCollectionsKnown) {
+      return;
+    }
+    setInitialCollections(collectionsOfSkill);
+    if (!getFieldState("skillCollections").isDirty) {
+      resetField("skillCollections", { defaultValue: collectionsOfSkill });
+    }
+  }, [
+    collectionsOfSkill,
+    getFieldState,
+    initialCollections,
+    isCollectionsKnown,
+    resetField,
+  ]);
 
   // The edit warning counts what the delete reason counts,
   // once both counts are known.
@@ -320,7 +474,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
     return undefined;
   })();
 
-  const onSubmit = (formValues: FormValues) => {
+  const onSubmit = async (formValues: FormValues) => {
     const associations: SkillAssociationRequest[] = [
       ...formValues.agents.map(
         (id): SkillAssociationRequest => ({
@@ -366,14 +520,60 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
       associations,
     };
 
-    if (skill) {
-      updateSkill({ id: skill.id, ...payload });
-    } else {
-      createSkill(payload);
+    // The skill must exist before it can join a collection: write it first,
+    // then the memberships if they changed.
+    // When only the memberships changed, the skill is not rewritten: its
+    // update time stays and its associations are not written again.
+    const isSkillChanged = (
+      Object.keys(formValues) as (keyof FormValues)[]
+    ).some(
+      (name) => name !== "skillCollections" && getFieldState(name).isDirty
+    );
+    let skillId: string;
+    try {
+      if (skill) {
+        if (isSkillChanged) await updateSkill({ id: skill.id, ...payload });
+        skillId = skill.id;
+      } else {
+        skillId = (await createSkill(payload)).id;
+      }
+    } catch {
+      // The hook showed the failure; the modal stays open to retry.
+      document.getElementById(SUBMIT_ID)?.focus();
+      return;
     }
+
+    if (
+      !isCollectionsDisabled &&
+      initialCollections != null &&
+      !isSameSet(formValues.skillCollections, initialCollections)
+    ) {
+      try {
+        await updateMemberships({
+          skillId,
+          collections: formValues.skillCollections.map((id) => ({ id })),
+        });
+      } catch {
+        // The skill is saved and the hook showed a warning. Close anyway: a
+        // retry from a create form would create a second skill.
+        onClose();
+        return;
+      }
+    }
+
+    pushNotification({
+      title: skill ? t("agentic.skill.updated") : t("agentic.skill.created"),
+      variant: "success",
+    });
+    onClose();
   };
 
-  const isSaving = isCreating || isUpdating;
+  const isSaving = isCreating || isUpdating || isUpdatingMemberships;
+  // isSubmitting covers the whole handler, both writes included.
+  React.useEffect(() => {
+    onSavingChange?.(isSubmitting);
+  }, [isSubmitting, onSavingChange]);
+  React.useEffect(() => () => onSavingChange?.(false), [onSavingChange]);
 
   return (
     <>
@@ -530,6 +730,12 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
                       ariaLabel={t(
                         `agentic.skill.associationFields.${field}.label`
                       )}
+                      inputAriaLabel={t(
+                        `agentic.skill.associationFields.${field}.label`
+                      )}
+                      inputAriaDescribedBy={`${toggleId}-input-helper`}
+                      maxMenuHeight={PICKER_MENU_HEIGHT}
+                      popperProps={PICKER_MENU_POPPER}
                       options={options[field]}
                       values={value}
                       isDisabled={isDisabled}
@@ -561,17 +767,112 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
                 />
               );
             })}
+            {/* Membership, not an association scope, so outside the loop. */}
+            <HookFormPFGroupController
+              control={control}
+              name="skillCollections"
+              label={t(
+                "agentic.skill.associationFields.skillCollections.label"
+              )}
+              fieldId={`${COLLECTIONS_TOGGLE_ID}-input`}
+              renderInput={({ field: { value } }) => (
+                <>
+                  <MultiSelect
+                    toggleId={COLLECTIONS_TOGGLE_ID}
+                    toggleAriaLabel={t(
+                      "agentic.skill.associationFields.skillCollections.placeholder"
+                    )}
+                    ariaLabel={t(
+                      "agentic.skill.associationFields.skillCollections.label"
+                    )}
+                    inputAriaLabel={t(
+                      "agentic.skill.associationFields.skillCollections.label"
+                    )}
+                    inputAriaDescribedBy={COLLECTIONS_HELPER_ID}
+                    maxMenuHeight={PICKER_MENU_HEIGHT}
+                    popperProps={PICKER_MENU_POPPER}
+                    options={collectionOptions}
+                    values={value}
+                    lockedValues={lockedCollections}
+                    isDisabled={isCollectionsDisabled}
+                    hasCheckbox
+                    hasBadge
+                    hasChips
+                    onSelect={(selection) => {
+                      if (
+                        !selection ||
+                        isCollectionsDisabled ||
+                        lockedCollections.includes(selection)
+                      ) {
+                        return;
+                      }
+                      setValue(
+                        "skillCollections",
+                        value.includes(selection)
+                          ? value.filter((id) => id !== selection)
+                          : [...value, selection],
+                        { shouldDirty: true, shouldValidate: true }
+                      );
+                    }}
+                    onClear={() => {
+                      if (isCollectionsDisabled) return;
+                      setValue(
+                        "skillCollections",
+                        value.filter((id) => lockedCollections.includes(id)),
+                        { shouldDirty: true, shouldValidate: true }
+                      );
+                    }}
+                    placeholderText={t(
+                      "agentic.skill.associationFields.skillCollections.placeholder"
+                    )}
+                  />
+                  {/* Own helper: it has a warning variant and a second line. */}
+                  <FormHelperText id={COLLECTIONS_HELPER_ID}>
+                    <HelperText>
+                      {/* Only a failed first read leaves the field
+                          disabled and unsent; after that, a failed refetch
+                          changes nothing the save does. */}
+                      {initialCollections == null &&
+                      collectionsError != null ? (
+                        <HelperTextItem variant="warning">
+                          {t("agentic.skill.skillCollectionsUnavailable")}
+                        </HelperTextItem>
+                      ) : initialCollections == null ? (
+                        // Never an empty field that reads as "in no
+                        // collection" while they load.
+                        <HelperTextItem>
+                          {t("agentic.skill.skillCollectionsLoading")}
+                        </HelperTextItem>
+                      ) : (
+                        <HelperTextItem>
+                          {canManageCollections
+                            ? t(
+                                "agentic.skill.associationFields.skillCollections.helper"
+                              )
+                            : t("agentic.skill.skillCollectionsReadOnly")}
+                        </HelperTextItem>
+                      )}
+                      {canManageCollections &&
+                        lockedHelpers.map((helper) => (
+                          <HelperTextItem key={helper}>{helper}</HelperTextItem>
+                        ))}
+                    </HelperText>
+                  </FormHelperText>
+                </>
+              )}
+            />
           </FormSection>
         </Form>
       </ModalBody>
       <ModalFooter>
         <Button
+          id={SUBMIT_ID}
           type="submit"
           form={FORM_ID}
           variant={ButtonVariant.primary}
-          isDisabled={
-            !isValid || isSubmitting || isValidating || !isDirty || isSaving
-          }
+          isDisabled={!isValid || !hasChanges}
+          // Still focusable while saving, so focus stays in the dialog.
+          isAriaDisabled={isSubmitting || isValidating || isSaving}
           isLoading={isSaving || undefined}
         >
           {skill ? t("actions.save") : t("actions.create")}
