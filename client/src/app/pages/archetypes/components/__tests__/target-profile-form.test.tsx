@@ -58,7 +58,7 @@ const renderForm = (
 };
 
 describe("TargetProfileForm", () => {
-  it("renders nothing while closed (AR2)", () => {
+  it("renders nothing while closed", () => {
     renderForm({ isOpen: false });
     expect(screen.queryByRole("dialog")).toBeNull();
   });

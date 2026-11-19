@@ -46,7 +46,7 @@ export interface AgentDetailsTabProps {
 }
 
 /**
- * The Details tab (guide 4.2, 7.2, kit-detail): the facts, then the
+ * The Details tab: the facts, then the
  * Persona prompt, Parameters and Used in migration plans sections.
  */
 export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
@@ -69,7 +69,7 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
   );
   const collections = agent.skillCollections ?? [];
 
-  /** A set-valued fact: link labels, even for one item (C2). */
+  /** A set-valued fact: link labels, even for one item. */
   const linkLabels = (refs: EntityRef[], pathOf: (id: string) => string) =>
     refs.length === 0 ? (
       none
@@ -253,7 +253,7 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
                 <Th>{t("agentic.agentDetail.stagesLabel")}</Th>
               </Tr>
             </Thead>
-            {/* The plans are a second query: a spinner or the error, never a false empty (X6). */}
+            {/* The plans are a second query: a spinner or the error, never a false empty. */}
             <ConditionalTableBody
               isLoading={isLoadingPlans}
               isError={plansError != null}

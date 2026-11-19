@@ -41,7 +41,7 @@ import { RunPageBody, RunStatusLine } from "../components/run-page-layout";
 import { useApproveStage } from "../components/use-approve-stage";
 
 /**
- * Where the run is (plan-runs amendment 6): a pending run waits for its
+ * Where the run is: a pending run waits for its
  * first stage, a succeeded one says when it started and completed, any
  * other names its current stage and its start. A pending run's `startedAt`
  * is not a start (docs/agentic-handoff.md), so it is not shown.
@@ -94,7 +94,7 @@ const PlanRunDetail: React.FC = () => {
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
   // The run's snapshot of skills: render what the server returns, never
-  // more. Undefined is unknown, not "no skills" (addenda X6).
+  // more. Undefined is unknown, not "no skills".
   const skillRows =
     planRun?.resolvedSkills != null
       ? groupSkillSources(planRun.resolvedSkills)

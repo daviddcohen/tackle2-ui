@@ -31,7 +31,7 @@ test.describe("Start migration journey", () => {
     await expect(
       summary.getByRole("link", { name: "Customer Management" })
     ).toBeVisible();
-    await expect(summary).toContainText("mta/agentic-migration");
+    await expect(summary).toContainText("konveyor/agentic-migration");
     // Breadcrumb returns to the inventory the journey started from.
     await page
       .getByRole("navigation", { name: "Breadcrumb" })

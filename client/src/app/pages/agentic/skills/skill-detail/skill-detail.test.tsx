@@ -172,7 +172,7 @@ describe("SkillDetail, Details tab", () => {
     );
   });
 
-  it("keeps the origin and the breadcrumb trail on the Associations fact link (S2)", async () => {
+  it("keeps the origin and the breadcrumb trail on the Associations fact link", async () => {
     useEndpoints();
     renderPage({
       pathname: "/skills/1",
@@ -211,7 +211,7 @@ describe("SkillDetail, Details tab", () => {
     );
   });
 
-  it("links a web repository and shows any other one as copyable text (S9)", async () => {
+  it("links a web repository and shows any other one as copyable text", async () => {
     useEndpoints({
       skill: {
         ...inlineSkill,
@@ -238,7 +238,7 @@ describe("SkillDetail, Details tab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says None without associations and Unavailable when the server leaves them out (S2, X6)", async () => {
+  it("says None without associations and Unavailable when the server leaves them out", async () => {
     useEndpoints({ skill: { ...inlineSkill, associations: [] } });
     const { unmount } = renderPage();
     await findTitle();
@@ -268,7 +268,7 @@ describe("SkillDetail, Details tab", () => {
     ).toBeInTheDocument();
   });
 
-  it("disables Edit and Delete for an operator-managed skill (S4)", async () => {
+  it("disables Edit and Delete for an operator-managed skill", async () => {
     useEndpoints({
       skill: { ...inlineSkill, associations: [], operatorManaged: true },
     });
@@ -334,7 +334,7 @@ describe("SkillDetail, Details tab", () => {
     expect(readsAfterDelete).toBe(0);
   });
 
-  it("has no Actions menu without the write scope (X9)", async () => {
+  it("has no Actions menu without the write scope", async () => {
     mockGrantedScopes.all = false;
     useEndpoints();
     renderPage();
@@ -416,7 +416,7 @@ describe("SkillDetail, Associations tab", () => {
     ).toBeInTheDocument();
   });
 
-  it("says Unavailable when the plans do not report their skills (X6)", async () => {
+  it("says Unavailable when the plans do not report their skills", async () => {
     useEndpoints({
       plans: (_req, res, ctx) =>
         res(
@@ -444,7 +444,7 @@ describe("SkillDetail, Associations tab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does not claim the skill is unused when the plans fail to load (X6)", async () => {
+  it("does not claim the skill is unused when the plans fail to load", async () => {
     useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(500)) });
     renderPage("/skills/1?tab=associations");
 

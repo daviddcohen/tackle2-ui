@@ -105,7 +105,7 @@ const TargetProfilesPage: React.FC = () => {
 
   // The leaf is "Target profiles" even when a row is selected, and the owning
   // archetype is always its parent, also when the trail starts elsewhere such
-  // as a migration plan (guide 3.5.5). A list link followed while another
+  // as a migration plan. A list link followed while another
   // archetype's drawer was open ends in that drawer, which the owner replaces.
   const leaf = t("terms.targetProfiles");
   const { breadcrumbs: incomingCrumbs } = useEntityBreadcrumbs(leaf, [
@@ -146,7 +146,7 @@ const TargetProfilesPage: React.FC = () => {
 
   const { addTargetProfile, updateTargetProfile, deleteTargetProfile } =
     useArchetypeMutations();
-  // Plans and skills exist only where the agentic API is available (AR3).
+  // Plans and skills exist only where the agentic API is available.
   const numericArchetypeId = Number(archetypeId);
   const {
     getAssignedPlan,
@@ -326,7 +326,7 @@ const TargetProfilesPage: React.FC = () => {
                 ];
                 // An assigned plan blocks Delete; without the plans query
                 // that cannot be checked, and without the skills query the
-                // confirm could not say which skills stop applying (X6).
+                // confirm could not say which skills stop applying.
                 const deleteBlocker = !isAgenticEnabled
                   ? undefined
                   : isPlansError || isSkillsError
@@ -443,7 +443,7 @@ const TargetProfilesPage: React.FC = () => {
             title={t("agentic.archetype.deleteTitle")}
             message={
               profileToDelete &&
-              // The skills consequence only when it applies (amendment 5).
+              // The skills consequence only when it applies.
               (isAgenticEnabled && profileSkills(profileToDelete).length > 0
                 ? t("agentic.archetype.deleteBodyWithSkills", {
                     profile: profileToDelete.name,

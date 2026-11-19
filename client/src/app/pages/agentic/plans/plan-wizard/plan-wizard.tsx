@@ -72,7 +72,7 @@ interface PlanFormValues {
 const NAME_MAX_LENGTH = 120;
 const DESCRIPTION_MAX_LENGTH = 500;
 
-/** The menus inside the wizard are appended here (addenda P12). */
+/** The menus inside the wizard are appended here. */
 const MODAL_ID = "plan-wizard";
 
 const DETAILS_STEP_ID = "step-plan-details";
@@ -121,7 +121,7 @@ const InvalidStepAlert: React.FC<{
   );
 };
 
-/** "View target profiles" in the create toast (addenda P3): a new plan is not assigned yet. */
+/** "View target profiles" in the create toast: a new plan is not assigned yet. */
 const TargetProfilesToastLink: React.FC<{ archetypeId: number }> = ({
   archetypeId,
 }) => {
@@ -158,8 +158,8 @@ const helper = (
 );
 
 /**
- * Create or edit a migration plan in four steps (guide 4.5, 7.3, plans
- * amendment 2): Plan details, Migration path, Stages, Review. Next stays
+ * Create or edit a migration plan in four steps:
+ * Plan details, Migration path, Stages, Review. Next stays
  * disabled until the step is valid, and every control that blocks it says
  * why. Creating visits the steps in order; editing can open any step.
  */
@@ -428,10 +428,10 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     trimmedName.length > 0 &&
     trimmedName.length <= NAME_MAX_LENGTH &&
     (description || "").length <= DESCRIPTION_MAX_LENGTH &&
-    // The duplicate check needs every plan (P8).
+    // The duplicate check needs every plan.
     arePlansLoaded &&
     !isDuplicateName(name);
-  // A saved path or stage agent is only confirmed once its options load (P8).
+  // A saved path or stage agent is only confirmed once its options load.
   const isPathValid =
     areArchetypesLoaded && archetypeId != null && targetProfileIds.length > 0;
   const isStagesValid =
@@ -448,7 +448,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     targetProfileIds.includes(profile.id)
   );
   const isPathAssigned = plan?.migrationPath?.isDefault === true;
-  // Review names come from the archetypes query (X6).
+  // Review names come from the archetypes query.
   const archetypesState = isLoadingArchetypes ? (
     <Skeleton width="8rem" screenreaderText={t("terms.loading")} />
   ) : (

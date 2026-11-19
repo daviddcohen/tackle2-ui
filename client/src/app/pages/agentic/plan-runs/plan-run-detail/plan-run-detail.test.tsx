@@ -46,7 +46,7 @@ const run = (overrides: Partial<PlanRun>): PlanRun => ({
     { id: 3, name: "Claims Processing" },
   ],
   status: "Running",
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
   stageRuns: [
     stage(1, "Prepare proposal", "Running", {
@@ -95,7 +95,7 @@ describe("PlanRunDetail", () => {
         /^Stage 1 of 2: Prepare proposal · Started November 10, 2026/
       )
     ).toBeInTheDocument();
-    // Started is in the status line only, never a fact (C6).
+    // Started is in the status line only, never a fact.
     expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
       ["Migration plan", "Applications", "Target branch", "Duration", "Commits"]
     );
@@ -161,7 +161,9 @@ describe("PlanRunDetail", () => {
         .getAllByRole("link")
         .map((link) => link.getAttribute("href"))
     ).toEqual(["/applications/1", "/applications/3"]);
-    expect(fact("Target branch")).toHaveTextContent("mta/agentic-migration");
+    expect(fact("Target branch")).toHaveTextContent(
+      "konveyor/agentic-migration"
+    );
   });
 
   it("shows run skills that are unknown as unavailable, not as none", async () => {

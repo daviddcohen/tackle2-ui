@@ -50,7 +50,7 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
 }) => {
   const { t } = useTranslation();
   // The title is the leaf, so the trail shows ancestors only, and none when
-  // the only ancestor is the Archetypes list behind the drawer (guide 3.5.6).
+  // the only ancestor is the Archetypes list behind the drawer.
   const ancestors = breadcrumbs
     .slice(0, -1)
     .filter(

@@ -117,7 +117,7 @@ test.describe("Migration next actions", () => {
       /This decision applies to all \d+ applications in Run #/
     );
     await confirm.getByRole("button", { name: "Approve and continue" }).click();
-    // The toast names the approved stage (AP13), in the one approve string
+    // The toast names the approved stage, in the one approve string
     // the run pages use too: no quotes. PF prefixes the title with its
     // screen reader text ("Success alert:").
     await expect(
@@ -187,7 +187,7 @@ test.describe("Migration next actions", () => {
     await expect(
       dialog.getByRole("row", { name: /Customer Management/ })
     ).toBeVisible();
-    // The application still resolves to the run's plan (R5), even though
+    // The application still resolves to the run's plan, even though
     // the run covers other applications this tab does not load.
     await expect(
       dialog.getByLabel("Use each application's migration plan")
@@ -226,7 +226,7 @@ test.describe("Migration next actions", () => {
     ).toBeChecked();
     await expect(
       dialog.getByRole("textbox", { name: /Target branch/ })
-    ).toHaveValue("mta/spring-quarkus");
+    ).toHaveValue("konveyor/spring-quarkus");
     await dialog
       .getByRole("button", { name: /^Run on \d+ applications?$/ })
       .click();

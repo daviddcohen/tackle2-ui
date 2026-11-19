@@ -30,7 +30,7 @@ if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
     kubectl rollout status deployment/tackle-ui -n "$NAMESPACE" --timeout=180s
   }
 else
-  echo "==> Fresh cluster — installing OLM..."
+  echo "==> Fresh cluster: installing OLM..."
   curl -sL "https://github.com/operator-framework/operator-lifecycle-manager/releases/download/${OLM_VERSION}/install.sh" | bash -s "$OLM_VERSION"
 
   echo "==> Installing Konveyor operator..."

@@ -62,7 +62,7 @@ import {
 
 import { SkillCollectionModal } from "./skill-collection-form";
 
-/** The Skill collections tab of the Skills page (guide 7.5, collections-list). */
+/** The Skill collections tab of the Skills page. */
 export const SkillCollectionsTab: React.FC = () => {
   const { t } = useTranslation();
   const { to } = useBreadcrumbs(t("sidebar.skills"), []);
@@ -76,7 +76,7 @@ export const SkillCollectionsTab: React.FC = () => {
     isLoading: isLoadingAgents,
     fetchError: agentsError,
   } = useFetchAgents();
-  // The Agents cell and the delete blocker wait for the agents query (X6).
+  // The Agents cell and the delete blocker wait for the agents query.
   const knownAgents =
     isLoadingAgents || agentsError != null ? undefined : agents;
 
@@ -176,7 +176,7 @@ export const SkillCollectionsTab: React.FC = () => {
     if (collection.skills.length === 0) {
       return <EmptyTextMessage message={t("terms.none")} />;
     }
-    // One object in a cell is its name (guide 4.10, C1).
+    // One object in a cell is its name.
     if (collection.skills.length === 1) {
       return (
         <Link
@@ -238,7 +238,7 @@ export const SkillCollectionsTab: React.FC = () => {
       >
         <Toolbar {...toolbarProps}>
           <ToolbarContent>
-            {/* Filters stay expanded down to 1024 wide (kit-list@1024). */}
+            {/* Filters stay expanded down to 1024 wide. */}
             <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
             {canManageCollections && (
               <ToolbarGroup variant="action-group">

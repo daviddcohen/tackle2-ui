@@ -41,7 +41,7 @@ interface ApplicationStagesProps {
 export type StageRunsTableProps = PlanRunStagesProps | ApplicationStagesProps;
 
 /**
- * The one stages table of a run (guide 4.3, 4.9, kit-tables). On a plan run:
+ * The one stages table of a run. On a plan run:
  * # · Stage (link to the stage page) · Agent · Status · Started · Duration.
  * On an application's Migration tab: # · Stage (with the server's `summary`
  * as a subtle line) · Status · Completed.

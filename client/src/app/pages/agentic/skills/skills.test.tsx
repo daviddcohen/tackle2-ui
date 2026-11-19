@@ -47,7 +47,7 @@ const skills: Skill[] = [
     sourceType: "oci",
     associations: [],
   },
-  // A real adapter without associations: usage is unknown (S1, X6).
+  // A real adapter without associations: usage is unknown.
   { id: "3", name: "Unknown usage", description: "", sourceType: "git" },
 ];
 
@@ -166,7 +166,7 @@ describe("SkillsPage", () => {
       await within(foundation).findByRole("link", { name: "2 agents" })
     ).toHaveAttribute("href", "/skills/collections/1#used-by-agents");
 
-    // One object in a cell is its name (guide 4.10).
+    // One object in a cell is its name.
     const single = await rowOf("Single skill pack");
     expect(
       within(single).getByRole("link", {
@@ -176,7 +176,7 @@ describe("SkillsPage", () => {
     expect(await within(single).findByText("None")).toBeInTheDocument();
   });
 
-  it("shows a skeleton in the Agents cell while agents load (X6)", async () => {
+  it("shows a skeleton in the Agents cell while agents load", async () => {
     let release = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
     useEndpoints();
@@ -195,7 +195,7 @@ describe("SkillsPage", () => {
     expect(await within(single).findByText("None")).toBeInTheDocument();
   });
 
-  it("says Unavailable and blocks Delete when agents fail to load (X6)", async () => {
+  it("says Unavailable and blocks Delete when agents fail to load", async () => {
     useEndpoints();
     server.use(
       rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
@@ -251,7 +251,7 @@ describe("SkillsPage", () => {
     ).toHaveLength(2);
   });
 
-  describe("without write scopes (X9)", () => {
+  describe("without write scopes", () => {
     beforeEach(() => {
       mockGrantedScopes.all = false;
     });
@@ -293,7 +293,7 @@ describe("SkillsPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("gates each tab on its own scope (S6)", async () => {
+    it("gates each tab on its own scope", async () => {
       mockGrantedScopes.scopes = [...skillCollectionsWriteScopes];
       useEndpoints();
       renderAt();

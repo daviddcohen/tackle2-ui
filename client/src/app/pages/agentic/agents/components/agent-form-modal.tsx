@@ -20,9 +20,9 @@ export interface AgentFormModalProps {
 }
 
 /**
- * The one create/edit agent modal (A14), opened from the list and the
+ * The one create/edit agent modal, opened from the list and the
  * detail page: title, one-sentence description, the consequence warning
- * when the agent is in use (guide 4.4, 6.5), then the form with its
+ * when the agent is in use, then the form with its
  * submit and Cancel pinned in the footer.
  */
 export const AgentFormModal: React.FC<AgentFormModalProps> = ({
@@ -35,7 +35,7 @@ export const AgentFormModal: React.FC<AgentFormModalProps> = ({
   const { migrationPlans, isSuccess, fetchError } = useFetchMigrationPlans();
 
   // An edit names its consequence; until the plans are known it never looks
-  // like "not used" (X6): a skeleton while they load, a warning if they fail.
+  // like "not used": a skeleton while they load, a warning if they fail.
   let notice: React.ReactNode = null;
   if (agent != null) {
     const planCount = isSuccess

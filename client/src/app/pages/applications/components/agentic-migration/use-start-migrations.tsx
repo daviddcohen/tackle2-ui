@@ -20,7 +20,7 @@ import { planRunPath } from "./paths";
 /**
  * Starts migrations and shows what the server created: it opens the plan run
  * when one was created. When the applications resolved to several plans (one
- * run per plan), the page stays and a toast links to the plan runs (AP13).
+ * run per plan), the page stays and a toast links to the plan runs.
  * When the server created none, a danger toast says so.
  */
 export const useStartMigrations = (

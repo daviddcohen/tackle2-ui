@@ -27,7 +27,7 @@ export interface SkillsTableRow {
   sources: SkillSource[];
 }
 
-/** Resolution order (guide 2.3): agent (and its collections), archetype, target profile, application. */
+/** Resolution order: agent (and its collections), archetype, target profile, application. */
 const scopeOrder: SkillAssociationScope[] = [
   "agent",
   "archetype",
@@ -36,7 +36,7 @@ const scopeOrder: SkillAssociationScope[] = [
 ];
 
 /**
- * Groups skill associations into one row per skill (guide 2.3, 4.9). Rows are
+ * Groups skill associations into one row per skill. Rows are
  * sorted by skill name; each row keeps every distinct source, in resolution
  * order and otherwise in the order the server returned them. Nothing is added:
  * the rows show exactly the sources the caller passes.
@@ -115,8 +115,8 @@ export interface SkillsTableProps {
 }
 
 /**
- * The one presentation of a skill set and its provenance (guide 2.3, 4.9,
- * kit-tables): Skill (link) · Source, one line per source as plain text
+ * The one presentation of a skill set and its provenance:
+ * Skill (link) · Source, one line per source as plain text
  * "{Scope}: {name}". Sources are never links: they carry no id.
  */
 export const SkillsTable: React.FC<SkillsTableProps> = ({ rows, linkTo }) => {

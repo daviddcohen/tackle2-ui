@@ -11,8 +11,8 @@ export interface CountLinkProps {
 }
 
 /**
- * A "{n} {nouns}" count as a router link (guide 4.1 Counts, kit amendment
- * 7): the cell may wrap, the count does not. The class comes from
+ * A "{n} {nouns}" count as a router link:
+ * the cell may wrap, the count does not. The class comes from
  * react-styles so its utility CSS is loaded with the component.
  */
 export const CountLink: React.FC<CountLinkProps> = ({ to, children }) => {

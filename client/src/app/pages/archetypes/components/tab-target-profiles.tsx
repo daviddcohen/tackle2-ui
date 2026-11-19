@@ -40,9 +40,9 @@ export interface TabTargetProfilesProps {
 }
 
 /**
- * Each target profile with the migration plan assigned to it (guide 7.7).
+ * Each target profile with the migration plan assigned to it.
  * Generators and the analysis profile stay on the full page (3.4); without
- * the agentic API the tab keeps those upstream columns (AR3).
+ * the agentic API the tab keeps those upstream columns.
  */
 export const TabTargetProfiles: React.FC<TabTargetProfilesProps> = ({
   archetype,

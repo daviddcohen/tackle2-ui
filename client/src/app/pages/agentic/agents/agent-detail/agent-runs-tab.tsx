@@ -145,7 +145,7 @@ const StageRunsSection: React.FC<{
                 </TableHeaderContentWithControls>
               </Tr>
             </Thead>
-            {/* The runs are a second query: spinner or error, never a false empty (X6). */}
+            {/* The runs are a second query: spinner or error, never a false empty. */}
             <ConditionalTableBody
               isLoading={isLoading}
               isError={fetchError != null}
@@ -396,15 +396,15 @@ export interface AgentRunsTabProps {
   testRuns: AgentTestRun[];
   isLoadingTestRuns: boolean;
   testRunsError: unknown;
-  /** With the agent run scope: the empty test runs say how to start one (A3). */
+  /** With the agent run scope: the empty test runs say how to start one. */
   canTestAgent: boolean;
   linkCrumbs: BreadcrumbEntry[];
 }
 
 /**
- * The Runs tab (7.2, agents amendments 2 and 4): the stages this agent
+ * The Runs tab: the stages this agent
  * runs in plan runs, and its test runs, as two sections. No toolbar; each
- * table paginates only above 10 rows (A4).
+ * table paginates only above 10 rows.
  */
 export const AgentRunsTab: React.FC<AgentRunsTabProps> = ({
   agentId,

@@ -13,9 +13,9 @@ import {
   test,
 } from "../support";
 
-// The leaf is the missing entity's noun (guide 3.5 rule 2); a stage of a
-// missing run is that run's not found (addenda R3). The target profiles page
-// keeps its own leaf, "Target profiles", under the missing archetype (AR8).
+// The leaf is the missing entity's noun; a stage of a
+// missing run is that run's not found. The target profiles page
+// keeps its own leaf, "Target profiles", under the missing archetype.
 const cases: [
   path: string,
   message: RegExp,

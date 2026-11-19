@@ -127,7 +127,7 @@ import { ColumnAssessmentStatus } from "./components/column-assessment-status";
 import { ColumnReviewStatus } from "./components/column-review-status";
 import { ManageColumnsToolbar } from "./components/manage-columns-toolbar";
 
-/** Migration status filter options, in the guide 5.2 order (most urgent first). */
+/** Migration status filter options, most urgent first. */
 const agenticMigrationStatuses: ApplicationMigrationDisplayStatus[] = [
   "actionRequired",
   "failed",
@@ -680,7 +680,7 @@ export const ApplicationsTable: FC = () => {
                   what: t("agentic.execution.statusFilter").toLowerCase(),
                 }) + "...",
               // Without the statuses there is nothing to filter: no options
-              // disables the control (ADDENDA AP1).
+              // disables the control.
               selectOptions:
                 migrationsFetchError != null
                   ? []
@@ -741,7 +741,7 @@ export const ApplicationsTable: FC = () => {
   } = tableControls;
   const showMigrationColumn =
     isAgenticEnabled && getColumnVisibility("agenticMigration");
-  // Every application, not only the current page or filter (guide 7.6).
+  // Every application, not only the current page or filter.
   const actionRequiredCount =
     isAgenticEnabled && areMigrationsAvailable
       ? applications.filter(
@@ -813,13 +813,13 @@ export const ApplicationsTable: FC = () => {
           : []
       )
     );
-  // A row that cannot start says why (guide 4.12): the server's reason, or
+  // A row that cannot start says why: the server's reason, or
   // its status. While the statuses load or after they failed, the dialog
   // reads them and reports that itself.
   const startRowProps = (application: DecoratedApplication) => {
     const migration = getMigration(application);
     if (!areMigrationsAvailable || migration.preflight === "ready") return {};
-    // The server's reason, else why the action is off (guide 4.12), never a
+    // The server's reason, else why the action is off, never a
     // bare status word.
     const reason =
       migration.preflightReason || t("agentic.execution.readyOnly");

@@ -48,4 +48,4 @@ Context:
 
 - Scope: a configuration plane (agents, skills, models, workflows) and an execution plane (migration runs)
 - Upstream ships a dev-preview agentic console from [konveyor/tackle2-ui#3546](https://github.com/konveyor/tackle2-ui/pull/3546); this design work starts from scratch. On this branch the prototype replaces that dev-preview console; its real-backend client is kept in `client/src/app/api/agentic/` and `client/src/app/api/rest/agent-runs.ts` as the wiring reference.
-- Related repos: [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller) (backend controller), [yuvalgalanti/MTA-Agentic-Migration-](https://github.com/yuvalgalanti/MTA-Agentic-Migration-) (concept prototype)
+- Related repo: [konveyor/agentic-controller](https://github.com/konveyor/agentic-controller) (backend controller)

@@ -47,7 +47,7 @@ const StageRunDetail: React.FC = () => {
 
   const { approve, isApproving } = useApproveStage(runId);
 
-  // The run itself is missing (addenda R3): the page is the run's not found.
+  // The run itself is missing: the page is the run's not found.
   const isRunMissing =
     planRun == null && !isLoading && (isNotFound || fetchError == null);
   const { breadcrumbs, linkCrumbs: stageChildCrumbs } = useEntityBreadcrumbs(
@@ -56,7 +56,7 @@ const StageRunDetail: React.FC = () => {
       : (stage?.name ?? t("agentic.entity.stage")),
     [
       { title: t("sidebar.planRuns"), path: DevPaths.planRuns },
-      // While the run loads or fails, its crumb is the noun (guide 3.5 rule 2).
+      // While the run loads or fails, its crumb is the noun.
       ...(isRunMissing
         ? []
         : [
@@ -79,7 +79,7 @@ const StageRunDetail: React.FC = () => {
     }
     if (planRun == null) {
       // A missing run is the run's not found; any other failure is the
-      // error branch under the full trail (addenda X7).
+      // error branch under the full trail.
       return (
         <EntityDetailUnavailable
           breadcrumbs={breadcrumbs}
@@ -112,7 +112,7 @@ const StageRunDetail: React.FC = () => {
   };
   const duration = stageRunDurationSeconds(stageRun);
   // The way back to the run, also on a trail that does not pass through it
-  // (Agents > agent > stage, addenda R1).
+  // (Agents > agent > stage).
   const runLink = (
     <Link
       to={breadcrumbTo(
@@ -218,7 +218,7 @@ const StageRunDetail: React.FC = () => {
 
         {paragraphs.length > 0 && (
           <DetailSection title={t("agentic.stageRun.instructions")}>
-            {/* Long instructions show their first lines (guide 4.11); the
+            {/* Long instructions show their first lines; the
                 toggle appears only when the text is cut. */}
             <ExpandableSection
               variant="truncate"

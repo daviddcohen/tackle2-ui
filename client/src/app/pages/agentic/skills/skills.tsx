@@ -19,7 +19,7 @@ const SKILLS_PAGE_TABS = ["skills", "collections"] as const;
 type SkillsPageTab = (typeof SKILLS_PAGE_TABS)[number];
 const TAB_PREFIX = "skills-page";
 
-/** `/skills`: skills and skill collections, one tab each (`?tab=`, guide 7.5). */
+/** `/skills`: skills and skill collections, one tab each (`?tab=`). */
 const SkillsPage: React.FC = () => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useUrlTab<SkillsPageTab>(
@@ -57,8 +57,8 @@ const SkillsPage: React.FC = () => {
           />
         </Tabs>
       </PageSection>
-      {/* The list wrapper of archetypes-page.tsx, kept for parity (guide
-          4.1), once around both tab bodies. */}
+      {/* The list wrapper of archetypes-page.tsx, kept for parity
+          , once around both tab bodies. */}
       <div
         style={{
           backgroundColor:

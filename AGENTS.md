@@ -1,6 +1,6 @@
-# Agent Guide for tackle2-ui
+# AI Agent Guide for tackle2-ui
 
-This repository is a tackle2-ui-based design workspace for the MTA Hub agentic migration UX. For setup instructions, see [README.md](README.md). For coding standards and PR process, see [CONTRIBUTING.md](CONTRIBUTING.md).
+This repository is a tackle2-ui-based design workspace for the Konveyor Hub agentic migration UX. For setup instructions, see [README.md](README.md). For coding standards and PR process, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Repository Structure
 

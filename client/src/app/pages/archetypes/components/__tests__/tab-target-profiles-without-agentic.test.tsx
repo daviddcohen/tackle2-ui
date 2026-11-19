@@ -34,7 +34,7 @@ const archetype: Archetype = {
   ],
 };
 
-describe("TabTargetProfiles without the agentic API (AR3)", () => {
+describe("TabTargetProfiles without the agentic API", () => {
   it("keeps the upstream columns and asks for no plans", () => {
     const plansRequested = jest.fn();
     server.use(

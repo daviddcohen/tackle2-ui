@@ -180,7 +180,7 @@ export interface EntityDetailActionsProps {
 
 /**
  * Header "Actions" menu: Edit, the entity verbs from `items`, a separator and
- * Delete, in the same order as the list row menu (guide 4.1). Each entry is
+ * Delete, in the same order as the list row menu. Each entry is
  * shown only when its handler is passed, and the menu renders nothing when no
  * entry remains.
  */

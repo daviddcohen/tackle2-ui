@@ -85,7 +85,7 @@ describe("invalidation matrix", () => {
     }
   );
 
-  it("refreshes everything a Skill write can change (F2)", () => {
+  it("refreshes everything a Skill write can change", () => {
     expect(MUTATION_EFFECTS.skill).toEqual(
       expect.arrayContaining([
         "skills",

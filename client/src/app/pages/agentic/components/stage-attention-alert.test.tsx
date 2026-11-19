@@ -44,7 +44,7 @@ const planRun = (
     name: `App ${index + 1}`,
   })),
   status,
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
   stageRuns,
 });
@@ -398,7 +398,7 @@ describe("StageAttentionAlert, failure", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says what blocks a new run before the next step (AP8)", () => {
+  it("says what blocks a new run before the next step", () => {
     renderAlert({
       surface: "application",
       planRun: failed,

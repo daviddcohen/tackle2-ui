@@ -116,7 +116,7 @@ describe("AgentRunsTab", () => {
     expect(screen.queryByText("Type")).toBeNull();
   });
 
-  it("pages a section only when it has more than 10 rows (A4)", async () => {
+  it("pages a section only when it has more than 10 rows", async () => {
     const manyStages = Array.from({ length: 11 }, (_, index) =>
       run(String(index + 1), [stage("1", "2", { status: "Pending" })])
     );
@@ -140,7 +140,7 @@ describe("AgentRunsTab", () => {
     expect(rowsOf("Migration plan stages")).toHaveLength(1);
   });
 
-  it("says how to start a test run only with the agent run scope (A3)", () => {
+  it("says how to start a test run only with the agent run scope", () => {
     const { unmount } = renderTab({ planRuns: [], testRuns: [] });
     expect(
       screen.getByRole("heading", { name: "Migration plan stages" })
@@ -158,7 +158,7 @@ describe("AgentRunsTab", () => {
     expect(screen.getByText("No test runs yet.")).toBeInTheDocument();
   });
 
-  it("never shows an empty section while the runs load or after they fail (X6)", () => {
+  it("never shows an empty section while the runs load or after they fail", () => {
     renderTab({
       planRuns: [],
       isLoadingPlanRuns: true,

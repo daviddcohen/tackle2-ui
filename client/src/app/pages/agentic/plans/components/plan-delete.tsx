@@ -14,7 +14,7 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
  * Why `plan` cannot be deleted, or undefined when it can: the list row and
  * the detail Actions menu say the same thing. A plan with runs, a plan that
  * applications resolve to, and the assigned plan of a target profile are
- * kept. Usage the server did not report blocks the delete (addenda X6, P5).
+ * kept. Usage the server did not report blocks the delete.
  */
 export const getPlanDeleteBlocker = (
   plan: MigrationPlan,
@@ -45,7 +45,7 @@ export const getPlanDeleteBlocker = (
 };
 
 /**
- * The delete confirm (kit-confirm, addenda P1: no title icon, no consequence
+ * The delete confirm (no title icon, no consequence
  * sentence) and its mutation. The mutation lives in the page, not in the
  * dialog, so its toast survives the dialog closing.
  */

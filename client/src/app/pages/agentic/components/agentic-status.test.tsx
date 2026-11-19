@@ -16,7 +16,7 @@ import {
   statusPresentation,
 } from "./agentic-status";
 
-// Guide 5 fixes the icon per state. The shared jest stub makes every icon the
+// Each state has a fixed icon. The shared jest stub makes every icon the
 // same component, so give each one its own, named after the import.
 jest.mock("@patternfly/react-icons", () => {
   const { createElement } = jest.requireActual("react");
@@ -60,7 +60,7 @@ const rows = (section: Record<string, StatusPresentation>) =>
     presentation.icon.displayName,
   ]);
 
-describe("statusPresentation (guide section 5, kit-status)", () => {
+describe("statusPresentation", () => {
   it("run and stage: Action required is the only name for a human must act", () => {
     expect(rows(statusPresentation.run)).toEqual([
       ["Pending", "Pending", "none", "Pending"],

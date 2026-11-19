@@ -191,7 +191,7 @@ describe("AgentsPage", () => {
     expect(within(row("Code Migrator")).queryByText("None")).toBeNull();
   });
 
-  it("does not look verified when the models fail to load (X6)", async () => {
+  it("does not look verified when the models fail to load", async () => {
     useEndpoints({ plans: plansOk([]) });
     server.use(
       rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
@@ -209,7 +209,7 @@ describe("AgentsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("holds the provider's place while the models load (X6)", async () => {
+  it("holds the provider's place while the models load", async () => {
     useEndpoints({ plans: plansOk([]) });
     server.use(
       rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
@@ -240,7 +240,7 @@ describe("AgentsPage", () => {
     ).toHaveLength(2);
   });
 
-  it("is read-only without the agent write scopes (X9)", async () => {
+  it("is read-only without the agent write scopes", async () => {
     mockGrantedScopes.all = false;
     mockGrantedScopes.scopes = ["agentic.agents:get"];
     useEndpoints({ list: [], plans: plansOk([]) });
@@ -306,7 +306,7 @@ describe("AgentsPage", () => {
       );
     });
 
-    it("blocks Delete when usage could not be checked (X6)", async () => {
+    it("blocks Delete when usage could not be checked", async () => {
       useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(500)) });
       renderPage();
       await within(await waitFor(() => row("Test Runner"))).findByText(
@@ -323,7 +323,7 @@ describe("AgentsPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("disables Edit and Delete of an operator-managed agent (A13)", async () => {
+    it("disables Edit and Delete of an operator-managed agent", async () => {
       useEndpoints({
         list: [makeAgent("9", "Built-in Agent", { operatorManaged: true })],
         plans: plansOk([]),

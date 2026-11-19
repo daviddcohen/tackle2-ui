@@ -145,7 +145,7 @@ const AgentDetail: React.FC = () => {
           }
           breadcrumbs={breadcrumbs}
           btnActions={
-            // Each entry by its own scope; nothing left, no menu (A2, X5).
+            // Each entry by its own scope; nothing left, no menu.
             <EntityDetailActions
               onEdit={canManageAgents ? () => setEditModal(true) : undefined}
               items={

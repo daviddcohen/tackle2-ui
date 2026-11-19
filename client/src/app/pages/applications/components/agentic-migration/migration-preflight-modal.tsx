@@ -62,7 +62,7 @@ import { universalComparator } from "@app/utils/utils";
 
 import { applicationDetailsPath, planRunPath } from "./paths";
 
-export const DEFAULT_TARGET_BRANCH = "mta/agentic-migration";
+export const DEFAULT_TARGET_BRANCH = "konveyor/agentic-migration";
 
 export interface MigrationPreflightValues {
   planSelection: "recommended" | "single";
@@ -81,7 +81,7 @@ interface MigrationPreflightModalProps {
   initialValues?: Partial<MigrationPreflightValues>;
   /**
    * The plan of the failed run this dialog runs again. Picking that plan for
-   * all applications is not an override, so its caution is hidden (R5); any
+   * all applications is not an override, so its caution is hidden; any
    * other plan still shows it.
    */
   rerunPlanId?: EntityId;
@@ -95,7 +95,7 @@ interface MigrationPreflightModalProps {
 /**
  * Why an application cannot start, as the server says it. A run the reason
  * names becomes a link by splitting at the view's run name; never by
- * guessing from the text (ACCEPTED amendment 9).
+ * guessing from the text.
  */
 const PreflightReason: React.FC<{
   migration: ApplicationMigrationView;
@@ -137,7 +137,7 @@ const PreflightReason: React.FC<{
 };
 
 /**
- * "Run migration plan" (guide 7.6, ACCEPTED amendments 5 and 9): the
+ * "Run migration plan": the
  * readiness of each selected application first, then how to run the ready
  * ones. Mount it only while open, so every opening starts from a fresh form.
  */
@@ -273,7 +273,7 @@ export const MigrationPreflightModal: React.FC<
                 selectedPlan ? (
                   planLink(selectedPlan)
                 ) : (
-                  // An override without a pick is not the recommended plan (AP2).
+                  // An override without a pick is not the recommended plan.
                   <EmptyTextMessage
                     message={t("agentic.execution.notSelected")}
                   />
@@ -443,7 +443,7 @@ export const MigrationPreflightModal: React.FC<
             {t("actions.cancel")}
           </Button>
         ) : (
-          // Nothing to submit: one secondary Close (COHERENCE C11).
+          // Nothing to submit: one secondary Close.
           <Button variant="secondary" onClick={onClose}>
             {t("actions.close")}
           </Button>

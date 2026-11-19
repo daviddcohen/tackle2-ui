@@ -128,7 +128,7 @@ describe("SkillForm", () => {
     expect(screen.getByText("Code Migrator")).toBeInTheDocument();
   });
 
-  it("offers every target profile of every archetype (S5)", async () => {
+  it("offers every target profile of every archetype", async () => {
     const user = userEvent.setup();
     render(<SkillForm skill={skill} onClose={jest.fn()} />);
 
@@ -141,7 +141,7 @@ describe("SkillForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the agents and sends them back without agent write access (S6)", async () => {
+  it("keeps the agents and sends them back without agent write access", async () => {
     mockGrantedScopes.agents = false;
     const user = userEvent.setup();
     const onClose = jest.fn();

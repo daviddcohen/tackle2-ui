@@ -241,7 +241,7 @@ test.describe("reset and URL validation", () => {
         stage: 3,
       })
     );
-    // Approve always confirms first (guide 4.3).
+    // Approve always confirms first.
     await approveStage(page);
     await expect(mainHeading(page)).toHaveText(/^Run #1/);
     await expect(

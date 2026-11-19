@@ -34,7 +34,7 @@ const expectedStatusByScenario = {
   completed: { "Customer Management": "Succeeded" },
 } as const;
 
-/** The cell's subtle second line by status (ACCEPTED amendment 6): at most one. */
+/** The cell's subtle second line by status: at most one. */
 const secondLineByStatus: Record<string, RegExp | null> = {
   "Ready to start": null,
   Blocked: /^.+\.$/,
@@ -122,7 +122,7 @@ test.describe("Inventory migration column", () => {
       "Not configured",
       "Succeeded",
     ];
-    // Guide 5.2 order, and every option shows without scrolling the menu.
+    // Most urgent first, and every option shows without scrolling the menu.
     await expect(page.getByRole("listbox").getByRole("menuitem")).toHaveText(
       options
     );
@@ -155,7 +155,7 @@ test.describe("Inventory migration column", () => {
       .click();
     const blocked = page.getByRole("menuitem", { name: "Run migration plan" });
     await expect(blocked).toBeDisabled();
-    // Guide 4.12: a disabled action says why.
+    // A disabled action says why.
     await blocked.hover();
     await expect(page.getByRole("tooltip")).toHaveText(
       "A source control credential reference is missing."

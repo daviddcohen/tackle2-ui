@@ -68,7 +68,7 @@ const run = (stageRuns: StageRun[], status: PlanRun["status"]): PlanRun => ({
   planName: "Java EE to Quarkus",
   applications: [{ id: 1, name: "Customer Management" }],
   status,
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
   stageRuns,
 });
@@ -147,7 +147,7 @@ describe("StageRunDetail", () => {
     const runLinks = screen.getAllByRole("link", {
       name: "Run #1 — Java EE to Quarkus",
     });
-    // The breadcrumb and the status line both lead to the run (addenda R1).
+    // The breadcrumb and the status line both lead to the run.
     expect(runLinks).toHaveLength(2);
     expect(runLinks[1]).toHaveAttribute("href", "/plan-runs/1");
     expect(runLinks[1].parentElement).toHaveTextContent(

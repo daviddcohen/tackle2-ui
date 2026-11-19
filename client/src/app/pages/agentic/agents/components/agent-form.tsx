@@ -77,7 +77,7 @@ export const findDuplicateParameterIndex = (
   });
 };
 
-/** The link from the model helper to the Models page (A5). */
+/** The link from the model helper to the Models page. */
 const GoToModelsLink: React.FC = () => {
   const { t } = useTranslation();
   const link = useLinkComponent(AdminPaths.models);
@@ -188,15 +188,15 @@ export const AgentForm: React.FC<AgentFormProps> = ({
         model: gateway.name,
         provider: gateway.provider.name,
       }),
-      // The organization default is marked, not renamed (A7).
+      // The organization default is marked, not renamed.
       optionProps: gateway.isOrganizationDefault
         ? { description: t("agentic.agent.modelDefault") }
         : undefined,
     })
   );
-  // Nothing to choose until a model is verified (A5); never while loading.
+  // Nothing to choose until a model is verified; never while loading.
   const hasNoUsableModel = hasGateways && usableGateways.length === 0;
-  // A failed read is not "no verified models" (X6): it says so instead.
+  // A failed read is not "no verified models": it says so instead.
   const isGatewayUnavailable = gatewaysError != null && gateways.length === 0;
   const defaultGateway = gateways.find(
     (gateway) =>
@@ -308,7 +308,7 @@ export const AgentForm: React.FC<AgentFormProps> = ({
     selectedGateway.verificationStatus !== "verified";
 
   // A new agent starts on the organization default once the models load,
-  // only when that model is verified (A5). It is not a user change.
+  // only when that model is verified. It is not a user change.
   const defaultGatewayId = defaultGateway?.id;
   React.useEffect(() => {
     if (agent == null && defaultGatewayId != null && !getValues("model")) {
@@ -320,7 +320,7 @@ export const AgentForm: React.FC<AgentFormProps> = ({
     append: appendParameter,
     remove: removeParameter,
   } = useFieldArray({ control, name: "parameters" });
-  // Collapsed when the agent has no parameters; adding one opens it (A10).
+  // Collapsed when the agent has no parameters; adding one opens it.
   const [isParametersExpanded, setIsParametersExpanded] = React.useState(
     (agent?.parameters.length ?? 0) > 0
   );

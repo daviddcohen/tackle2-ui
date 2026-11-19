@@ -56,7 +56,7 @@ import {
   getCollectionDeleteBlockedReason,
 } from "../skill-usage";
 
-/** The Skill collections tab of the Skills page: the list a collection lives on (S8). */
+/** The Skill collections tab of the Skills page: the list a collection lives on. */
 const COLLECTIONS_LIST_PATH = `${DevPaths.skills}?tab=collections`;
 
 const SkillCollectionDetail: React.FC = () => {
@@ -101,7 +101,7 @@ const SkillCollectionDetail: React.FC = () => {
       })
   );
 
-  // Agents and the delete blocker wait for the agents query (X6).
+  // Agents and the delete blocker wait for the agents query.
   const knownAgents =
     isLoadingAgents || agentsError != null ? undefined : agents;
   const agentsUsingCollection = React.useMemo(

@@ -18,7 +18,7 @@ import { PlanRun, StageRun, getOrderedStageRuns } from "@app/agentic";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
 
-/** What a run or stage needs from a person, if anything (guide 4.3). */
+/** What a run or stage needs from a person, if anything. */
 export type StageAttention =
   | { kind: "approval"; stageRun: StageRun; next?: StageRun }
   /** `stageRun` is undefined when the run failed without a failed stage. */
@@ -29,8 +29,8 @@ export type StageAttention =
 /**
  * The attention a run needs (`stageRun` omitted: the stage awaiting approval,
  * else the failed stage or the failed run), or that one stage needs on its
- * own page, where a stage that has not run also says why (plan-runs
- * amendment 4, addenda R2). Only the run's own stage snapshot is read.
+ * own page, where a stage that has not run also says why.
+ * Only the run's own stage snapshot is read.
  */
 export const getStageAttention = (
   planRun: PlanRun,
@@ -121,13 +121,13 @@ export type StageAttentionAlertProps = StageAttentionSurface & {
   /**
    * Application tab, failed variant: why the migration cannot run again yet
    * (the view's `preflightReason` when `preflight` is not ready). Adds "Before
-   * it can run again: {reason}" before the next step (applications AP8).
+   * it can run again: {reason}" before the next step.
    */
   restartBlockedReason?: string;
   /**
    * The plan run page, for a failure that names no stage: the slot that
-   * otherwise holds "Review stage" reads "View plan run" (applications
-   * amendment 2). The run page itself passes nothing.
+   * otherwise holds "Review stage" reads "View plan run".
+   * The run page itself passes nothing.
    */
   planRunTo?: LocationDescriptor;
   /**
@@ -139,8 +139,8 @@ export type StageAttentionAlertProps = StageAttentionSurface & {
 };
 
 /**
- * The one attention alert of a run, a stage or an application's migration
- * (guide 4.3, kit-alerts, addenda X13): the title names the stage, the body
+ * The one attention alert of a run, a stage or an application's migration:
+ * the title names the stage, the body
  * says what happened and what to do, and the actions sit in one row inside
  * the alert. Approve and Reject always confirm first. Renders nothing when
  * `getStageAttention` finds nothing to show.
@@ -222,7 +222,7 @@ const AttentionAlert: React.FC<
   if (attention.kind === "failed") {
     const hasFailureDetails =
       !!failureDetails?.summary || !!failureDetails?.evidence?.length;
-    // Paragraph 1 is omitted when there is nothing to say (addenda X13).
+    // Paragraph 1 is omitted when there is nothing to say.
     const details =
       failureDetails != null
         ? hasFailureDetails && (

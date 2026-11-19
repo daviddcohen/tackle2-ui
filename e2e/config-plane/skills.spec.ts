@@ -242,7 +242,7 @@ test.describe("Skill form", () => {
     page,
   }) => {
     await field(dialog(page), "Content").fill("# QA Skill\nGuidance.");
-    // The Associations fields are always visible (user decision U1).
+    // The Associations fields are always visible.
     await pickMulti(page, "skill-agents", ["Test Runner"]);
     await dialog(page).getByRole("button", { name: "Create" }).click();
     await expect(toast(page, "Skill created")).toBeVisible();
@@ -507,7 +507,7 @@ test.describe("Skill cross-entity consistency", () => {
 
     await spaNavigate(page, "/agents");
     const row = rowByText(page, "Code Migrator");
-    // The Skills cell summarizes what the agent uses (A12): its 4 skills
+    // The Skills cell summarizes what the agent uses: its 4 skills
     // and 1 collection.
     const skillsSummary = row.getByRole("link", { name: /^\d+ skills?\b/ });
     await expect(skillsSummary).toHaveText("4 skills, 1 collection");

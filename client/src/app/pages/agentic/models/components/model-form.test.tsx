@@ -233,7 +233,7 @@ describe("ModelForm", () => {
     expect(screen.queryByText("agentic.model.unreachableTitle")).toBeNull();
   });
 
-  it("never looks unused while the agents load or after they fail (X6)", async () => {
+  it("never looks unused while the agents load or after they fail", async () => {
     server.use(
       rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
         res(ctx.status(500))

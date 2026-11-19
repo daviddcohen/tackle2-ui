@@ -19,7 +19,7 @@ import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { statusPresentation } from "../components/agentic-status";
 import { PlanRunsTable } from "../components/plan-runs-table";
 
-/** Status filter options: the runs that need a person first (guide 7.4). */
+/** Status filter options: the runs that need a person first. */
 const runStatusFilterOrder: ControllerRunPhase[] = [
   "AwaitingApproval",
   "Failed",

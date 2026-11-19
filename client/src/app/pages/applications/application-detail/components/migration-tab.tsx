@@ -72,7 +72,7 @@ interface MigrationTabProps {
 }
 
 /**
- * The application's agentic migration (guide 7.6, applications amendment 1):
+ * The application's agentic migration:
  * the one attention alert when something needs a person, the facts, the
  * stages of its latest run and, once it succeeded, the commits.
  */
@@ -111,8 +111,8 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         variant: "danger",
       })
   );
-  // Approve: "{stage} approved". Reject fails the whole run: "{run} rejected"
-  // (applications AP13). A failure is reported by the mutation.
+  // Approve: "{stage} approved". Reject fails the whole run: "{run} rejected".
+  // A failure is reported by the mutation.
   const decide =
     (decision: "approve" | "reject") => async (stageRun: StageRun) => {
       await resolveRequest.mutateAsync({ applicationId, decision });
@@ -254,7 +254,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
 };
 
 /**
- * The facts (applications amendment 1): Status · Migration plan · Plan run ·
+ * The facts: Status · Migration plan · Plan run ·
  * Target profile · Target branch · Skills. Without a run, Plan run and Target
  * branch are omitted.
  */
@@ -340,7 +340,7 @@ const MigrationFacts: React.FC<{
           [
             t("agentic.execution.targetBranch"),
             // The tab waits for the run, so no branch here means the run
-            // could not be read: unknown (addenda X6).
+            // could not be read: unknown.
             targetBranch == null ? (
               unavailable
             ) : migration.result?.branchUrl ? (
@@ -360,7 +360,7 @@ const MigrationFacts: React.FC<{
     [
       t("agentic.applicationDetail.tabSkills"),
       skillCount == null ? (
-        // The server did not say: unknown, never "None" (addenda X6).
+        // The server did not say: unknown, never "None".
         unavailable
       ) : skillCount === 0 ? (
         <EmptyTextMessage key="skills" message={t("agentic.execution.none")} />
@@ -383,7 +383,7 @@ const MigrationFacts: React.FC<{
 
 /**
  * A target profile belongs to one archetype, which need not be this
- * application's (applications AP14): its owner is found by profile id, as for
+ * application's: its owner is found by profile id, as for
  * skill sources. Plain text when no archetype owns it.
  */
 const TargetProfileLink: React.FC<{
@@ -418,7 +418,7 @@ const RunUnavailableAlert: React.FC<{ to: LocationDescriptor }> = ({ to }) => {
 };
 
 /**
- * What the agents committed (applications amendment 3): "Commits (n)", one
+ * What the agents committed: "Commits (n)", one
  * sentence and a compact table. The branch is the Target branch fact.
  */
 const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
@@ -455,7 +455,7 @@ const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
             <Tr key={commit.hash}>
               <Td dataLabel={columns.commit} modifier="nowrap">
                 {commit.url ? (
-                  // Git URLs open outside the app (guide 4.11), like the
+                  // Git URLs open outside the app, like the
                   // Target branch fact.
                   <ExternalLink href={commit.url} isInline>
                     <span className={textStyles.fontFamilyMonospace}>
@@ -478,7 +478,7 @@ const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
 };
 
 /**
- * No migration plan resolves for the application (applications AP10). Plans
+ * No migration plan resolves for the application. Plans
  * come from the archetype's target profile, so the next step is there; an
  * application without an archetype is told to get one first. The data gives
  * no cause (a profile without a plan, no profile, a plan on another profile),

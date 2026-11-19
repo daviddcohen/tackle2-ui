@@ -70,7 +70,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   const { t } = useTranslation();
   const { pushNotification } = React.useContext(NotificationsContext);
   const { providers } = useFetchProviders();
-  // The in-use sentence counts models only once they are known (X6): a
+  // The in-use sentence counts models only once they are known: a
   // skeleton while they load, a usage-unchecked sentence if they fail.
   const {
     gateways: models,
@@ -160,7 +160,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
 
   const isSaving = isCreating || isUpdating;
 
-  // One alert carries the status and the in-use consequence (amendment 2).
+  // One alert carries the status and the in-use consequence.
   const inUse =
     provider == null || isUsageLoading
       ? undefined

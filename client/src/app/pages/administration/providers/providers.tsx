@@ -72,7 +72,7 @@ const ProvidersPage: React.FC = () => {
   const canManageProviders = useHasSomeScopes(providersWriteScopes);
 
   const { providers, isFetching, isLoading, fetchError } = useFetchProviders();
-  // Usage comes from the models query: never "Not used" or an enabled Delete before it succeeded (X6).
+  // Usage comes from the models query: never "Not used" or an enabled Delete before it succeeded.
   const {
     gateways: models,
     isSuccess: isModelsLoaded,
@@ -119,7 +119,7 @@ const ProvidersPage: React.FC = () => {
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    // No actions column at all for a user who has no actions (guide 4.1).
+    // No actions column at all for a user who has no actions.
     hasActionsColumn: canManageProviders,
     filterCategories: [
       {
@@ -167,7 +167,7 @@ const ProvidersPage: React.FC = () => {
     },
   } = tableControls;
 
-  /** A provider's status does not block its models, so only the reason and what to check (amendment 1). */
+  /** A provider's status does not block its models, so only the reason and what to check. */
   const getStatusText = (provider: Provider) =>
     [
       provider.statusReason,
@@ -178,7 +178,7 @@ const ProvidersPage: React.FC = () => {
       .filter(Boolean)
       .join(" ");
 
-  /** One model is its name (models have no page); more open a popover of names (guide 2.4). */
+  /** One model is its name (models have no page); more open a popover of names. */
   const renderUsedBy = (users: ModelProjection[]) => {
     if (modelsError) {
       return <EmptyTextMessage message={t("agentic.common.unavailable")} />;

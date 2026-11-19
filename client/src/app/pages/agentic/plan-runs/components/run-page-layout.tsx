@@ -15,7 +15,7 @@ import { DetailSections } from "../../components/detail-section";
  */
 
 /**
- * The run page status line under the title (guide 4.3): the status, then
+ * The run page status line under the title: the status, then
  * where the run or stage is and when it started, in subtle text.
  */
 export const RunStatusLine: React.FC<{
@@ -35,7 +35,7 @@ export const RunStatusLine: React.FC<{
 );
 
 /**
- * The run page body (guide 4.2, 4.3): the alert, the facts and the sections
+ * The run page body: the alert, the facts and the sections
  * in the shared detail stack, inside the page section.
  */
 export const RunPageBody: React.FC<{ children: React.ReactNode }> = ({

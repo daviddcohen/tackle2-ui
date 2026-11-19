@@ -87,7 +87,7 @@ describe("AgentFormModal", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("never looks unused while the plans load or after they fail (X6)", async () => {
+  it("never looks unused while the plans load or after they fail", async () => {
     server.use(
       rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
         res(ctx.status(500))

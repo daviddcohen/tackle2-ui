@@ -72,7 +72,7 @@ interface PlanDetailsRouteParams {
 }
 
 /**
- * "View models" appears only for users who can open Models (guide 7.3): the route needs `adminViewScopes`
+ * "View models" appears only for users who can open Models: the route needs `adminViewScopes`
  * (`Routes.tsx`) and the page reads gateways. Architects hold neither admin view scope, so they get no link.
  */
 const modelsReadScopes = ["agentic.gateways:get"];
@@ -88,7 +88,7 @@ const tabTitleKeys: Record<PlanDetailTab, string> = {
 const PANEL_PREFIX = "plan-detail";
 const panelId = (tab: PlanDetailTab) => tabPanelId(PANEL_PREFIX, tab);
 
-/** The plan's target profiles as link labels, plus the unassigned cue (addenda P3, X11). */
+/** The plan's target profiles as link labels, plus the unassigned cue. */
 const TargetProfilesFact: React.FC<{
   plan: MigrationPlan;
   linkCrumbs: BreadcrumbEntry[];
@@ -101,7 +101,7 @@ const TargetProfilesFact: React.FC<{
       : breadcrumbTo(targetProfilesPath(path.archetype.id), "", linkCrumbs)
   );
   if (path == null) {
-    // The real adapters do not report the path yet: unknown, not empty (X6).
+    // The real adapters do not report the path yet: unknown, not empty.
     return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
   }
   if (path.targetProfiles.length === 0) {
@@ -416,7 +416,7 @@ const PlanDetailsPage: React.FC = () => {
       >
         <PageSection hasBodyWrapper={false}>
           {isLoadingRuns || runsFetchError != null ? (
-            // The spinner and error rows of the table (addenda X6).
+            // The spinner and error rows of the table.
             <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
               <PlanRunsTable
                 runs={[]}

@@ -29,7 +29,7 @@ import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchSkills } from "@app/queries/agentic";
 import { skillsWriteScopes } from "@app/scopes";
 
-/** Skills associated with the archetype and with its target profiles (guide 2.3, sources 3 and 4). */
+/** Skills associated with the archetype and with its target profiles. */
 export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
   archetype,
 }) => {
@@ -48,7 +48,7 @@ export const TabAssociatedSkills: React.FC<{ archetype: Archetype }> = ({
       </DrawerTabContent>
     );
   }
-  // A failed query is not "no skills" (guide 7.7).
+  // A failed query is not "no skills".
   if (fetchError) {
     return (
       <DrawerTabContent>

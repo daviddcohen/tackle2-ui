@@ -69,8 +69,8 @@ import { AgentTestModal } from "./components/agent-test-modal";
 type LinkTo = (pathname: string, search?: string) => LocationDescriptor;
 
 /**
- * One skill and no collection is the skill's name (C1); otherwise the count
- * summary opens the agent, whose Details tab lists them (A12).
+ * One skill and no collection is the skill's name; otherwise the count
+ * summary opens the agent, whose Details tab lists them.
  */
 const AgentSkillsCell: React.FC<{ agent: Agent; to: LinkTo }> = ({
   agent,
@@ -102,7 +102,7 @@ const AgentSkillsCell: React.FC<{ agent: Agent; to: LinkTo }> = ({
 /**
  * Where the agent is used: one plan is its name, more are a count opening
  * the agent (its Details tab lists them). The plans come from a second
- * query, so the cell never says "None" before it has them (X6).
+ * query, so the cell never says "None" before it has them.
  */
 const AgentPlansCell: React.FC<{
   agent: Agent;
@@ -196,7 +196,7 @@ export const AgentsPage: React.FC = () => {
   const deleteBlockedReason = useAgentDeleteBlockedReason();
   const hasRowActions = canManageAgents || canTestAgents;
 
-  /** Edit, Test agent, separator, Delete, each with its own scope (A1, guide 4.1). */
+  /** Edit, Test agent, separator, Delete, each with its own scope. */
   const rowActions = (agent: Agent): IAction[] => {
     const managedReason = agent.operatorManaged
       ? t("agentic.common.managedByKonveyor")
@@ -363,7 +363,7 @@ export const AgentsPage: React.FC = () => {
                     />
                     <Th {...getThProps({ columnKey: "model" })} />
                     <Th {...getThProps({ columnKey: "skills" })} />
-                    {/* Wraps rather than truncates when the table is narrow (kit). */}
+                    {/* Wraps rather than truncates when the table is narrow. */}
                     <Th
                       {...getThProps({ columnKey: "plans" })}
                       modifier="wrap"

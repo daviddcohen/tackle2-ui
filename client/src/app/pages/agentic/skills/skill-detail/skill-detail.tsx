@@ -127,7 +127,7 @@ const skillContentComponents: Components = {
   ),
 };
 
-/** A Git repository opens in a new tab only when it is a web URL (S9). */
+/** A Git repository opens in a new tab only when it is a web URL. */
 const isWebUrl = (value: string) => /^https?:\/\//i.test(value);
 
 const SkillDetail: React.FC = () => {
@@ -183,13 +183,12 @@ const SkillDetail: React.FC = () => {
     [skillCollections, skillId]
   );
 
-  // The real adapter leaves `effectiveSkills` undefined: unknown, not empty
-  // (X6), so the section says "Unavailable" instead of "no plan".
+  // The real adapter leaves `effectiveSkills` undefined: unknown, not empty,
+  // so the section says "Unavailable" instead of "no plan".
   const isPlanUsageUnknown = migrationPlans.some(
     (plan) => plan.effectiveSkills === undefined
   );
-  // Rows come from the plans' `effectiveSkills` only: never add sources here
-  // (guide 2.3, residual Q1).
+  // Rows come from the plans' `effectiveSkills` only: never add sources here.
   const plansResolvingSkill = React.useMemo(
     () =>
       migrationPlans
@@ -234,7 +233,7 @@ const SkillDetail: React.FC = () => {
     breadcrumbTo(path, `?from=skill-${skillId}`, childLinkCrumbs);
 
   const arePlansLoaded = !isLoadingPlans && plansError == null;
-  // Undefined until the plans loaded with a known `effectiveSkills` (X6).
+  // Undefined until the plans loaded with a known `effectiveSkills`.
   const planCount =
     arePlansLoaded && !isPlanUsageUnknown
       ? plansResolvingSkill.length
@@ -463,7 +462,7 @@ const SkillDetail: React.FC = () => {
                             <Td
                               dataLabel={t("agentic.skillCollection.members")}
                             >
-                              {/* One member is this skill: its name (C1). */}
+                              {/* One member is this skill: its name. */}
                               {collection.skills.length === 1
                                 ? collection.skills[0].name
                                 : t("agentic.skillCollection.skillCount", {
@@ -513,7 +512,7 @@ const SkillDetail: React.FC = () => {
 
 /**
  * The Associations tab of this page, as a link that keeps the rest of the
- * query (`?from=`) and the breadcrumb trail in history state (guide 3.5).
+ * query (`?from=`) and the breadcrumb trail in history state.
  */
 const useAssociationsTabLink = () => {
   const { pathname, search, state } = useLocation();
@@ -616,9 +615,9 @@ interface AssociatedWithSectionProps {
 }
 
 /**
- * "Associated with (n)": Type · Name (C12 exception), the skill's own
+ * "Associated with (n)": Type · Name, the skill's own
  * associations. Target profiles need the archetypes for their name and link,
- * so the rows wait for that query when a target profile is present (X6); if
+ * so the rows wait for that query when a target profile is present; if
  * it fails, they show the bare name without a link.
  */
 const AssociatedWithSection: React.FC<AssociatedWithSectionProps> = ({

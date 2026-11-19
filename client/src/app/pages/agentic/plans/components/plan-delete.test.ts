@@ -29,7 +29,7 @@ describe("getPlanDeleteBlocker", () => {
     expect(getPlanDeleteBlocker(plan, t)).toBeUndefined();
   });
 
-  it("blocks while the server did not report the usage (addenda X6, P5)", () => {
+  it("blocks while the server did not report the usage", () => {
     expect(
       getPlanDeleteBlocker({ ...plan, applicationImpact: undefined }, t)
     ).toBe("agentic.common.usageUnchecked");

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Agent } from "@app/agentic";
 
 /**
- * The count summary of an agent's skills (addenda A12, glossary C13): only
+ * The count summary of an agent's skills: only
  * the non-zero parts, "2 skills", "1 collection" or "4 skills, 1 collection".
  * Undefined when the agent has neither, which callers render as "None".
  */

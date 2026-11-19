@@ -42,7 +42,7 @@ const run = (id: string, applicationIds: number[]): PlanRun => ({
     name: `App ${appId}`,
   })),
   status: "Succeeded",
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
   completedAt: "2026-11-10T10:15:00Z",
   stageRuns: [],
@@ -90,7 +90,7 @@ describe("PlanRunsTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers Run migration plan when the application has no run (AP5)", () => {
+  it("offers Run migration plan when the application has no run", () => {
     renderTab();
     expect(
       screen.getByRole("heading", {
@@ -106,7 +106,7 @@ describe("PlanRunsTab", () => {
     expect(mockState.open).toHaveBeenCalled();
   });
 
-  it("has no start in the empty section without the run write scope (X9)", () => {
+  it("has no start in the empty section without the run write scope", () => {
     mockState.canRun = false;
     renderTab();
     expect(
@@ -119,7 +119,7 @@ describe("PlanRunsTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the app placeholder while the runs load (AP9)", () => {
+  it("shows the app placeholder while the runs load", () => {
     mockState.isLoading = true;
     renderTab();
     expect(screen.getByText("Loading...")).toBeInTheDocument();
@@ -130,7 +130,7 @@ describe("PlanRunsTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the error state when the runs cannot be read (AP9)", () => {
+  it("shows the error state when the runs cannot be read", () => {
     mockState.fetchError = new Error("503");
     renderTab();
     expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();

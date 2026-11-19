@@ -26,8 +26,7 @@ import {
 import { IconedStatus } from "@app/components/Icons/IconedStatus";
 
 /**
- * The one presentation of agentic statuses (guide 4.8 and section 5, the
- * kit-status sheet): an icon and text through `IconedStatus`, never a colored
+ * The one presentation of agentic statuses: an icon and text through `IconedStatus`, never a colored
  * `Label`. `status` is the PF `Icon` status; without one the icon stays grey,
  * which is how every state that needs no attention reads (Pending, Ready to
  * start, Blocked, Not configured, Not evaluated). Danger is reserved for
@@ -41,7 +40,7 @@ export interface StatusPresentation {
   icon: React.ComponentType;
 }
 
-/** Aggregate of a plan's configuration checks (guide 5.4, plans P6). */
+/** Aggregate of a plan's configuration checks. */
 export type ConfigurationAggregate = "checksPassed" | "issues" | "notEvaluated";
 
 const pending: StatusPresentation = {
@@ -185,7 +184,7 @@ export const getConfigurationAggregate = (
 export interface AgenticStatusProps {
   /**
    * Makes the status text a router `Link` to this target, when the status
-   * navigates (guide 4.8, the inventory Migration column). The words stay the
+   * navigates (the inventory Migration column). The words stay the
    * status label: a check name is its own cell, never the status text.
    */
   to?: LocationDescriptor;

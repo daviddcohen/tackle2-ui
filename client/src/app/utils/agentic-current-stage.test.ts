@@ -23,7 +23,7 @@ const run = (status: PlanRun["status"], stageRuns: StageRun[]): PlanRun => ({
   planName: "Java EE to Quarkus",
   applications: [],
   status,
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
   stageRuns,
 });

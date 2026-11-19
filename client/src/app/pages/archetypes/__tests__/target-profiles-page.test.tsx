@@ -198,7 +198,7 @@ describe("TargetProfilesPage", () => {
     expect(screen.queryByText("Not assigned")).toBeNull();
   });
 
-  it("keeps the rows when a background poll fails (AR8)", async () => {
+  it("keeps the rows when a background poll fails", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -271,7 +271,7 @@ describe("TargetProfilesPage", () => {
     ).not.toHaveAttribute("aria-disabled", "true");
   });
 
-  it("disables the plan action and Delete when plans fail (X6)", async () => {
+  it("disables the plan action and Delete when plans fail", async () => {
     serve({ plansResolver: (_req, res, ctx) => res(ctx.status(403)) });
     renderPage();
 
@@ -297,7 +297,7 @@ describe("TargetProfilesPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("disables Delete when skills fail, even without a plan (X6)", async () => {
+  it("disables Delete when skills fail, even without a plan", async () => {
     serve({ skillsResolver: (_req, res, ctx) => res(ctx.status(403)) });
     renderPage();
 
@@ -354,7 +354,7 @@ describe("TargetProfilesPage", () => {
     ).toBeNull();
   });
 
-  it("has no toolbar and no row actions for read-only users (X9)", async () => {
+  it("has no toolbar and no row actions for read-only users", async () => {
     mockGrantedScopes.all = false;
     serve();
     renderPage();
@@ -381,7 +381,7 @@ describe("TargetProfilesPage", () => {
     ).toHaveLength(2);
   });
 
-  it("says profiles appear once created, with no action, for read-only users (X9)", async () => {
+  it("says profiles appear once created, with no action, for read-only users", async () => {
     mockGrantedScopes.all = false;
     serve({
       archetypeResolver: (_req, res, ctx) =>
@@ -530,7 +530,7 @@ describe("TargetProfilesPage", () => {
         within(dialog).getByRole("link", { name: "Go to migration plans" })
       ).toHaveAttribute("href", "/migration-plans");
       expect(within(dialog).queryByRole("button", { name: "Save" })).toBeNull();
-      // The footer holds one secondary Close (amendment 2).
+      // The footer holds one secondary Close.
       expect(within(dialog).getByText("Close").closest("button")).toHaveClass(
         "pf-m-secondary"
       );

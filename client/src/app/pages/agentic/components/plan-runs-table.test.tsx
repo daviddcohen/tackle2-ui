@@ -32,7 +32,7 @@ const run = (overrides: Partial<PlanRun> & Pick<PlanRun, "id">): PlanRun => ({
   planName: "Java EE to Quarkus",
   applications: [{ id: 1, name: "Customer Management" }],
   status: "Succeeded",
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-09-20T08:00:00Z",
   completedAt: "2026-09-20T10:15:00Z",
   stageRuns: [],
@@ -83,7 +83,7 @@ const cells = (row: HTMLElement) =>
     .map((cell) => cell.textContent);
 
 describe("PlanRunsTable", () => {
-  it("shows the kit columns, newest first, with verbatim run names", () => {
+  it("shows the columns, newest first, with verbatim run names", () => {
     renderTable({ origin: "?from=app-1" });
 
     expect(

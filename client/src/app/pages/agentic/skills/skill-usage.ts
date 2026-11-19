@@ -25,7 +25,7 @@ export interface SkillAssociationRow {
 }
 
 /**
- * The "Associated with" rows of a skill (skills amendment 6): ordered by type,
+ * The "Associated with" rows of a skill: ordered by type,
  * then by name. A target profile reads "{profile} ({archetype})"; its
  * archetype is found by profile id, and the name stays bare when the
  * archetypes are not known.
@@ -86,9 +86,9 @@ export const getAgentsUsingCollection = (
  * Why the Skill cannot be deleted yet, or `undefined` when it can. A Skill
  * with associations or skill collection memberships is in use; the server
  * refuses those deletes with 409. The association count is the server's
- * `skill.associations` (addenda S1): when it is missing, usage is unknown.
- * `collections` is undefined while the collections query has not succeeded
- * (addenda X6). Either unknown blocks the delete.
+ * `skill.associations`: when it is missing, usage is unknown.
+ * `collections` is undefined while the collections query has not succeeded.
+ * Either unknown blocks the delete.
  */
 export const getSkillDeleteBlockedReason = (
   t: TFunction,
@@ -129,7 +129,7 @@ export const getSkillDeleteBlockedReason = (
 /**
  * Why the skill collection cannot be deleted yet, or `undefined` when it can:
  * agents still use it. `agents` is undefined while the agents query has not
- * succeeded (addenda X6).
+ * succeeded.
  */
 export const getCollectionDeleteBlockedReason = (
   t: TFunction,

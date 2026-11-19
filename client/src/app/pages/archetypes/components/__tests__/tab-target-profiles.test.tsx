@@ -155,7 +155,7 @@ describe("TabTargetProfiles", () => {
     ).toBeInTheDocument();
   });
 
-  it("says profiles appear once created, with no link, for read-only users (X9)", () => {
+  it("says profiles appear once created, with no link, for read-only users", () => {
     mockGrantedScopes.all = false;
     renderTab({ ...archetype, profiles: [] });
 

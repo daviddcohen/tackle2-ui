@@ -54,7 +54,7 @@ test.describe("Plan run approval", () => {
     await stageLinks(page).first().click();
     await expect(page).toHaveURL(/\/plan-runs\/2\/stages\/4\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Analyze");
-    // The stage status is in the status line under the title (guide 4.3).
+    // The stage status is in the status line under the title.
     await expect(main(page).locator(AGENTIC_STATUS).first()).toHaveText(
       "Action required"
     );

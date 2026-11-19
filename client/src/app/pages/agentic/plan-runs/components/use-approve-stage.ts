@@ -10,7 +10,7 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 /**
  * Approves a stage of a plan run, for the plan run page and the stage page
  * alike: a "{stage} approved" toast on success, the server's message on
- * failure (applications AP13). The returned promise rejects on failure, so
+ * failure. The returned promise rejects on failure, so
  * `StageAttentionAlert` closes its confirm either way.
  */
 export const useApproveStage = (runId: EntityId) => {
