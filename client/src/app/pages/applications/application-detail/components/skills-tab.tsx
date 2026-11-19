@@ -36,7 +36,7 @@ interface SkillsTabProps {
 }
 
 /**
- * The skills the agents use for this application (guide 2.3, sources 1-5),
+ * The skills the agents use for this application,
  * from its migration view. Without a migration plan there are no agents yet,
  * so the table shows the skills associated with the application and its
  * archetypes.
@@ -64,7 +64,7 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
 
   const rows = React.useMemo(() => {
     if (hasPlan) {
-      // The server did not say which skills apply: unknown, not none (X6).
+      // The server did not say which skills apply: unknown, not none.
       return migration?.effectiveSkills != null
         ? groupSkillSources(migration.effectiveSkills)
         : undefined;

@@ -68,7 +68,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
   const { providers } = useFetchProviders();
   const { identities, isSuccess: isIdentitiesLoaded } = useFetchIdentities();
   const credentialsLink = useLinkComponent(AdminPaths.identities);
-  // The in-use sentence counts agents only once they are known (X6): a
+  // The in-use sentence counts agents only once they are known: a
   // skeleton while they load, a usage-unchecked sentence if they fail.
   const {
     agents,
@@ -114,12 +114,12 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose }) => {
   // Gateway references a Secret, see adapters/models.ts) can be edited
   // without choosing one; a new Model needs one.
   const isCredentialRequired = model == null || model.credential != null;
-  // Without any API-key credential the next step is to create one (AD9). The
+  // Without any API-key credential the next step is to create one. The
   // group renders one helper item and an error would replace it, so the link
   // stays and "A credential is required." is not shown: Create stays disabled.
   const hasNoCredentials = isIdentitiesLoaded && credentialOptions.length === 0;
 
-  // Sorted by name; each option says its type and verification status (MF1).
+  // Sorted by name; each option says its type and verification status.
   const providerOptions: FilterSelectOptionProps[] = [...providers]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((p) => ({

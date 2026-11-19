@@ -32,7 +32,7 @@ jest.mock("@app/queries/agentic", () => ({
 const request: StartApplicationMigrationsRequest = {
   applicationIds: [1, 2, 3],
   planSelection: "recommended",
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
 };
 
 const start = () => {

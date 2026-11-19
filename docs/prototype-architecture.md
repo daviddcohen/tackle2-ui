@@ -6,7 +6,7 @@ This repository is a functional MVP prototype on top of tackle2-ui. Its agentic 
 
 ## Shared prototype state
 
-The switcher adapts the global state contract from an earlier prototype's `PrototypeScopeSwitcher`. It is the only source of truth for persona, scenario, and stage (`protoPersona`, `protoScenario`, `protoStage`). State is encoded in URL query parameters so a view is bookmarkable and survives refresh. Only the switcher and the mock server (`client/src/mocks/stub-new-work/agentic/prototype-state.ts`) read this state. Production-facing pages render from routes, scopes, and query data.
+The switcher is the only source of truth for persona, scenario, and stage (`protoPersona`, `protoScenario`, `protoStage`). State is encoded in URL query parameters so a view is bookmarkable and survives refresh. Only the switcher and the mock server (`client/src/mocks/stub-new-work/agentic/prototype-state.ts`) read this state. Production-facing pages render from routes, scopes, and query data.
 
 The switcher is mounted only in development bundles with `AUTH_REQUIRED=false` and `MOCK` stubbing the agentic endpoints (`isPrototypeEnabled`): `client/src/index.tsx` loads `client/src/app/layout/PrototypeShell/` and hands it to `App`. No production module imports `client/src/app/prototype/**`.
 
@@ -20,7 +20,7 @@ The persona selection maps to existing masquerade presets so route and action ac
 | Enterprise Architect | Architect       | Application Inventory in Migration |
 | Hub Migrator         | Migrator        | Application Inventory execution    |
 
-Persona names are demonstration metadata only. Production code authorizes with scopes and RBAC. Vanilla Konveyor perspective behavior is preserved: Admin can use Administration and Migration, while Architect and Migrator receive Migration only. Application Architect is documented as a downstream persona but has no distinct current Hub role mapping.
+Persona names are demonstration metadata only. Production code authorizes with scopes and RBAC. Vanilla Konveyor perspective behavior is preserved: Admin can use Administration and Migration, while Architect and Migrator receive Migration only. Application Architect is documented as a developer portal persona but has no distinct current Hub role mapping.
 
 ## Projection boundary
 
@@ -87,7 +87,7 @@ Changing persona is an explicit demo action that opens the recommended starting 
 
 ## Integration boundary
 
-The controller is domain agnostic. The Hub must own product vocabulary, application-to-Plan resolution, portfolio authorization, audit, credential mediation, and application-specific result presentation. The Migration Tab, IDE, and CLI consume governed policy and execution results. They do not manage Hub Models, Agents, Plans, Stages, or Skills.
+The controller is domain agnostic. The Hub must own product vocabulary, application-to-Plan resolution, portfolio authorization, audit, credential mediation, and application-specific result presentation. Developer portals, the IDE, and the CLI consume governed policy and execution results. They do not manage Hub Models, Agents, Plans, Stages, or Skills.
 
 ## Static hosting on GitHub Pages
 
@@ -140,7 +140,7 @@ A build serves correctly only under the base path it was built for. Running the 
 
 ### Keeping the upstream workflows quiet
 
-The fork carries the 16 upstream Konveyor workflows (CI, image builds to quay, nightlies, stale and issue bots). They stay unedited so syncs from upstream and staging apply cleanly; instead the `quiet-upstream` job disables them in the fork's Actions settings, on every run. A workflow that a later sync adds is disabled on the next run (it may run once before that, for example on the push that adds it). The job is idempotent and logs what it kept, skipped and disabled.
+The fork carries the 16 upstream Konveyor workflows (CI, image builds to quay, nightlies, stale and issue bots). They stay unedited so syncs from upstream apply cleanly; instead the `quiet-upstream` job disables them in the fork's Actions settings, on every run. A workflow that a later sync adds is disabled on the next run (it may run once before that, for example on the push that adds it). The job is idempotent and logs what it kept, skipped and disabled.
 
 Owner, once:
 

@@ -9,11 +9,11 @@ import { useFetchMigrationPlans } from "@app/queries/agentic";
  * an archetype, shared by the drawer Target profiles tab and the target
  * profiles page so the two never disagree (archetypes residual).
  *
- * "Assigned" means the default plan (addenda X11): a plan whose migration
+ * "Assigned" means the default plan: a plan whose migration
  * path is the default for the archetype and lists the profile. Only that
  * plan resolves to applications, so archetype surfaces show only it.
  *
- * Without the agentic API there is no plans query (AR3).
+ * Without the agentic API there is no plans query.
  */
 export const useTargetProfilePlans = (archetypeId: number | undefined) => {
   const { migrationPlans, isLoading, isSuccess, fetchError } =

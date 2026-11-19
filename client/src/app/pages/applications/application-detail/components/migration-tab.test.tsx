@@ -111,7 +111,7 @@ const run = (
     { id: 2, name: "Policy Administration" },
   ],
   status,
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
   stageRuns,
 });
@@ -177,7 +177,7 @@ describe("MigrationTab", () => {
     });
   });
 
-  it("shows the app placeholder while the migration loads (AP9)", () => {
+  it("shows the app placeholder while the migration loads", () => {
     mockState.migrationsLoading = true;
     renderTab();
     expect(screen.getByText("Loading...")).toBeInTheDocument();
@@ -188,7 +188,7 @@ describe("MigrationTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the app placeholder while the migration's run loads (AP9)", () => {
+  it("shows the app placeholder while the migration's run loads", () => {
     mockState.migration = view({ planRun: runRef, runPhase: "Running" });
     mockState.runLoading = true;
     renderTab();
@@ -198,7 +198,7 @@ describe("MigrationTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the error state when the migration cannot be read (AP9)", () => {
+  it("shows the error state when the migration cannot be read", () => {
     mockState.migrationsError = new Error("503");
     renderTab();
     expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();
@@ -264,7 +264,7 @@ describe("MigrationTab", () => {
         "/archetypes/4/target-profiles#target-profile-11"
       );
       expect(fact("agentic.execution.targetBranch")).toHaveTextContent(
-        "mta/agentic-migration"
+        "konveyor/agentic-migration"
       );
       // Skills are counted once per skill and open the Skills tab.
       expect(
@@ -278,7 +278,7 @@ describe("MigrationTab", () => {
       expect(screen.getByText("Prepare proposal")).toBeInTheDocument();
     });
 
-    it("without the run write scope waits for approval and offers no decision (X9, AP16)", () => {
+    it("without the run write scope waits for approval and offers no decision", () => {
       mockState.canRun = false;
       mockState.migration = view({
         planRun: runRef,
@@ -316,7 +316,7 @@ describe("MigrationTab", () => {
         "agentic.execution.runRejected",
       ],
     ])(
-      "confirms, then says what the %s decided (AP13)",
+      "confirms, then says what the %s decided",
       async (decision, button, toast) => {
         mockState.migration = view({
           planRun: runRef,
@@ -342,7 +342,7 @@ describe("MigrationTab", () => {
       }
     );
 
-    it("keeps a profile no archetype owns as text (AP14)", () => {
+    it("keeps a profile no archetype owns as text", () => {
       mockState.migration = view({ planRun: runRef, runPhase: "Running" });
       mockState.planRun = run("Running", []);
       renderTab();
@@ -354,7 +354,7 @@ describe("MigrationTab", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("says Unavailable when the server gives no skills (X6)", () => {
+    it("says Unavailable when the server gives no skills", () => {
       mockState.migration = view({
         planRun: runRef,
         runPhase: "Running",
@@ -400,8 +400,8 @@ describe("MigrationTab", () => {
         runPhase: "Succeeded",
         result: {
           repositoryName: "customer-management",
-          targetBranch: "mta/agentic-migration",
-          branchUrl: "https://git.example.com/tree/mta",
+          targetBranch: "konveyor/agentic-migration",
+          branchUrl: "https://git.example.com/tree/konveyor",
           commits: [
             {
               hash: "007a69cafe",
@@ -418,7 +418,7 @@ describe("MigrationTab", () => {
       renderTab();
       expect(
         within(fact("agentic.execution.targetBranch")).getByRole("link")
-      ).toHaveAttribute("href", "https://git.example.com/tree/mta");
+      ).toHaveAttribute("href", "https://git.example.com/tree/konveyor");
       expect(
         screen.getByRole("heading", { name: "agentic.execution.commitsTitle" })
       ).toBeInTheDocument();
@@ -447,7 +447,7 @@ describe("MigrationTab", () => {
       expect(mockState.open).toHaveBeenCalled();
     });
 
-    it("has no start without the run write scope (X9)", () => {
+    it("has no start without the run write scope", () => {
       mockState.canRun = false;
       mockState.migration = view();
       renderTab();

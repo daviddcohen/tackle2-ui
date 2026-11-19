@@ -65,7 +65,7 @@ type AssociationField =
   | "targetProfiles"
   | "applications";
 
-/** One picker per scope, in resolution order (guide 2.3, skills amendment 1). */
+/** One picker per scope, in resolution order. */
 const ASSOCIATION_FIELDS: {
   field: AssociationField;
   scope: SkillAssociationScope;
@@ -107,7 +107,7 @@ export interface SkillModalProps {
   onClose: () => void;
 }
 
-/** Create or edit a skill (guide 4.4, skill-create, skill-edit). */
+/** Create or edit a skill. */
 export const SkillModal: React.FC<SkillModalProps> = ({
   isOpen,
   skill,
@@ -146,7 +146,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
   } = useFetchSkillCollections();
   // Associating a skill with an agent writes the agent's skills, so the
   // Agents field needs agent write access. Without it the field is disabled
-  // and its values are sent back unchanged (S6).
+  // and its values are sent back unchanged.
   const canManageAgents = useHasSomeScopes(agentsWriteScopes);
 
   const idsOf = (scope: SkillAssociationScope) =>
@@ -163,7 +163,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
         value: String(archetype.id),
         label: archetype.name,
       })),
-      // From the archetypes, so a profile no plan uses is offered too (S5).
+      // From the archetypes, so a profile no plan uses is offered too.
       targetProfiles: archetypes.flatMap((archetype) =>
         (archetype.profiles ?? []).map((profile) => ({
           value: String(profile.id),
@@ -291,7 +291,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
 
   const selectedSourceType = useWatch({ control, name: "sourceType" });
 
-  // The edit warning counts what the delete reason counts (amendment 3, S1),
+  // The edit warning counts what the delete reason counts,
   // once both counts are known.
   const associationCount = skill?.associations?.length;
   const collectionCount =
@@ -505,7 +505,7 @@ export const SkillForm: React.FC<SkillFormProps> = ({ skill, onClose }) => {
             )}
           </FormSection>
 
-          {/* Always visible on create and edit (user decision U1). */}
+          {/* Always visible on create and edit. */}
           <FormSection title={t("agentic.skill.associations")}>
             {ASSOCIATION_FIELDS.map(({ field, toggleId }) => {
               const isDisabled = field === "agents" && !canManageAgents;

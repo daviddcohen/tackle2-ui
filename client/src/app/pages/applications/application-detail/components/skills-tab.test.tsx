@@ -86,7 +86,7 @@ describe("SkillsTab", () => {
     ).toHaveLength(1);
   });
 
-  it("says where to add skills when none apply (AP6)", () => {
+  it("says where to add skills when none apply", () => {
     mockState.migration = view({ effectiveSkills: [] });
     renderTab();
     expect(
@@ -102,7 +102,7 @@ describe("SkillsTab", () => {
     ).toHaveAttribute("href", "/skills");
   });
 
-  it("says Unavailable, not empty, when the server gives no skills (X6)", () => {
+  it("says Unavailable, not empty, when the server gives no skills", () => {
     mockState.migration = view({ effectiveSkills: undefined });
     renderTab();
     expect(screen.getByText("agentic.common.unavailable")).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe("SkillsTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the app placeholder while the migration loads (AP9)", () => {
+  it("shows the app placeholder while the migration loads", () => {
     mockState.migrationsLoading = true;
     renderTab();
     expect(screen.getByText("Loading...")).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("SkillsTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("without a plan, waits for the skills before listing them (AP9)", () => {
+  it("without a plan, waits for the skills before listing them", () => {
     mockState.migration = view({ plan: undefined });
     mockState.skillsLoading = true;
     renderTab();
@@ -137,13 +137,13 @@ describe("SkillsTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the error state when the migration cannot be read (AP9)", () => {
+  it("shows the error state when the migration cannot be read", () => {
     mockState.migrationsError = new Error("503");
     renderTab();
     expect(screen.getByText("message.unableToConnect")).toBeInTheDocument();
   });
 
-  it("without a plan, shows the error state when the skills cannot be read (AP9)", () => {
+  it("without a plan, shows the error state when the skills cannot be read", () => {
     mockState.migration = view({ plan: undefined });
     mockState.skillsError = new Error("503");
     renderTab();

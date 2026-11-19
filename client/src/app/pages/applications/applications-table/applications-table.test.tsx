@@ -178,7 +178,7 @@ describe("ApplicationsTable agentic actions", () => {
     expect(runItem()).not.toHaveAttribute("aria-disabled", "true");
   });
 
-  it("offers Run migration plan nowhere without the run write scope (X9)", async () => {
+  it("offers Run migration plan nowhere without the run write scope", async () => {
     mockState.canRun = false;
     const user = userEvent.setup();
     renderTable();

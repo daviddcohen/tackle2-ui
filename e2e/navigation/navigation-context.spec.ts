@@ -95,7 +95,7 @@ test("tabs, table filters, scenario changes and sidebar navigation have explicit
   });
   await nameFilter.fill("Code Migrator");
   await nameFilter.press("Enter");
-  // The row's skills summary and plan count also open the agent (A12).
+  // The row's skills summary and plan count also open the agent.
   const agentLinks = page
     .locator("main")
     .getByRole("link", { name: "Code Migrator", exact: true });
@@ -180,8 +180,8 @@ test("every Agents list Skills link preserves the list context", async ({
     const row = page.getByRole("row").filter({
       has: page.getByRole("link", { name: agent.name, exact: true }),
     });
-    // One skill and no collection is the skill itself (C1); otherwise the
-    // summary opens the agent, whose Details tab lists them (A12).
+    // One skill and no collection is the skill itself; otherwise the
+    // summary opens the agent, whose Details tab lists them.
     const single = agent.skills.length === 1 && collections.length === 0;
     await (
       single
@@ -467,7 +467,7 @@ test("cold links use the canonical hierarchy and a new tab has its own history",
   await expect(
     breadcrumb(page).getByRole("link", { name: "Code Migrator", exact: true })
   ).toBeVisible();
-  // The stage page reaches skills through its run (addenda R1).
+  // The stage page reaches skills through its run.
   await page.locator(`main a[href="${withBase("/plan-runs/1")}"]`).click();
   await page
     .locator(`main a[href^="${withBase("/skills/")}"]`)

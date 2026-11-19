@@ -19,8 +19,8 @@ import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 /*
- * The building blocks of agentic detail and run pages (guide 4.2, 4.3,
- * kit-detail): a stack of sections, each a heading with an optional subtle
+ * The building blocks of agentic detail and run pages:
+ * a stack of sections, each a heading with an optional subtle
  * sentence; facts as term and value pairs; link labels for a set of related
  * objects; and a section's one-sentence empty state.
  *
@@ -44,7 +44,7 @@ const stackItems = (children: React.ReactNode) =>
 
 /**
  * The stack of a page or tab body: the alert, the facts and the sections,
- * with the section gap and no wrapping (kit amendment 2: a wrapping column
+ * with the section gap and no wrapping (a wrapping column
  * Flex leaves holes). Empty children are left out.
  */
 export const DetailSections: React.FC<{ children: React.ReactNode }> = ({
@@ -64,7 +64,7 @@ export interface DetailSectionProps {
   id?: string;
   /** The heading, with its count when the section has rows ("Test runs (1)"). */
   title: string;
-  /** At most one subtle sentence: what the rows are or how to get more (C3). */
+  /** At most one subtle sentence: what the rows are or how to get more. */
   description?: React.ReactNode;
   /** The content; several children stack with the content gap. */
   children: React.ReactNode;
@@ -100,7 +100,7 @@ export const DetailSection: React.FC<DetailSectionProps> = ({
   </Flex>
 );
 
-/** A section's empty state (kit-tables): one sentence, no icon, no "(0)" heading (C4). */
+/** A section's empty state: one sentence, no icon, no "(0)" heading. */
 export const SectionEmpty: React.FC<{ children: string }> = ({ children }) => (
   <EmptyState variant="xs">
     <EmptyStateBody>{children}</EmptyStateBody>
@@ -114,7 +114,7 @@ export interface DetailFactsProps {
   isTwoColumn?: boolean;
 }
 
-/** Plain term and value pairs under the header (guide 4.2, 4.3). */
+/** Plain term and value pairs under the header. */
 export const DetailFacts: React.FC<DetailFactsProps> = ({
   facts,
   isTwoColumn,
@@ -141,8 +141,8 @@ export interface LinkLabelItem {
 }
 
 /**
- * A set-valued fact as outlined, clickable link labels, even for one item
- * (C2, kit amendment 8): the first five, then "more". The caller renders
+ * A set-valued fact as outlined, clickable link labels, even for one item:
+ * the first five, then "more". The caller renders
  * the empty case ("None").
  */
 export const LinkLabels: React.FC<{ items: LinkLabelItem[] }> = ({ items }) => (

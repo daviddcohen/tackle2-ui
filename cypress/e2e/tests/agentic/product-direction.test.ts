@@ -14,7 +14,7 @@ describe("Agentic product direction", () => {
     );
     cy.get("#migration-target-branch").should(
       "have.value",
-      "mta/agentic-migration"
+      "konveyor/agentic-migration"
     );
     cy.contains(
       "The same branch name will be created in each selected application's separate repository."
@@ -62,7 +62,7 @@ describe("Agentic product direction", () => {
     cy.contains('[role="tab"]', "Migration").click();
     cy.contains("Effective Skills").scrollIntoView().should("be.visible");
     cy.contains("Git results").scrollIntoView().should("be.visible");
-    cy.contains("mta/agentic-migration").should("be.visible");
+    cy.contains("konveyor/agentic-migration").should("be.visible");
     cy.contains("Created by the").should("be.visible");
   });
 

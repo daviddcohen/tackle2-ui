@@ -13,7 +13,7 @@ import {
 
 /**
  * The archetype's target profiles as a link, the same element as the
- * Applications count beside it (amendment 4): one profile is its name
+ * Applications count beside it: one profile is its name
  * linking to its row, several are a count linking to the page (4.10).
  */
 const LinkToArchetypeTargetProfiles: React.FC<{

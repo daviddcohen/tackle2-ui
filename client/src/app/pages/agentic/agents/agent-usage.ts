@@ -18,7 +18,7 @@ export const getPlansUsingAgent = (
 /**
  * Why Delete is disabled, from the number of plans using the agent:
  * undefined while that is unknown (the plans query is loading or failed),
- * so Delete is never enabled on a guess (X6). No reason when it is unused.
+ * so Delete is never enabled on a guess. No reason when it is unused.
  */
 export const useAgentDeleteBlockedReason = () => {
   const { t } = useTranslation();

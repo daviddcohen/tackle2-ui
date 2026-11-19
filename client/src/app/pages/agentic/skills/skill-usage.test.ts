@@ -67,7 +67,7 @@ describe("getSkillDeleteBlockedReason", () => {
     ).toBeUndefined();
   });
 
-  it("blocks while usage is unknown (X6, S1)", () => {
+  it("blocks while usage is unknown", () => {
     const unchecked = "Usage could not be checked. Try again later.";
     expect(getSkillDeleteBlockedReason(t, skill(), [])).toBe(unchecked);
     expect(getSkillDeleteBlockedReason(t, skill(0), undefined)).toBe(unchecked);
@@ -88,7 +88,7 @@ describe("getCollectionDeleteBlockedReason", () => {
     );
   });
 
-  it("blocks while the agents are unknown (X6)", () => {
+  it("blocks while the agents are unknown", () => {
     expect(getCollectionDeleteBlockedReason(t, "1", undefined)).toBe(
       "Usage could not be checked. Try again later."
     );

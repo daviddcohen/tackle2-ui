@@ -41,4 +41,4 @@ The prototype is published at https://daviddcohen.github.io/tackle2-ui/ (visitor
 3. Confirm that Administration is unavailable.
 4. Confirm that Migrator scopes permit application execution while Agent, Plan, Stage, and Skill configuration remains read only.
 5. Start a ready migration and inspect the application-specific run.
-6. Note that Application Architect and Corporate Developer flows remain in the host product, IDE, or CLI surfaces and are not fabricated inside Hub.
+6. Note that Application Architect and Corporate Developer flows remain in developer portals, the IDE, or the CLI and are not fabricated inside Hub.

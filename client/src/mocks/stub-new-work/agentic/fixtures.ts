@@ -599,7 +599,7 @@ export const mockAgents: Agent[] = [
     skills: agentSkills("1"),
     skillCollections: [{ id: "1", name: "Java modernization foundation" }],
     prompt:
-      "Analyze the application source code and MTA analysis results to produce a detailed, prioritized migration proposal for this application. Identify high-risk areas, estimate effort per module, and recommend the order of changes to minimize build breakage during incremental migration.",
+      "Analyze the application source code and Konveyor analysis results to produce a detailed, prioritized migration proposal for this application. Identify high-risk areas, estimate effort per module, and recommend the order of changes to minimize build breakage during incremental migration.",
     createTime: "2026-07-20T10:00:00Z",
     updateTime: "2026-08-10T14:00:00Z",
   },
@@ -1146,7 +1146,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     planName: "Java EE to Quarkus",
     applications: [applicationRef(3), applicationRef(8)],
     status: "Succeeded",
-    targetBranch: "mta/agentic-migration",
+    targetBranch: "konveyor/agentic-migration",
     startedAt: "2026-09-20T08:00:00Z",
     completedAt: "2026-09-20T10:15:00Z",
     resolvedSkills: [
@@ -1181,7 +1181,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
           {
             role: "agent",
             content:
-              'Starting "Prepare proposal": analyzing application source code and MTA analysis results.',
+              'Starting "Prepare proposal": analyzing application source code and Konveyor analysis results.',
             timestamp: "2026-09-20T08:00:30Z",
           },
           {
@@ -1288,7 +1288,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     planName: "Spring Boot to Quarkus",
     applications: [applicationRef(7), applicationRef(12)],
     status: "AwaitingApproval",
-    targetBranch: "mta/spring-quarkus",
+    targetBranch: "konveyor/spring-quarkus",
     startedAt: "2026-09-23T09:00:00Z",
     resolvedSkills: [
       {
@@ -1347,7 +1347,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     planName: "Java EE to Quarkus",
     applications: [applicationRef(2)],
     status: "Failed",
-    targetBranch: "mta/agentic-migration",
+    targetBranch: "konveyor/agentic-migration",
     startedAt: "2026-09-22T14:00:00Z",
     completedAt: "2026-09-22T14:08:00Z",
     resolvedSkills: [
@@ -1398,7 +1398,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     planName: "Java EE lift and shift",
     applications: [applicationRef(16)],
     status: "Running",
-    targetBranch: "mta/lift-shift",
+    targetBranch: "konveyor/lift-shift",
     startedAt: "2026-09-23T10:30:00Z",
     resolvedSkills: [
       {
@@ -1446,7 +1446,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     planName: "Spring Boot 3 modernization",
     applications: [applicationRef(12)],
     status: "Succeeded",
-    targetBranch: "mta/spring-boot-3",
+    targetBranch: "konveyor/spring-boot-3",
     startedAt: "2026-09-21T07:00:00Z",
     completedAt: "2026-09-21T09:45:00Z",
     resolvedSkills: [
@@ -1521,7 +1521,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     planName: "Node.js runtime modernization",
     applications: [applicationRef(18)],
     status: "Running",
-    targetBranch: "mta/nodejs-22",
+    targetBranch: "konveyor/nodejs-22",
     startedAt: "2026-09-29T11:00:00Z",
     resolvedSkills: [
       {
@@ -1600,7 +1600,7 @@ export const mockPlanRuns: PlanRunTemplate[] = [
     planName: "Legacy Java runtime modernization",
     applications: [applicationRef(7)],
     status: "AwaitingApproval",
-    targetBranch: "mta/java17",
+    targetBranch: "konveyor/java17",
     startedAt: "2026-09-28T14:00:00Z",
     resolvedSkills: [
       {

@@ -44,7 +44,7 @@ export interface DisabledActionProps {
  * Spread into a row kebab or detail Actions menu item: aria-disabled with
  * `reason` as its tooltip when a reason is given, enabled otherwise. A row
  * kebab's Delete passes `position: "left"` so the tooltip does not cover
- * Edit (guide 4.1, addenda X12).
+ * Edit.
  */
 export function disabledActionProps(
   reason?: string,
@@ -63,7 +63,7 @@ export function disabledActionProps(
 
 /**
  * Spread into a row kebab's Delete: disabled with `reason` as its tooltip on
- * the left (addenda X12), and danger only while it is enabled. Callers pass
+ * the left, and danger only while it is enabled. Callers pass
  * the managed reason first, then the usage blocker
  * (`managedReason ?? usageReason`).
  */
@@ -76,7 +76,7 @@ export function deleteActionProps(
 /**
  * `disabledActionProps` for an Edit or Delete action of an operator-managed
  * object: disabled with `tooltip` saying why. Domain objects pass their
- * `operatorManaged` flag (addenda X4).
+ * `operatorManaged` flag.
  */
 export function managedActionProps(
   isManaged: boolean | undefined,
@@ -120,7 +120,7 @@ export function workflowRunDuration(run: AgentWorkflowRun): number | undefined {
 /**
  * When a stage awaiting approval stopped: its agent's last message. A
  * `StageRun` has no completion time until it is approved, but the waiting
- * is not the agent's work, so its clock stops there (addenda X3).
+ * is not the agent's work, so its clock stops there.
  */
 const awaitingSince = (stageRun?: Pick<StageRun, "messages">) => {
   const times = (stageRun?.messages ?? [])
@@ -155,7 +155,7 @@ const clockEnd = (
         : now;
 
 /**
- * Seconds a stage has taken (addenda X3): from start to completion, or to
+ * Seconds a stage has taken: from start to completion, or to
  * now while it is running. A stage awaiting approval stops at its agent's
  * last message. Undefined while Pending, for a finished stage without a
  * completion time and for an awaiting stage without messages. `StageRun`
@@ -173,7 +173,7 @@ export function stageRunDurationSeconds(
 }
 
 /**
- * Seconds a plan run has taken (addenda X3): from start to completion, or to
+ * Seconds a plan run has taken: from start to completion, or to
  * now while it is running. A run awaiting approval stops where its awaiting
  * stage stopped, so the wait for a decision does not count. Undefined while
  * Pending (a pending run's `startedAt` is not a start; see
@@ -211,7 +211,7 @@ export interface CurrentStage {
 
 /**
  * The stage a plan run is at, for the run status line ("Stage n of m:
- * {stage}", plan-runs amendment 6) and the runs table: the stage awaiting
+ * {stage}") and the runs table: the stage awaiting
  * approval, else the running one, else the failed one. Undefined while no
  * stage is in one of these states (a pending or succeeded run).
  */

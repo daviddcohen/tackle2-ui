@@ -38,7 +38,7 @@ interface Issue {
 }
 
 /**
- * The plan's one configuration alert (guide 7.3, plans P7): shown only when
+ * The plan's one configuration alert: shown only when
  * a check is an issue. The title names the problem; for unverified models
  * the body lists each affected stage with its agent and model. Several
  * issues share one alert.

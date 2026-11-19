@@ -5,7 +5,7 @@
  *    drawer's title is its leaf, and a target profile is the selected row of
  *    the "Target profiles" page),
  *  - extend the source view's trail by exactly one crumb (plus the owning
- *    archetype before a target profiles leaf, guide 3.5.5), and
+ *    archetype before a target profiles leaf), and
  *  - return to the exact source view (URL and trail) from the parent crumb.
  *
  * One test per entity group so failures point at a surface and the groups run
@@ -46,7 +46,7 @@ const isArchetypeDrawer = (url: URL) =>
 /**
  * The view's trail, leaf included. The archetype drawer's title is its leaf
  * and its breadcrumb lists ancestors only, omitted when the only ancestor is
- * the Archetypes list behind it (guide 3.5.6).
+ * the Archetypes list behind it.
  */
 const trailTitles = async (page: Page) => {
   const titles = await breadcrumbTitles(page);
@@ -185,7 +185,7 @@ for (const group of GROUPS) {
       const sourceTitle =
         sourceTitles.at(-1) ?? (await mainHeading(page).innerText()).trim();
       // Ancestor crumbs of the source page, by path: a link to one of them
-      // (the stage page's run link, addenda R1) returns to it, like the crumb.
+      // (the stage page's run link) returns to it, like the crumb.
       const ancestorPaths = (
         await breadcrumb(page)
           .getByRole("link")
@@ -256,12 +256,11 @@ for (const group of GROUPS) {
                 expected
               );
             } else await expect(currentCrumb(page)).toHaveText(expected);
-            // A plan run's count link ("3 applications", guide 4.10, addenda
-            // X14) names the set it opens, not the run page it lands on.
+            // A plan run's count link ("3 applications") names the set it opens, not the run page it lands on.
             const isRunCountLink =
               /^\d+ applications$/.test(label) &&
               /^\/plan-runs\/\d+$/.test(destination.pathname);
-            // So does an agent's skills summary or plan count (A12, 4.10):
+            // So does an agent's skills summary or plan count:
             // "4 skills, 1 collection" and "5 migration plans" open the agent.
             const isAgentCountLink =
               /^\d+ (skills?|collections?|migration plans?)(, \d+ collections?)?$/.test(
@@ -278,15 +277,15 @@ for (const group of GROUPS) {
               /^\d+ (associations?|skills|agents)$/.test(label) &&
               /^\/skills\//.test(destination.pathname);
             // A skill's "Associated with" table names each target profile
-            // with its archetype, "{profile} ({archetype})" (skills amendment
-            // 6): profile names repeat across archetypes.
+            // with its archetype, "{profile} ({archetype})":
+            // profile names repeat across archetypes.
             const isQualifiedTargetProfile =
               /^\/skills\/\d+$/.test(appUrl(sourceURL).pathname) &&
               /#target-profile-\d+$/.test(href) &&
               label.startsWith(`${expected} (`) &&
               label.endsWith(")");
             // The inventory Migration status links to the application's
-            // Migration tab; its words are the status (guide 4.8, 7.6).
+            // Migration tab; its words are the status.
             const isMigrationStatusLink =
               /^\/applications\/\d+$/.test(destination.pathname) &&
               destination.searchParams.get("tab") === "migration";

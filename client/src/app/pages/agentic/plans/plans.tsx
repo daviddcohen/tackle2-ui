@@ -80,7 +80,7 @@ import { PlanWizard } from "./plan-wizard/plan-wizard";
 type LinkTo = (pathname: string) => LocationDescriptor;
 
 /**
- * Name with the attention marker (guide 4.1): a warning icon after the name
+ * Name with the attention marker: a warning icon after the name
  * whose tooltip names each failing check. The icon is joined to the name
  * with a non-breaking space so it wraps with the last word (plans residual).
  */
@@ -123,7 +123,7 @@ const PlanNameCell: React.FC<{
   );
 };
 
-/** One target profile is its name; several are a count that opens their list (guide 4.10). */
+/** One target profile is its name; several are a count that opens their list. */
 const TargetProfilesCell: React.FC<{
   plan: MigrationPlan;
   linkTo: LinkTo;
@@ -131,7 +131,7 @@ const TargetProfilesCell: React.FC<{
   const { t } = useTranslation();
   const path = plan.migrationPath;
   if (path == null) {
-    // The real adapters do not report the path yet: unknown, not empty (X6).
+    // The real adapters do not report the path yet: unknown, not empty.
     return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
   }
   if (path.targetProfiles.length === 0) {
@@ -165,7 +165,7 @@ const TargetProfilesCell: React.FC<{
 };
 
 /**
- * Runs of the plan: one run is its name (guide 4.10, C1), several are a
+ * Runs of the plan: one run is its name, several are a
  * count opening the Runs tab. The single run's name needs the runs query;
  * until it answers the cell is a skeleton, and without it the count stays.
  */
@@ -236,7 +236,7 @@ const MigrationPlansPage: React.FC = () => {
     isLoading: isLoadingRuns,
     fetchError: runsFetchError,
   } = useFetchPlanRuns();
-  // The marker needs both secondary queries (P6): no marker until they load.
+  // The marker needs both secondary queries: no marker until they load.
   const canCheckConfiguration =
     !isLoadingAgents &&
     !isLoadingModels &&
@@ -453,7 +453,7 @@ const MigrationPlansPage: React.FC = () => {
                           ) : plan.applicationImpact.matching === 0 ? (
                             <EmptyTextMessage message={t("terms.none")} />
                           ) : (
-                            // A count even at 1 (addenda P4): the plan has no application refs.
+                            // A count even at 1: the plan has no application refs.
                             <CountLink
                               to={planApplicationsLocation(plan.id, linkCrumbs)}
                             >

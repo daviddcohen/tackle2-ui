@@ -61,7 +61,7 @@ const PlanRunStatus: React.FC<{ run: PlanRun }> = ({ run }) => {
  * `fetchError` and `emptyState`, which render inside the table. A detail tab
  * (a plan's or an application's runs) passes none of these four: it renders
  * its own loading, error and empty section outside the table, because a
- * section with nothing to list has no table header (kit-tables).
+ * section with nothing to list has no table header.
  */
 export interface PlanRunsTableProps {
   runs: PlanRun[];
@@ -88,10 +88,10 @@ export interface PlanRunsTableProps {
 }
 
 /**
- * The one plan runs table (guide 4.9, kit-tables): Run · Migration plan ·
+ * The one plan runs table: Run · Migration plan ·
  * Status (with the active stage) · Applications · Started · Duration. Used on
  * `/plan-runs`, a migration plan's Runs tab and an application's Plan runs
- * tab. Run names are rendered verbatim: they are opaque (7.4, addenda X14).
+ * tab. Run names are rendered verbatim: they are opaque.
  */
 export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
   runs,
@@ -286,7 +286,7 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
                         </Link>
                       ) : run.applications.length > 1 ? (
                         // "{n} applications" opens the run, whose page
-                        // lists them (addenda X14).
+                        // lists them.
                         <CountLink
                           to={linkTo(
                             generatePath(DevPaths.planRunDetails, {

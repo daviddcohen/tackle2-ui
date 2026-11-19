@@ -22,7 +22,7 @@ test.describe("Stage run detail", () => {
       protoUrl("/plan-runs/1/stages/1", { scenario: "actionRequired" })
     );
     // Started lives in the status line; the facts are Agent, Duration and
-    // Approval (guide 4.3, C6).
+    // Approval.
     await expect(
       main(page).getByText(/^Stage 1 of 3 in .* · Started /)
     ).toBeVisible();

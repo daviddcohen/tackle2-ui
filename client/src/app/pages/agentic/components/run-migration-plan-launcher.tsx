@@ -13,7 +13,7 @@ import { useFetchApplicationMigrations } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 
 /**
- * Preflight values to run a failed run again (addenda R5) for `targets`
+ * Preflight values to run a failed run again for `targets`
  * (the run's applications, or some of them): its target branch, and each
  * application's own migration plan when that is the run's plan for every
  * target; otherwise the run's plan for all.
@@ -52,14 +52,14 @@ interface RunMigrationPlanLauncherOptions {
 }
 
 /**
- * The one "Run migration plan" launcher (addenda R4) for the plan run page,
+ * The one "Run migration plan" launcher for the plan run page,
  * the stage page, the application Migration tab and the inventory: the
  * preflight modal and the start, which opens the created run. `open` is
  * undefined without `agenticWorkflowRunsWriteScopes`, so callers render no
  * trigger; `open(applications)` runs those applications instead of the
  * hook's. Render `modal` anywhere in the page. A rerun (`rerunOf`) starts
  * from the failed run's values and shows no override caution while its own
- * plan is picked (addenda R5).
+ * plan is picked.
  */
 export const useRunMigrationPlanLauncher = ({
   applications,

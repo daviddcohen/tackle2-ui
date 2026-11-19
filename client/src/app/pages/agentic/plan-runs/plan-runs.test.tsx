@@ -28,7 +28,7 @@ const run = (id: string, planId: string, planName: string): PlanRun => ({
   planName,
   applications: [{ id: 1, name: "Customer Management" }],
   status: "Running",
-  targetBranch: "mta/agentic-migration",
+  targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
   stageRuns: [],
 });

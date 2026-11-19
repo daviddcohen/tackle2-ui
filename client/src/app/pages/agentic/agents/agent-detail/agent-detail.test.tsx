@@ -196,7 +196,7 @@ describe("AgentDetail", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers only Test agent with the agent run scope alone (A2)", async () => {
+  it("offers only Test agent with the agent run scope alone", async () => {
     const user = userEvent.setup();
     mockGrantedScopes.all = false;
     mockGrantedScopes.scopes = ["agentic.agents:get", "agentic.agentruns:post"];
@@ -211,7 +211,7 @@ describe("AgentDetail", () => {
     ).toEqual(["agentic.agent.test"]);
   });
 
-  it("disables Edit and Delete of an operator-managed agent (A13)", async () => {
+  it("disables Edit and Delete of an operator-managed agent", async () => {
     const user = userEvent.setup();
     useEndpoints({
       detail: (_req, res, ctx) =>
@@ -230,7 +230,7 @@ describe("AgentDetail", () => {
     }
   });
 
-  it("keeps Delete disabled until the plans show the agent is unused (X6)", async () => {
+  it("keeps Delete disabled until the plans show the agent is unused", async () => {
     const user = userEvent.setup();
     server.use(
       rest.get(`${AGENTIC_ENDPOINTS.agents}/:id`, (_req, res, ctx) =>
@@ -264,7 +264,7 @@ describe("AgentDetail", () => {
       capabilities: [],
     };
 
-    it("says None and shows the section empty states for a sparse agent (A11)", async () => {
+    it("says None and shows the section empty states for a sparse agent", async () => {
       useEndpoints({ detail: (_req, res, ctx) => res(ctx.json(sparse)) });
       renderAt("7");
       await screen.findByRole("heading", { name: "Code Migrator" });
@@ -337,7 +337,7 @@ describe("AgentDetail", () => {
       expect(screen.getByText("Stage 1")).toBeInTheDocument();
     });
 
-    it("never says the agent is unused when the plans fail to load (X6)", async () => {
+    it("never says the agent is unused when the plans fail to load", async () => {
       server.use(
         rest.get(`${AGENTIC_ENDPOINTS.agents}/:id`, (_req, res, ctx) =>
           res(ctx.json(sparse))

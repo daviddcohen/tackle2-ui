@@ -26,9 +26,9 @@ interface PlanRunsTabProps {
 }
 
 /**
- * The plan runs that include the application (guide 7.6, C3): the shared
+ * The plan runs that include the application: the shared
  * plan runs table under "Plan runs (n)", or a one-sentence empty section that
- * offers to run the migration plan (applications AP5).
+ * offers to run the migration plan.
  */
 export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
   applicationId,

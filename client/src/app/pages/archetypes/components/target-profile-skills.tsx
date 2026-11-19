@@ -27,7 +27,7 @@ export interface TargetProfileSkillsProps {
 }
 
 /**
- * The skills of a target profile in a table cell (guide 7.7, 4.10): none is
+ * The skills of a target profile in a table cell: none is
  * "None", one is its name as a link, several are "{n} skills" opening a
  * Popover of links, because a target profile has no page of its own.
  */

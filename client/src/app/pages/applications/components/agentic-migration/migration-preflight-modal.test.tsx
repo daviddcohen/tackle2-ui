@@ -145,7 +145,7 @@ describe("MigrationPreflightModal", () => {
       initialValues: {
         planSelection: "single",
         planId: "2",
-        targetBranch: "mta/spring-quarkus",
+        targetBranch: "konveyor/spring-quarkus",
       },
     });
     await waitFor(() => expect(startButton()).toBeEnabled());
@@ -155,7 +155,7 @@ describe("MigrationPreflightModal", () => {
         applicationIds: [1],
         planSelection: "single",
         planId: "2",
-        targetBranch: "mta/spring-quarkus",
+        targetBranch: "konveyor/spring-quarkus",
       })
     );
   });

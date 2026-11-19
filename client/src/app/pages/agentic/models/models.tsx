@@ -80,13 +80,13 @@ const ModelsPage: React.FC = () => {
   const { pushNotification } = React.useContext(NotificationsContext);
   const { gateways, isFetching, isLoading, fetchError, refetch } =
     useFetchGateways();
-  // Usage comes from the agents query: never "Not used" or an enabled Delete before it succeeded (X6).
+  // Usage comes from the agents query: never "Not used" or an enabled Delete before it succeeded.
   const {
     agents,
     isSuccess: isAgentsLoaded,
     fetchError: agentsError,
   } = useFetchAgents();
-  // Every model needs a provider: only a loaded, empty list says so (X6).
+  // Every model needs a provider: only a loaded, empty list says so.
   const {
     providers,
     isLoading: isLoadingProviders,
@@ -97,7 +97,7 @@ const ModelsPage: React.FC = () => {
   // An empty model list offers its next step only once that count is known.
   const isEmptyStateWaiting = gateways.length === 0 && isLoadingProviders;
   const providersLink = useLinkComponent(AdminPaths.providers);
-  // Agent links from the Used by popover return here (AD7).
+  // Agent links from the Used by popover return here.
   const { to } = useBreadcrumbs(t("sidebar.models"), []);
   const [modalState, setModalState, formKey] = useFormModalState<
     "create" | ModelProjection
@@ -142,7 +142,7 @@ const ModelsPage: React.FC = () => {
     isFilterEnabled: true,
     isSortEnabled: true,
     isPaginationEnabled: true,
-    // No actions column at all for a user who has no actions (guide 4.1).
+    // No actions column at all for a user who has no actions.
     hasActionsColumn: canManageModels,
     filterCategories: [
       {
@@ -220,7 +220,7 @@ const ModelsPage: React.FC = () => {
     );
   };
 
-  /** Why Set as default is disabled; usage does not matter here (AD4). */
+  /** Why Set as default is disabled; usage does not matter here. */
   const getSetDefaultBlocker = (model: ModelProjection) => {
     if (model.isOrganizationDefault)
       return t("agentic.model.setDefaultAlready");
@@ -240,7 +240,7 @@ const ModelsPage: React.FC = () => {
     return undefined;
   };
 
-  /** The server's reason, then what it means for agents or what to check (guide 5.3). */
+  /** The server's reason, then what it means for agents or what to check. */
   const getStatusText = (model: ModelProjection) => {
     const effect =
       model.verificationStatus === "pending"

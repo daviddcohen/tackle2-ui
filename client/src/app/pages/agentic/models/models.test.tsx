@@ -148,7 +148,7 @@ describe("ModelsPage", () => {
     renderPage();
     const row = (await screen.findByText("Granite Code 20B")).closest("tr")!;
     expect(within(row).queryByRole("button")).toBeNull();
-    // no empty actions column either (guide 4.1)
+    // no empty actions column either
     expect(
       screen.queryByRole("columnheader", { name: "actions.rowActions" })
     ).toBeNull();

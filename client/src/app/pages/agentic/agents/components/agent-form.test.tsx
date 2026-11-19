@@ -120,7 +120,7 @@ describe("AgentForm", () => {
     expect(within(control!).getByLabelText("Second Skill")).toBeVisible();
   });
 
-  it("opens the parameters group when the agent has parameters or one is added (A10)", async () => {
+  it("opens the parameters group when the agent has parameters or one is added", async () => {
     const user = userEvent.setup();
     const { unmount } = render(
       <AgentForm
@@ -241,7 +241,7 @@ describe("AgentForm model", () => {
   const modelInput = () =>
     document.querySelector<HTMLInputElement>("#gateway-select-toggle-input")!;
 
-  it("preselects the verified organization default and marks it Default (A5, A7)", async () => {
+  it("preselects the verified organization default and marks it Default", async () => {
     const user = userEvent.setup();
     useModels([model("1", "verified"), model("2", "verified", true)]);
     renderInRouter(<AgentForm agent={null} onClose={jest.fn()} />);
@@ -264,7 +264,7 @@ describe("AgentForm model", () => {
     expect(modelInput()).toHaveValue("");
   });
 
-  it("disables the field and says why when no model is verified (A5)", async () => {
+  it("disables the field and says why when no model is verified", async () => {
     useModels([model("1", "pending", true), model("2", "unreachable")]);
     renderInRouter(<AgentForm agent={null} onClose={jest.fn()} />);
     expect(
@@ -274,7 +274,7 @@ describe("AgentForm model", () => {
     expect(screen.queryByText("agentic.agent.modelHelp")).toBeNull();
   });
 
-  it("says the models could not be loaded instead of none verified (X6)", async () => {
+  it("says the models could not be loaded instead of none verified", async () => {
     useModels([]);
     server.use(
       rest.get(hub`/prototype/agentic/models`, (_req, res, ctx) =>
@@ -292,7 +292,7 @@ describe("AgentForm model", () => {
     expect(screen.queryByText("agentic.agent.modelHelp")).toBeNull();
   });
 
-  it("warns when the agent's current model is not verified (A6)", async () => {
+  it("warns when the agent's current model is not verified", async () => {
     useModels([model("1", "unreachable"), model("2", "verified", true)]);
     renderInRouter(<AgentForm agent={agent} onClose={jest.fn()} />);
     expect(

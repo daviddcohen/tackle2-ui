@@ -64,12 +64,12 @@ export interface StageCardProps {
   canRemove: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
-  /** The modal box the agent menu is appended to, so the card does not clip it (addenda P12). */
+  /** The modal box the agent menu is appended to, so the card does not clip it. */
   menuAppendTo: () => HTMLElement;
 }
 
 /**
- * One stage of the plan wizard (guide 4.5, plans amendment 2): an expandable
+ * One stage of the plan wizard: an expandable
  * compact card whose header names the stage ("Stage 1: Prepare proposal"),
  * marks "Requires approval", says which agent runs it while collapsed, and
  * holds plain Move up, Move down and Remove buttons.
@@ -224,7 +224,7 @@ export const StageCard: React.FC<StageCardProps> = ({
             {t("agentic.plan.runBy", { agent: selectedAgent.name })}
           </Content>
         )}
-        {/* A closed card still says why Next is disabled (addenda P8). */}
+        {/* A closed card still says why Next is disabled. */}
         {!isExpanded && agents == null && (
           <HelperText>{agentHelper}</HelperText>
         )}

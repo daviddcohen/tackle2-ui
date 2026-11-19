@@ -43,9 +43,9 @@ export interface AssignMigrationPlanModalProps {
 }
 
 /**
- * Assign (or change) the migration plan of a target profile (guide 7.7).
+ * Assign (or change) the migration plan of a target profile.
  * When nothing can be submitted, the field is replaced by an alert with the
- * next step and the footer is a single secondary Close (amendment 2).
+ * next step and the footer is a single secondary Close.
  */
 export const AssignMigrationPlanModal: React.FC<
   AssignMigrationPlanModalProps

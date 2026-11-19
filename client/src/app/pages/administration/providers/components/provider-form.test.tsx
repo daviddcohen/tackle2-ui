@@ -155,7 +155,7 @@ describe("ProviderForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("never looks unused while the models load or after they fail (X6)", async () => {
+  it("never looks unused while the models load or after they fail", async () => {
     server.use(
       rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
         res(ctx.status(500))

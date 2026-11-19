@@ -179,7 +179,7 @@ test.describe("Plan wizard", () => {
       page.getByRole("heading", { level: 1, name: "E2E wizard plan" })
     ).toBeVisible();
     await expect(page.getByRole("main")).toContainText("Stage C");
-    // A new plan is not assigned to its target profiles yet (X11, P3).
+    // A new plan is not assigned to its target profiles yet.
     await expect(
       page.getByText(
         "Not assigned. Applications get this plan once it is assigned."
@@ -253,7 +253,7 @@ test.describe("Plan wizard", () => {
   });
 
   // Regression guard: PF Modal sets aria-hidden on every <body> child on each update, including the Select
-  // popper, so options are invisible to assistive technology. The menus are appended to the modal (P12).
+  // popper, so options are invisible to assistive technology. The menus are appended to the modal.
   test("select options inside the wizard are exposed to assistive technology", async ({
     page,
   }) => {
@@ -266,7 +266,7 @@ test.describe("Plan wizard", () => {
     ).toBeVisible();
   });
 
-  // Regression guard (W1): the agent menu was clipped by the stage card.
+  // Regression guard: the agent menu was clipped by the stage card.
   test("the agent menu is not clipped by its stage card", async ({ page }) => {
     const dialog = await openCreateWizard(page);
     await dialog.getByRole("textbox", { name: /^Name/ }).fill("Menu E2E plan");

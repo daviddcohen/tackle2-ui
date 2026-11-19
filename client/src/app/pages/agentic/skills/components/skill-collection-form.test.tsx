@@ -77,14 +77,14 @@ describe("SkillCollectionForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("warns on edit how many agents use the collection (S3)", async () => {
+  it("warns on edit how many agents use the collection", async () => {
     render(<SkillCollectionForm collection={collection} onClose={jest.fn()} />);
     expect(
       await screen.findByText("agentic.skillCollection.editWarning")
     ).toBeInTheDocument();
   });
 
-  it("never looks unused while the agents load or after they fail (X6)", async () => {
+  it("never looks unused while the agents load or after they fail", async () => {
     server.use(
       rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
         res(ctx.status(500))

@@ -88,7 +88,7 @@ const AgentTestModalContent: React.FC<{
     () => {
       pushNotification({
         title: t("agentic.agent.testQueued", { agent: agent.name }),
-        // The run is listed on the agent's Runs tab (guide 4.12).
+        // The run is listed on the agent's Runs tab.
         message: (
           <Button variant="link" isInline component={runsLink}>
             {t("agentic.agent.viewRuns")}

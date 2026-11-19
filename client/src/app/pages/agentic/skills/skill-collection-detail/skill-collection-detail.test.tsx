@@ -159,7 +159,7 @@ describe("SkillCollectionDetail", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not claim the collection is unused when the agents fail to load (X6)", async () => {
+  it("does not claim the collection is unused when the agents fail to load", async () => {
     useEndpoints({
       agents: (_req, res, ctx) => res(ctx.status(500)),
     });
@@ -234,7 +234,7 @@ describe("SkillCollectionDetail", () => {
     expect(readsAfterDelete).toBe(0);
   });
 
-  it("has no Actions menu without the write scope (X9)", async () => {
+  it("has no Actions menu without the write scope", async () => {
     mockGrantedScopes.all = false;
     useEndpoints();
     renderPage();

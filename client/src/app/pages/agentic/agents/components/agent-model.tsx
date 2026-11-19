@@ -21,17 +21,17 @@ export interface AgentModelProps {
   gateway?: Gateway;
   /** Provider inline after the name (a fact) instead of stacked under it (a table cell). */
   isInline?: boolean;
-  /** The models query failed: say so instead of looking verified (X6). */
+  /** The models query failed: say so instead of looking verified. */
   isGatewayUnavailable?: boolean;
-  /** The models query is still loading: a skeleton holds the provider's place (X6). */
+  /** The models query is still loading: a skeleton holds the provider's place. */
   isGatewayLoading?: boolean;
 }
 
 /**
  * An agent's model: the name, the provider as subtle text, and a warning
  * marker with the reason when the model is not verified, because agents
- * cannot use it then (guide 4.10, kit-status). Plain text: models have no
- * detail page (A8).
+ * cannot use it then. Plain text: models have no
+ * detail page.
  */
 export const AgentModel: React.FC<AgentModelProps> = ({
   model,
@@ -67,7 +67,7 @@ export const AgentModel: React.FC<AgentModelProps> = ({
     model.name
   );
   const provider = gateway?.provider.name;
-  // Until the models are known the name alone would read as verified (X6).
+  // Until the models are known the name alone would read as verified.
   let unavailable: React.ReactNode = null;
   if (provider == null && isGatewayLoading) {
     unavailable = (

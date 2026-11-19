@@ -58,7 +58,7 @@ export interface SkillCollectionModalProps {
   onClose: () => void;
 }
 
-/** Create or edit a skill collection (guide 4.4, collection-create). */
+/** Create or edit a skill collection. */
 export const SkillCollectionModal: React.FC<SkillCollectionModalProps> = ({
   isOpen,
   collection,
@@ -92,8 +92,8 @@ export const SkillCollectionForm: React.FC<SkillCollectionFormProps> = ({
     isLoading: isLoadingAgents,
     fetchError: agentsError,
   } = useFetchAgents();
-  // The edit warning counts the agents the same way as the delete reason
-  // (S3). Until the agents are known it never looks like "not used" (X6): a
+  // The edit warning counts the agents the same way as the delete reason.
+  // Until the agents are known it never looks like "not used": a
   // skeleton while they load, a usage-unchecked warning if they fail.
   const agentsUsingCollection =
     collection == null || isLoadingAgents || agentsError != null

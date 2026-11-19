@@ -10,13 +10,13 @@ import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 
 export interface AssignedMigrationPlanProps {
   plan: MigrationPlan | undefined;
-  /** The plans query has not answered yet: never read that as "Not assigned" (X6). */
+  /** The plans query has not answered yet: never read that as "Not assigned". */
   isLoading?: boolean;
   isError: boolean;
   linkTo: (pathname: string) => LocationDescriptor;
 }
 
-/** The migration plan assigned to a target profile, as a table cell (guide 4.10). */
+/** The migration plan assigned to a target profile, as a table cell. */
 export const AssignedMigrationPlan: React.FC<AssignedMigrationPlanProps> = ({
   plan,
   isLoading,

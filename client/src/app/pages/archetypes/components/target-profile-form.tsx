@@ -96,7 +96,7 @@ const TargetProfileModal: React.FC<{
 };
 
 const TargetProfileForm: React.FC<TargetProfileFormProps> = (props) =>
-  // Nothing is rendered or fetched while the form is closed (AR2).
+  // Nothing is rendered or fetched while the form is closed.
   props.isOpen ? <TargetProfileFormLoader {...props} /> : null;
 
 const TargetProfileFormLoader: React.FC<TargetProfileFormProps> = (props) => {

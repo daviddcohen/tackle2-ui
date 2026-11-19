@@ -24,7 +24,7 @@ const isFinished = (stageRun: StageRun) =>
   stageRun.status === "AwaitingApproval";
 
 /**
- * "Activity" (guide 4.3): the stage's messages as Time · From · Message,
+ * "Activity": the stage's messages as Time · From · Message,
  * then its raw output behind "Show output". An agent message is from the
  * stage's agent, which the Agent fact above already links.
  */
@@ -87,7 +87,7 @@ export const StageActivity: React.FC<{ stageRun: StageRun }> = ({
 };
 
 /**
- * "Commits" with a count when it has rows (plan-runs amendment 5): the
+ * "Commits" with a count when it has rows: the
  * hash, monospace and an external link when the commit has a URL, and its
  * message.
  */

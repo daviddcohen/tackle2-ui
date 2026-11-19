@@ -17,7 +17,7 @@ const run = {
     { id: 4, name: "Order Service" },
   ],
   status: "Failed",
-  targetBranch: "mta/lift-and-shift",
+  targetBranch: "konveyor/lift-and-shift",
   startedAt: "2026-11-09T16:30:00Z",
   stageRuns: [],
 } as PlanRun;
@@ -35,7 +35,7 @@ describe("rerunInitialValues", () => {
       rerunInitialValues(run, run.applications, { 2: view("3"), 4: view("3") })
     ).toEqual({
       planSelection: "recommended",
-      targetBranch: "mta/lift-and-shift",
+      targetBranch: "konveyor/lift-and-shift",
     });
   });
 
@@ -45,7 +45,7 @@ describe("rerunInitialValues", () => {
     ).toEqual({
       planSelection: "single",
       planId: "3",
-      targetBranch: "mta/lift-and-shift",
+      targetBranch: "konveyor/lift-and-shift",
     });
   });
 
@@ -55,7 +55,7 @@ describe("rerunInitialValues", () => {
     const ownApplication = [run.applications[0]];
     expect(rerunInitialValues(run, ownApplication, { 2: view("3") })).toEqual({
       planSelection: "recommended",
-      targetBranch: "mta/lift-and-shift",
+      targetBranch: "konveyor/lift-and-shift",
     });
     expect(
       rerunInitialValues(run, ownApplication, { 2: view("1") })
@@ -190,7 +190,7 @@ describe("useRunMigrationPlanLauncher", () => {
     rerender();
     expect(modalProps()?.initialValues).toEqual({
       planSelection: "recommended",
-      targetBranch: "mta/lift-and-shift",
+      targetBranch: "konveyor/lift-and-shift",
     });
     expect((result.current.modal as React.ReactElement).key).not.toBe(
       loadingKey

@@ -62,7 +62,7 @@ import { SkillModal } from "./skill-form";
 
 const SOURCE_TYPES: SkillSourceType[] = ["inline", "git", "oci"];
 
-/** The Skills tab of the Skills page (guide 7.5, skills-list). */
+/** The Skills tab of the Skills page. */
 export const SkillsTab: React.FC = () => {
   const { t } = useTranslation();
   const { to } = useBreadcrumbs(t("sidebar.skills"), []);
@@ -75,7 +75,7 @@ export const SkillsTab: React.FC = () => {
     isLoading: isLoadingCollections,
     fetchError: collectionsError,
   } = useFetchSkillCollections();
-  // Memberships block a delete; unknown until the collections have loaded (X6).
+  // Memberships block a delete; unknown until the collections have loaded.
   const knownCollections =
     isLoadingCollections || collectionsError != null
       ? undefined
@@ -191,7 +191,7 @@ export const SkillsTab: React.FC = () => {
       >
         <Toolbar {...toolbarProps}>
           <ToolbarContent>
-            {/* Filters stay expanded down to 1024 wide (kit-list@1024). */}
+            {/* Filters stay expanded down to 1024 wide. */}
             <FilterToolbar {...filterToolbarProps} breakpoint="lg" />
             {canManageSkills && (
               <ToolbarGroup variant="action-group">

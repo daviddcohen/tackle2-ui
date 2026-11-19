@@ -158,7 +158,7 @@ export const getPlanConfigurationChecks = (
     {
       id: "skills",
       labelKey: "agentic.plan.configurationCheck.skills.label",
-      // Undefined means the server did not report skills (X6); an empty list means none apply (P9).
+      // Undefined means the server did not report skills; an empty list means none apply.
       status: plan.effectiveSkills ? "passed" : "notEvaluated",
       detailKey: plan.effectiveSkills
         ? "agentic.plan.configurationCheck.skills.resolved"

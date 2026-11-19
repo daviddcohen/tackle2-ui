@@ -297,7 +297,7 @@ export const stageStatus = (page: Page, stage: string) =>
 export const approveButton = (page: Page) =>
   main(page).getByRole("button", { name: "Approve and continue", exact: true });
 
-/** Approves from the attention alert: Approve always opens a confirm first (guide 4.3). */
+/** Approves from the attention alert: Approve always opens a confirm first. */
 export const approveStage = async (page: Page) => {
   await approveButton(page).click();
   const confirm = page.getByRole("dialog");

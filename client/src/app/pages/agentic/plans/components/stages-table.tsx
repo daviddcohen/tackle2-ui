@@ -57,7 +57,7 @@ export interface StagesTableProps {
 
 const INSTRUCTIONS_MAX_LINES = 8;
 
-/** Prose split into paragraphs: no utility keeps line breaks (guide 4.11). */
+/** Prose split into paragraphs: no utility keeps line breaks. */
 const paragraphs = (text: string) =>
   text
     .split(/\n\s*\n/)
@@ -65,7 +65,7 @@ const paragraphs = (text: string) =>
     .filter((paragraph) => paragraph.length > 0);
 
 /**
- * The stages of a migration plan definition (guide 7.3, plans amendment 3):
+ * The stages of a migration plan definition:
  * expand toggle · # · Stage (with "Requires approval") · Agent · Model, the
  * provider as a subtle second line and a warning marker when the model is
  * not verified. Rows expand to the stage instructions. Used by the plan
@@ -205,7 +205,7 @@ export const StagesTable: React.FC<StagesTableProps> = ({
                       </DescriptionListTerm>
                       <DescriptionListDescription>
                         {instructions.length > 0 ? (
-                          // Long prose shows its first lines (guide 4.11).
+                          // Long prose shows its first lines.
                           <ExpandableSection
                             variant="truncate"
                             truncateMaxLines={INSTRUCTIONS_MAX_LINES}

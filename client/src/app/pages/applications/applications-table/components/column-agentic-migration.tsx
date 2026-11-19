@@ -38,7 +38,7 @@ interface ColumnAgenticMigrationProps {
 }
 
 /**
- * The inventory Migration cell (guide 7.6, ACCEPTED amendment 6): the status,
+ * The inventory Migration cell: the status,
  * linked to the application's Migration tab, and at most one subtle second
  * line. Pending, running and action required say "{plan} · {stage}"; Blocked
  * and Review before start show the server's reason verbatim, never linked.

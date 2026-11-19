@@ -119,7 +119,7 @@ describe("MigrationPlansPage", () => {
       "href",
       "/archetypes/1/target-profiles#target-profile-11"
     );
-    // One application stays a count (addenda P4); one run is its name.
+    // One application stays a count; one run is its name.
     expect(
       within(plan).getByRole("link", { name: "agentic.plan.applicationCount" })
     ).toBeInTheDocument();
