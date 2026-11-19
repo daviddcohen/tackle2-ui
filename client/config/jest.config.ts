@@ -25,6 +25,9 @@ const config: JestConfigWithTsJest = {
     // deep imports of PF internals (ControlledFormFieldGroupExpandable): use the CommonJS build
     "^@patternfly/react-core/dist/esm/(.*)$":
       "@patternfly/react-core/dist/js/$1",
+    // the log viewer's class names (run observability): the CommonJS build
+    "^@patternfly/react-log-viewer/dist/esm/(.*)$":
+      "@patternfly/react-log-viewer/dist/js/$1",
 
     // other mocks
     "react-i18next": "<rootDir>/__mocks__/react-i18next.js",

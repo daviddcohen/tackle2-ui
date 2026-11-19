@@ -14,14 +14,9 @@ import SimpleSelect from "../FilterToolbar/components/SimpleSelect";
 
 import { LanguageToggle } from "./LanguageToggle";
 import { RefreshControl } from "./RefreshControl";
+import { CodeEditorInstance, useKeepEditorPlace } from "./follow-tail";
 
 export { Language } from "@patternfly/react-code-editor";
-
-/** The subset of MonacoEditor component functions we want to use. */
-type ControlledEditor = {
-  focus: () => void;
-  setPosition: (position: object) => void;
-};
 
 export interface Document {
   id: DocumentId;
@@ -52,6 +47,16 @@ export interface ISimpleDocumentViewerProps {
 
   /** Callback triggered when user selects a new document to display */
   onDocumentChange?: (documentId: DocumentId) => void;
+
+  /**
+   * Poll the shown document at this interval, for a document that is still
+   * growing. When it changes back to `false`, the document is fetched once more
+   * so its final content is shown. Off by default.
+   */
+  refetchInterval?: number | false;
+
+  /** Callback triggered when the user asks for a refresh, after the document refetch */
+  onRefresh?: () => void;
 }
 
 export type DocumentId = number | "LOG_VIEW" | "MERGED_VIEW";
@@ -60,10 +65,12 @@ const useDocuments = ({
   taskId,
   selectedId,
   currentLanguage,
+  refetchInterval,
 }: {
   taskId?: number;
   selectedId: DocumentId;
   currentLanguage: Language;
+  refetchInterval: number | false;
 }) => {
   const { task, refetch: refetchTask } = useFetchTaskByIdAndFormat({
     taskId,
@@ -71,6 +78,7 @@ const useDocuments = ({
     enabled:
       !!taskId && (selectedId === "LOG_VIEW" || selectedId === "MERGED_VIEW"),
     merged: selectedId === "MERGED_VIEW",
+    refetchInterval,
   });
 
   const isAttachment = typeof selectedId === "number";
@@ -78,6 +86,7 @@ const useDocuments = ({
     {
       attachmentId: isAttachment ? selectedId : undefined,
       enabled: isAttachment,
+      refetchInterval,
     }
   );
 
@@ -96,6 +105,8 @@ export const SimpleDocumentViewer = ({
   attachments,
   height = "450px",
   onDocumentChange,
+  refetchInterval = false,
+  onRefresh,
 }: ISimpleDocumentViewerProps) => {
   const { t } = useTranslation();
   const configuredDocuments: Document[] = useMemo(
@@ -129,28 +140,50 @@ export const SimpleDocumentViewer = ({
     [attachments, taskId]
   );
 
-  const [selectedDocument, setSelectedDocument] = useState<Document>(
-    configuredDocuments.find(({ id }) => id === documentId) ??
-      configuredDocuments[0]
+  // Keep only the selected id in state, so the document list (attachments) can
+  // change without re-creating the viewer and losing the language or scroll.
+  const [selectedId, setSelectedId] = useState<DocumentId>(
+    () =>
+      (
+        configuredDocuments.find(({ id }) => id === documentId) ??
+        configuredDocuments[0]
+      ).id
   );
-  const supportedLanguages = configuredDocuments.find(
-    ({ id }) => id === selectedDocument.id
-  )?.languages ?? [Language.yaml, Language.json];
+  const selectedDocument =
+    configuredDocuments.find(({ id }) => id === selectedId) ??
+    configuredDocuments[0];
+  const supportedLanguages = selectedDocument.languages;
 
   const [currentLanguage, setCurrentLanguage] = useState(
     supportedLanguages[0] ?? Language.plaintext
   );
 
-  const editorRef = useRef<ControlledEditor>();
+  const editorRef = useRef<CodeEditorInstance>();
 
   const { code, refetch } = useDocuments({
     taskId,
     currentLanguage,
     selectedId: selectedDocument.id,
+    refetchInterval,
   });
 
+  // fetch once more when polling stops, so the final content is shown
+  const wasPolling = useRef(refetchInterval !== false);
+  useEffect(() => {
+    if (wasPolling.current && refetchInterval === false) {
+      refetch();
+    }
+    wasPolling.current = refetchInterval !== false;
+  }, [refetchInterval, refetch]);
+
+  // A refresh of the document it already shows keeps the reader's place.
+  const keepPlace = useKeepEditorPlace(
+    `${selectedDocument.id}/${currentLanguage}`,
+    code
+  );
+
   // move focus on first code change AFTER a new document was selected
-  const focusMovedOnSelectedDocumentChange = useRef<boolean>(false);
+  const focusedDocumentId = useRef<DocumentId>();
   const focusAndHomePosition = () => {
     if (editorRef.current) {
       editorRef.current.focus();
@@ -158,11 +191,30 @@ export const SimpleDocumentViewer = ({
     }
   };
   useEffect(() => {
-    if (code && !focusMovedOnSelectedDocumentChange.current) {
+    if (code && focusedDocumentId.current !== selectedDocument.id) {
       focusAndHomePosition();
-      focusMovedOnSelectedDocumentChange.current = true;
+      focusedDocumentId.current = selectedDocument.id;
     }
-  }, [code]);
+  }, [code, selectedDocument.id]);
+
+  const showDocument = (doc: Document) => {
+    setCurrentLanguage(doc.languages[0] ?? Language.plaintext);
+    setSelectedId(doc.id);
+  };
+
+  // Follow the `documentId` prop when it changes, including an attachment id
+  // that only resolves once the attachments are known (adjusting state while
+  // rendering, see https://react.dev/learn/you-might-not-need-an-effect).
+  const [appliedDocumentId, setAppliedDocumentId] = useState<DocumentId>();
+  if (documentId !== appliedDocumentId) {
+    const doc = configuredDocuments.find(({ id }) => id === documentId);
+    if (doc) {
+      setAppliedDocumentId(documentId);
+      if (doc.id !== selectedDocument.id) {
+        showDocument(doc);
+      }
+    }
+  }
 
   const onSelect = (docId: string | number) => {
     const doc = configuredDocuments.find(({ id }) => id === docId);
@@ -170,9 +222,7 @@ export const SimpleDocumentViewer = ({
       return;
     }
 
-    setCurrentLanguage(doc.languages[0] ?? Language.plaintext);
-    setSelectedDocument(doc);
-    focusMovedOnSelectedDocumentChange.current = false;
+    showDocument(doc);
     onDocumentChange?.(doc.id);
   };
 
@@ -189,7 +239,8 @@ export const SimpleDocumentViewer = ({
       language={currentLanguage}
       code={code}
       onEditorDidMount={(editor) => {
-        editorRef.current = editor as ControlledEditor;
+        editorRef.current = editor;
+        keepPlace(editor);
       }}
       showEditor={code !== undefined}
       emptyState={
@@ -231,7 +282,10 @@ export const SimpleDocumentViewer = ({
         <RefreshControl
           key="refresh"
           isVisible={code !== ""}
-          refetch={refetch}
+          refetch={() => {
+            refetch();
+            onRefresh?.();
+          }}
         />,
         <LanguageToggle
           key="languageToggle"

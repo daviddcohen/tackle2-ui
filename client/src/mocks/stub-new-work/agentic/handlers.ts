@@ -29,6 +29,7 @@ import * as catalog from "./catalog";
 import { EntityKind, MockHttpError, isSeeded } from "./db";
 import * as execution from "./execution";
 import { availableModelsByProviderType } from "./fixtures";
+import * as observability from "./observability";
 import { getPrototypeScenario } from "./prototype-state";
 
 const {
@@ -512,6 +513,30 @@ const handlers = [
     write((req) => ({
       body: execution.approveStage(param(req, "runId"), param(req, "stageId")),
     }))
+  ),
+
+  // Run observability (the AgentRun behind each started stage)
+  rest.get(
+    `${PLAN_RUNS}/:runId/agent-runs`,
+    read((req) => observability.listPlanRunAgentRuns(param(req, "runId")))
+  ),
+  rest.get(
+    `${AGENT_RUNS}/:name`,
+    read((req) => observability.getAgentRunResource(param(req, "name")))
+  ),
+  rest.get(
+    `${AGENT_RUNS}/:name/transcript`,
+    read((req) => observability.getAgentRunTranscript(param(req, "name")))
+  ),
+  rest.get(
+    `${AGENT_RUNS}/:name/logs`,
+    read((req) =>
+      observability.getAgentRunLog(
+        param(req, "name"),
+        req.url.searchParams.get("container"),
+        req.url.searchParams.get("offset")
+      )
+    )
   ),
 
   // Application migrations

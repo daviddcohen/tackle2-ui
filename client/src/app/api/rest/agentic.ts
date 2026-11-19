@@ -26,6 +26,8 @@ import axios from "axios";
 import {
   Agent,
   AgentRequest,
+  AgentRunLogChunk,
+  AgentRunTranscript,
   AgentTestRun,
   AgentTestRunRequest,
   ApplicationMigrationMap,
@@ -48,10 +50,12 @@ import {
   SkillCollectionRequest,
   SkillPlansResponse,
   SkillRequest,
+  StageAgentRun,
   StartApplicationMigrationsRequest,
   StartApplicationMigrationsResponse,
   WithId,
 } from "../../agentic";
+import type { AgentRun } from "../agentic/contract";
 import { hub } from "../rest";
 
 const PROTOTYPE_BASE = hub`/prototype/agentic`;
@@ -444,6 +448,50 @@ export const approveStageRun = ({
 }) =>
   axios
     .post<PlanRun>(`${PLAN_RUNS}/${id(runId)}/stages/${id(stageId)}/approve`)
+    .then(({ data }) => data);
+
+// ---------------------------------------------------------------------------
+// Run observability (one AgentRun per started stage). Real backend: partial.
+// - agent runs of a plan run: `status.stages[].agentRunName` of GET
+//   `/hub/agentic/workflowruns/:name`, then GET `/hub/agentic/agentruns/:name`
+//   per stage (merged), mapped by `toStageAgentRun`;
+// - the AgentRun resource: GET `/hub/agentic/agentruns/:name` (merged);
+// - transcript and logs: GET `/hub/agentic/agentruns/:name/transcript` (NDJSON,
+//   fold with `foldTranscript`) and `.../logs?container&offset` (text plus
+//   `X-Log-Source`), observability hub branch only (agentic-controller#341).
+// The prototype serves stage agent runs under `/agent-runs/:name`, next to the
+// agent test runs: both are AgentRuns on the Hub.
+// ---------------------------------------------------------------------------
+
+/** The AgentRun of every started stage of a plan run, in stage order. */
+export const getPlanRunAgentRuns = (runId: EntityId) =>
+  axios
+    .get<StageAgentRun[]>(`${PLAN_RUNS}/${id(runId)}/agent-runs`)
+    .then(({ data }) => data);
+
+/** The AgentRun resource itself (CRD shape), for the YAML/JSON view. */
+export const getAgentRunResource = (name: string) =>
+  axios.get<AgentRun>(`${AGENT_RUNS}/${id(name)}`).then(({ data }) => data);
+
+export const getAgentRunTranscript = (name: string) =>
+  axios
+    .get<AgentRunTranscript>(`${AGENT_RUNS}/${id(name)}/transcript`)
+    .then(({ data }) => data);
+
+/** The log text of one container from `offset` (bytes) on. */
+export const getAgentRunLog = ({
+  name,
+  container,
+  offset = 0,
+}: {
+  name: string;
+  container: string;
+  offset?: number;
+}) =>
+  axios
+    .get<AgentRunLogChunk>(`${AGENT_RUNS}/${id(name)}/logs`, {
+      params: { container, offset },
+    })
     .then(({ data }) => data);
 
 // ---------------------------------------------------------------------------

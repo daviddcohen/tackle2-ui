@@ -1,5 +1,3 @@
-import type { QueryStatus } from "@tanstack/react-query";
-
 /**
  * Polling policy shared by the agentic `useFetch*` hooks.
  *
@@ -17,7 +15,4 @@ import type { QueryStatus } from "@tanstack/react-query";
  */
 export const AGENTIC_QUERY_RETRY = 1;
 
-export const pollUnlessErrored = (
-  query: { state: { status: QueryStatus } },
-  refetchInterval: number | false
-): number | false => (query.state.status === "error" ? false : refetchInterval);
+export { pollUnlessErrored } from "./polling";

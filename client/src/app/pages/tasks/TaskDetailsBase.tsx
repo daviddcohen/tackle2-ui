@@ -1,14 +1,15 @@
-import { type FC } from "react";
+import { type FC, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory, useLocation } from "react-router-dom";
 import { PageSection } from "@patternfly/react-core";
 
+import { DEFAULT_REFETCH_INTERVAL } from "@app/Constants";
 import { PageHeader, PageHeaderProps } from "@app/components/PageHeader";
 import {
   DocumentId,
   SimpleDocumentViewer,
 } from "@app/components/simple-document-viewer";
-import { useFetchTaskByID } from "@app/queries/tasks";
+import { TaskStates, useFetchTaskByID } from "@app/queries/tasks";
 import "@app/components/simple-document-viewer/SimpleDocumentViewer.css";
 
 export const TaskDetailsBase: FC<{
@@ -40,7 +41,23 @@ export const TaskDetailsBase: FC<{
           search: documentId === "MERGED_VIEW" ? "?merged=true" : undefined,
         });
 
-  const { task } = useFetchTaskByID(taskId);
+  // Poll the task (state, attachment list) and the shown document while the
+  // task can still change. Polling stops at a terminal state or on an error.
+  const [refetchInterval, setRefetchInterval] = useState<number | false>(false);
+  const {
+    task,
+    fetchError,
+    refetch: refetchTask,
+  } = useFetchTaskByID(taskId, refetchInterval);
+  const isLive =
+    task != null &&
+    fetchError == null &&
+    !TaskStates.Terminal.includes(task.state ?? "");
+  const nextRefetchInterval = isLive ? DEFAULT_REFETCH_INTERVAL : false;
+  if (nextRefetchInterval !== refetchInterval) {
+    // the interval depends on the fetched task, so adjust it while rendering
+    setRefetchInterval(nextRefetchInterval);
+  }
 
   const taskName: string = task?.name ?? t("terms.unknown");
   const attachmentName = task?.attached?.find(
@@ -81,12 +98,12 @@ export const TaskDetailsBase: FC<{
           className="simple-task-viewer-container"
         >
           <SimpleDocumentViewer
-            // force re-creating viewer via keys
-            key={`${task?.id}/${task?.attached?.length}`}
             taskId={task ? taskId : undefined}
             documentId={resolvedAttachmentId || resolvedLogMode}
             attachments={task?.attached ?? []}
             onDocumentChange={onDocumentChange}
+            refetchInterval={refetchInterval}
+            onRefresh={refetchTask}
             height="full"
           />
         </div>

@@ -10,13 +10,23 @@ import { DevPaths } from "@app/Paths";
 import {
   ApplicationMigrationStageExecution,
   EntityId,
+  StageAgentRun,
   StageRun,
 } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
 import { formatTableDate } from "@app/utils/utils";
 
+import { ContextUsageCell } from "./agent-run/context-usage";
 import { RunStatus } from "./agentic-status";
+
+/** The agent runs behind the stages, for the Context column. */
+export interface StageAgentRunsState {
+  agentRuns: StageAgentRun[];
+  isLoading: boolean;
+  /** The agent runs could not be read. */
+  isUnavailable: boolean;
+}
 
 interface PlanRunStagesProps {
   /** The run's stage snapshot; rendered in stage order. */
@@ -26,6 +36,8 @@ interface PlanRunStagesProps {
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
   /** `?from=` origin added to the agent links (stages are children of the run). */
   origin?: string;
+  /** The stages' agent runs: with them, the table adds the Context column. */
+  agentRuns?: StageAgentRunsState;
   stages?: never;
 }
 
@@ -42,7 +54,8 @@ export type StageRunsTableProps = PlanRunStagesProps | ApplicationStagesProps;
 
 /**
  * The one stages table of a run. On a plan run:
- * # · Stage (link to the stage page) · Agent · Status · Started · Duration.
+ * # · Stage (link to the stage page) · Agent · Status · Started · Duration,
+ * and Context when the caller passes the agent runs.
  * On an application's Migration tab: # · Stage (with the server's `summary`
  * as a subtle line) · Status · Completed.
  */
@@ -60,6 +73,7 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
     status: t("terms.status"),
     started: t("terms.started"),
     duration: t("agentic.stageRunsTable.duration"),
+    context: t("agentic.planRun.context"),
     completed: t("terms.completed"),
   };
 
@@ -113,7 +127,7 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
     );
   }
 
-  const { stageRuns, runId, linkTo, origin = "" } = props;
+  const { stageRuns, runId, linkTo, origin = "", agentRuns } = props;
   return (
     <Table aria-label={t("agentic.stageRunsTable.label")} variant="compact">
       <Thead>
@@ -124,6 +138,18 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
           <Th modifier="fitContent">{columns.status}</Th>
           <Th modifier="fitContent">{columns.started}</Th>
           <Th modifier="fitContent">{columns.duration}</Th>
+          {agentRuns != null && (
+            <Th
+              width={15}
+              modifier="nowrap"
+              info={{
+                popover: t("agentic.planRun.contextHelp"),
+                ariaLabel: t("agentic.planRun.contextHelpLabel"),
+              }}
+            >
+              {columns.context}
+            </Th>
+          )}
         </Tr>
       </Thead>
       <Tbody>
@@ -131,6 +157,9 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
           .sort((a, b) => a.order - b.order)
           .map((stageRun) => {
             const duration = stageRunDurationSeconds(stageRun);
+            const agentRun = agentRuns?.agentRuns.find(
+              (candidate) => candidate.stageId === stageRun.stageId
+            );
             return (
               <Tr key={stageRun.stageId}>
                 <Td dataLabel={columns.order}>{stageRun.order}</Td>
@@ -173,6 +202,19 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
                       ? notStarted
                       : unavailable}
                 </Td>
+                {agentRuns != null && (
+                  // One line, like Started: the cell turns from "Not
+                  // reported yet" into a bar without changing the row height.
+                  <Td dataLabel={columns.context} modifier="nowrap">
+                    <ContextUsageCell
+                      stageName={stageRun.name}
+                      phase={stageRun.status}
+                      usage={agentRun?.usage}
+                      isLoading={agentRuns.isLoading}
+                      isUnavailable={agentRuns.isUnavailable}
+                    />
+                  </Td>
+                )}
               </Tr>
             );
           })}

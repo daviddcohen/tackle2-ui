@@ -69,6 +69,7 @@ describe("invalidation matrix", () => {
     "planRuns",
     "applicationMigrations",
     "executionPolicy",
+    "agentRunObservability",
   ];
 
   const seed = () => {
@@ -112,6 +113,8 @@ describe("invalidation matrix", () => {
     expect(MUTATION_EFFECTS.startMigrations).toContain("planRuns");
     expect(MUTATION_EFFECTS.runDecision).toContain("applicationMigrations");
     expect(MUTATION_EFFECTS.agentTestRun).toContain("agentTestRuns");
+    expect(MUTATION_EFFECTS.runDecision).toContain("agentRunObservability");
+    expect(MUTATION_EFFECTS.startMigrations).toContain("agentRunObservability");
   });
 });
 

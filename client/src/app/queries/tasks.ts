@@ -27,6 +27,8 @@ import {
 } from "@app/api/rest";
 import { universalComparator } from "@app/utils/utils";
 
+import { pollUnlessErrored } from "./polling";
+
 export const TaskStates = {
   Canceled: ["Canceled"],
   Created: ["Created"],
@@ -225,17 +227,22 @@ export const useFetchTaskByIdAndFormat = ({
   format = "json",
   merged = false,
   enabled = true,
+  refetchInterval = false,
 }: {
   taskId?: number;
   format?: "json" | "yaml";
   merged?: boolean;
   enabled?: boolean;
+  /** Poll the document, paused while the query is errored. Off by default. */
+  refetchInterval?: number | false;
 }) => {
   const { isLoading, error, data, refetch } = useQuery({
     queryKey: [TaskByIDQueryKey, taskId, format, merged],
     queryFn: () =>
       taskId ? getTaskByIdAndFormat(taskId, format, merged) : undefined,
     enabled,
+    refetchInterval: (_data, query) =>
+      pollUnlessErrored(query, refetchInterval),
   });
 
   return {
@@ -249,14 +256,19 @@ export const useFetchTaskByIdAndFormat = ({
 export const useFetchTaskAttachmentById = ({
   attachmentId,
   enabled = true,
+  refetchInterval = false,
 }: {
   attachmentId?: number;
   enabled?: boolean;
+  /** Poll the attachment, paused while the query is errored. Off by default. */
+  refetchInterval?: number | false;
 }) => {
   const { isLoading, error, data, refetch } = useQuery({
     queryKey: [TaskAttachmentByIDQueryKey, attachmentId],
     queryFn: () => (attachmentId ? getTextFileById(attachmentId) : undefined),
     enabled,
+    refetchInterval: (_data, query) =>
+      pollUnlessErrored(query, refetchInterval),
   });
 
   return {

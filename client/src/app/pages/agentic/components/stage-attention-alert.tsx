@@ -105,6 +105,17 @@ export type StageAttentionAlertProps = StageAttentionSurface & {
   /** Link to a stage page ("Review stage"); the stage page never links to itself. */
   reviewStageTo?: (stageRun: StageRun) => LocationDescriptor;
   /**
+   * The stage page: its Logs tab. A failed stage or one that needs approval
+   * then links to it ("View logs") where other surfaces offer
+   * "Review stage". Ignored on the other surfaces.
+   */
+  viewLogsTo?: LocationDescriptor;
+  /**
+   * The stage page: called when "View logs" is followed, so the page can
+   * move focus to the log once it shows.
+   */
+  onViewLogs?: () => void;
+  /**
    * Approves the stage awaiting approval. Pass it only with
    * `agenticWorkflowRunsWriteScopes`: without it the alert says "Waiting for
    * approval." and offers no decision. Errors are the caller's to report.
@@ -164,6 +175,8 @@ const AttentionAlert: React.FC<
   surface,
   planRun,
   reviewStageTo,
+  viewLogsTo,
+  onViewLogs,
   onApprove,
   onReject,
   isDeciding = false,
@@ -175,12 +188,13 @@ const AttentionAlert: React.FC<
   const { t } = useTranslation();
   const [decision, setDecision] = React.useState<"approve" | "reject">();
   const stage = attention.kind === "pending" ? undefined : attention.stageRun;
-  // One link slot: Review stage, or View plan run when no stage is named.
+  // One link slot: Review stage (View logs on the stage page itself), or
+  // View plan run when no stage is named.
   const reviewTo =
     stage != null
       ? surface !== "stage"
         ? reviewStageTo?.(stage)
-        : undefined
+        : viewLogsTo
       : attention.kind === "failed"
         ? planRunTo
         : undefined;
@@ -198,16 +212,22 @@ const AttentionAlert: React.FC<
   }
 
   const reviewLabel =
-    stage != null
-      ? t("agentic.stageAttention.reviewStage")
-      : t("agentic.stageAttention.viewPlanRun");
+    stage == null
+      ? t("agentic.stageAttention.viewPlanRun")
+      : surface === "stage"
+        ? t("agentic.stageAttention.viewLogs")
+        : t("agentic.stageAttention.reviewStage");
+  const onReview =
+    surface === "stage" && stage != null ? onViewLogs : undefined;
   const reviewButton = reviewLink != null && (
-    <Button variant="link" component={reviewLink}>
+    <Button variant="link" component={reviewLink} onClick={onReview}>
       {reviewLabel}
     </Button>
   );
   const reviewActionLink = reviewLink != null && (
-    <AlertActionLink component={reviewLink}>{reviewLabel}</AlertActionLink>
+    <AlertActionLink component={reviewLink} onClick={onReview}>
+      {reviewLabel}
+    </AlertActionLink>
   );
   const actionRow = (buttons: React.ReactNode[]) => (
     <ActionList>

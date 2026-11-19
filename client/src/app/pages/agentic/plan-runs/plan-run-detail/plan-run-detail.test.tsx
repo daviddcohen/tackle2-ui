@@ -2,7 +2,7 @@ import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
-import { PlanRun, StageRun } from "@app/agentic";
+import { PlanRun, StageAgentRun, StageRun } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
@@ -82,11 +82,57 @@ const fact = (term: string) => {
   return dt.nextElementSibling as HTMLElement;
 };
 
+const useAgentRuns = (agentRuns: StageAgentRun[]) =>
+  server.use(
+    rest.get(`${AGENTIC_ENDPOINTS.planRuns}/:id/agent-runs`, (_req, res, ctx) =>
+      res(ctx.json(agentRuns))
+    )
+  );
+
 beforeEach(() => {
   mockGrantedScopes.all = true;
+  useAgentRuns([]);
 });
 
 describe("PlanRunDetail", () => {
+  it("shows each stage's context window in the Stages table", async () => {
+    useRun(run({}));
+    useAgentRuns([
+      {
+        name: "run-1-prepare-proposal",
+        runId: "1",
+        stageId: "1",
+        phase: "Running",
+        containers: ["agent"],
+        usage: { contextUsed: 121_400, contextSize: 200_000 },
+      },
+    ]);
+    renderPage();
+    const bar = await screen.findByRole("progressbar", {
+      name: "Context window of Prepare proposal",
+    });
+    expect(bar).toHaveAttribute("aria-valuetext", "121K of 200K tokens (60%)");
+    const table = screen.getByRole("grid", { name: "Stages" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent)
+    ).toEqual([
+      "#",
+      "Stage",
+      "Agent",
+      "Status",
+      "Started",
+      "Duration",
+      "Context",
+    ]);
+    // The pending stage has no agent run yet.
+    const pending = within(table).getAllByRole("row")[2];
+    expect(within(pending).getAllByRole("cell")[6]).toHaveTextContent(
+      "Not started"
+    );
+  });
+
   it("names the current stage and the start in the status line", async () => {
     useRun(run({}));
     renderPage();
@@ -318,6 +364,11 @@ describe("PlanRunDetail", () => {
     expect(
       await screen.findByRole("button", { name: "Run migration plan" })
     ).toBeInTheDocument();
+    // A failure is read in the stage's saved log.
+    expect(screen.getByRole("link", { name: "Review stage" })).toHaveAttribute(
+      "href",
+      "/plan-runs/1/stages/1?tab=logs"
+    );
     unmount();
 
     mockGrantedScopes.all = false;

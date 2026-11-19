@@ -11,7 +11,15 @@ export const LanguageToggle: React.FC<{
   code?: string;
   supportedLanguages: Language[];
   setCurrentLanguage: (lang: Language) => void;
-}> = ({ currentLanguage, code, setCurrentLanguage, supportedLanguages }) => {
+  /** Accessible name of the toggle group; defaults to the Task details one. */
+  ariaLabel?: string;
+}> = ({
+  currentLanguage,
+  code,
+  setCurrentLanguage,
+  supportedLanguages,
+  ariaLabel = "code content type selection",
+}) => {
   if (supportedLanguages.length <= 1) {
     return <></>;
   }
@@ -24,10 +32,7 @@ export const LanguageToggle: React.FC<{
       )}
       key="code-language-toggle"
     >
-      <ToggleGroup
-        aria-label="code content type selection"
-        className="language-toggle-group"
-      >
+      <ToggleGroup aria-label={ariaLabel} className="language-toggle-group">
         {supportedLanguages.map((lang) => (
           <ToggleGroupItem
             key={lang}

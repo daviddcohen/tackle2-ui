@@ -20,6 +20,9 @@ import {
   TabContent,
 } from "@patternfly/react-core";
 import { SearchIcon } from "@patternfly/react-icons";
+import { css } from "@patternfly/react-styles";
+import display from "@patternfly/react-styles/css/utilities/Display/display";
+import flex from "@patternfly/react-styles/css/utilities/Flex/flex";
 
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import {
@@ -41,6 +44,11 @@ export interface DetailTabPanelProps {
   prefix: string;
   eventKey: string;
   activeKey: string;
+  /**
+   * The open panel grows to the bottom of the page, so a `PageSection
+   * isFilled` inside it can hold a full height viewer (as on Task details).
+   */
+  isFilled?: boolean;
   children: React.ReactNode;
 }
 
@@ -53,6 +61,7 @@ export const DetailTabPanel: React.FC<DetailTabPanelProps> = ({
   prefix,
   eventKey,
   activeKey,
+  isFilled,
   children,
 }) => {
   const id = tabPanelId(prefix, eventKey);
@@ -63,6 +72,12 @@ export const DetailTabPanel: React.FC<DetailTabPanelProps> = ({
       eventKey={eventKey}
       aria-labelledby={`pf-tab-${eventKey}-${id}`}
       hidden={!isActive}
+      // Only while open: the display utility would override `hidden`.
+      className={
+        isFilled && isActive
+          ? css(display.displayFlex, flex.flexDirectionColumn, flex.flexGrow_1)
+          : undefined
+      }
     >
       {/* Inactive panels stay in the DOM (empty) so aria-controls resolves;
           TabContent renders nothing at all without children. */}
