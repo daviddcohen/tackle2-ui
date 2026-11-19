@@ -160,6 +160,10 @@ describe("SkillDetail, Details tab", () => {
     renderPage();
 
     await findTitle();
+    // The tab set has an accessible name, on the tablist itself.
+    expect(
+      screen.getByRole("tablist", { name: "Skill details" })
+    ).toBeInTheDocument();
     expect(screen.getByText("Guidance for Quarkus.")).toBeInTheDocument();
     expect(screen.getByText("Inline")).toBeInTheDocument();
     expect(

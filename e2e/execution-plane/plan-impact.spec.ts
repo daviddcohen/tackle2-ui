@@ -26,8 +26,9 @@ test.describe("Plan impact and lifecycle", () => {
     ).toBeVisible();
   });
 
-  // Guide 5.4 / 7.3: the Configuration fact counts failing checks, and one alert
-  // names the problem and lists each affected stage with its agent and model.
+  // One alert names the problem and lists each affected
+  // stage with its agent and model; the Configuration fact, which would say
+  // the same with another count, is left out while the alert shows.
   test("an unverified model is named with the stages it affects", async ({
     page,
   }) => {
@@ -41,11 +42,12 @@ test.describe("Plan impact and lifecycle", () => {
       .filter({
         has: page.getByRole("term").getByText("Configuration", { exact: true }),
       });
-    await expect(configuration).toContainText("1 issue");
     const alert = page.locator(".pf-v6-c-alert.pf-m-warning");
     await expect(alert).toContainText(
       "3 stages use a model that is not verified"
     );
+    // Checked on the loaded page, once the alert is there.
+    await expect(configuration).toHaveCount(0);
     await expect(alert.getByRole("listitem")).toHaveText([
       "Prepare proposal: Migration Proposal Agent uses Claude 3.7 Sonnet (Pending)",
       "Migrate: Code Migrator uses Claude 3.7 Sonnet (Pending)",

@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import {
   AGENTIC_STATUS,
+  agenticGet,
   expect,
   expectNoBrokenText,
   main,
@@ -12,6 +13,39 @@ import {
 } from "../support";
 
 test.describe("Plan runs list", () => {
+  test("a run awaiting approval whose clock cannot be read says Not finished", async ({
+    page,
+  }) => {
+    await page.goto(protoUrl("/plan-runs", { scenario: "configured" }));
+    // The seeded run that waits for approval on a stage with no agent
+    // message yet: nothing stops its clock, so its duration is not known.
+    const runs = await agenticGet<
+      {
+        name: string;
+        status: string;
+        stageRuns: { status: string; messages?: { role: string }[] }[];
+      }[]
+    >(page, "/plan-runs");
+    const waiting = runs.find(
+      (run) =>
+        run.status === "AwaitingApproval" &&
+        run.stageRuns.some(
+          (stage) =>
+            stage.status === "AwaitingApproval" &&
+            !(stage.messages ?? []).some((message) => message.role === "agent")
+        )
+    );
+    expect(
+      waiting,
+      "a seeded run awaiting approval on a stage without agent messages"
+    ).toBeDefined();
+    const row = page.getByRole("row").filter({
+      has: page.getByRole("link", { name: waiting!.name, exact: true }),
+    });
+    // Duration is the last column.
+    await expect(row.getByRole("gridcell").last()).toHaveText("Not finished");
+  });
+
   test("lists every run with a known status, sorted by start time", async ({
     page,
     pageErrors,

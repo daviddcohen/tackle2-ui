@@ -12,6 +12,7 @@ import {
   expect,
   fixtureGraph,
   main,
+  mainHeading,
   personaSelect,
   protoUrl,
   scenarioSelect,
@@ -494,21 +495,20 @@ test("application details handle delayed, failed and missing entity reads withou
   // the default 30s test timeout under parallel workers.
   test.setTimeout(60_000);
   await page.goto(view("/applications/999999"));
-  // A missing application (404) is "not found", not an API error.
+  // A missing application (404) is "not found", not an API error, with the
+  // way back to the inventory (the shared detail states).
+  await expect(mainHeading(page)).toHaveText("Application not found");
   await expect(
-    page.getByRole("heading", {
-      name: "Warning alert: Application not found",
-      exact: true,
-    })
+    page.getByRole("button", { name: "Back to application inventory" })
   ).toBeVisible();
   await page.goto(protoUrl("/applications/1", { scenario: "apiError" }));
-  await expect(
-    page.getByRole("heading", {
-      name: "Danger alert: Error loading application",
-      exact: true,
-    })
-  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Unable to connect")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByText(/not found/i)).toHaveCount(0);
   await page.goto(protoUrl("/applications/1", { scenario: "loading" }));
+  // The shared loading page: the trail with the noun, no title yet.
+  await expect(currentCrumb(page)).toHaveText("Application");
   await expect(
     page.getByRole("main").getByRole("heading", { level: 1 })
   ).toHaveCount(0);
@@ -516,4 +516,41 @@ test("application details handle delayed, failed and missing entity reads withou
   await expect(
     page.getByRole("heading", { name: "Customer Management", exact: true })
   ).toBeVisible({ timeout: 20_000 });
+});
+
+test("a failed refresh of a loaded application is said first in the open tab", async ({
+  page,
+}) => {
+  // The first poll after the switch to apiError (5 s) is retried before it
+  // fails, so the alert takes up to about 20 s.
+  test.setTimeout(60_000);
+  await page.goto(protoUrl("/applications"));
+  const { applications } = await fixtureGraph(page);
+  const application = applications[0];
+  await page.goto(
+    protoUrl(`/applications/${application.id}`, {
+      params: { tab: "plan-runs" },
+    })
+  );
+  await expect(mainHeading(page)).toHaveText(application.name);
+  // The mock reads the scenario from the URL on every request.
+  await page.evaluate(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("protoScenario", "apiError");
+    window.history.replaceState(window.history.state, "", url);
+  });
+  const panel = main(page).getByRole("tabpanel");
+  await expect(
+    panel.getByRole("heading", {
+      name: "Danger alert: Error loading application",
+    })
+  ).toBeVisible({ timeout: 25_000 });
+  // The page keeps its header and tabs; the alert is tab content.
+  await expect(mainHeading(page)).toHaveText(application.name);
+  await expect(main(page).getByRole("tablist")).toBeVisible();
+  await expect(
+    main(page).getByRole("heading", {
+      name: "Danger alert: Error loading application",
+    })
+  ).toHaveCount(1);
 });

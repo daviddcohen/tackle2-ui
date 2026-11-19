@@ -153,6 +153,7 @@ const errorCases: [path: string, leaf: string][] = [
   ["/plan-runs/1/stages/1", "Stage"],
   ["/skills/1", "Skill"],
   ["/skills/collections/1", "Skill collection"],
+  ["/applications/1", "Application"],
 ];
 
 for (const [path, leaf] of errorCases) {

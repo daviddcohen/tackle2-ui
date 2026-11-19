@@ -86,9 +86,10 @@ type SkillDetailTab = (typeof SKILL_DETAIL_TABS)[number];
 const TAB_PREFIX = "skill-detail";
 
 /**
- * The skill's Markdown headings keep their look but sit below the page
- * structure: its `# h1` would otherwise be a second page title (h1) next to
- * the skill name, and its sections would outrank the "Content" section (h2).
+ * The skill's Markdown headings sit below the page structure: its `# h1`
+ * would otherwise be a second page title (h1) next to the skill name, and
+ * its sections would outrank the "Content" section (h2). They are also no
+ * larger than that section heading (h2 lg): h1 is lg, the rest md.
  */
 type HeadingProps = { children?: React.ReactNode };
 const ContentHeading: React.FC<
@@ -101,17 +102,17 @@ const ContentHeading: React.FC<
 const skillContentComponents: Components = {
   ...markdownPFComponents,
   h1: ({ children }: HeadingProps) => (
-    <ContentHeading headingLevel="h3" size="2xl">
+    <ContentHeading headingLevel="h3" size="lg">
       {children}
     </ContentHeading>
   ),
   h2: ({ children }: HeadingProps) => (
-    <ContentHeading headingLevel="h4" size="xl">
+    <ContentHeading headingLevel="h4" size="md">
       {children}
     </ContentHeading>
   ),
   h3: ({ children }: HeadingProps) => (
-    <ContentHeading headingLevel="h5" size="lg">
+    <ContentHeading headingLevel="h5" size="md">
       {children}
     </ContentHeading>
   ),
@@ -274,7 +275,11 @@ const SkillDetail: React.FC = () => {
       </PageSection>
 
       <PageSection hasBodyWrapper={false} type="tabs">
-        <Tabs activeKey={activeTab} onSelect={(_e, key) => setActiveTab(key)}>
+        <Tabs
+          activeKey={activeTab}
+          onSelect={(_e, key) => setActiveTab(key)}
+          tabListAriaLabel={t("agentic.skillDetail.tabsLabel")}
+        >
           <Tab
             eventKey="details"
             id={panelId("details")}

@@ -18,7 +18,6 @@ import {
   ModalHeader,
   PageSection,
   Tab,
-  TabContent,
   TabTitleText,
   Tabs,
 } from "@patternfly/react-core";
@@ -26,10 +25,7 @@ import {
 import { DEFAULT_REFETCH_INTERVAL, isAgenticEnabled } from "@app/Constants";
 import { ApplicationDetailsRoute, DevPaths } from "@app/Paths";
 import { useHasSomeScopes } from "@app/auth";
-import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ApplicationDependenciesForm } from "@app/components/ApplicationDependenciesFormContainer/ApplicationDependenciesForm";
-import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
-import { ConditionalRender } from "@app/components/ConditionalRender";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { PageHeader } from "@app/components/PageHeader";
@@ -40,7 +36,13 @@ import {
   ManageSkillsTarget,
   useCanManageSkills,
 } from "@app/pages/agentic/components/manage-skills-modal";
+import {
+  DetailTabPanel,
+  EntityDetailLoading,
+  EntityDetailUnavailable,
+} from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
+import { isNotFoundError } from "@app/queries/agentic";
 import {
   useBulkDeleteApplicationMutation,
   useFetchApplicationById,
@@ -119,15 +121,17 @@ const tabTitleKeys: Record<AppDetailTab, string> = {
   skills: "agentic.applicationDetail.tabSkills",
 };
 
-const panelId = (tab: AppDetailTab) => tabPanelId("application-detail", tab);
+const TAB_PREFIX = "application-detail";
+const panelId = (tab: AppDetailTab) => tabPanelId(TAB_PREFIX, tab);
 
 const ApplicationDetail: React.FC = () => {
   const { t } = useTranslation();
   const history = useHistory();
   const { applicationId: applicationIdParam } =
     useParams<ApplicationDetailsRoute>();
-  // The route only matches digits.
+  // The route only matches digits; anything else can never be an id.
   const applicationId = Number(applicationIdParam);
+  const isValidId = Number.isSafeInteger(applicationId);
   const { pushNotification } = React.useContext(NotificationsContext);
 
   const [activeTab, setActiveTab] = useUrlTab(APP_DETAIL_TABS, "details");
@@ -152,20 +156,16 @@ const ApplicationDetail: React.FC = () => {
   // that never had data puts it back into the loading state, which would make
   // the page flip between "Loading" and "not found".
   const [isPollingStopped, setIsPollingStopped] = React.useState(false);
-  const {
-    application: baseApplication,
-    isFetching: isFetchingApplications,
-    fetchError: applicationsFetchError,
-  } = useFetchApplicationById(
-    applicationId,
-    isPollingStopped ? false : DEFAULT_REFETCH_INTERVAL
-  );
+  const { application: baseApplication, fetchError: applicationsFetchError } =
+    useFetchApplicationById(
+      // An id that can never exist is not asked for.
+      isValidId ? applicationId : undefined,
+      isPollingStopped ? false : DEFAULT_REFETCH_INTERVAL
+    );
   if (applicationsFetchError != null && !baseApplication && !isPollingStopped) {
     setIsPollingStopped(true);
   }
-  const isNotFound =
-    isAxiosError(applicationsFetchError) &&
-    applicationsFetchError.response?.status === 404;
+  const isNotFound = isNotFoundError(applicationsFetchError);
   const { tasks } = useFetchTaskDashboard();
   const baseApplications = React.useMemo(
     () => (baseApplication ? [baseApplication] : []),
@@ -256,28 +256,23 @@ const ApplicationDetail: React.FC = () => {
     }
   );
 
-  if (applicationsFetchError != null && !application) {
+  // A missing application (404, or an id that can never exist) is the
+  // shared not found; any other failure before it loaded is the shared error.
+  if (!isValidId || (applicationsFetchError != null && !application)) {
     return (
-      <PageSection hasBodyWrapper={false}>
-        <BreadCrumbPath breadcrumbs={breadcrumbs} />
-        {isNotFound ? (
-          <Alert
-            variant={AlertVariant.warning}
-            title={t("agentic.applicationDetail.notFound")}
-          >
-            {t("agentic.applicationDetail.notFoundDescription")}
-          </Alert>
-        ) : (
-          <Alert
-            variant={AlertVariant.danger}
-            title={t("agentic.applicationDetail.loadError")}
-          >
-            {isAxiosError(applicationsFetchError) &&
-              getAxiosErrorMessage(applicationsFetchError)}
-          </Alert>
-        )}
-      </PageSection>
+      <EntityDetailUnavailable
+        breadcrumbs={breadcrumbs}
+        isNotFound={!isValidId || isNotFound}
+        notFoundTitle={t("agentic.applicationDetail.notFound")}
+        notFoundBody={t("agentic.applicationDetail.notFoundBody")}
+        backLabel={t("agentic.applicationDetail.backToApplications")}
+        backPath={DevPaths.applications}
+      />
     );
+  }
+  // Until the application is there, the shared loading page.
+  if (!application) {
+    return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
   }
 
   const openManageSkills = () => {
@@ -441,276 +436,286 @@ const ApplicationDetail: React.FC = () => {
       )
     : [];
 
-  return (
-    <ConditionalRender
-      when={isFetchingApplications && !application}
-      then={<AppPlaceholder />}
-    >
-      {application && (
-        <>
-          <PageSection hasBodyWrapper={false}>
-            {applicationsFetchError != null && (
-              <Alert
-                isInline
-                variant={AlertVariant.danger}
-                title={t("agentic.applicationDetail.loadError")}
-              >
-                {isAxiosError(applicationsFetchError) &&
-                  getAxiosErrorMessage(applicationsFetchError)}
-              </Alert>
-            )}
-            <PageHeader
-              title={application.name}
-              breadcrumbs={breadcrumbs}
-              btnActions={
-                <Dropdown
-                  isOpen={isActionsOpen}
-                  onOpenChange={setIsActionsOpen}
-                  onSelect={() => setIsActionsOpen(false)}
-                  popperProps={{ position: "right" }}
-                  toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
-                    <MenuToggle
-                      ref={toggleRef}
-                      aria-label={t("agentic.applicationDetail.actions")}
-                      variant="secondary"
-                      onClick={() => setIsActionsOpen((o) => !o)}
-                      isExpanded={isActionsOpen}
-                    >
-                      {t("agentic.applicationDetail.actions")}
-                    </MenuToggle>
-                  )}
-                >
-                  <DropdownList>{actionItems}</DropdownList>
-                </Dropdown>
-              }
-            />
-          </PageSection>
+  // A refresh that failed after the application loaded: said first in the
+  // open tab, in its own section like the agentic pages' alerts.
+  const loadErrorAlert = applicationsFetchError != null && (
+    <PageSection hasBodyWrapper={false}>
+      <Alert
+        isInline
+        variant={AlertVariant.danger}
+        title={t("agentic.applicationDetail.loadError")}
+      >
+        {isAxiosError(applicationsFetchError) &&
+          getAxiosErrorMessage(applicationsFetchError)}
+      </Alert>
+    </PageSection>
+  );
 
-          <PageSection hasBodyWrapper={false} type="tabs">
-            <Tabs
-              activeKey={activeTab}
-              onSelect={(_e, key) => setActiveTab(key)}
-              aria-label={t("agentic.applicationDetail.tabsLabel")}
-            >
-              {APP_DETAIL_TABS.map((tab) => (
-                <Tab
-                  key={tab}
-                  eventKey={tab}
-                  tabContentId={panelId(tab)}
-                  title={<TabTitleText>{t(tabTitleKeys[tab])}</TabTitleText>}
-                />
-              ))}
-            </Tabs>
-          </PageSection>
-
-          <PageSection hasBodyWrapper={false}>
-            <TabContent
-              id={panelId(activeTab)}
-              aria-label={t(tabTitleKeys[activeTab])}
-            >
-              {activeTab === "details" && (
-                <TabDetailsContent
-                  application={application}
-                  onEditClick={
-                    applicationWriteAccess
-                      ? () => setIsEditModalOpen(true)
-                      : undefined
-                  }
-                />
-              )}
-              {activeTab === "tags" && (
-                <TabTagsContent application={application} />
-              )}
-              {activeTab === "reports" && (
-                <TabReportsContent application={application} />
-              )}
-              {activeTab === "review" && (
-                <DrawerTabContent>
-                  <ReviewFields application={application} />
-                </DrawerTabContent>
-              )}
-              {activeTab === "tasks" && (
-                <TabTasksContent application={application} />
-              )}
-              {activeTab === "platform" && (
-                <TabPlatformContent application={application} />
-              )}
-              {activeTab === MIGRATION_TAB && (
-                <MigrationTab
-                  application={application}
-                  applicationId={applicationId}
-                  linkCrumbs={linkCrumbs}
-                />
-              )}
-              {activeTab === "plan-runs" && (
-                <PlanRunsTab
-                  linkCrumbs={linkCrumbs}
-                  applicationId={applicationId}
-                  applicationName={application.name}
-                />
-              )}
-              {activeTab === "skills" && (
-                <SkillsTab
-                  linkCrumbs={linkCrumbs}
-                  applicationId={applicationId}
-                  archetypes={application.archetypes ?? []}
-                  onManageSkills={openManageSkills}
-                />
-              )}
-            </TabContent>
-          </PageSection>
-
-          <ApplicationFormModal
-            isOpen={isEditModalOpen}
+  const tabContent = (tab: AppDetailTab) => {
+    switch (tab) {
+      case "details":
+        return (
+          <TabDetailsContent
             application={application}
-            onClose={() => setIsEditModalOpen(false)}
-          />
-
-          <ApplicationIdentityModal
-            applications={isCredentialsModalOpen ? [application] : null}
-            onClose={() => setIsCredentialsModalOpen(false)}
-          />
-
-          {canManageSkills && (
-            <ManageSkillsModal
-              target={skillsTarget}
-              onClose={() => setSkillsTarget(null)}
-            />
-          )}
-
-          <RetrieveConfigWizard
-            key={isRetrieveConfigOpen ? "retrieve-open" : "retrieve-closed"}
-            applications={isRetrieveConfigOpen ? [application] : undefined}
-            isOpen={isRetrieveConfigOpen}
-            onClose={() => setIsRetrieveConfigOpen(false)}
-          />
-
-          <GenerateAssetsWizard
-            key={isGenerateAssetsOpen ? "generate-open" : "generate-closed"}
-            application={isGenerateAssetsOpen ? application : undefined}
-            isOpen={isGenerateAssetsOpen}
-            onClose={() => setIsGenerateAssetsOpen(false)}
-          />
-
-          <Modal
-            isOpen={isDependenciesModalOpen}
-            variant="medium"
-            onClose={() => setIsDependenciesModalOpen(false)}
-          >
-            <ModalHeader
-              title={t("composed.manageDependenciesFor", {
-                what: application.name,
-              })}
-            />
-            <ModalBody>
-              <ApplicationDependenciesForm
-                application={application._}
-                onCancel={() => setIsDependenciesModalOpen(false)}
-              />
-            </ModalBody>
-          </Modal>
-
-          <ConfirmDialog
-            title={t("dialog.title.deleteWithName", {
-              what: t("terms.application").toLowerCase(),
-              name: application.name,
-            })}
-            titleIconVariant="warning"
-            isOpen={isDeleteOpen}
-            message={t("dialog.message.delete")}
-            confirmBtnVariant={ButtonVariant.danger}
-            confirmBtnLabel={t("actions.delete")}
-            cancelBtnLabel={t("actions.cancel")}
-            onCancel={() => setIsDeleteOpen(false)}
-            onClose={() => setIsDeleteOpen(false)}
-            onConfirm={() => {
-              bulkDeleteApplication({ ids: [applicationId] });
-              setIsDeleteOpen(false);
-            }}
-          />
-
-          <ConfirmDialog
-            title={t("dialog.title.cancelWithName", {
-              what: t("terms.task").toLowerCase(),
-              name: application.name,
-            })}
-            titleIconVariant="warning"
-            isOpen={isCancelOpen}
-            message={t("dialog.message.cancel")}
-            confirmBtnVariant={ButtonVariant.danger}
-            confirmBtnLabel={t("actions.cancelTasks")}
-            cancelBtnLabel={t("actions.cancel")}
-            onCancel={() => setIsCancelOpen(false)}
-            onClose={() => setIsCancelOpen(false)}
-            onConfirm={() => {
-              const taskId = application.tasks.currentAnalyzer?.id;
-              if (taskId) cancelTask(taskId);
-              setIsCancelOpen(false);
-            }}
-          />
-
-          <ConfirmDialog
-            title={t("dialog.title.discard", {
-              what: t("terms.assessment").toLowerCase(),
-            })}
-            titleIconVariant="warning"
-            isOpen={isDiscardAssessmentOpen}
-            message={
-              <span>
-                <Trans
-                  i18nKey="dialog.message.discardAssessment"
-                  values={{ applicationName: application.name }}
-                />
-              </span>
+            onEditClick={
+              applicationWriteAccess
+                ? () => setIsEditModalOpen(true)
+                : undefined
             }
-            confirmBtnVariant={ButtonVariant.primary}
-            confirmBtnLabel={t("actions.continue")}
-            cancelBtnLabel={t("actions.cancel")}
-            onCancel={() => setIsDiscardAssessmentOpen(false)}
-            onClose={() => setIsDiscardAssessmentOpen(false)}
-            onConfirm={() => {
-              application.assessments?.forEach((assessment) => {
-                deleteAssessment({
-                  assessmentId: assessment.id,
-                  applicationName: application.name,
-                });
-              });
-              setIsDiscardAssessmentOpen(false);
-            }}
           />
+        );
+      case "tags":
+        return <TabTagsContent application={application} />;
+      case "reports":
+        return <TabReportsContent application={application} />;
+      case "review":
+        return (
+          <DrawerTabContent>
+            <ReviewFields application={application} />
+          </DrawerTabContent>
+        );
+      case "tasks":
+        return <TabTasksContent application={application} />;
+      case "platform":
+        return <TabPlatformContent application={application} />;
+      case MIGRATION_TAB:
+        return (
+          <MigrationTab
+            application={application}
+            applicationId={applicationId}
+            linkCrumbs={linkCrumbs}
+          />
+        );
+      case "plan-runs":
+        return (
+          <PlanRunsTab
+            linkCrumbs={linkCrumbs}
+            applicationId={applicationId}
+            applicationName={application.name}
+          />
+        );
+      case "skills":
+        return (
+          <SkillsTab
+            linkCrumbs={linkCrumbs}
+            applicationId={applicationId}
+            archetypes={application.archetypes ?? []}
+            onManageSkills={openManageSkills}
+          />
+        );
+    }
+  };
 
-          <ConfirmDialog
-            title={t("dialog.title.discard", {
-              what: t("terms.review").toLowerCase(),
-            })}
-            titleIconVariant="warning"
-            isOpen={isDiscardReviewOpen}
-            message={
-              <span>
-                <Trans
-                  i18nKey="dialog.message.discardReview"
-                  values={{ applicationName: application.name }}
-                />
-              </span>
-            }
-            confirmBtnVariant={ButtonVariant.primary}
-            confirmBtnLabel={t("actions.continue")}
-            cancelBtnLabel={t("actions.cancel")}
-            onCancel={() => setIsDiscardReviewOpen(false)}
-            onClose={() => setIsDiscardReviewOpen(false)}
-            onConfirm={() => {
-              if (application.review) {
-                deleteReview({
-                  id: application.review.id,
-                  name: application.name,
-                });
-              }
-              setIsDiscardReviewOpen(false);
-            }}
-          />
-        </>
+  return (
+    <>
+      <PageSection hasBodyWrapper={false}>
+        <PageHeader
+          title={application.name}
+          breadcrumbs={breadcrumbs}
+          btnActions={
+            <Dropdown
+              isOpen={isActionsOpen}
+              onOpenChange={setIsActionsOpen}
+              onSelect={() => setIsActionsOpen(false)}
+              popperProps={{ position: "right" }}
+              toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
+                <MenuToggle
+                  ref={toggleRef}
+                  aria-label={t("agentic.applicationDetail.actions")}
+                  variant="secondary"
+                  onClick={() => setIsActionsOpen((o) => !o)}
+                  isExpanded={isActionsOpen}
+                >
+                  {t("agentic.applicationDetail.actions")}
+                </MenuToggle>
+              )}
+            >
+              <DropdownList>{actionItems}</DropdownList>
+            </Dropdown>
+          }
+        />
+      </PageSection>
+
+      <PageSection hasBodyWrapper={false} type="tabs">
+        <Tabs
+          activeKey={activeTab}
+          onSelect={(_e, key) => setActiveTab(key)}
+          tabListAriaLabel={t("agentic.applicationDetail.tabsLabel")}
+        >
+          {APP_DETAIL_TABS.map((tab) => (
+            <Tab
+              key={tab}
+              eventKey={tab}
+              id={panelId(tab)}
+              tabContentId={panelId(tab)}
+              title={<TabTitleText>{t(tabTitleKeys[tab])}</TabTitleText>}
+            />
+          ))}
+        </Tabs>
+      </PageSection>
+
+      {/* Only the open tab renders, so only its queries load. */}
+      {APP_DETAIL_TABS.map((tab) => (
+        <DetailTabPanel
+          key={tab}
+          prefix={TAB_PREFIX}
+          eventKey={tab}
+          activeKey={activeTab}
+        >
+          {loadErrorAlert}
+          <PageSection hasBodyWrapper={false}>{tabContent(tab)}</PageSection>
+        </DetailTabPanel>
+      ))}
+
+      <ApplicationFormModal
+        isOpen={isEditModalOpen}
+        application={application}
+        onClose={() => setIsEditModalOpen(false)}
+      />
+
+      <ApplicationIdentityModal
+        applications={isCredentialsModalOpen ? [application] : null}
+        onClose={() => setIsCredentialsModalOpen(false)}
+      />
+
+      {canManageSkills && (
+        <ManageSkillsModal
+          target={skillsTarget}
+          onClose={() => setSkillsTarget(null)}
+        />
       )}
-    </ConditionalRender>
+
+      <RetrieveConfigWizard
+        key={isRetrieveConfigOpen ? "retrieve-open" : "retrieve-closed"}
+        applications={isRetrieveConfigOpen ? [application] : undefined}
+        isOpen={isRetrieveConfigOpen}
+        onClose={() => setIsRetrieveConfigOpen(false)}
+      />
+
+      <GenerateAssetsWizard
+        key={isGenerateAssetsOpen ? "generate-open" : "generate-closed"}
+        application={isGenerateAssetsOpen ? application : undefined}
+        isOpen={isGenerateAssetsOpen}
+        onClose={() => setIsGenerateAssetsOpen(false)}
+      />
+
+      <Modal
+        isOpen={isDependenciesModalOpen}
+        variant="medium"
+        onClose={() => setIsDependenciesModalOpen(false)}
+      >
+        <ModalHeader
+          title={t("composed.manageDependenciesFor", {
+            what: application.name,
+          })}
+        />
+        <ModalBody>
+          <ApplicationDependenciesForm
+            application={application._}
+            onCancel={() => setIsDependenciesModalOpen(false)}
+          />
+        </ModalBody>
+      </Modal>
+
+      <ConfirmDialog
+        title={t("dialog.title.deleteWithName", {
+          what: t("terms.application").toLowerCase(),
+          name: application.name,
+        })}
+        titleIconVariant="warning"
+        isOpen={isDeleteOpen}
+        message={t("dialog.message.delete")}
+        confirmBtnVariant={ButtonVariant.danger}
+        confirmBtnLabel={t("actions.delete")}
+        cancelBtnLabel={t("actions.cancel")}
+        onCancel={() => setIsDeleteOpen(false)}
+        onClose={() => setIsDeleteOpen(false)}
+        onConfirm={() => {
+          bulkDeleteApplication({ ids: [applicationId] });
+          setIsDeleteOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        title={t("dialog.title.cancelWithName", {
+          what: t("terms.task").toLowerCase(),
+          name: application.name,
+        })}
+        titleIconVariant="warning"
+        isOpen={isCancelOpen}
+        message={t("dialog.message.cancel")}
+        confirmBtnVariant={ButtonVariant.danger}
+        confirmBtnLabel={t("actions.cancelTasks")}
+        cancelBtnLabel={t("actions.cancel")}
+        onCancel={() => setIsCancelOpen(false)}
+        onClose={() => setIsCancelOpen(false)}
+        onConfirm={() => {
+          const taskId = application.tasks.currentAnalyzer?.id;
+          if (taskId) cancelTask(taskId);
+          setIsCancelOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        title={t("dialog.title.discard", {
+          what: t("terms.assessment").toLowerCase(),
+        })}
+        titleIconVariant="warning"
+        isOpen={isDiscardAssessmentOpen}
+        message={
+          <span>
+            <Trans
+              i18nKey="dialog.message.discardAssessment"
+              values={{ applicationName: application.name }}
+            />
+          </span>
+        }
+        confirmBtnVariant={ButtonVariant.primary}
+        confirmBtnLabel={t("actions.continue")}
+        cancelBtnLabel={t("actions.cancel")}
+        onCancel={() => setIsDiscardAssessmentOpen(false)}
+        onClose={() => setIsDiscardAssessmentOpen(false)}
+        onConfirm={() => {
+          application.assessments?.forEach((assessment) => {
+            deleteAssessment({
+              assessmentId: assessment.id,
+              applicationName: application.name,
+            });
+          });
+          setIsDiscardAssessmentOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        title={t("dialog.title.discard", {
+          what: t("terms.review").toLowerCase(),
+        })}
+        titleIconVariant="warning"
+        isOpen={isDiscardReviewOpen}
+        message={
+          <span>
+            <Trans
+              i18nKey="dialog.message.discardReview"
+              values={{ applicationName: application.name }}
+            />
+          </span>
+        }
+        confirmBtnVariant={ButtonVariant.primary}
+        confirmBtnLabel={t("actions.continue")}
+        cancelBtnLabel={t("actions.cancel")}
+        onCancel={() => setIsDiscardReviewOpen(false)}
+        onClose={() => setIsDiscardReviewOpen(false)}
+        onConfirm={() => {
+          if (application.review) {
+            deleteReview({
+              id: application.review.id,
+              name: application.name,
+            });
+          }
+          setIsDiscardReviewOpen(false);
+        }}
+      />
+    </>
   );
 };
 

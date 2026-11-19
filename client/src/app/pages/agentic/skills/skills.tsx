@@ -40,7 +40,11 @@ const SkillsPage: React.FC = () => {
         />
       </PageSection>
       <PageSection hasBodyWrapper={false} type="tabs">
-        <Tabs activeKey={activeTab} onSelect={(_e, key) => setActiveTab(key)}>
+        <Tabs
+          activeKey={activeTab}
+          onSelect={(_e, key) => setActiveTab(key)}
+          tabListAriaLabel={t("agentic.skills.tabsLabel")}
+        >
           <Tab
             eventKey="skills"
             id={panelId("skills")}

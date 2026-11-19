@@ -127,9 +127,18 @@ export const SectionEmpty: React.FC<{ children: string }> = ({ children }) => (
   </EmptyState>
 );
 
+export interface DetailFactOptions {
+  /** Field help after the term text: a `Popover` on a plain help `Button`. */
+  termHelp?: React.ReactNode;
+}
+
 export interface DetailFactsProps {
-  /** Term and value pairs, in order. */
-  facts: [term: string, description: React.ReactNode][];
+  /** Term and value pairs, in order, each with optional term options. */
+  facts: [
+    term: string,
+    description: React.ReactNode,
+    options?: DetailFactOptions,
+  ][];
   /** Two columns from the lg breakpoint, as the run pages show them. */
   isTwoColumn?: boolean;
 }
@@ -145,9 +154,12 @@ export const DetailFacts: React.FC<DetailFactsProps> = ({
     horizontalTermWidthModifier={{ default: "18ch" }}
     columnModifier={isTwoColumn ? { lg: "2Col" } : undefined}
   >
-    {facts.map(([term, description]) => (
+    {facts.map(([term, description, options]) => (
       <DescriptionListGroup key={term}>
-        <DescriptionListTerm>{term}</DescriptionListTerm>
+        <DescriptionListTerm>
+          {term}
+          {options?.termHelp != null && <> {options.termHelp}</>}
+        </DescriptionListTerm>
         <DescriptionListDescription>{description}</DescriptionListDescription>
       </DescriptionListGroup>
     ))}

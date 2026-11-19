@@ -1,7 +1,8 @@
 /**
  * Run observability on the stage page (the agent run page): the Details,
  * Transcript, Logs and YAML tabs, how they refresh while the stage runs and
- * stop once it finished, and the context window row.
+ * stop once it finished, the context window fact, the header and the
+ * attention alert on each tab.
  *
  * Mock timings (client/src/mocks/stub-new-work/agentic/observability.ts):
  * a running stage gets a new transcript step about every 5 s and a log line
@@ -18,7 +19,15 @@
  */
 import type { Locator, Page } from "@playwright/test";
 
-import { type Scenario, expect, main, protoUrl, test } from "../support";
+import {
+  type Scenario,
+  breadcrumb,
+  expect,
+  fixtureGraph,
+  main,
+  protoUrl,
+  test,
+} from "../support";
 
 /** Growth arrives with the next polls (3 s) of a step (5 s) or line (1 s). */
 const GROWTH_TIMEOUT = 20_000;
@@ -43,6 +52,22 @@ const tab = (page: Page, name: string) =>
   page.getByRole("tab", { name, exact: true });
 
 const tabPanel = (page: Page) => main(page).getByRole("tabpanel");
+
+/** The "Agent run" section of Details; the context window is its last fact. */
+const agentRunFacts = (page: Page) =>
+  main(page)
+    .locator("div")
+    .filter({
+      has: page.getByRole("heading", { level: 2, name: "Agent run" }),
+    })
+    .filter({ has: page.getByRole("term") })
+    .last();
+
+/** An inline alert's title, which PatternFly names "{Variant} alert: {title}". */
+const alertTitle = (scope: Locator, variant: string, title?: RegExp) =>
+  scope.getByRole("heading", {
+    name: new RegExp(`^${variant} alert: ${title?.source ?? ""}`),
+  });
 
 const transcriptTable = (page: Page) =>
   main(page).getByRole("grid", { name: "Transcript", exact: true });
@@ -212,7 +237,7 @@ test.describe("Stage tabs", () => {
     await expect(main(page).getByRole("tablist").getByRole("tab")).toHaveText([
       ...STAGE_TABS,
     ]);
-    // No context row before the stage starts.
+    // No agent run, so no context window, before the stage starts.
     await expect(main(page).getByText("Context window")).toHaveCount(0);
     for (const [name, message] of [
       ["Transcript", "The transcript appears when this stage starts."],
@@ -693,21 +718,43 @@ test.describe("YAML", () => {
 });
 
 test.describe("Context window", () => {
-  test("a started stage shows its context window above the tabs on every tab", async ({
+  test("a started stage shows its context window as the last Agent run fact, on Details only", async ({
     page,
   }) => {
     await page.goto(stageUrl("1", "3", "configured"));
-    const context = main(page).getByRole("progressbar", {
-      name: /Context window/,
-    });
-    await expect(context).toBeVisible();
-    await expect(main(page)).toContainText(
-      /Context window\s*[\d.]+K of [\d.]+K tokens \(\d+%\)/
+    const section = agentRunFacts(page);
+    await expect(section.getByRole("term").last()).toHaveText(
+      /^Context window\s*$/
     );
+    const value = section.getByRole("definition").last();
+    await expect(value).toHaveText(/^[\d.]+K of [\d.]+K tokens \(\d+%\)/);
+    await expect(
+      value.getByRole("progressbar", { name: "Context window", exact: true })
+    ).toBeVisible();
     for (const name of ["Transcript", "Logs", "YAML"]) {
       await tab(page, name).click();
-      await expect(context).toBeVisible();
+      await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
+      // (The transcript may mention the context window; no fact or bar.)
+      await expect(
+        main(page).getByRole("term").filter({ hasText: "Context window" })
+      ).toHaveCount(0);
+      await expect(main(page).getByRole("progressbar")).toHaveCount(0);
     }
+  });
+
+  test("the context window term explains itself in a popover", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured"));
+    await main(page)
+      .getByRole("button", { name: "More information about context" })
+      .click();
+    const popover = page.getByRole("dialog", { name: "Context window" });
+    await expect(popover).toContainText(
+      "How full the agent's context window is."
+    );
+    await popover.getByRole("button", { name: "Close" }).click();
+    await expect(popover).toHaveCount(0);
   });
 
   test("a stage whose model does not meter context says Not reported", async ({
@@ -719,12 +766,115 @@ test.describe("Context window", () => {
     await expect(
       main(page).getByRole("progressbar", { name: /Context window/ })
     ).toHaveCount(0);
+    await expect(agentRunFacts(page).getByRole("definition").last()).toHaveText(
+      "Not reported"
+    );
+  });
+});
+
+test.describe("Stage header", () => {
+  test("the tabs directly follow the header: no alert or measurement between them", async ({
+    page,
+  }) => {
+    // A failed stage has an alert and a context window; both are tab content.
+    await page.goto(stageUrl("1", "2", "failed", { stage: 2 }));
+    await expect(main(page).getByRole("tablist")).toBeVisible();
+    // The section right before the tabs is the header itself.
+    expect(
+      await main(page)
+        .getByRole("tablist")
+        .evaluate(
+          (tablist) =>
+            tablist
+              .closest("section")
+              ?.previousElementSibling?.querySelector("h1") != null
+        )
+    ).toBe(true);
+    const header = main(page)
+      .getByRole("heading", { level: 1 })
+      .locator("xpath=ancestor::section[1]");
+    await expect(header.getByRole("heading", { name: /alert:/ })).toHaveCount(
+      0
+    );
+    await expect(header.getByRole("progressbar")).toHaveCount(0);
     await expect(
-      main(page)
-        .locator(".pf-v6-l-flex")
-        .filter({ hasText: /^Context window/ })
-        .first()
-    ).toContainText("Not reported");
+      alertTitle(tabPanel(page), "Danger", /.* failed/)
+    ).toBeVisible();
+  });
+
+  test("the header names the run's applications, linking to them with the trail", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "1", "configured"));
+    const { runs } = await fixtureGraph(page);
+    const run = runs.find((candidate) => String(candidate.id) === "1");
+    expect(run).toBeDefined();
+    const names = run!.applications.map((application) => application.name);
+    const title = main(page).getByRole("heading", { level: 1 });
+    const header = title.locator("xpath=ancestor::section[1]");
+    await expect(
+      header.getByText(
+        `${names.length === 1 ? "Application:" : "Applications:"} ${names.join(", ")}`,
+        { exact: true }
+      )
+    ).toBeVisible();
+    const stageName = await title.textContent();
+    await header.getByRole("link", { name: names[0], exact: true }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: names[0], exact: true })
+    ).toBeVisible();
+    // The trail leads back through the stage.
+    await expect(
+      breadcrumb(page).getByRole("link", { name: stageName!, exact: true })
+    ).toBeVisible();
+  });
+});
+
+test.describe("Attention alert on the views", () => {
+  test("a stage awaiting approval offers Approve on its Logs tab, without View logs", async ({
+    page,
+  }) => {
+    // The run page's alert leads to the stage that waits for approval.
+    await page.goto(protoUrl("/plan-runs/2", { scenario: "actionRequired" }));
+    await expect(
+      alertTitle(main(page), "Warning", /.* needs approval/)
+    ).toBeVisible();
+    await main(page).getByRole("link", { name: "Review stage" }).click();
+    await expect(page).toHaveURL(/\/stages\//);
+    await expect(
+      alertTitle(tabPanel(page), "Warning", /.* needs approval/)
+    ).toBeVisible();
+    await expect(
+      tabPanel(page).getByRole("link", { name: "View logs" })
+    ).toBeVisible();
+
+    await tab(page, "Logs").click();
+    await expect(tab(page, "Logs")).toHaveAttribute("aria-selected", "true");
+    await expect(
+      alertTitle(tabPanel(page), "Warning", /.* needs approval/)
+    ).toBeVisible();
+    await expect(
+      tabPanel(page).getByRole("button", {
+        name: "Approve and continue",
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(
+      main(page).getByRole("link", { name: "View logs" })
+    ).toHaveCount(0);
+    await expect(logRegion(page)).toBeVisible();
+  });
+
+  test("a pending stage explains itself on Details only", async ({ page }) => {
+    await page.goto(stageUrl("2", "5", "configured"));
+    await expect(alertTitle(tabPanel(page), "Info")).toBeVisible();
+    for (const name of ["Transcript", "Logs", "YAML"]) {
+      await tab(page, name).click();
+      await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
+      await expect(
+        main(page).getByRole("heading", { name: /alert:/ })
+      ).toHaveCount(0);
+    }
   });
 });
 

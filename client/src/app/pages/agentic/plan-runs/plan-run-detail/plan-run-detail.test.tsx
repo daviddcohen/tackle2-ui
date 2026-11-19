@@ -4,7 +4,7 @@ import { MemoryRouter, Route } from "react-router-dom";
 import { DevPaths } from "@app/Paths";
 import { PlanRun, StageAgentRun, StageRun } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
-import { render, screen, within } from "@app/test-config/test-utils";
+import { render, screen, waitFor, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import PlanRunDetail from "./plan-run-detail";
@@ -163,6 +163,42 @@ describe("PlanRunDetail", () => {
     ).toBeInTheDocument();
     expect(fact("Duration")).toHaveTextContent("Not started");
     expect(fact("Commits")).toHaveTextContent("None");
+  });
+
+  it("says Not finished for a running duration it cannot read yet, Unavailable once it ended", async () => {
+    // The awaiting stage has no agent message to stop the clock.
+    useRun(
+      run({
+        status: "AwaitingApproval",
+        stageRuns: [
+          stage(1, "Prepare proposal", "AwaitingApproval", {
+            startedAt: "2026-11-10T10:06:00Z",
+          }),
+          stage(2, "Migrate", "Pending"),
+        ],
+      })
+    );
+    const { unmount } = renderPage();
+    await waitFor(() =>
+      expect(fact("Duration")).toHaveTextContent("Not finished")
+    );
+    unmount();
+
+    // A run that ended without a completion time: its duration is unknown.
+    useRun(
+      run({
+        status: "Failed",
+        stageRuns: [
+          stage(1, "Prepare proposal", "Failed", {
+            startedAt: "2026-11-10T10:06:00Z",
+          }),
+        ],
+      })
+    );
+    renderPage();
+    await waitFor(() =>
+      expect(fact("Duration")).toHaveTextContent("Unavailable")
+    );
   });
 
   it("gives a succeeded run its start and completion, and its commit total", async () => {

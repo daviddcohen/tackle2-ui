@@ -69,3 +69,19 @@ for (const [path, firstTab] of [
     await expect(main(page).getByRole("tabpanel")).toBeVisible();
   });
 }
+
+// Every tabbed page names its tab set on the tablist itself, so a screen
+// reader announces which set of tabs it is in.
+for (const [path, name] of [
+  ["/agents/3", "Agent details"],
+  ["/migration-plans/1", "Plan details"],
+  ["/applications/1", "Application details"],
+  ["/skills/1", "Skill details"],
+  ["/skills", "Skills and skill collections"],
+  ["/plan-runs/1/stages/1", "Stage views"],
+] as const) {
+  test(`${path} names its tablist "${name}"`, async ({ page }) => {
+    await page.goto(protoUrl(path));
+    await expect(main(page).getByRole("tablist", { name })).toBeVisible();
+  });
+}

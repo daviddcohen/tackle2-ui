@@ -320,7 +320,7 @@ export const AgentsPage: React.FC = () => {
           breadcrumbs={[]}
         />
       </PageSection>
-      <PageSection>
+      <PageSection hasBodyWrapper={false}>
         <ConditionalRender
           when={isFetching && !(agents || fetchError)}
           then={<AppPlaceholder />}
