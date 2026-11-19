@@ -132,6 +132,27 @@ export interface HarnessTerminationData {
   };
 }
 
+/**
+ * Typed run usage, PROPOSED in agentic-controller ADR 0021 (PR 282,
+ * https://github.com/konveyor/agentic-controller/pull/282, not merged and
+ * not implemented): the controller parses `terminationData.usage` into
+ * `AgentRunStatus.usage` (and copies it to the workflow run stage). Every
+ * field is optional; absent means not reported. Counts are int64 in Go;
+ * `cost` is a decimal string like `ExecutionSpec.maxCost`.
+ */
+export interface RunUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  peakContextUsed?: number;
+  compactions?: number;
+  contextUsed?: number;
+  contextSize?: number;
+  turnsUsed?: number;
+  cost?: string;
+  currency?: string;
+  model?: string;
+}
+
 export interface AgentRunStatus {
   phase?: AgentRunPhase;
   observedGeneration?: number;
@@ -142,6 +163,8 @@ export interface AgentRunStatus {
   secretKeyRef?: { name: string };
   conditions?: Condition[];
   terminationData?: HarnessTerminationData;
+  /** Proposed (ADR 0021, PR 282); absent on every controller today. */
+  usage?: RunUsage;
 }
 
 export interface AgentRun {

@@ -6,11 +6,20 @@ import "./SimpleDocumentViewer.css";
 export const RefreshControl: React.FC<{
   refetch: () => void;
   isVisible: boolean;
-}> = ({ refetch, isVisible }) => (
+  /** Accessible name; defaults to the Task details one. */
+  ariaLabel?: string;
+  /** Tooltip text; defaults to "Refresh". */
+  tooltip?: string;
+}> = ({
+  refetch,
+  isVisible,
+  ariaLabel = "refresh-task",
+  tooltip = "Refresh",
+}) => (
   <CodeEditorControl
     icon={<UndoIcon />}
-    aria-label="refresh-task"
-    tooltipProps={{ content: "Refresh" }}
+    aria-label={ariaLabel}
+    tooltipProps={{ content: tooltip }}
     onClick={refetch}
     isVisible={isVisible}
   />

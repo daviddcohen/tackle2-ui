@@ -16,6 +16,7 @@ import {
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import { useFetchPlanRun } from "@app/queries/agentic";
+import { useFetchPlanRunAgentRuns } from "@app/queries/agentic-observability";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import {
   formatDuration,
@@ -97,6 +98,11 @@ const PlanRunDetail: React.FC = () => {
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
+  const {
+    agentRuns,
+    isLoading: isLoadingAgentRuns,
+    fetchError: agentRunsError,
+  } = useFetchPlanRunAgentRuns(runId, planRun?.status);
   // The run's snapshot of skills: render what the server returns, never
   // more. Undefined is unknown, not "no skills". Skills the
   // plan excluded stay in the table, marked.
@@ -224,7 +230,9 @@ const PlanRunDetail: React.FC = () => {
                 generatePath(DevPaths.stageRunDetails, {
                   runId: planRun.id,
                   stageId: stageRun.stageId,
-                })
+                }),
+                // A failure is read in the saved log.
+                stageRun.status === "Failed" ? "?tab=logs" : ""
               )
             }
             onApprove={canManageRun ? approve : undefined}
@@ -241,6 +249,11 @@ const PlanRunDetail: React.FC = () => {
             runId={planRun.id}
             linkTo={runLink}
             origin={`?from=run-${runId}`}
+            agentRuns={{
+              agentRuns,
+              isLoading: isLoadingAgentRuns,
+              isUnavailable: agentRunsError != null && agentRuns.length === 0,
+            }}
           />
         </DetailSection>
 

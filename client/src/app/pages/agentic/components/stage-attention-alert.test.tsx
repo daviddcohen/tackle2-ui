@@ -206,7 +206,7 @@ describe("StageAttentionAlert, approval", () => {
 
     expect(
       screen.getByText(
-        "Prepare proposal Agent finished Prepare proposal. Check its activity and commits below, then approve to start Migrate."
+        "Prepare proposal Agent finished Prepare proposal. Check its transcript and commits, then approve to start Migrate."
       )
     ).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
@@ -311,6 +311,80 @@ describe("StageAttentionAlert, approval", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     );
+  });
+});
+
+describe("StageAttentionAlert, View logs on the stage page", () => {
+  const viewLogsTo = "/plan-runs/1/stages/1?tab=logs";
+
+  it("links a stage that needs approval to its logs, beside the decision", () => {
+    renderAlert({
+      surface: "stage",
+      planRun: awaiting,
+      stageRun: awaiting.stageRuns[1],
+      onApprove: jest.fn(),
+      viewLogsTo,
+    });
+    expect(screen.getByRole("link", { name: "View logs" })).toHaveAttribute(
+      "href",
+      viewLogsTo
+    );
+    expect(
+      screen.getByRole("button", { name: "Approve and continue" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review stage" })).toBeNull();
+  });
+
+  it("links a failed stage to its logs, with or without Run migration plan", () => {
+    const { unmount } = renderAlert({
+      surface: "stage",
+      planRun: failed,
+      stageRun: failed.stageRuns[0],
+      onRunMigrationPlan: jest.fn(),
+      viewLogsTo,
+    });
+    expect(screen.getByRole("link", { name: "View logs" })).toHaveAttribute(
+      "href",
+      viewLogsTo
+    );
+    unmount();
+
+    renderAlert({
+      surface: "stage",
+      planRun: failed,
+      stageRun: failed.stageRuns[0],
+      viewLogsTo,
+    });
+    expect(screen.getByRole("link", { name: "View logs" })).toHaveAttribute(
+      "href",
+      viewLogsTo
+    );
+  });
+
+  it("tells the stage page when View logs is followed", async () => {
+    const onViewLogs = jest.fn();
+    renderAlert({
+      surface: "stage",
+      planRun: failed,
+      stageRun: failed.stageRuns[0],
+      viewLogsTo,
+      onViewLogs,
+    });
+    await userEvent.click(screen.getByRole("link", { name: "View logs" }));
+    expect(onViewLogs).toHaveBeenCalledTimes(1);
+  });
+
+  it("is ignored on the run page, which reviews the stage", () => {
+    renderAlert({
+      surface: "run",
+      planRun: failed,
+      reviewStageTo,
+      viewLogsTo,
+    });
+    expect(screen.queryByRole("link", { name: "View logs" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Review stage" })
+    ).toBeInTheDocument();
   });
 });
 

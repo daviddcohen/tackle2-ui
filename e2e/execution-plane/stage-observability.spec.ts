@@ -1,0 +1,743 @@
+/**
+ * Run observability on the stage page (the agent run page): the Details,
+ * Transcript, Logs and YAML tabs, how they refresh while the stage runs and
+ * stop once it finished, and the context window row.
+ *
+ * Mock timings (client/src/mocks/stub-new-work/agentic/observability.ts):
+ * a running stage gets a new transcript step about every 5 s and a log line
+ * about every second for 2.5 minutes after the world is seeded (every
+ * `page.goto`); the transcript and logs poll every 3 s while it runs.
+ * Assertions on growth wait up to 20 s: several poll cycles.
+ *
+ * Stages used (run 1 = Java EE to Quarkus):
+ * - running, protoStage 2: stage 2 (Migrate) is Running and recorded;
+ * - configured: stage 1 requires approval (transcript skipped), stage 2 has
+ *   the very long saved log and an incomplete transcript with a gap, stage 3
+ *   has a complete transcript;
+ * - configured, run 2 stage 5: Pending.
+ */
+import type { Locator, Page } from "@playwright/test";
+
+import { type Scenario, expect, main, protoUrl, test } from "../support";
+
+/** Growth arrives with the next polls (3 s) of a step (5 s) or line (1 s). */
+const GROWTH_TIMEOUT = 20_000;
+
+const STAGE_TABS = ["Details", "Transcript", "Logs", "YAML"] as const;
+
+const stageUrl = (
+  runId: string,
+  stageId: string,
+  scenario: Scenario,
+  options: { stage?: number; tab?: string } = {}
+) =>
+  protoUrl(`/plan-runs/${runId}/stages/${stageId}`, {
+    scenario,
+    stage: options.stage,
+    params: options.tab != null ? { tab: options.tab } : undefined,
+  });
+
+const RUNNING_STAGE = ["1", "2", "running", { stage: 2 }] as const;
+
+const tab = (page: Page, name: string) =>
+  page.getByRole("tab", { name, exact: true });
+
+const tabPanel = (page: Page) => main(page).getByRole("tabpanel");
+
+const transcriptTable = (page: Page) =>
+  main(page).getByRole("grid", { name: "Transcript", exact: true });
+
+/** One row group per transcript entry (an expandable entry keeps both rows in it). */
+const transcriptEntries = (page: Page) =>
+  transcriptTable(page).locator("tbody");
+
+const logRegion = (page: Page) =>
+  main(page).getByRole("region", { name: / log$/ });
+
+const logScroller = (page: Page) =>
+  logRegion(page).locator(".pf-v6-c-log-viewer__scroll-container");
+
+const containerToggle = (page: Page) =>
+  logRegion(page).getByRole("button", { name: /^Container: / });
+
+/** The scroll position of the log and the line numbers in view. */
+interface LogView {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  /** Line number of the first line fully in view. */
+  firstLine: number;
+  /** Line number of the last line in view. */
+  lastLine: number;
+  /** Distance (px) between the bottom of the view and the end of the log. */
+  toBottom: number;
+}
+
+const logView = (page: Page): Promise<LogView> =>
+  logScroller(page).evaluate((scroller) => {
+    const box = scroller.getBoundingClientRect();
+    const numbers = [
+      ...scroller.querySelectorAll<HTMLElement>(
+        ".pf-v6-c-log-viewer__list-item"
+      ),
+    ]
+      .filter((item) => {
+        const rect = item.getBoundingClientRect();
+        return rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1;
+      })
+      .map((item) =>
+        Number(
+          item.querySelector(".pf-v6-c-log-viewer__index")?.textContent ?? NaN
+        )
+      )
+      .filter((value) => !Number.isNaN(value));
+    return {
+      scrollTop: scroller.scrollTop,
+      scrollHeight: scroller.scrollHeight,
+      clientHeight: scroller.clientHeight,
+      firstLine: numbers.length > 0 ? Math.min(...numbers) : 0,
+      lastLine: numbers.length > 0 ? Math.max(...numbers) : 0,
+      toBottom:
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+    };
+  });
+
+/** The view is at the end of the log (allowing the list's bottom padding). */
+const AT_END_PX = 40;
+
+const lineTexts = (scope: Locator) =>
+  scope.locator(".pf-v6-c-log-viewer__text").allInnerTexts();
+
+/** "Updated just now." / "Updated 3 seconds ago." */
+const UPDATED_AGO = /Updated (just now|\d+ seconds? ago)\./;
+
+test.describe("Stage tabs", () => {
+  test("the stage page has Details, Transcript, Logs and YAML tabs, Details first", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured"));
+    await expect(main(page).getByRole("tablist").getByRole("tab")).toHaveText([
+      ...STAGE_TABS,
+    ]);
+    await expect(tab(page, "Details")).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page.getByRole("term").filter({ hasText: "Agent" })
+    ).toBeVisible();
+  });
+
+  for (const [key, name] of [
+    ["details", "Details"],
+    ["transcript", "Transcript"],
+    ["logs", "Logs"],
+    ["yaml", "YAML"],
+  ] as const) {
+    test(`?tab=${key} opens the ${name} tab`, async ({ page }) => {
+      await page.goto(stageUrl("1", "3", "configured", { tab: key }));
+      await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
+      // Only the open tab is mounted.
+      await expect(tabPanel(page)).toHaveCount(1);
+      const shown = {
+        details: page.getByRole("term").filter({ hasText: "Pod" }),
+        transcript: transcriptTable(page),
+        logs: logRegion(page),
+        yaml: main(page).getByRole("group", { name: "Format" }),
+      }[key];
+      await expect(shown).toBeVisible();
+    });
+  }
+
+  test("an unknown tab falls back to Details", async ({ page }) => {
+    await page.goto(stageUrl("1", "3", "configured", { tab: "nonsense" }));
+    await expect(tab(page, "Details")).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page.getByRole("term").filter({ hasText: "Pod" })
+    ).toBeVisible();
+  });
+
+  test("clicking a tab puts it in the URL, so a reload keeps it", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured"));
+    await tab(page, "Logs").click();
+    await expect(page).toHaveURL(/[?&]tab=logs\b/);
+    await expect(logRegion(page)).toBeVisible();
+    await tab(page, "YAML").click();
+    await expect(page).toHaveURL(/[?&]tab=yaml\b/);
+    await page.reload();
+    await expect(tab(page, "YAML")).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("the tabs are reachable and selectable with the keyboard", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured"));
+    await tab(page, "Details").focus();
+    await page.keyboard.press("Tab");
+    await expect(tab(page, "Transcript")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(tab(page, "Transcript")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(page).toHaveURL(/[?&]tab=transcript\b/);
+    await page.keyboard.press("Tab");
+    await expect(tab(page, "Logs")).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(tab(page, "Logs")).toHaveAttribute("aria-selected", "true");
+  });
+
+  // Known defect: PatternFly 6.7 Tabs render role="tablist"/"tab" but have
+  // no arrow key handling, so the WAI-ARIA tabs pattern (Left/Right move
+  // between tabs) does not work here or on any other tabbed page.
+  test("arrow keys move between the tabs", async ({ page }) => {
+    test.fail(true, "PatternFly Tabs have no arrow key navigation");
+    await page.goto(stageUrl("1", "3", "configured"));
+    await tab(page, "Details").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(tab(page, "Transcript")).toBeFocused({ timeout: 2_000 });
+    await page.keyboard.press("ArrowLeft");
+    await expect(tab(page, "Details")).toBeFocused({ timeout: 2_000 });
+  });
+
+  test("a pending stage has every tab, each saying it appears when the stage starts", async ({
+    page,
+  }) => {
+    const reads: string[] = [];
+    page.on("request", (request) => {
+      if (/\/agentic\/agent-runs\//.test(request.url()))
+        reads.push(request.url());
+    });
+    // Run 2, stage 5 (Migrate) waits for Analyze to be approved.
+    await page.goto(stageUrl("2", "5", "configured"));
+    await expect(main(page).getByRole("tablist").getByRole("tab")).toHaveText([
+      ...STAGE_TABS,
+    ]);
+    // No context row before the stage starts.
+    await expect(main(page).getByText("Context window")).toHaveCount(0);
+    for (const [name, message] of [
+      ["Transcript", "The transcript appears when this stage starts."],
+      ["Logs", "The logs appear when this stage starts."],
+      ["YAML", "The YAML appears when this stage starts."],
+    ] as const) {
+      await tab(page, name).click();
+      await expect(tabPanel(page)).toContainText(message);
+    }
+    await tab(page, "Details").click();
+    await expect(
+      page.getByRole("definition").filter({ hasText: "Not started" })
+    ).toHaveCount(1);
+    // A stage without an agent run reads no transcript, log or resource.
+    expect(reads).toEqual([]);
+  });
+});
+
+test.describe("Auto-refresh while the stage runs", () => {
+  test("the transcript gains entries without a reload and says when it was updated", async ({
+    page,
+  }) => {
+    const [runId, stageId, scenario, options] = RUNNING_STAGE;
+    await page.goto(
+      stageUrl(runId, stageId, scenario, { ...options, tab: "transcript" })
+    );
+    await expect(transcriptTable(page)).toBeVisible();
+    await expect(tabPanel(page)).toContainText(
+      "Recording while the stage runs."
+    );
+    await expect(tabPanel(page)).toContainText(UPDATED_AGO);
+    const before = await transcriptEntries(page).count();
+    await expect
+      .poll(() => transcriptEntries(page).count(), {
+        timeout: GROWTH_TIMEOUT,
+      })
+      .toBeGreaterThan(before);
+  });
+
+  test("the log gains lines without a reload while following its end", async ({
+    page,
+  }) => {
+    const [runId, stageId, scenario, options] = RUNNING_STAGE;
+    await page.goto(
+      stageUrl(runId, stageId, scenario, { ...options, tab: "logs" })
+    );
+    await expect(logRegion(page)).toContainText(/Live from pod \S+\./);
+    await expect(logRegion(page)).toContainText(UPDATED_AGO);
+    await expect(
+      logRegion(page).locator(".pf-v6-c-log-viewer__index").first()
+    ).toBeVisible();
+    const before = (await logView(page)).lastLine;
+    await expect
+      .poll(async () => (await logView(page)).lastLine, {
+        timeout: GROWTH_TIMEOUT,
+      })
+      .toBeGreaterThan(before);
+    // Following: the newest line is the last one in view.
+    await expect
+      .poll(async () => (await logView(page)).toBottom)
+      .toBeLessThanOrEqual(AT_END_PX);
+  });
+
+  test("the Details tab says it refreshes while the stage runs", async ({
+    page,
+  }) => {
+    const [runId, stageId, scenario, options] = RUNNING_STAGE;
+    await page.goto(stageUrl(runId, stageId, scenario, options));
+    await expect(tabPanel(page)).toContainText(
+      "Refreshes while the stage runs."
+    );
+    await expect(tabPanel(page)).toContainText(UPDATED_AGO);
+  });
+});
+
+test.describe("Refresh stops on a finished stage", () => {
+  /** GETs of the observability endpoints, recorded from now on. */
+  const recordObservability = (page: Page) => {
+    const urls: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        /\/hub\/prototype\/agentic\/(plan-runs\/[^/]+\/)?agent-runs\b/.test(
+          request.url()
+        )
+      )
+        urls.push(request.url());
+    });
+    return urls;
+  };
+
+  /** Lets fetches started by fired timers reach the network layer. */
+  const flush = (page: Page) =>
+    page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  /** Advances the fake clock one second at a time. */
+  const advance = async (page: Page, seconds: number) => {
+    for (let second = 0; second < seconds; second++) {
+      await page.clock.runFor(1_000);
+      await flush(page);
+    }
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await page.clock.install();
+  });
+
+  test("a running stage's transcript polls (control for the checks below)", async ({
+    page,
+  }) => {
+    const urls = recordObservability(page);
+    const [runId, stageId, scenario, options] = RUNNING_STAGE;
+    await page.goto(
+      stageUrl(runId, stageId, scenario, { ...options, tab: "transcript" })
+    );
+    await expect(transcriptTable(page)).toBeVisible();
+    const transcriptReads = () =>
+      urls.filter((url) => url.includes("/transcript")).length;
+    const before = transcriptReads();
+    await expect
+      .poll(async () => {
+        await advance(page, 1);
+        return transcriptReads() - before;
+      })
+      .toBeGreaterThanOrEqual(2);
+  });
+
+  for (const [name, key, content] of [
+    ["transcript", "transcript", (page: Page) => transcriptTable(page)],
+    ["log", "logs", (page: Page) => logRegion(page)],
+  ] as const) {
+    test(`a finished stage's ${name} is read once and not polled`, async ({
+      page,
+    }) => {
+      const urls = recordObservability(page);
+      // Run 1, stage 3 (Validate) succeeded: complete transcript, saved log.
+      await page.goto(stageUrl("1", "3", "configured", { tab: key }));
+      await expect(content(page)).toBeVisible();
+      if (key === "logs") {
+        await expect(logRegion(page)).toContainText(
+          "Saved log. The pod no longer exists."
+        );
+        await expect(
+          logRegion(page).getByRole("button", { name: /following/ })
+        ).toHaveCount(0);
+      } else {
+        await expect(tabPanel(page)).toContainText(
+          "The whole stage was recorded."
+        );
+      }
+      await expect
+        .poll(() =>
+          urls.some((url) =>
+            key === "logs"
+              ? url.includes("/logs?")
+              : url.includes("/transcript")
+          )
+        )
+        .toBe(true);
+      // Let the final fetches settle before counting.
+      await advance(page, 1);
+      const text = await content(page).innerText();
+      const settled = urls.length;
+      await advance(page, 30);
+      expect(urls.slice(settled), "observability requests").toEqual([]);
+      expect(await content(page).innerText()).toBe(text);
+    });
+  }
+});
+
+test.describe("Logs", () => {
+  test("scrolling up pauses following, keeps the place, and Resume jumps to the end", async ({
+    page,
+  }) => {
+    // A freshly seeded stage needs about 40 s of lines to overflow the
+    // view: jump the page's clock (the mock reads it too) instead of
+    // waiting. Time keeps flowing from there.
+    await page.clock.install();
+    const [runId, stageId, scenario, options] = RUNNING_STAGE;
+    await page.goto(
+      stageUrl(runId, stageId, scenario, { ...options, tab: "logs" })
+    );
+    const pause = logRegion(page).getByRole("button", {
+      name: "Pause following",
+    });
+    const resume = logRegion(page).getByRole("button", {
+      name: "Resume following",
+    });
+    await expect(pause).toBeVisible();
+    await expect(
+      logRegion(page).locator(".pf-v6-c-log-viewer__index").first()
+    ).toBeVisible();
+    await page.clock.fastForward(60_000);
+    // Enough lines to scroll.
+    await expect
+      .poll(
+        async () => {
+          const view = await logView(page);
+          return view.scrollHeight - view.clientHeight;
+        },
+        { timeout: GROWTH_TIMEOUT }
+      )
+      .toBeGreaterThan(200);
+    await expect
+      .poll(async () => (await logView(page)).toBottom)
+      .toBeLessThanOrEqual(AT_END_PX);
+
+    await logScroller(page).hover();
+    await page.mouse.wheel(0, -150);
+    await expect(resume).toBeVisible();
+    await expect(logRegion(page)).toContainText("Following paused.");
+
+    const paused = await logView(page);
+    expect(paused.toBottom).toBeGreaterThan(AT_END_PX);
+    // New lines arrive, the reader's place stays.
+    await expect
+      .poll(async () => (await logView(page)).scrollHeight, {
+        timeout: GROWTH_TIMEOUT,
+      })
+      .toBeGreaterThan(paused.scrollHeight);
+    const later = await logView(page);
+    expect(later.scrollTop).toBe(paused.scrollTop);
+    expect(later.firstLine).toBe(paused.firstLine);
+
+    await resume.click();
+    await expect(pause).toBeVisible();
+    await expect(logRegion(page)).not.toContainText("Following paused.");
+    await expect
+      .poll(async () => (await logView(page)).toBottom)
+      .toBeLessThanOrEqual(AT_END_PX);
+    expect((await logView(page)).lastLine).toBeGreaterThan(paused.lastLine);
+  });
+
+  test("a saved log opens at its last line", async ({ page }) => {
+    await page.goto(stageUrl("1", "3", "configured", { tab: "logs" }));
+    await expect(logRegion(page)).toContainText("Validate succeeded");
+    await expect
+      .poll(async () => (await logView(page)).toBottom)
+      .toBeLessThanOrEqual(AT_END_PX);
+  });
+
+  test("the log can be reached with Tab and scrolled with the keyboard", async ({
+    page,
+  }) => {
+    // Run 1, stage 2 (Migrate): a very long saved log, opened at its end.
+    await page.goto(stageUrl("1", "2", "configured", { tab: "logs" }));
+    await expect
+      .poll(async () => (await logView(page)).toBottom)
+      .toBeLessThanOrEqual(AT_END_PX);
+    const download = logRegion(page).getByRole("button", { name: "Download" });
+    await download.focus();
+    await page.keyboard.press("Tab");
+    await expect(logScroller(page)).toBeFocused();
+    const before = (await logView(page)).scrollTop;
+    await page.keyboard.press("PageUp");
+    await page.keyboard.press("ArrowUp");
+    await expect
+      .poll(async () => (await logView(page)).scrollTop)
+      .toBeLessThan(before);
+  });
+
+  test("the container select switches to Skill loader and All containers", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured", { tab: "logs" }));
+    await expect(containerToggle(page)).toHaveAccessibleName(
+      "Container: Agent"
+    );
+    await expect(
+      main(page).getByRole("region", { name: "Agent log" })
+    ).toBeVisible();
+
+    await containerToggle(page).click();
+    await page.getByRole("option", { name: /^Skill loader/ }).click();
+    await expect(containerToggle(page)).toHaveAccessibleName(
+      "Container: Skill loader"
+    );
+    const skillLoader = main(page).getByRole("region", {
+      name: "Skill loader log",
+    });
+    await expect(skillLoader).toBeVisible();
+    await expect(
+      skillLoader.locator(".pf-v6-c-log-viewer__text").first()
+    ).toBeVisible();
+    const skillLoaderLines = await lineTexts(skillLoader);
+    expect(skillLoaderLines.join("\n")).not.toMatch(/^\[/m);
+
+    await containerToggle(page).click();
+    await page.getByRole("option", { name: /^All containers/ }).click();
+    await expect(containerToggle(page)).toHaveAccessibleName(
+      "Container: All containers"
+    );
+    const all = main(page).getByRole("region", { name: "All containers log" });
+    await expect(all).toBeVisible();
+    // A saved log opens at its end: the agent's lines, prefixed.
+    await expect
+      .poll(async () => (await lineTexts(all)).join("\n"))
+      .toMatch(/^\[agent\] /m);
+    // The skill loader's lines come first.
+    await logScroller(page).evaluate((scroller) => {
+      scroller.scrollTop = 0;
+    });
+    await expect
+      .poll(async () => (await lineTexts(all))[0] ?? "")
+      .toMatch(/^\[skill-loader\] /);
+  });
+
+  test("search finds and steps through matches in the very long saved log", async ({
+    page,
+  }) => {
+    // Run 1, stage 2 (Migrate): 24,000+ lines of saved agent log.
+    await page.goto(stageUrl("1", "2", "configured", { tab: "logs" }));
+    await expect
+      .poll(async () => (await logView(page)).lastLine)
+      .toBeGreaterThan(20_000);
+    const search = logRegion(page).getByRole("textbox", {
+      name: "Search logs",
+    });
+    await search.fill("tool: completed");
+    const count = logRegion(page).locator(".pf-v6-c-badge");
+    await expect(count).toHaveText(/^1 \/ \d+/);
+    const total = Number((await count.innerText()).match(/\/ (\d+)/)?.[1]);
+    expect(total).toBeGreaterThan(2);
+    // The first match is in view, far from the end the log opened at.
+    const first = await logView(page);
+    expect(first.lastLine).toBeLessThan(20_000);
+    expect((await lineTexts(logRegion(page))).join("\n")).toContain(
+      "tool: completed"
+    );
+
+    await logRegion(page).getByRole("button", { name: "Next" }).click();
+    await expect(count).toHaveText(new RegExp(`^2 / ${total}`));
+    await logRegion(page).getByRole("button", { name: "Previous" }).click();
+    await expect(count).toHaveText(new RegExp(`^1 / ${total}`));
+    // Previous from the first match goes to the last one, near the end.
+    await logRegion(page).getByRole("button", { name: "Previous" }).click();
+    await expect(count).toHaveText(new RegExp(`^${total} / ${total}`));
+    await expect
+      .poll(async () => (await logView(page)).lastLine)
+      .toBeGreaterThan(20_000);
+    expect((await lineTexts(logRegion(page))).join("\n")).toContain(
+      "tool: completed"
+    );
+  });
+
+  test("Download saves {agent run}-{container}.log with the log text", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured", { tab: "logs" }));
+    await expect(logRegion(page)).toContainText("Validate succeeded");
+    await expect
+      .poll(async () => (await logView(page)).toBottom)
+      .toBeLessThanOrEqual(AT_END_PX);
+    const { lastLine } = await logView(page);
+    const visible = await lineTexts(logRegion(page));
+
+    const downloading = page.waitForEvent("download");
+    await logRegion(page).getByRole("button", { name: "Download" }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe("run-1-validate-agent.log");
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Buffer);
+    const text = Buffer.concat(chunks).toString("utf-8");
+    const lines = text.replace(/\n$/, "").split("\n");
+    expect(lines).toHaveLength(lastLine);
+    // The saved text is the log as shown (the viewer renders ANSI colors).
+    const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+    const plain = (line: string) =>
+      line.replace(ansi, "").replace(/\s+/g, " ").trim();
+    expect(lines.slice(-visible.length).map(plain)).toEqual(visible.map(plain));
+
+    await containerToggle(page).click();
+    await page.getByRole("option", { name: /^Skill loader/ }).click();
+    await expect(
+      main(page).getByRole("region", { name: "Skill loader log" })
+    ).toBeVisible();
+    const second = page.waitForEvent("download");
+    await logRegion(page).getByRole("button", { name: "Download" }).click();
+    expect((await second).suggestedFilename()).toBe(
+      "run-1-validate-skill-loader.log"
+    );
+  });
+});
+
+test.describe("Transcript", () => {
+  test("a tool call row expands and collapses from the keyboard and shows its output", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured", { tab: "transcript" }));
+    await expect(transcriptTable(page)).toBeVisible();
+    // Tool call toggles are named by the call's title.
+    const entry = transcriptEntries(page)
+      .filter({
+        has: page.getByRole("button", {
+          name: /^developer__shell: .* Details$/,
+        }),
+      })
+      .first();
+    const toggle = entry.getByRole("button", { name: / Details$/ });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const output = entry.locator(".pf-v6-c-code-block");
+    await expect(output).toBeHidden();
+
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(output.first()).toBeVisible();
+    await expect(output.first()).not.toHaveText("");
+
+    await page.keyboard.press("Space");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(output.first()).toBeHidden();
+  });
+
+  test("a stage that requires approval shows its live messages and View logs opens the Logs tab", async ({
+    page,
+  }) => {
+    // Run 1, stage 1 (Prepare proposal) runs in approve mode: not recorded,
+    // so the tab shows the agent's messages from the live session.
+    await page.goto(stageUrl("1", "1", "configured", { tab: "transcript" }));
+    await expect(tabPanel(page)).toContainText(
+      "Stages that require approval are not recorded. The logs show what the agent did. These are the agent's messages from the live session."
+    );
+    await expect(
+      transcriptTable(page).getByText(/Starting "Prepare proposal"/)
+    ).toBeVisible();
+    await tabPanel(page).getByRole("button", { name: "View logs" }).click();
+    await expect(tab(page, "Logs")).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(/[?&]tab=logs\b/);
+    await expect(logRegion(page)).toBeVisible();
+  });
+
+  test("an incomplete transcript says so and shows the gap", async ({
+    page,
+  }) => {
+    // Run 1, stage 2 (Migrate): recording was interrupted once.
+    await page.goto(stageUrl("1", "2", "configured", { tab: "transcript" }));
+    await expect(tabPanel(page)).toContainText(
+      "Parts of this transcript were not recorded."
+    );
+    const gap = transcriptTable(page).getByRole("row", {
+      name: /^Recording interrupted for \d+m( \d+s)?$/,
+    });
+    await expect(gap).toHaveCount(1);
+    // The gap sits between recorded entries, not at an end.
+    const rows = await transcriptEntries(page).allInnerTexts();
+    // Its sentence starts under Time, after the empty expand cell.
+    const index = rows.findIndex((row) =>
+      row.trim().startsWith("Recording interrupted")
+    );
+    expect(index).toBeGreaterThan(0);
+    expect(index).toBeLessThan(rows.length - 1);
+  });
+});
+
+test.describe("YAML", () => {
+  test("shows the AgentRun resource and switches to JSON", async ({ page }) => {
+    await page.goto(stageUrl("1", "3", "configured", { tab: "yaml" }));
+    const panel = tabPanel(page);
+    const format = panel.getByRole("group", { name: "Format" });
+    await expect(format.getByRole("button", { name: "YAML" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(panel).toContainText("kind: AgentRun");
+    await expect(panel).toContainText("name: run-1-validate");
+
+    await format.getByRole("button", { name: "JSON" }).click();
+    await expect(format.getByRole("button", { name: "JSON" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(panel).toContainText('"kind": "AgentRun"');
+    await expect(panel).toContainText('"name": "run-1-validate"');
+    await expect(panel).not.toContainText("kind: AgentRun");
+  });
+});
+
+test.describe("Context window", () => {
+  test("a started stage shows its context window above the tabs on every tab", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured"));
+    const context = main(page).getByRole("progressbar", {
+      name: /Context window/,
+    });
+    await expect(context).toBeVisible();
+    await expect(main(page)).toContainText(
+      /Context window\s*[\d.]+K of [\d.]+K tokens \(\d+%\)/
+    );
+    for (const name of ["Transcript", "Logs", "YAML"]) {
+      await tab(page, name).click();
+      await expect(context).toBeVisible();
+    }
+  });
+
+  test("a stage whose model does not meter context says Not reported", async ({
+    page,
+  }) => {
+    // Run 6, stage 27 (Upgrade runtime) uses the self-hosted model.
+    await page.goto(stageUrl("6", "27", "configured"));
+    await expect(main(page).getByText("Context window")).toBeVisible();
+    await expect(
+      main(page).getByRole("progressbar", { name: /Context window/ })
+    ).toHaveCount(0);
+    await expect(
+      main(page)
+        .locator(".pf-v6-l-flex")
+        .filter({ hasText: /^Context window/ })
+        .first()
+    ).toContainText("Not reported");
+  });
+});
+
+test.describe("Failed stage leads to its logs", () => {
+  test("View logs in the failed alert opens the Logs tab", async ({ page }) => {
+    // Run 1, stage 2 (Migrate) failed.
+    await page.goto(stageUrl("1", "2", "failed", { stage: 2 }));
+    const alert = main(page).locator(".pf-v6-c-alert.pf-m-danger").first();
+    await expect(alert).toBeVisible();
+    await alert.getByRole("link", { name: "View logs" }).click();
+    await expect(tab(page, "Logs")).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(/[?&]tab=logs\b/);
+    await expect(page).toHaveURL(/[?&]protoScenario=failed\b/);
+    await expect(logRegion(page)).toBeVisible();
+  });
+});

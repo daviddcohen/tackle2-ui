@@ -3,9 +3,16 @@ import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
-import { PlanRun, StageRun } from "@app/agentic";
+import {
+  AgentRunTranscript,
+  PlanRun,
+  StageAgentRun,
+  StageRun,
+} from "@app/agentic";
+import type { AgentRun } from "@app/api/agentic/contract";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
-import { render, screen, within } from "@app/test-config/test-utils";
+import { fakeLogViewer } from "@app/test-config/fake-log-viewer";
+import { render, screen, waitFor, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import StageRunDetail from "./stage-run-detail";
@@ -38,6 +45,19 @@ jest.mock("react-i18next", () => {
   };
 });
 jest.mock("react-router-dom", () => jest.requireActual("react-router-dom"));
+jest.mock("@monaco-editor/react", () =>
+  jest.requireActual("@app/test-config/fake-monaco-editor")
+);
+// react-markdown is ESM only; the transcript passes it messages verbatim.
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="markdown">{children}</div>
+  ),
+}));
+jest.mock("@patternfly/react-log-viewer", () =>
+  jest.requireActual("@app/test-config/fake-log-viewer")
+);
 
 const mockGrantedScopes = { all: true };
 jest.mock("@app/auth", () => ({
@@ -80,12 +100,89 @@ const useRun = (planRun: PlanRun) =>
     )
   );
 
-const renderStage = (stageId: string) =>
+/** The agent runs of run 1 (and their resources), or a failure (403: not retried). */
+const useAgentRuns = (agentRuns: StageAgentRun[] | "error") =>
+  server.use(
+    rest.get(
+      `${AGENTIC_ENDPOINTS.planRuns}/:id/agent-runs`,
+      (_req, res, ctx) =>
+        agentRuns === "error" ? res(ctx.status(403)) : res(ctx.json(agentRuns))
+    ),
+    rest.get(`${AGENTIC_ENDPOINTS.agentRuns}/:name`, (req, res, ctx) =>
+      res(ctx.json(resourceOf(String(req.params.name))))
+    ),
+    rest.get(
+      `${AGENTIC_ENDPOINTS.agentRuns}/:name/transcript`,
+      (_req, res, ctx) => res(ctx.json(mockTranscript))
+    ),
+    rest.get(`${AGENTIC_ENDPOINTS.agentRuns}/:name/logs`, (req, res, ctx) =>
+      res(
+        ctx.json({
+          container: req.url.searchParams.get("container"),
+          source: "live",
+          offset: 0,
+          nextOffset: 0,
+          text: "",
+          complete: false,
+        })
+      )
+    )
+  );
+
+let mockTranscript: AgentRunTranscript = { status: "recording", entries: [] };
+
+const resourceOf = (name: string): AgentRun => ({
+  apiVersion: "konveyor.io/v1alpha1",
+  kind: "AgentRun",
+  metadata: {
+    name,
+    namespace: "konveyor-tackle",
+    managedFields: [{ manager: "controller" }],
+  } as AgentRun["metadata"],
+  spec: { agentRef: "code-migrator" } as AgentRun["spec"],
+  status: { phase: "Running" } as AgentRun["status"],
+});
+
+const agentRunOf = (
+  stageId: string,
+  overrides: Partial<StageAgentRun> = {}
+): StageAgentRun => ({
+  name: `run-1-stage-${stageId}`,
+  runId: "1",
+  stageId,
+  phase: "Running",
+  podName: `run-1-stage-${stageId}-x7k2p`,
+  containers: ["skill-loader", "agent"],
+  usage: {
+    contextUsed: 121_400,
+    contextSize: 200_000,
+    peakContextUsed: 168_204,
+    compactions: 1,
+    inputTokens: 1_240_311,
+    outputTokens: 48_204,
+    turnsUsed: 14,
+    maxTurns: 50,
+    cost: 3.42,
+    currency: "USD",
+    model: "claude-3-7-sonnet",
+  },
+  ...overrides,
+});
+
+let currentSearch = "";
+
+const renderStage = (stageId: string, search = "") =>
   render(
-    <MemoryRouter initialEntries={[`/plan-runs/1/stages/${stageId}`]}>
+    <MemoryRouter initialEntries={[`/plan-runs/1/stages/${stageId}${search}`]}>
       <Route path={DevPaths.stageRunDetails}>
         <StageRunDetail />
       </Route>
+      <Route
+        render={({ location }) => {
+          currentSearch = location.search;
+          return null;
+        }}
+      />
     </MemoryRouter>
   );
 
@@ -135,6 +232,8 @@ const awaiting = run(
 
 beforeEach(() => {
   mockGrantedScopes.all = true;
+  mockTranscript = { status: "recording", entries: [] };
+  useAgentRuns([]);
 });
 
 describe("StageRunDetail", () => {
@@ -155,20 +254,55 @@ describe("StageRunDetail", () => {
     );
   });
 
-  it("has the facts Agent, Duration and Approval only", async () => {
+  it("has the stage facts and the facts of its agent run", async () => {
     useRun(awaiting);
+    useAgentRuns([agentRunOf("1", { phase: "Succeeded" })]);
     renderStage("1");
     await screen.findByRole("heading", { level: 1 });
+    expect(fact("Pod")).toHaveTextContent("run-1-stage-1-x7k2p");
     expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
-      ["Agent", "Duration", "Approval"]
+      [
+        "Agent",
+        "Model",
+        "Duration",
+        "Approval",
+        "Turns",
+        "Compactions",
+        "Tokens",
+        "Cost",
+        "Pod",
+      ]
     );
     expect(
       within(fact("Agent")).getByRole("link", {
         name: "Prepare proposal Agent",
       })
     ).toHaveAttribute("href", "/agents/1?from=run-1");
+    expect(fact("Model")).toHaveTextContent("claude-3-7-sonnet");
     expect(fact("Duration")).toHaveTextContent("9m");
     expect(fact("Approval")).toHaveTextContent("Required after this stage");
+    expect(fact("Turns")).toHaveTextContent("14 of 50");
+    expect(fact("Compactions")).toHaveTextContent("1");
+    expect(fact("Tokens")).toHaveTextContent("1.24M input, 48.2K output");
+    expect(fact("Cost")).toHaveTextContent("$3.42");
+  });
+
+  it("says Not reported for usage the run does not report", async () => {
+    useRun(awaiting);
+    useAgentRuns([
+      agentRunOf("1", {
+        podName: undefined,
+        usage: { inputTokens: 900, compactions: 0 },
+      }),
+    ]);
+    renderStage("1");
+    await screen.findByRole("heading", { level: 1 });
+    await screen.findByText("900 input");
+    for (const term of ["Model", "Turns", "Cost", "Pod"]) {
+      expect(fact(term)).toHaveTextContent("Not reported");
+    }
+    expect(fact("Compactions")).toHaveTextContent("None");
+    expect(fact("Tokens")).toHaveTextContent("900 input");
   });
 
   it("says a passed gate was approved, or not required without a record", async () => {
@@ -216,31 +350,76 @@ describe("StageRunDetail", () => {
     expect(fact("Approval")).toHaveTextContent("Required after this stage");
   });
 
-  it("asks to check the evidence below, with no link to itself", async () => {
+  it("asks to check the transcript and commits, and links its Logs tab", async () => {
     useRun(awaiting);
     renderStage("1");
     expect(
       await screen.findByText(
-        "Prepare proposal Agent finished Prepare proposal. Check its activity and commits below, then approve to start Migrate."
+        "Prepare proposal Agent finished Prepare proposal. Check its transcript and commits, then approve to start Migrate."
       )
     ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Review stage" })).toBeNull();
+    await userEvent.click(screen.getByRole("link", { name: "View logs" }));
+    expect(currentSearch).toBe("?tab=logs");
+    expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
   });
 
-  it("lists activity by time and sender, and commits with a count", async () => {
+  it("lands focus on the log after View logs, scrolled into view", async () => {
+    const scrollIntoView = jest.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    useRun(awaiting);
+    useAgentRuns([agentRunOf("1", { phase: "AwaitingApproval" })]);
+    renderStage("1");
+    await userEvent.click(
+      await screen.findByRole("link", { name: "View logs" })
+    );
+    const log = await screen.findByRole("region", { name: "Agent log" });
+    await waitFor(() => expect(log).toHaveFocus());
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+
+    // Opening the tab by hand later does not move focus.
+    await userEvent.click(screen.getByRole("tab", { name: "Details" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Logs" }));
+    await screen.findByRole("region", { name: "Agent log" });
+    expect(screen.getByRole("tab", { name: "Logs" })).toHaveFocus();
+  });
+
+  it("focuses the Logs tab panel when the log cannot show yet, and never the log later", async () => {
+    // The query logs the failure to read the agent runs.
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    Element.prototype.scrollIntoView = jest.fn();
+    useRun(awaiting);
+    useAgentRuns("error");
+    renderStage("1");
+    await userEvent.click(
+      await screen.findByRole("link", { name: "View logs" })
+    );
+    const panel = await screen.findByRole("tabpanel", { name: "Logs" });
+    await waitFor(() => expect(panel).toHaveFocus());
+
+    // The agent run arrives later: focus stays where the user put it.
+    useAgentRuns([agentRunOf("1", { phase: "AwaitingApproval" })]);
+    const tryAgain = await within(panel).findByRole("button", {
+      name: "Try again",
+    });
+    tryAgain.focus();
+    await userEvent.keyboard("{Enter}");
+    const log = await screen.findByRole("region", { name: "Agent log" });
+    expect(log).not.toHaveFocus();
+    consoleError.mockRestore();
+  });
+
+  it("lists commits with a count, and no activity section", async () => {
     useRun(awaiting);
     renderStage("1");
-    await screen.findByRole("heading", { level: 2, name: "Activity" });
-    const activity = screen.getByRole("grid", { name: "Activity" });
-    expect(
-      within(activity)
-        .getAllByRole("row")
-        .slice(1)
-        .map((row) => row.textContent)
-    ).toEqual([
-      "2026-11-10 10:15Prepare proposal AgentAnalysis complete.",
-      "2026-11-10 10:16UserLooks good.",
-    ]);
+    // The transcript replaces Activity.
+    await screen.findByRole("heading", { level: 2, name: "Instructions" });
+    expect(screen.queryByRole("heading", { name: "Activity" })).toBeNull();
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Commits (2)" })
@@ -252,7 +431,7 @@ describe("StageRunDetail", () => {
     ).toHaveAttribute("href", "https://git.example.com/commit/b2c3d4e5f6a1");
   });
 
-  it("keeps the raw output collapsed behind Show output", async () => {
+  it("shows the first line of the output in the alert, and no raw output", async () => {
     useRun(
       run(
         [
@@ -267,23 +446,55 @@ describe("StageRunDetail", () => {
       )
     );
     renderStage("1");
-    const toggle = await screen.findByRole("button", { name: "Show output" });
-    expect(screen.getByText(/at line 2/)).not.toBeVisible();
-    // The alert shows the first line only; the block has all of it.
+    // The alert has the first line; the rest is in the logs and the YAML
+    // (terminationData.stopReason), not repeated on Details.
     expect(
-      screen.getByText("Error: Unable to resolve dependency tree.")
+      await screen.findByText("Error: Unable to resolve dependency tree.")
     ).toBeInTheDocument();
-    await userEvent.click(toggle);
-    expect(
-      screen.getByRole("button", { name: "Hide output" })
-    ).toBeInTheDocument();
-    expect(screen.getByText(/at line 2/)).toBeVisible();
+    expect(screen.queryByText(/at line 2/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show output" })).toBeNull();
 
-    expect(screen.getByText("This stage recorded no activity.")).toBeVisible();
     expect(screen.getByText("This stage made no commits.")).toBeVisible();
   });
 
-  it("says a running stage has no activity or commits yet", async () => {
+  it("brings the log of a failed stage opened on its Logs tab into view, without moving focus", async () => {
+    const scrollIntoView = jest.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const failed = (status: "Failed" | "Running") =>
+      run(
+        [
+          stage(1, "Prepare proposal", status, {
+            startedAt: "2026-11-10T10:06:00Z",
+          }),
+        ],
+        status
+      );
+    useRun(failed("Failed"));
+    useAgentRuns([agentRunOf("1", { phase: "Failed" })]);
+    const { unmount } = renderStage("1", "?tab=logs");
+    const log = await screen.findByRole("region", { name: "Agent log" });
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" })
+    );
+    expect(log).not.toHaveFocus();
+
+    // Only once: opening the tab again by hand does not scroll.
+    scrollIntoView.mockClear();
+    await userEvent.click(screen.getByRole("tab", { name: "Details" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Logs" }));
+    await screen.findByRole("region", { name: "Agent log" });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    unmount();
+
+    // A stage that did not fail opens where it is.
+    useRun(failed("Running"));
+    useAgentRuns([agentRunOf("1")]);
+    renderStage("1", "?tab=logs");
+    await screen.findByRole("region", { name: "Agent log" });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("says a running stage has no commits yet", async () => {
     useRun(
       run(
         [
@@ -295,14 +506,13 @@ describe("StageRunDetail", () => {
       )
     );
     renderStage("1");
-    expect(await screen.findByText("No activity yet.")).toBeInTheDocument();
-    expect(screen.getByText("No commits yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No commits yet.")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 2, name: "Commits" })
     ).toBeInTheDocument();
   });
 
-  it("explains a pending stage and leaves out activity and commits", async () => {
+  it("explains a pending stage and leaves out its commits", async () => {
     useRun(awaiting);
     renderStage("2");
     expect(
@@ -313,14 +523,18 @@ describe("StageRunDetail", () => {
     expect(screen.getByText(/^Stage 2 of 2 in/).textContent).not.toMatch(
       /Started/
     );
+    // No agent run yet: the stage facts only, and no context row.
+    expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
+      ["Agent", "Duration", "Approval"]
+    );
     expect(fact("Duration")).toHaveTextContent("Not started");
     expect(fact("Approval")).toHaveTextContent("Not required");
+    expect(screen.queryByText("Context window")).toBeNull();
     expect(
       screen.getByRole("heading", { level: 2, name: "Instructions" })
     ).toBeInTheDocument();
     expect(screen.getByText("Do Migrate.")).toBeInTheDocument();
     expect(screen.getByText("Then report.")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Activity" })).toBeNull();
     expect(screen.queryByRole("heading", { name: /^Commits/ })).toBeNull();
   });
 
@@ -336,5 +550,334 @@ describe("StageRunDetail", () => {
     expect(
       screen.queryByRole("button", { name: "Approve and continue" })
     ).toBeNull();
+  });
+
+  describe("tabs", () => {
+    const running = run(
+      [
+        stage(1, "Prepare proposal", "Running", {
+          startedAt: "2026-11-10T10:06:00Z",
+        }),
+        stage(2, "Migrate", "Pending"),
+      ],
+      "Running"
+    );
+
+    it("opens Details by default and keeps the open tab in the URL", async () => {
+      useRun(running);
+      useAgentRuns([agentRunOf("1")]);
+      renderStage("1");
+      const details = await screen.findByRole("tab", { name: "Details" });
+      expect(details).toHaveAttribute("aria-selected", "true");
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Instructions" })
+      ).toBeInTheDocument();
+      // The same live sentence as the other views of a running stage.
+      expect(
+        await screen.findByText(
+          /^Refreshes while the stage runs. Updated (just now|\d+ seconds? ago).$/
+        )
+      ).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("tab", { name: "YAML" }));
+      expect(currentSearch).toBe("?tab=yaml");
+      expect(screen.getByRole("tab", { name: "YAML" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      // Only the open tab renders.
+      expect(
+        screen.queryByRole("heading", { name: "Instructions" })
+      ).toBeNull();
+    });
+
+    it("has Details, Transcript, Logs and YAML, in that order", async () => {
+      useRun(running);
+      useAgentRuns([agentRunOf("1")]);
+      renderStage("1", "?tab=logs");
+      expect(
+        (await screen.findAllByRole("tab")).map((tab) => tab.textContent)
+      ).toEqual(["Details", "Transcript", "Logs", "YAML"]);
+      expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+
+    it("opens the logs from a transcript that was not recorded", async () => {
+      mockTranscript = {
+        status: "skipped",
+        skipReason: "approve mode",
+        entries: [],
+      };
+      useRun(running);
+      useAgentRuns([agentRunOf("1")]);
+      renderStage("1", "?tab=transcript");
+      await userEvent.click(
+        await screen.findByRole("button", { name: "View logs" })
+      );
+      expect(currentSearch).toBe("?tab=logs");
+      expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      // Focus follows to the log, not to the page body.
+      Element.prototype.scrollIntoView = jest.fn();
+      await waitFor(() =>
+        expect(screen.getByRole("region", { name: "Agent log" })).toHaveFocus()
+      );
+    });
+
+    it("shows the messages of a stage that was not recorded on its Transcript tab", async () => {
+      mockTranscript = {
+        status: "skipped",
+        skipReason: "approve mode",
+        entries: [],
+      };
+      useRun(awaiting);
+      useAgentRuns([agentRunOf("1", { phase: "AwaitingApproval" })]);
+      renderStage("1", "?tab=transcript");
+      expect(await screen.findByText("Analysis complete.")).toBeVisible();
+      expect(screen.getByText("Looks good.")).toBeVisible();
+      expect(
+        screen.getByText(/These are the agent's messages from the live session/)
+      ).toBeVisible();
+    });
+
+    it("says when each view of a pending stage appears", async () => {
+      useRun(running);
+      const { unmount } = renderStage("2", "?tab=transcript");
+      expect(
+        await screen.findByText(
+          "The transcript appears when this stage starts."
+        )
+      ).toBeInTheDocument();
+      unmount();
+      renderStage("2", "?tab=logs");
+      expect(
+        await screen.findByText("The logs appear when this stage starts.")
+      ).toBeInTheDocument();
+    });
+
+    it("waits for the agent of a running stage whose agent run is not listed yet", async () => {
+      useRun(running);
+      // beforeEach: the plan run lists no agent runs yet.
+      const { unmount } = renderStage("1", "?tab=logs");
+      expect(
+        await screen.findByText("Waiting for the agent to start.")
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Refreshes while the stage runs/)).toBeVisible();
+      expect(
+        screen.queryByText("The logs appear when this stage starts.")
+      ).toBeNull();
+      unmount();
+
+      renderStage("1");
+      await waitFor(() =>
+        expect(fact("Turns")).toHaveTextContent("Not reported yet")
+      );
+      expect(fact("Cost")).toHaveTextContent("Not reported yet");
+    });
+
+    it("says the agent never started for a finished stage without an agent run", async () => {
+      useRun(
+        run(
+          [
+            stage(1, "Prepare proposal", "Failed", {
+              startedAt: "2026-11-10T10:06:00Z",
+            }),
+          ],
+          "Failed"
+        )
+      );
+      renderStage("1", "?tab=transcript");
+      expect(
+        await screen.findByText("The agent did not start for this stage.")
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Refreshes while the stage runs/)).toBeNull();
+    });
+
+    it("falls back to Details for an unknown tab", async () => {
+      useRun(running);
+      renderStage("1", "?tab=transcripts");
+      expect(
+        await screen.findByRole("tab", { name: "Details" })
+      ).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("keeps the alert and the context window above the tabs", async () => {
+      useRun(awaiting);
+      useAgentRuns([
+        agentRunOf("1", {
+          phase: "Succeeded",
+          usage: { contextUsed: 190_000, contextSize: 200_000 },
+        }),
+      ]);
+      renderStage("1", "?tab=yaml");
+      const bar = await screen.findByRole("progressbar", {
+        name: "Context window",
+      });
+      // The bar is neutral at every level.
+      expect(bar).toHaveAttribute(
+        "aria-valuetext",
+        "190K of 200K tokens (95%)"
+      );
+      expect(bar.closest(".pf-v6-c-progress")?.className).not.toMatch(
+        /pf-m-(warning|danger)/
+      );
+      expect(
+        screen.getByText(/Check its transcript and commits/)
+      ).toBeVisible();
+    });
+
+    it("says a running stage has no usage yet, never Not reported", async () => {
+      useRun(running);
+      useAgentRuns([
+        agentRunOf("1", {
+          usage: {
+            contextSize: 200_000,
+            maxTurns: 50,
+            model: "claude-3-7-sonnet",
+          },
+        }),
+      ]);
+      renderStage("1");
+      expect(
+        await screen.findByRole("progressbar", { name: "Context window" })
+      ).toHaveAttribute("aria-valuetext", "Not reported yet");
+      await waitFor(() =>
+        expect(fact("Turns")).toHaveTextContent("Not reported yet")
+      );
+      expect(fact("Tokens")).toHaveTextContent("Not reported yet");
+      expect(fact("Cost")).toHaveTextContent("Not reported yet");
+      expect(fact("Model")).toHaveTextContent("claude-3-7-sonnet");
+      expect(screen.queryByText("Not reported")).toBeNull();
+    });
+
+    it("says the context is not reported, or unavailable", async () => {
+      useRun(running);
+      // Tokens are reported, the context is not (an unmetered model).
+      useAgentRuns([agentRunOf("1", { usage: { inputTokens: 10 } })]);
+      const { unmount } = renderStage("1");
+      expect(await screen.findByText("Context window")).toBeInTheDocument();
+      expect(await screen.findAllByText("Not reported")).not.toHaveLength(0);
+      expect(screen.queryByRole("progressbar")).toBeNull();
+      unmount();
+
+      useAgentRuns("error");
+      renderStage("1");
+      expect(await screen.findAllByText("Unavailable")).not.toHaveLength(0);
+    });
+
+    it("shows the stage's resource as YAML or JSON, without managed fields", async () => {
+      useRun(running);
+      useAgentRuns([agentRunOf("1")]);
+      renderStage("1", "?tab=yaml");
+      const editor = await screen.findByTestId("code-editor");
+      await waitFor(() =>
+        expect(editor).toHaveTextContent("name: run-1-stage-1")
+      );
+      expect(editor).toHaveTextContent("kind: AgentRun");
+      expect(editor).not.toHaveTextContent("managedFields");
+      expect(
+        screen.getByText(/^Refreshes while the stage runs. Updated /)
+      ).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: /JSON/ }));
+      await waitFor(() =>
+        expect(screen.getByTestId("code-editor")).toHaveTextContent(
+          '"name": "run-1-stage-1"'
+        )
+      );
+    });
+
+    it("offers a retry when the resource cannot be read", async () => {
+      useRun(running);
+      useAgentRuns([agentRunOf("1")]);
+      server.use(
+        rest.get(`${AGENTIC_ENDPOINTS.agentRuns}/:name`, (_req, res, ctx) =>
+          res(ctx.status(403))
+        )
+      );
+      renderStage("1", "?tab=yaml");
+      expect(
+        await screen.findByText("The YAML could not be loaded.")
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+    });
+
+    it("keeps the YAML under an error when a refresh fails", async () => {
+      const consoleError = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      useRun(running);
+      useAgentRuns([agentRunOf("1")]);
+      renderStage("1", "?tab=yaml");
+      const editor = await screen.findByTestId("code-editor");
+      await waitFor(() =>
+        expect(editor).toHaveTextContent("name: run-1-stage-1")
+      );
+      server.use(
+        rest.get(`${AGENTIC_ENDPOINTS.agentRuns}/:name`, (_req, res, ctx) =>
+          res(ctx.status(403))
+        )
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(
+        await screen.findByText("The YAML could not be loaded.")
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+      expect(screen.getByTestId("code-editor")).toHaveTextContent(
+        "name: run-1-stage-1"
+      );
+      consoleError.mockRestore();
+    });
+
+    it("never gives the logs or the YAML less than 480 px", async () => {
+      useRun(running);
+      useAgentRuns([agentRunOf("1")]);
+      // A short window: jsdom has no layout, so the views start at its top.
+      const innerHeight = window.innerHeight;
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: 300,
+      });
+      const { unmount } = renderStage("1", "?tab=yaml");
+      // The height goes to the components' height props (no inline style);
+      // jsdom has no layout, so there is no toolbar height to take off.
+      const editor = await screen.findByTestId("code-editor");
+      expect(editor).toHaveAttribute("data-height", "480px");
+      unmount();
+      server.use(
+        rest.get(`${AGENTIC_ENDPOINTS.agentRuns}/:name/logs`, (req, res, ctx) =>
+          res(
+            ctx.json({
+              container: req.url.searchParams.get("container"),
+              source: "live",
+              offset: 0,
+              nextOffset: 4,
+              text: "one\n",
+              complete: false,
+            })
+          )
+        )
+      );
+      renderStage("1", "?tab=logs");
+      await screen.findByRole("region", { name: "Agent log" });
+      await waitFor(() => expect(fakeLogViewer.props?.height).toBe(480));
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: innerHeight,
+      });
+    });
+
+    it("keeps the YAML tab of a pending stage with an empty state", async () => {
+      useRun(running);
+      renderStage("2", "?tab=yaml");
+      expect(
+        await screen.findByText("The YAML appears when this stage starts.")
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("code-editor")).toBeNull();
+    });
   });
 });

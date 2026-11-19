@@ -111,7 +111,9 @@ export type AgenticQueryGroup =
   | "skillPlans"
   | "planRuns"
   | "applicationMigrations"
-  | "executionPolicy";
+  | "executionPolicy"
+  /** Stage agent runs: summaries, AgentRun resources, transcripts, logs. */
+  | "agentRunObservability";
 
 export const agenticKeys = {
   all: [AGENTIC_QUERY_ROOT] as const,
@@ -171,8 +173,13 @@ export const MUTATION_EFFECTS = {
     "planRuns",
     "applicationMigrations",
   ],
-  startMigrations: ["applicationMigrations", "planRuns", "plans"],
-  runDecision: ["planRuns", "applicationMigrations"],
+  startMigrations: [
+    "applicationMigrations",
+    "planRuns",
+    "plans",
+    "agentRunObservability",
+  ],
+  runDecision: ["planRuns", "applicationMigrations", "agentRunObservability"],
   executionPolicy: ["executionPolicy", "applicationMigrations", "planRuns"],
 } as const satisfies Record<string, readonly AgenticQueryGroup[]>;
 
@@ -210,13 +217,13 @@ export const isUsableId = (id: EntityId | null | undefined): id is EntityId =>
   id !== "undefined" &&
   id !== "null";
 
-const POLL_FAST_MS = 3000;
-const POLL_RUN_MS = 5000;
+export const POLL_FAST_MS = 3000;
+export const POLL_RUN_MS = 5000;
 /**
  * While the only active work waits for a human decision nothing changes on
  * its own; keep a slow poll so a decision made elsewhere still shows up.
  */
-const POLL_AWAITING_DECISION_MS = 30000;
+export const POLL_AWAITING_DECISION_MS = 30000;
 
 /** Poll interval for a set of plan runs: fast while one progresses on its own. */
 const planRunsPollInterval = (runs: PlanRun[]): number | false => {

@@ -268,6 +268,78 @@ test("503: the apiError scenario fails every agentic endpoint alike", async ({
     "/providers",
     "/execution-policy",
     "/agent-runs",
+    "/plan-runs/1/agent-runs",
+    "/agent-runs/run-1-migrate/logs?container=agent",
   ])
     expect((await agenticRequest(page, "GET", path)).status, path).toBe(503);
+});
+
+test("run observability: agent runs, resource, transcript and logs by offset", async ({
+  page,
+}) => {
+  await bootMockApi(page);
+  const run = await agenticGet<PlanRun>(page, "/plan-runs/1");
+  const agentRuns = await list<{
+    name: string;
+    stageId: string;
+    phase: string;
+    containers: string[];
+  }>(page, "/plan-runs/1/agent-runs");
+  expect(agentRuns.map((agentRun) => agentRun.stageId)).toEqual(
+    run.stageRuns
+      .filter((stage) => stage.status !== "Pending")
+      .map((stage) => stage.stageId)
+  );
+  const [first] = agentRuns;
+  expect(first.containers).toEqual(["skill-loader", "agent"]);
+  const resource = await agenticGet<{
+    kind: string;
+    metadata: { name: string };
+    status: { phase: string };
+  }>(page, `/agent-runs/${first.name}`);
+  expect(resource.kind).toBe("AgentRun");
+  expect(resource.metadata.name).toBe(first.name);
+  const transcript = await agenticGet<{ status: string; entries: unknown[] }>(
+    page,
+    `/agent-runs/${first.name}/transcript`
+  );
+  expect(["complete", "incomplete", "skipped"]).toContain(transcript.status);
+  const chunk = await agenticGet<{
+    text: string;
+    offset: number;
+    nextOffset: number;
+    complete: boolean;
+  }>(page, `/agent-runs/${first.name}/logs?container=skill-loader&offset=0`);
+  expect(chunk.text.length).toBeGreaterThan(0);
+  // Offsets count UTF-8 bytes, like the hub's text/plain body.
+  expect(chunk.nextOffset).toBe(Buffer.byteLength(chunk.text, "utf8"));
+  const rest = await agenticGet<{ text: string }>(
+    page,
+    `/agent-runs/${first.name}/logs?container=skill-loader&offset=${chunk.nextOffset}`
+  );
+  expect(rest.text).toBe("");
+  // Past the end: no text, not an error (the hub seeks to the end).
+  const pastEnd = await agenticGet<{ text: string; nextOffset: number }>(
+    page,
+    `/agent-runs/${first.name}/logs?container=skill-loader&offset=${chunk.nextOffset + 100}`
+  );
+  expect(pastEnd).toMatchObject({
+    text: "",
+    nextOffset: chunk.nextOffset + 100,
+  });
+  for (const path of [
+    "/plan-runs/9999/agent-runs",
+    "/agent-runs/no-such-run",
+    `/agent-runs/${first.name}/logs?container=sidecar`,
+  ])
+    expect((await agenticRequest(page, "GET", path)).status, path).toBe(404);
+  expect(
+    (
+      await agenticRequest(
+        page,
+        "GET",
+        `/agent-runs/${first.name}/logs?container=agent&offset=-1`
+      )
+    ).status
+  ).toBe(400);
 });

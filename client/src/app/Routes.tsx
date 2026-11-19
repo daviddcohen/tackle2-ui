@@ -175,6 +175,11 @@ export const migrationRoutes: IRoute<DevPathValues>[] = [
     exact: true,
   },
   {
+    path: Paths.applicationsTaskDetailsAttachment,
+    comp: TaskDetails,
+    exact: false,
+  },
+  {
     path: Paths.applicationsAnalysisDetailsAttachment,
     comp: AnalysisDetails,
     exact: false,

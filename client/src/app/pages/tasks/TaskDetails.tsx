@@ -45,10 +45,16 @@ export const TaskDetails = () => {
       detailsPath={detailsPath}
       formatTitle={(taskName) => `Task details for task ${taskId}, ${taskName}`}
       formatAttachmentPath={(attachmentId) =>
-        formatPath(Paths.taskDetailsAttachment, {
-          taskId,
-          attachmentId,
-        })
+        isFromApplication
+          ? formatPath(Paths.applicationsTaskDetailsAttachment, {
+              applicationId,
+              taskId,
+              attachmentId,
+            })
+          : formatPath(Paths.taskDetailsAttachment, {
+              taskId,
+              attachmentId,
+            })
       }
       taskId={Number(taskId)}
       attachmentId={attachmentId}

@@ -1,6 +1,6 @@
 import { MemoryRouter } from "react-router-dom";
 
-import { StageRun } from "@app/agentic";
+import { StageAgentRun, StageRun } from "@app/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 
 import { StageRunsTable } from "./stage-runs-table";
@@ -82,6 +82,106 @@ describe("StageRunsTable on a plan run", () => {
       "href",
       "/agents/1?from=run-1"
     );
+  });
+});
+
+describe("StageRunsTable Context column", () => {
+  const agentRun = (stageId: string, contextUsed?: number): StageAgentRun => ({
+    name: `run-1-${stageId}`,
+    runId: "1",
+    stageId,
+    phase: "Running",
+    containers: ["agent"],
+    usage:
+      contextUsed != null ? { contextUsed, contextSize: 200_000 } : undefined,
+  });
+  const stageRuns = [
+    stageRun({
+      order: 1,
+      status: "Succeeded",
+      startedAt: "2026-11-10T10:06:00Z",
+    }),
+    stageRun({
+      order: 2,
+      status: "Running",
+      startedAt: "2026-11-10T10:15:00Z",
+    }),
+    stageRun({ order: 3 }),
+  ];
+  const renderTable = (
+    agentRuns: StageAgentRun[],
+    state: { isLoading?: boolean; isUnavailable?: boolean } = {}
+  ) =>
+    render(
+      <MemoryRouter>
+        <StageRunsTable
+          runId="1"
+          linkTo={(pathname) => pathname}
+          stageRuns={stageRuns}
+          agentRuns={{
+            agentRuns,
+            isLoading: state.isLoading ?? false,
+            isUnavailable: state.isUnavailable ?? false,
+          }}
+        />
+      </MemoryRouter>
+    );
+
+  it("adds Context after Duration with the agent runs", () => {
+    renderTable([agentRun("s1", 84_000), agentRun("s2", 190_000)]);
+    expect(headers()).toEqual([
+      "#",
+      "Stage",
+      "Agent",
+      "Status",
+      "Started",
+      "Duration",
+      "Context",
+    ]);
+    expect(rows().map((row) => row[6])).toEqual(["42%", "95%", "Not started"]);
+    expect(
+      screen.getByRole("progressbar", { name: "Context window of Stage 2" })
+    ).toHaveAttribute("aria-valuetext", "190K of 200K tokens (95%)");
+    // Neutral even near the limit.
+    expect(
+      screen
+        .getByRole("progressbar", { name: "Context window of Stage 2" })
+        .closest(".pf-v6-c-progress")?.className
+    ).not.toMatch(/pf-m-(warning|danger)/);
+    expect(
+      screen.getByRole("button", { name: "More information about context" })
+    ).toBeInTheDocument();
+  });
+
+  it("says Not reported, Not reported yet, Unavailable, or loads", () => {
+    const { unmount } = renderTable([agentRun("s1")]);
+    // The running stage has not reported yet; the finished one never did.
+    expect(rows().map((row) => row[6])).toEqual([
+      "Not reported",
+      "Not reported yet",
+      "Not started",
+    ]);
+    unmount();
+
+    const { unmount: unmountError } = renderTable([], { isUnavailable: true });
+    expect(rows()[0][6]).toBe("Unavailable");
+    unmountError();
+
+    renderTable([], { isLoading: true });
+    expect(screen.getAllByText("Loading context usage")).toHaveLength(2);
+  });
+
+  it("leaves Context out without agent runs, as on the Migration tab", () => {
+    render(
+      <MemoryRouter>
+        <StageRunsTable
+          runId="1"
+          linkTo={(pathname) => pathname}
+          stageRuns={stageRuns}
+        />
+      </MemoryRouter>
+    );
+    expect(headers()).not.toContain("Context");
   });
 });
 

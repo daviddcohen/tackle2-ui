@@ -718,6 +718,26 @@ const findRecord = (runId: EntityId) => {
 export const getPlanRun = (runId: EntityId): PlanRun =>
   presentRun(findRecord(runId));
 
+/**
+ * When the given stage became the run's live stage (ms since the epoch),
+ * the clock its progress messages are revealed by. Undefined unless the
+ * stage is Running and live. For mocks that grow content over time the same
+ * way (`observability.ts`). It writes no state of its own; like every read,
+ * `records()` advances the runs first.
+ */
+export const getStageLiveSince = (
+  runId: EntityId,
+  stageId: EntityId
+): number | undefined => {
+  const record = records().find((candidate) => candidate.run.id === runId);
+  const live = record?.live;
+  if (record == null || live == null) return undefined;
+  const stage = record.run.stageRuns[live.index];
+  return stage?.stageId === stageId && stage.status === "Running"
+    ? live.since
+    : undefined;
+};
+
 export const runsUsingPlan = (planId: EntityId) =>
   records().filter((record) => record.run.planId === planId);
 

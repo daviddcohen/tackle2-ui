@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import {
   AGENTIC_STATUS,
   expect,
@@ -5,6 +7,7 @@ import {
   main,
   protoUrl,
   stageLinks,
+  stagesTable,
   test,
 } from "../support";
 
@@ -179,5 +182,89 @@ test.describe("Status consistency across surfaces", () => {
     await expect(
       page.getByRole("link", { name: "Claims Processing" })
     ).toBeVisible();
+  });
+});
+
+test.describe("Plan run stages: context and failed stage logs", () => {
+  /** The Context cell of a stage in the Stages table, by stage name. */
+  const contextCell = (page: Page, stage: string) =>
+    stagesTable(page)
+      .getByRole("row")
+      .filter({ has: page.getByRole("link", { name: stage, exact: true }) })
+      .locator('td[data-label="Context"]');
+
+  test("the Stages table has a Context column: a value per started stage, Not started for pending", async ({
+    page,
+  }) => {
+    // Run 1 failed in Migrate: Prepare proposal and Migrate ran, Validate did not.
+    await page.goto(protoUrl("/plan-runs/1", { scenario: "failed", stage: 2 }));
+    await expect(
+      stagesTable(page).getByRole("columnheader", { name: /^Context/ })
+    ).toBeVisible();
+    await expect(
+      stagesTable(page).getByRole("button", {
+        name: "More information about context",
+      })
+    ).toBeVisible();
+    for (const stage of ["Prepare proposal", "Migrate"]) {
+      const bar = contextCell(page, stage).getByRole("progressbar", {
+        name: `Context window of ${stage}`,
+      });
+      await expect(bar).toBeVisible();
+      await expect(contextCell(page, stage)).toContainText(/^\d+%$/);
+      // The tokens are in the accessible value.
+      await expect(bar).toHaveAttribute(
+        "aria-valuetext",
+        /[\d.]+K of [\d.]+K tokens/
+      );
+    }
+    await expect(contextCell(page, "Validate")).toHaveText("Not started");
+  });
+
+  test("a run whose model does not meter context says Not reported for that stage", async ({
+    page,
+  }) => {
+    // Run 6, Upgrade runtime uses the self-hosted model (no context reported).
+    await page.goto(protoUrl("/plan-runs/6", { scenario: "configured" }));
+    await expect(contextCell(page, "Upgrade runtime")).toHaveText(
+      "Not reported"
+    );
+    await expect(
+      contextCell(page, "Configure deployment").getByRole("progressbar")
+    ).toBeVisible();
+  });
+
+  test("Review stage for a failed stage opens that stage's logs", async ({
+    page,
+  }) => {
+    await page.goto(protoUrl("/plan-runs/1", { scenario: "failed", stage: 2 }));
+    const review = main(page).getByRole("link", { name: "Review stage" });
+    await expect(review).toHaveAttribute(
+      "href",
+      /\/plan-runs\/1\/stages\/2\?(.*&)?tab=logs\b/
+    );
+    await review.click();
+    await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/2\?/);
+    await expect(page).toHaveURL(/[?&]tab=logs\b/);
+    await expect(
+      page.getByRole("tab", { name: "Logs", exact: true })
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      main(page).getByRole("region", { name: / log$/ })
+    ).toBeVisible();
+  });
+
+  test("Review stage for a stage awaiting approval opens its Details", async ({
+    page,
+  }) => {
+    await page.goto(
+      protoUrl("/plan-runs/1", { scenario: "actionRequired", stage: 1 })
+    );
+    const review = main(page).getByRole("link", { name: "Review stage" });
+    await expect(review).not.toHaveAttribute("href", /tab=logs/);
+    await review.click();
+    await expect(
+      page.getByRole("tab", { name: "Details", exact: true })
+    ).toHaveAttribute("aria-selected", "true");
   });
 });

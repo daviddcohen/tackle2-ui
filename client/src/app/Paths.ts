@@ -5,6 +5,8 @@ export const DevPaths = {
   applicationsAnalysisDetails:
     "/applications/:applicationId/analysis-details/:taskId",
   applicationsTaskDetails: "/applications/:applicationId/tasks/:taskId",
+  applicationsTaskDetailsAttachment:
+    "/applications/:applicationId/tasks/:taskId/attachments/:attachmentId",
   applicationsAnalysisDetailsAttachment:
     "/applications/:applicationId/analysis-details/:taskId/attachments/:attachmentId",
   applicationsAnalysisTab: "/applications/analysis-tab",
