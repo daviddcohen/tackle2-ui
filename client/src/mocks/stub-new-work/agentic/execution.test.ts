@@ -1,4 +1,9 @@
-import { assignPlanToTargetProfile, createPlan, updatePlan } from "./catalog";
+import {
+  assignPlanToTargetProfile,
+  createPlan,
+  getPlan,
+  updatePlan,
+} from "./catalog";
 import {
   applicationSkills,
   collectionSkillsForAgents,
@@ -14,6 +19,7 @@ import {
   getApplicationMigrations,
   getPlanRun,
   listPlanRuns,
+  portfolioApplications,
   resetExecutionWorld,
   runPhases,
   startApplicationMigrations,
@@ -214,6 +220,31 @@ describe("Plan resolution", () => {
         stages: [{ name: "Only", agent: { id: db.agents[0].id } }],
       })
     ).toThrow(/already the default Plan/);
+  });
+
+  it("lists each plan's applications: the ones it counts, in name order", () => {
+    for (const scenario of ["configured", "running", "actionRequired"]) {
+      setScenario(scenario);
+      resetExecutionWorld();
+      const views = getApplicationMigrations(
+        portfolioApplications().map((application) => application.id)
+      );
+      for (const stored of db.plans) {
+        const { applicationImpact } = getPlan(stored.id);
+        const expected = portfolioApplications()
+          .filter(
+            (application) => views[application.id]?.plan?.id === stored.id
+          )
+          .map((application) => application.name)
+          .sort((a, b) => a.localeCompare(b));
+        expect(
+          applicationImpact?.applications?.map(
+            (application) => application.name
+          )
+        ).toEqual(expected);
+        expect(applicationImpact?.matching).toBe(expected.length);
+      }
+    }
   });
 
   it("rejects a Plan without stages", () => {

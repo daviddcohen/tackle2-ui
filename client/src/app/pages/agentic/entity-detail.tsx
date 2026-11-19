@@ -175,6 +175,8 @@ export interface EntityDetailAction {
   key: string;
   label: string;
   onClick: () => void;
+  /** When set, the entry stays visible but is aria-disabled with this tooltip. */
+  disabledReason?: string;
 }
 
 export interface EntityDetailActionsProps {
@@ -222,6 +224,9 @@ export const EntityDetailActions: React.FC<EntityDetailActionsProps> = ({
       isOpen={isOpen}
       onOpenChange={setIsOpen}
       onSelect={() => setIsOpen(false)}
+      // Aligned to the toggle's right edge: the toggle sits at the right of
+      // the header, and a left-aligned menu spills past the content card.
+      popperProps={{ position: "end" }}
       toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
         <MenuToggle
           ref={toggleRef}
@@ -244,7 +249,11 @@ export const EntityDetailActions: React.FC<EntityDetailActionsProps> = ({
           </DropdownItem>
         )}
         {items.map((item) => (
-          <DropdownItem key={item.key} onClick={item.onClick}>
+          <DropdownItem
+            key={item.key}
+            onClick={item.onClick}
+            {...disabledActionProps(item.disabledReason)}
+          >
             {item.label}
           </DropdownItem>
         ))}

@@ -401,6 +401,11 @@ export interface SkillPlansResponse {
 
 export interface PlanApplicationImpact {
   matching: number;
+  /**
+   * Server-derived: the applications counted in `matching`, in name order.
+   * Absent on a server that only counts them.
+   */
+  applications?: HubRef[];
 }
 
 export interface MigrationPlan {

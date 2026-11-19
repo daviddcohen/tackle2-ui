@@ -49,20 +49,37 @@ for (const { persona, canEditPlans } of personas) {
         protoUrl("/migration-plans", { scenario: "configured", persona })
       );
       await expect(
-        page.getByRole("link", { name: "Java EE to Quarkus" })
+        page.getByRole("link", { name: "Java EE to Quarkus", exact: true })
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Create migration plan" })
       ).toHaveCount(canEditPlans ? 1 : 0);
+      // Every persona can run plans, so each row has a menu; without the
+      // plan write scope it holds only Run migration plan.
       await expect(
         page.getByRole("button", { name: /Kebab toggle/ })
-      ).toHaveCount(canEditPlans ? 8 : 0);
-      await page.getByRole("link", { name: "Java EE to Quarkus" }).click();
+      ).toHaveCount(8);
+      await page
+        .getByRole("button", { name: /Kebab toggle/ })
+        .first()
+        .click();
+      await expect(page.getByRole("menuitem")).toHaveText(
+        canEditPlans
+          ? ["Edit", "Run migration plan", "Delete"]
+          : ["Run migration plan"]
+      );
+      await page.keyboard.press("Escape");
+      await page
+        .getByRole("link", { name: "Java EE to Quarkus", exact: true })
+        .click();
       await expect(
         page.getByRole("heading", { level: 1, name: "Java EE to Quarkus" })
       ).toBeVisible();
-      await expect(page.getByRole("button", { name: "Actions" })).toHaveCount(
-        canEditPlans ? 1 : 0
+      await page.getByRole("button", { name: "Actions" }).click();
+      await expect(page.getByRole("menuitem")).toHaveText(
+        canEditPlans
+          ? ["Edit", "Run migration plan", "Delete"]
+          : ["Run migration plan"]
       );
     });
 

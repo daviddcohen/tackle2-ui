@@ -188,6 +188,12 @@ export interface AgenticStatusProps {
    * status label: a check name is its own cell, never the status text.
    */
   to?: LocationDescriptor;
+  /**
+   * Accessible name of the `to` link when the status text alone is not
+   * enough, for example "Failed, Run #3". Start it with the visible status
+   * text (WCAG 2.5.3).
+   */
+  linkAriaLabel?: string;
   /** Subtle small second line under the status, for example a reason. No separators. */
   supportingText?: React.ReactNode;
 }
@@ -199,14 +205,21 @@ const PresentedStatus: React.FC<
     value: string;
     count?: number;
   }
-> = ({ presentation, value, count, to, supportingText }) => {
+> = ({ presentation, value, count, to, linkAriaLabel, supportingText }) => {
   const { t } = useTranslation();
   // An unknown value reads as itself with IconedStatus's unknown icon.
   const text =
     presentation == null
       ? value
       : t(presentation.labelKey, count != null ? { count } : undefined);
-  const label = to != null ? <Link to={to}>{text}</Link> : text;
+  const label =
+    to != null ? (
+      <Link to={to} aria-label={linkAriaLabel}>
+        {text}
+      </Link>
+    ) : (
+      text
+    );
   const iconed =
     presentation == null ? (
       <IconedStatus label={label} />

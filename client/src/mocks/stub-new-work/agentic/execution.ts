@@ -28,6 +28,7 @@ import {
   ControllerRunPhase,
   EntityId,
   EntityRef,
+  HubRef,
   PlanRun,
   PlanStage,
   StageMessage,
@@ -845,6 +846,18 @@ export const planImpact = (planId: EntityId) =>
   portfolioApplications().filter(
     (application) => getApplicationMigration(application).plan?.id === planId
   ).length;
+
+/**
+ * The applications counted by `planImpact`, as refs in name order: what the
+ * plans list shows and what "Run migration plan" on a plan runs.
+ */
+export const planApplications = (planId: EntityId): HubRef[] =>
+  portfolioApplications()
+    .filter(
+      (application) => getApplicationMigration(application).plan?.id === planId
+    )
+    .map(({ id, name }) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
 // ---------------------------------------------------------------------------
 // Application migration view

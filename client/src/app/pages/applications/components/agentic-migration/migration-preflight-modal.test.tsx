@@ -12,7 +12,7 @@ import {
   MigrationPlan,
 } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
-import { render, screen, waitFor } from "@app/test-config/test-utils";
+import { render, screen, waitFor, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import {
@@ -319,5 +319,199 @@ describe("MigrationPreflightModal", () => {
     expect(screen.getByRole("button", { name: "actions.close" })).toHaveClass(
       "pf-m-secondary"
     );
+  });
+});
+
+describe("MigrationPreflightModal opened from a plan", () => {
+  const plan = {
+    id: "1",
+    name: "Java EE to Quarkus",
+    targetProfile: "Quarkus",
+  };
+  // Two ready rows (Account Ledger, Customer Management) and two that are not.
+  const planApplications = [...applications, { id: 4, name: "Account Ledger" }];
+  const planMigrations = { ...migrations, 4: view({}) };
+  const renderFromPlan = (
+    props: Partial<ComponentProps<typeof MigrationPreflightModal>> = {}
+  ) =>
+    renderModal({
+      applications: planApplications,
+      migrations: planMigrations,
+      plan,
+      ...props,
+    });
+  const rowOf = (name: string) =>
+    screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+  const checkboxOf = (name: string) =>
+    within(rowOf(name)).getByRole("checkbox");
+  // PF names the header checkbox itself; it cannot be renamed.
+  const selectAll = () =>
+    within(screen.getAllByRole("row")[0]).getByRole("checkbox");
+
+  beforeEach(() => {
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
+        res(ctx.json(plans))
+      )
+    );
+  });
+
+  it("names the plan and hides the plan choice and constant columns", () => {
+    renderFromPlan();
+    expect(
+      screen.getByRole("grid", { name: "agentic.plan.applicationsOfPlan" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("agentic.execution.preflightDescriptionPlanProfile")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("agentic.execution.preflightDescription")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "agentic.execution.planOverride" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent)
+    ).toEqual(["", "terms.application", "agentic.execution.readiness"]);
+    // The plan is not repeated on every row.
+    expect(screen.queryByText("Java EE to Quarkus")).not.toBeInTheDocument();
+  });
+
+  it("describes a plan without a target profile by its name only", () => {
+    renderFromPlan({ plan: { id: "1", name: "Java EE to Quarkus" } });
+    expect(
+      screen.getByText("agentic.execution.preflightDescriptionPlan")
+    ).toBeInTheDocument();
+  });
+
+  it("starts with every ready application selected and the others disabled", async () => {
+    const user = userEvent.setup();
+    const { onStartReady } = renderFromPlan();
+    expect(checkboxOf("Account Ledger")).toBeChecked();
+    expect(checkboxOf("Customer Management")).toBeChecked();
+    for (const name of ["Branch Operations", "Inventory Service"]) {
+      expect(checkboxOf(name)).not.toBeChecked();
+      expect(checkboxOf(name)).toBeDisabled();
+    }
+    // A blocked row keeps its reason.
+    expect(
+      screen.getByText("A source control credential reference is missing.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("agentic.execution.selectedCaption")
+    ).toBeInTheDocument();
+    expect(selectAll()).toBeChecked();
+    // The application names its row, and so its checkbox.
+    expect(
+      screen.getByRole("rowheader", { name: "Account Ledger" })
+    ).toBeInTheDocument();
+
+    await waitFor(() => expect(startButton()).toBeEnabled());
+    await user.click(startButton());
+    await waitFor(() =>
+      expect(onStartReady).toHaveBeenCalledWith({
+        applicationIds: [4, 1],
+        planSelection: "single",
+        planId: "1",
+        targetBranch: DEFAULT_TARGET_BRANCH,
+      })
+    );
+  });
+
+  it("runs only the selected applications and none at zero", async () => {
+    const user = userEvent.setup();
+    const { onStartReady } = renderFromPlan();
+    await waitFor(() => expect(startButton()).toBeEnabled());
+
+    await user.click(checkboxOf("Customer Management"));
+    expect(checkboxOf("Customer Management")).not.toBeChecked();
+    expect(selectAll()).not.toBeChecked();
+    expect(selectAll()).toHaveProperty("indeterminate", true);
+    await user.click(startButton());
+    await waitFor(() =>
+      expect(onStartReady).toHaveBeenCalledWith(
+        expect.objectContaining({ applicationIds: [4], planId: "1" })
+      )
+    );
+
+    await user.click(checkboxOf("Account Ledger"));
+    expect(startButton()).toBeDisabled();
+
+    // Select all picks the ready rows only.
+    await user.click(selectAll());
+    expect(checkboxOf("Account Ledger")).toBeChecked();
+    expect(checkboxOf("Customer Management")).toBeChecked();
+    expect(checkboxOf("Inventory Service")).not.toBeChecked();
+    await waitFor(() => expect(startButton()).toBeEnabled());
+
+    await user.click(selectAll());
+    expect(checkboxOf("Account Ledger")).not.toBeChecked();
+    expect(startButton()).toBeDisabled();
+  });
+
+  it("selects every ready row from the partial state", async () => {
+    const user = userEvent.setup();
+    renderFromPlan();
+    await user.click(checkboxOf("Customer Management"));
+    expect(selectAll()).toHaveProperty("indeterminate", true);
+    await user.click(selectAll());
+    expect(checkboxOf("Account Ledger")).toBeChecked();
+    expect(checkboxOf("Customer Management")).toBeChecked();
+    expect(selectAll()).toBeChecked();
+  });
+
+  it("selects the ready rows when readiness arrives after the dialog opens", async () => {
+    const user = userEvent.setup();
+    let releaseViews = () => {};
+    const viewsReleased = new Promise<void>((resolve) => {
+      releaseViews = resolve;
+    });
+    server.use(
+      rest.get(
+        AGENTIC_ENDPOINTS.applicationMigrations,
+        async (_req, res, ctx) => {
+          await viewsReleased;
+          return res(ctx.json(planMigrations));
+        }
+      )
+    );
+    const { onStartReady } = renderFromPlan({ migrations: undefined });
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    releaseViews();
+    await waitFor(() => expect(selectAll()).toBeChecked());
+    expect(checkboxOf("Account Ledger")).toBeChecked();
+    expect(checkboxOf("Customer Management")).toBeChecked();
+    expect(checkboxOf("Inventory Service")).not.toBeChecked();
+    expect(
+      screen.getByText("agentic.execution.selectedCaption")
+    ).toBeInTheDocument();
+    await waitFor(() => expect(startButton()).toBeEnabled());
+    await user.click(startButton());
+    await waitFor(() =>
+      expect(onStartReady).toHaveBeenCalledWith(
+        expect.objectContaining({ applicationIds: [4, 1], planId: "1" })
+      )
+    );
+  });
+
+  it("offers only Close when none of the plan's applications is ready", () => {
+    renderFromPlan({ applications: applications.slice(1) });
+    expect(
+      screen.getByText("agentic.execution.noneReadyPlanTitle")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("agentic.execution.noneReadyPlanDescription")
+    ).toBeInTheDocument();
+    // Nothing to pick and nothing to count: no selection, no caption.
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("grid").querySelector("caption")).toBeNull();
+    // Each row still says why.
+    expect(
+      screen.getByText("A source control credential reference is missing.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "agentic.execution.startReady" })
+    ).not.toBeInTheDocument();
   });
 });

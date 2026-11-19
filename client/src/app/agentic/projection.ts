@@ -4,6 +4,7 @@ import {
   ApplicationMigrationView,
   ConfigurationCheck,
   ControllerRunPhase,
+  EntityId,
   MigrationPlan,
   ModelProjection,
   PlanRun,
@@ -168,4 +169,30 @@ export const getPlanConfigurationChecks = (
         : undefined,
     },
   ];
+};
+
+/**
+ * The run of a plan that the plans list shows: the newest run that needs
+ * action (awaiting approval) if there is one, otherwise the newest run by
+ * start, whatever its phase; a Pending run has not started and counts as the
+ * newest. A failure is never hidden behind an older run that needs nobody.
+ * Undefined when the plan has no runs.
+ */
+export const getShownPlanRun = (
+  runs: PlanRun[],
+  planId: EntityId
+): PlanRun | undefined => {
+  // A run without a readable start sorts last, so the order is total.
+  const startOf = (run: PlanRun) => {
+    if (run.status === "Pending") return Infinity;
+    const start = Date.parse(run.startedAt);
+    return Number.isNaN(start) ? -Infinity : start;
+  };
+  const newestFirst = runs
+    .filter((run) => run.planId === planId)
+    .sort((a, b) => startOf(b) - startOf(a) || 0);
+  return (
+    newestFirst.find((run) => run.status === "AwaitingApproval") ??
+    newestFirst[0]
+  );
 };

@@ -1436,8 +1436,6 @@
       "stageExpansion": "Row expansion",
       "modelNotVerified": "{{model}} is not verified. Agents can use a model only after it is verified.",
       "emptyDescriptionReadOnly": "Migration plans appear here once they are created.",
-      "targetProfileCount_one": "{{count}} target profile",
-      "targetProfileCount_other": "{{count}} target profiles",
       "stageTitle": "Stage {{number}}: {{stage}}",
       "stageDetails": "Details of {{stage}}",
       "runBy": "Run by {{agent}}",
@@ -1490,7 +1488,22 @@
       "skillsExcludedList": "Excluded: {{names}}",
       "skillsNewlyExcluded": "Newly excluded: {{names}}",
       "skillsNoLongerExcluded": "No longer excluded: {{names}}",
-      "skillsStillExcluded": "Still excluded: {{names}}"
+      "skillsStillExcluded": "Still excluded: {{names}}",
+      "filterByArchetype": "Filter by archetype",
+      "notRun": "Not run",
+      "applicationsOfPlan": "Applications of {{plan}}",
+      "applicationsHelp": "Applications whose archetype and target profile use this migration plan. A run can also include applications selected in the application inventory.",
+      "applicationsHelpLabel": "More information about applications",
+      "runStatusLabel": "{{status}}, {{run}}",
+      "runBlocked": {
+        "notAssigned": "This migration plan is not assigned to an archetype, so it has no applications. To run it, select applications in the application inventory.",
+        "noStagesEdit": "This migration plan has no stages. Edit it to add one.",
+        "noStages": "This migration plan has no stages yet.",
+        "noApplications": "No applications in {{archetype}} use this migration plan yet.",
+        "unavailable": "The applications of this migration plan could not be loaded. Reload the page to try again."
+      },
+      "moreApplications_one": "{{count}} more",
+      "moreApplications_other": "{{count}} more"
     },
     "skill": {
       "branch": "Branch",
@@ -1737,7 +1750,13 @@
       "commitsEmpty": "The agents made no commits to the target branch for this application.",
       "commitColumn": "Commit",
       "messageColumn": "Message",
-      "runRejected": "{{run}} rejected"
+      "runRejected": "{{run}} rejected",
+      "preflightDescriptionPlan": "Runs {{plan}} on the applications you select. Each application is checked before it starts.",
+      "preflightDescriptionPlanProfile": "Runs {{plan}} on the applications you select. Target profile: {{profile}}. Each application is checked before it starts.",
+      "selectedCaption_one": "{{selected}} of {{count}} ready application selected.",
+      "selectedCaption_other": "{{selected}} of {{count}} ready applications selected.",
+      "noneReadyPlanTitle": "None of the applications of this migration plan can start",
+      "noneReadyPlanDescription": "Each application below says why. Resolve the reasons and try again."
     },
     "skillCollection": {
       "create": "Create skill collection",
@@ -2097,9 +2116,7 @@
       "skillsNotAvailable": "This server cannot list the skills of a migration plan.",
       "runsTitle": "Runs ({{count}})",
       "runsTitleEmpty": "Runs",
-      "goToInventory": "Go to application inventory",
-      "runsDescription": "Each run applies this plan to one or more applications.",
-      "runsDescriptionWithStart": "Each run applies this plan to one or more applications. To start a run, select applications in the <inventoryLink>application inventory</inventoryLink> and choose Run migration plan."
+      "runsDescription": "Each run applies this plan to one or more applications."
     },
     "applicationDetail": {
       "tabDetails": "Details",

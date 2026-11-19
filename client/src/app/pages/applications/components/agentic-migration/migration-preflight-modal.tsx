@@ -79,6 +79,14 @@ export interface MigrationPreflightValues {
   targetBranch: string;
 }
 
+/** The migration plan a dialog opened from that plan runs. */
+export interface PreflightFixedPlan {
+  id: EntityId;
+  name: string;
+  /** Shown in the description when the plan has one. */
+  targetProfile?: string;
+}
+
 interface MigrationPreflightModalProps {
   applications: Ref[];
   /**
@@ -94,6 +102,12 @@ interface MigrationPreflightModalProps {
    * other plan still shows it.
    */
   rerunPlanId?: EntityId;
+  /**
+   * Opened from a migration plan: every application runs this plan. The plan
+   * choice and the per-row target profile and plan columns are hidden, and
+   * the user picks which ready applications run (they start selected).
+   */
+  plan?: PreflightFixedPlan;
   isStarting?: boolean;
   /** Builds a link that carries the caller's breadcrumb trail. */
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
@@ -220,6 +234,7 @@ export const MigrationPreflightModal: React.FC<
   migrations: providedMigrations,
   initialValues,
   rerunPlanId,
+  plan: fixedPlan,
   isStarting = false,
   linkTo: to,
   onClose,
@@ -260,6 +275,9 @@ export const MigrationPreflightModal: React.FC<
       planId: "",
       targetBranch: DEFAULT_TARGET_BRANCH,
       ...initialValues,
+      ...(fixedPlan != null
+        ? { planSelection: "single" as const, planId: fixedPlan.id }
+        : {}),
     },
     mode: "onChange",
     resolver: yupResolver(schema),
@@ -280,6 +298,24 @@ export const MigrationPreflightModal: React.FC<
   const total = applications.length;
   const isLoaded = !isLoadingMigrations && migrationsFetchError == null;
   const isNoneReady = isLoaded && readyCount === 0;
+  // Fixed plan only: the ready applications the user picked, all of them
+  // until the first change (readiness can arrive after the dialog opens).
+  const isFixedPlan = fixedPlan != null;
+  // Nothing to pick when no row is ready: the alert and the reasons say why.
+  const isSelectable = isFixedPlan && readyCount > 0;
+  const [pickedIds, setPickedIds] = React.useState<Set<number>>();
+  const runApplications =
+    isFixedPlan && pickedIds != null
+      ? readyApplications.filter((application) => pickedIds.has(application.id))
+      : readyApplications;
+  const runIds = new Set(runApplications.map((application) => application.id));
+  const runCount = runApplications.length;
+  const setPicked = (id: number, isSelecting: boolean) => {
+    const next = new Set(runIds);
+    if (isSelecting) next.add(id);
+    else next.delete(id);
+    setPickedIds(next);
+  };
   const planSelection = useWatch({ control, name: "planSelection" });
   const planId = useWatch({ control, name: "planId" });
   const selectedPlan = plans.find((plan) => plan.id === planId);
@@ -297,7 +333,7 @@ export const MigrationPreflightModal: React.FC<
 
   const submit = (values: MigrationPreflightValues) => {
     onStartReady({
-      applicationIds: readyApplications.map((application) => application.id),
+      applicationIds: runApplications.map((application) => application.id),
       planSelection: values.planSelection,
       planId: values.planSelection === "single" ? values.planId : undefined,
       targetBranch: values.targetBranch.trim(),
@@ -323,28 +359,82 @@ export const MigrationPreflightModal: React.FC<
     );
 
   const readinessTable = (
-    <Table aria-label={t("agentic.execution.preflightTable")} variant="compact">
-      <Caption>
-        {t("agentic.execution.readyCaption", {
-          ready: readyCount,
-          count: total,
-        })}
-        {readyCount > 0 && readyCount < total
-          ? ` ${t("agentic.execution.readyOnly")}`
-          : null}
-      </Caption>
+    <Table
+      aria-label={
+        fixedPlan != null
+          ? t("agentic.plan.applicationsOfPlan", { plan: fixedPlan.name })
+          : t("agentic.execution.preflightTable")
+      }
+      variant="compact"
+    >
+      {!(isFixedPlan && readyCount === 0) && (
+        <Caption>
+          {isSelectable ? (
+            t("agentic.execution.selectedCaption", {
+              selected: runCount,
+              count: readyCount,
+            })
+          ) : (
+            <>
+              {t("agentic.execution.readyCaption", {
+                ready: readyCount,
+                count: total,
+              })}
+              {readyCount > 0 && readyCount < total
+                ? ` ${t("agentic.execution.readyOnly")}`
+                : null}
+            </>
+          )}
+        </Caption>
+      )}
       <Thead>
         <Tr>
+          {isSelectable && (
+            <Th
+              select={{
+                // From the partial state a click selects every ready row,
+                // like the inventory's bulk selector.
+                onSelect: (_event, isSelecting) =>
+                  setPickedIds(
+                    new Set(
+                      isSelecting || runCount < readyCount
+                        ? readyApplications.map((application) => application.id)
+                        : []
+                    )
+                  ),
+                isSelected: runCount === readyCount,
+                isIndeterminate: runCount > 0 && runCount < readyCount,
+              }}
+            />
+          )}
           <Th>{t("terms.application")}</Th>
-          <Th>{t("agentic.execution.targetProfile")}</Th>
-          <Th modifier="wrap">{t("agentic.execution.planColumn")}</Th>
+          {!isFixedPlan && <Th>{t("agentic.execution.targetProfile")}</Th>}
+          {!isFixedPlan && (
+            <Th modifier="wrap">{t("agentic.execution.planColumn")}</Th>
+          )}
           <Th>{t("agentic.execution.readiness")}</Th>
         </Tr>
       </Thead>
       <Tbody>
-        {rows.map(({ application, migration }) => (
+        {rows.map(({ application, migration }, rowIndex) => (
           <Tr key={application.id}>
-            <Td dataLabel={t("terms.application")} modifier="nowrap">
+            {isSelectable && (
+              <Td
+                select={{
+                  rowIndex,
+                  onSelect: (_event, isSelecting) =>
+                    setPicked(application.id, isSelecting),
+                  isSelected: runIds.has(application.id),
+                  isDisabled: migration.preflight !== "ready",
+                }}
+              />
+            )}
+            <Td
+              dataLabel={t("terms.application")}
+              modifier="nowrap"
+              // A row header names the row's checkbox for table navigation.
+              {...(isFixedPlan && { component: "th", scope: "row" })}
+            >
               {applicationDetailsPath(application.id) === pathname ? (
                 // Opened from this application's page: a link would change
                 // nothing and leave the dialog open.
@@ -355,29 +445,33 @@ export const MigrationPreflightModal: React.FC<
                 </Link>
               )}
             </Td>
-            <Td dataLabel={t("agentic.execution.targetProfile")}>
-              {migration.targetProfile?.name ?? (
-                <EmptyTextMessage message={t("agentic.execution.none")} />
-              )}
-            </Td>
-            <Td dataLabel={t("agentic.execution.planColumn")}>
-              {planSelection === "single" ? (
-                selectedPlan ? (
-                  planLink(selectedPlan)
+            {!isFixedPlan && (
+              <Td dataLabel={t("agentic.execution.targetProfile")}>
+                {migration.targetProfile?.name ?? (
+                  <EmptyTextMessage message={t("agentic.execution.none")} />
+                )}
+              </Td>
+            )}
+            {!isFixedPlan && (
+              <Td dataLabel={t("agentic.execution.planColumn")}>
+                {planSelection === "single" ? (
+                  selectedPlan ? (
+                    planLink(selectedPlan)
+                  ) : (
+                    // An override without a pick is not the recommended plan.
+                    <EmptyTextMessage
+                      message={t("agentic.execution.notSelected")}
+                    />
+                  )
+                ) : migration.plan ? (
+                  planLink(migration.plan)
                 ) : (
-                  // An override without a pick is not the recommended plan.
                   <EmptyTextMessage
-                    message={t("agentic.execution.notSelected")}
+                    message={t("agentic.execution.notAssigned")}
                   />
-                )
-              ) : migration.plan ? (
-                planLink(migration.plan)
-              ) : (
-                <EmptyTextMessage
-                  message={t("agentic.execution.notAssigned")}
-                />
-              )}
-            </Td>
+                )}
+              </Td>
+            )}
             <Td dataLabel={t("agentic.execution.readiness")}>
               <div>
                 <MigrationStatus
@@ -396,34 +490,36 @@ export const MigrationPreflightModal: React.FC<
 
   const runOptions = (
     <Form id="migration-preflight-form" onSubmit={handleSubmit(submit)}>
-      <FormGroup
-        role="radiogroup"
-        isStack
-        fieldId="plan-selection"
-        label={t("agentic.execution.planSelection")}
-      >
-        <Radio
-          id="plan-selection-recommended"
-          name="plan-selection"
-          label={t("agentic.execution.recommendedPlan")}
-          description={t("agentic.execution.recommendedPlanDescription")}
-          isChecked={planSelection === "recommended"}
-          onChange={() =>
-            setValue("planSelection", "recommended", { shouldValidate: true })
-          }
-        />
-        <Radio
-          id="plan-selection-single"
-          name="plan-selection"
-          label={t("agentic.execution.singlePlan")}
-          description={t("agentic.execution.singlePlanDescription")}
-          isChecked={planSelection === "single"}
-          onChange={() =>
-            setValue("planSelection", "single", { shouldValidate: true })
-          }
-        />
-      </FormGroup>
-      {planSelection === "single" && (
+      {!isFixedPlan && (
+        <FormGroup
+          role="radiogroup"
+          isStack
+          fieldId="plan-selection"
+          label={t("agentic.execution.planSelection")}
+        >
+          <Radio
+            id="plan-selection-recommended"
+            name="plan-selection"
+            label={t("agentic.execution.recommendedPlan")}
+            description={t("agentic.execution.recommendedPlanDescription")}
+            isChecked={planSelection === "recommended"}
+            onChange={() =>
+              setValue("planSelection", "recommended", { shouldValidate: true })
+            }
+          />
+          <Radio
+            id="plan-selection-single"
+            name="plan-selection"
+            label={t("agentic.execution.singlePlan")}
+            description={t("agentic.execution.singlePlanDescription")}
+            isChecked={planSelection === "single"}
+            onChange={() =>
+              setValue("planSelection", "single", { shouldValidate: true })
+            }
+          />
+        </FormGroup>
+      )}
+      {!isFixedPlan && planSelection === "single" && (
         <HookFormPFGroupController
           control={control}
           name="planId"
@@ -439,6 +535,7 @@ export const MigrationPreflightModal: React.FC<
                 toggleId="plan-override-select"
                 toggleAriaLabel={t("agentic.execution.planOverride")}
                 ariaLabel={name}
+                inputAriaLabel={t("agentic.execution.planOverride")}
                 value={value}
                 options={planOptions}
                 onSelect={(selection) => onChange(selection ?? "")}
@@ -481,7 +578,18 @@ export const MigrationPreflightModal: React.FC<
       <ModalHeader
         labelId="run-migration-plan-title"
         title={t("agentic.execution.startMigration")}
-        description={t("agentic.execution.preflightDescription")}
+        description={
+          fixedPlan == null
+            ? t("agentic.execution.preflightDescription")
+            : fixedPlan.targetProfile != null
+              ? t("agentic.execution.preflightDescriptionPlanProfile", {
+                  plan: fixedPlan.name,
+                  profile: fixedPlan.targetProfile,
+                })
+              : t("agentic.execution.preflightDescriptionPlan", {
+                  plan: fixedPlan.name,
+                })
+        }
       />
       <ModalBody>
         {migrationsFetchError != null ? (
@@ -501,9 +609,15 @@ export const MigrationPreflightModal: React.FC<
                 <Alert
                   isInline
                   variant="danger"
-                  title={t("agentic.execution.noneReadyTitle")}
+                  title={
+                    isFixedPlan
+                      ? t("agentic.execution.noneReadyPlanTitle")
+                      : t("agentic.execution.noneReadyTitle")
+                  }
                 >
-                  {t("agentic.execution.noneReadyDescription")}
+                  {isFixedPlan
+                    ? t("agentic.execution.noneReadyPlanDescription")
+                    : t("agentic.execution.noneReadyDescription")}
                 </Alert>
               </StackItem>
             )}
@@ -523,10 +637,10 @@ export const MigrationPreflightModal: React.FC<
               type="submit"
               form="migration-preflight-form"
               variant="primary"
-              isDisabled={!isValid || isStarting}
+              isDisabled={!isValid || isStarting || runCount === 0}
               isLoading={isStarting}
             >
-              {t("agentic.execution.startReady", { count: readyCount })}
+              {t("agentic.execution.startReady", { count: runCount })}
             </Button>
             <Button variant="link" onClick={onClose}>
               {t("actions.cancel")}
