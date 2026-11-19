@@ -5,6 +5,7 @@
 import type { Page } from "@playwright/test";
 
 import {
+  agenticGet,
   dataRows,
   dialog,
   expect,
@@ -397,6 +398,42 @@ test.describe("Skill detail", () => {
     await expect(
       page.getByRole("menuitem", { name: "Delete" })
     ).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
+test.describe("Skill content headings", () => {
+  test("keep their levels under the Content section but are no larger than it", async ({
+    page,
+  }) => {
+    await gotoProto(page, "/skills", { persona: ARCHITECT });
+    const skills = await agenticGet<
+      { id: string; name: string; content?: string }[]
+    >(page, "/skills");
+    const withHeading = skills.find((skill) =>
+      /^# /m.test(skill.content ?? "")
+    );
+    expect(
+      withHeading,
+      "a seeded skill whose content has a # heading"
+    ).toBeDefined();
+    await gotoProto(page, `/skills/${withHeading!.id}`, { persona: ARCHITECT });
+    await expect(
+      main(page).getByRole("heading", { level: 2, name: "Content" })
+    ).toBeVisible();
+    // The Markdown's "#" is an h3 below the h2 section heading.
+    const headings = main(page).getByRole("heading", { level: 3 });
+    await expect(headings.first()).toBeVisible();
+    const sizes = await main(page)
+      .locator("h3, h4, h5, h6")
+      .evaluateAll((elements) =>
+        elements.map((element) =>
+          ["pf-m-2xl", "pf-m-xl", "pf-m-3xl", "pf-m-4xl"].some((size) =>
+            element.classList.contains(size)
+          )
+        )
+      );
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(sizes.every((isLarger) => !isLarger)).toBe(true);
   });
 });
 

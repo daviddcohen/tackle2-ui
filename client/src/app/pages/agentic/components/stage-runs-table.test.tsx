@@ -186,22 +186,36 @@ describe("StageRunsTable Context column", () => {
 });
 
 describe("StageRunsTable, values that cannot be derived", () => {
-  it("reads Unavailable, never Not available", () => {
-    const { unmount } = render(
-      <MemoryRouter>
-        <StageRunsTable
-          runId="1"
-          linkTo={(pathname) => pathname}
-          stageRuns={[
-            stageRun({
-              order: 1,
-              status: "AwaitingApproval",
-              startedAt: "2026-11-10T10:06:00Z",
-            }),
-          ]}
-        />
-      </MemoryRouter>
+  it("reads Unavailable, never Not available, and Not finished for a stage still going", () => {
+    const renderStage = (stage: StageRun) =>
+      render(
+        <MemoryRouter>
+          <StageRunsTable
+            runId="1"
+            linkTo={(pathname) => pathname}
+            stageRuns={[stage]}
+          />
+        </MemoryRouter>
+      );
+    // No agent message stops the clock of the awaiting stage yet.
+    let { unmount } = renderStage(
+      stageRun({
+        order: 1,
+        status: "AwaitingApproval",
+        startedAt: "2026-11-10T10:06:00Z",
+      })
     );
+    expect(rows()[0][5]).toBe("Not finished");
+    unmount();
+
+    // An ended stage without a completion time: its duration is unknown.
+    ({ unmount } = renderStage(
+      stageRun({
+        order: 1,
+        status: "Failed",
+        startedAt: "2026-11-10T10:06:00Z",
+      })
+    ));
     expect(rows()[0][5]).toBe("Unavailable");
     unmount();
 

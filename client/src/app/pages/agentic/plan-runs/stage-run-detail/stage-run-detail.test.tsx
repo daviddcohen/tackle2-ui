@@ -189,7 +189,7 @@ const renderStage = (stageId: string, search = "") =>
 const fact = (term: string) => {
   const dt = screen
     .getAllByRole("term")
-    .find((candidate) => candidate.textContent === term);
+    .find((candidate) => candidate.textContent?.trim() === term);
   if (dt == null) throw new Error(`No fact "${term}"`);
   return dt.nextElementSibling as HTMLElement;
 };
@@ -260,25 +260,42 @@ describe("StageRunDetail", () => {
     renderStage("1");
     await screen.findByRole("heading", { level: 1 });
     expect(fact("Pod")).toHaveTextContent("run-1-stage-1-x7k2p");
-    expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
-      [
-        "Agent",
-        "Model",
-        "Duration",
-        "Approval",
-        "Turns",
-        "Compactions",
-        "Tokens",
-        "Cost",
-        "Pod",
-      ]
-    );
+    expect(
+      screen.getAllByRole("term").map((term) => term.textContent?.trim())
+    ).toEqual([
+      "Agent",
+      "Duration",
+      "Approval",
+      "Model ID",
+      "Pod",
+      "Turns",
+      "Compactions",
+      "Tokens",
+      "Cost",
+      "Context window",
+    ]);
+    // The agent run's facts are their own section, after the stage's.
+    const section = screen.getByRole("heading", { level: 2, name: "Agent run" })
+      .parentElement?.parentElement as HTMLElement;
+    expect(
+      within(section)
+        .getAllByRole("term")
+        .map((term) => term.textContent?.trim())
+    ).toEqual([
+      "Model ID",
+      "Pod",
+      "Turns",
+      "Compactions",
+      "Tokens",
+      "Cost",
+      "Context window",
+    ]);
     expect(
       within(fact("Agent")).getByRole("link", {
         name: "Prepare proposal Agent",
       })
     ).toHaveAttribute("href", "/agents/1?from=run-1");
-    expect(fact("Model")).toHaveTextContent("claude-3-7-sonnet");
+    expect(fact("Model ID")).toHaveTextContent("claude-3-7-sonnet");
     expect(fact("Duration")).toHaveTextContent("9m");
     expect(fact("Approval")).toHaveTextContent("Required after this stage");
     expect(fact("Turns")).toHaveTextContent("14 of 50");
@@ -298,14 +315,14 @@ describe("StageRunDetail", () => {
     renderStage("1");
     await screen.findByRole("heading", { level: 1 });
     await screen.findByText("900 input");
-    for (const term of ["Model", "Turns", "Cost", "Pod"]) {
+    for (const term of ["Model ID", "Turns", "Cost", "Pod"]) {
       expect(fact(term)).toHaveTextContent("Not reported");
     }
     expect(fact("Compactions")).toHaveTextContent("None");
     expect(fact("Tokens")).toHaveTextContent("900 input");
   });
 
-  it("says a passed gate was approved, or not required without a record", async () => {
+  it("says a passed gate was approved, or that no approval was recorded", async () => {
     const finished = {
       startedAt: "2026-11-10T10:06:00Z",
       requiresApproval: true,
@@ -330,7 +347,55 @@ describe("StageRunDetail", () => {
 
     renderStage("2");
     await screen.findByRole("heading", { level: 1, name: "Migrate" });
-    expect(fact("Approval")).toHaveTextContent("Not required");
+    expect(fact("Approval")).toHaveTextContent("No approval recorded");
+  });
+
+  it("says approval is required for a stage waiting for it, even if its definition has no gate", async () => {
+    useRun(
+      run(
+        [
+          stage(1, "Prepare proposal", "AwaitingApproval", {
+            startedAt: "2026-11-10T10:06:00Z",
+          }),
+        ],
+        "AwaitingApproval"
+      )
+    );
+    renderStage("1");
+    await screen.findByRole("heading", { level: 1 });
+    expect(fact("Approval")).toHaveTextContent("Required after this stage");
+  });
+
+  it("says Not finished for a running duration it cannot read yet, Unavailable once it ended", async () => {
+    // The awaiting stage has no agent message to stop the clock.
+    useRun(
+      run(
+        [
+          stage(1, "Prepare proposal", "AwaitingApproval", {
+            startedAt: "2026-11-10T10:06:00Z",
+          }),
+        ],
+        "AwaitingApproval"
+      )
+    );
+    const { unmount } = renderStage("1");
+    await screen.findByRole("heading", { level: 1 });
+    expect(fact("Duration")).toHaveTextContent("Not finished");
+    unmount();
+
+    useRun(
+      run(
+        [
+          stage(1, "Prepare proposal", "Failed", {
+            startedAt: "2026-11-10T10:06:00Z",
+          }),
+        ],
+        "Failed"
+      )
+    );
+    renderStage("1");
+    await screen.findByRole("heading", { level: 1 });
+    expect(fact("Duration")).toHaveTextContent("Unavailable");
   });
 
   it("keeps the gate ahead of a gated stage that failed", async () => {
@@ -705,7 +770,7 @@ describe("StageRunDetail", () => {
       ).toHaveAttribute("aria-selected", "true");
     });
 
-    it("keeps the alert and the context window above the tabs", async () => {
+    it("shows the context window as the last Details fact, with its help", async () => {
       useRun(awaiting);
       useAgentRuns([
         agentRunOf("1", {
@@ -713,10 +778,14 @@ describe("StageRunDetail", () => {
           usage: { contextUsed: 190_000, contextSize: 200_000 },
         }),
       ]);
-      renderStage("1", "?tab=yaml");
+      renderStage("1");
       const bar = await screen.findByRole("progressbar", {
         name: "Context window",
       });
+      expect(fact("Context window")).toContainElement(bar);
+      expect(fact("Context window")).toHaveTextContent(
+        "190K of 200K tokens (95%)"
+      );
       // The bar is neutral at every level.
       expect(bar).toHaveAttribute(
         "aria-valuetext",
@@ -725,9 +794,20 @@ describe("StageRunDetail", () => {
       expect(bar.closest(".pf-v6-c-progress")?.className).not.toMatch(
         /pf-m-(warning|danger)/
       );
+      // The same help as the plan run's Stages table.
+      await userEvent.click(
+        screen.getByRole("button", { name: "More information about context" })
+      );
       expect(
-        screen.getByText(/Check its transcript and commits/)
+        await screen.findByText(
+          "How full the agent's context window is. The agent compacts it automatically when it gets full."
+        )
       ).toBeVisible();
+
+      // The other tabs are the views: no context window there.
+      await userEvent.click(screen.getByRole("tab", { name: "YAML" }));
+      expect(screen.queryByRole("progressbar")).toBeNull();
+      expect(screen.queryByText("Context window")).toBeNull();
     });
 
     it("says a running stage has no usage yet, never Not reported", async () => {
@@ -742,15 +822,14 @@ describe("StageRunDetail", () => {
         }),
       ]);
       renderStage("1");
-      expect(
-        await screen.findByRole("progressbar", { name: "Context window" })
-      ).toHaveAttribute("aria-valuetext", "Not reported yet");
       await waitFor(() =>
         expect(fact("Turns")).toHaveTextContent("Not reported yet")
       );
+      expect(fact("Context window")).toHaveTextContent("Not reported yet");
+      expect(screen.queryByRole("progressbar")).toBeNull();
       expect(fact("Tokens")).toHaveTextContent("Not reported yet");
       expect(fact("Cost")).toHaveTextContent("Not reported yet");
-      expect(fact("Model")).toHaveTextContent("claude-3-7-sonnet");
+      expect(fact("Model ID")).toHaveTextContent("claude-3-7-sonnet");
       expect(screen.queryByText("Not reported")).toBeNull();
     });
 
@@ -878,6 +957,199 @@ describe("StageRunDetail", () => {
         await screen.findByText("The YAML appears when this stage starts.")
       ).toBeInTheDocument();
       expect(screen.queryByTestId("code-editor")).toBeNull();
+    });
+  });
+  describe("page structure", () => {
+    const failed = run(
+      [
+        stage(1, "Prepare proposal", "Failed", {
+          startedAt: "2026-11-10T10:06:00Z",
+          output: "Error: Unable to resolve dependency tree.",
+        }),
+        stage(2, "Migrate", "Pending"),
+      ],
+      "Failed"
+    );
+
+    // PatternFly inline alerts have no role of their own.
+    const alerts = () =>
+      Array.from(document.querySelectorAll<HTMLElement>(".pf-v6-c-alert"));
+
+    /** The page's top level: the header section, then the tabs section. */
+    const tabsSection = () => screen.getByRole("tablist").closest("section");
+
+    it.each([
+      ["awaiting approval", "1", false],
+      ["failed", "1", true],
+      ["pending", "2", false],
+    ] as const)(
+      "puts nothing between the header and the tabs of a stage %s",
+      async (_label, stageId, isFailed) => {
+        useRun(isFailed ? failed : awaiting);
+        useAgentRuns([agentRunOf("1", { phase: "Succeeded" })]);
+        renderStage(stageId);
+        const title = await screen.findByRole("heading", { level: 1 });
+        const header = title.closest(".pf-v6-c-page__main-section");
+        await waitFor(() => expect(alerts()).toHaveLength(1));
+        expect(header?.nextElementSibling).toBe(tabsSection());
+        // The alert and the context window are tab content.
+        expect(
+          screen.getByRole("tabpanel", { name: "Details" })
+        ).toContainElement(alerts()[0]);
+        expect(header).not.toHaveTextContent(/Context window/);
+      }
+    );
+
+    it("names the run's applications in the header, keeping the trail", async () => {
+      useRun({
+        ...awaiting,
+        applications: [
+          { id: 1, name: "Customer Management" },
+          { id: 2, name: "Inventory Service" },
+        ],
+      });
+      renderStage("1");
+      const title = await screen.findByRole("heading", { level: 1 });
+      const header = title.closest(
+        ".pf-v6-c-page__main-section"
+      ) as HTMLElement;
+      const first = within(header).getByRole("link", {
+        name: "Customer Management",
+      });
+      expect(first).toHaveAttribute("href", "/applications/1");
+      expect(first.parentElement).toHaveTextContent(
+        /^Applications: Customer Management, Inventory Service$/
+      );
+      // The application row comes before the status line.
+      const statusLine = within(header).getByText(/^Stage 1 of 2 in/);
+      expect(
+        first.compareDocumentPosition(statusLine) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it("opens every tab of a stage awaiting approval with its alert, View logs on Details only", async () => {
+      useRun(awaiting);
+      useAgentRuns([agentRunOf("1", { phase: "AwaitingApproval" })]);
+      renderStage("1");
+      const alertTitle = /Prepare proposal needs approval/;
+      expect(await screen.findByText(alertTitle)).toBeVisible();
+      expect(screen.getByRole("link", { name: "View logs" })).toBeVisible();
+      for (const name of ["Transcript", "Logs", "YAML"]) {
+        await userEvent.click(screen.getByRole("tab", { name }));
+        const panel = screen.getByRole("tabpanel", { name });
+        expect(within(panel).getByText(alertTitle)).toBeVisible();
+        expect(
+          within(panel).getByRole("button", { name: "Approve and continue" })
+        ).toBeVisible();
+        expect(
+          within(panel).queryByRole("link", { name: "View logs" })
+        ).toBeNull();
+        // The alert has its own section, before the view's.
+        const section = within(panel)
+          .getByText(alertTitle)
+          .closest(".pf-v6-c-page__main-section");
+        expect(section?.parentElement).toBe(panel);
+        expect(section?.nextElementSibling).toHaveClass(
+          "pf-v6-c-page__main-section"
+        );
+      }
+    });
+
+    it("opens every tab of a failed stage with its alert and Run migration plan", async () => {
+      useRun(failed);
+      useAgentRuns([agentRunOf("1", { phase: "Failed" })]);
+      renderStage("1", "?tab=logs");
+      const panel = await screen.findByRole("tabpanel", { name: "Logs" });
+      expect(
+        await within(panel).findByText(
+          "Error: Unable to resolve dependency tree."
+        )
+      ).toBeVisible();
+      expect(
+        within(panel).getByRole("button", { name: "Run migration plan" })
+      ).toBeVisible();
+      expect(
+        within(panel).queryByRole("link", { name: "View logs" })
+      ).toBeNull();
+    });
+
+    it("keeps an alert with no decision for this user on Details", async () => {
+      mockGrantedScopes.all = false;
+      useRun(awaiting);
+      useAgentRuns([agentRunOf("1", { phase: "AwaitingApproval" })]);
+      renderStage("1");
+      expect(await screen.findByText(/Waiting for approval/)).toBeVisible();
+      await userEvent.click(screen.getByRole("tab", { name: "Logs" }));
+      await screen.findByRole("region", { name: "Agent log" });
+      expect(screen.queryByText(/Waiting for approval/)).toBeNull();
+      expect(alerts()).toHaveLength(0);
+    });
+
+    it("keeps a failed alert on Details when this user cannot run the plan", async () => {
+      mockGrantedScopes.all = false;
+      useRun(failed);
+      useAgentRuns([agentRunOf("1", { phase: "Failed" })]);
+      renderStage("1");
+      const details = await screen.findByRole("tabpanel", { name: "Details" });
+      expect(
+        await within(details).findByText(
+          "Error: Unable to resolve dependency tree."
+        )
+      ).toBeVisible();
+      expect(
+        within(details).getByRole("link", { name: "View logs" })
+      ).toBeVisible();
+      expect(
+        within(details).queryByRole("button", { name: "Run migration plan" })
+      ).toBeNull();
+
+      await userEvent.click(screen.getByRole("tab", { name: "Logs" }));
+      await screen.findByRole("region", { name: "Agent log" });
+      expect(alerts()).toHaveLength(0);
+      expect(screen.queryByRole("link", { name: "View logs" })).toBeNull();
+    });
+
+    it("says the Agent run refreshes, and when, only while the stage runs", async () => {
+      const withStatus = (status: "Running" | "Succeeded") =>
+        run(
+          [
+            stage(1, "Prepare proposal", status, {
+              startedAt: "2026-11-10T10:06:00Z",
+            }),
+          ],
+          status
+        );
+      useRun(withStatus("Running"));
+      useAgentRuns([agentRunOf("1")]);
+      const { unmount } = renderStage("1");
+      const heading = await screen.findByRole("heading", {
+        level: 2,
+        name: "Agent run",
+      });
+      const description = await screen.findByText(
+        /^Refreshes while the stage runs. Updated (just now|\d+ seconds? ago).$/
+      );
+      expect(heading.parentElement).toContainElement(description);
+      unmount();
+
+      useRun(withStatus("Succeeded"));
+      useAgentRuns([agentRunOf("1", { phase: "Succeeded" })]);
+      renderStage("1");
+      await screen.findByRole("heading", { level: 2, name: "Agent run" });
+      await waitFor(() => expect(fact("Turns")).toHaveTextContent("14 of 50"));
+      expect(screen.queryByText(/Refreshes while the stage runs/)).toBeNull();
+    });
+
+    it("explains a pending stage on Details only", async () => {
+      useRun(awaiting);
+      renderStage("2");
+      const reason = "This stage starts after Prepare proposal is approved.";
+      expect(await screen.findByText(reason)).toBeVisible();
+      for (const name of ["Transcript", "Logs", "YAML"]) {
+        await userEvent.click(screen.getByRole("tab", { name }));
+        expect(screen.queryByText(reason)).toBeNull();
+      }
     });
   });
 });

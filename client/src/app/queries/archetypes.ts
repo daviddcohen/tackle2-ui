@@ -14,6 +14,7 @@ import {
 } from "@app/api/rest";
 
 import { assessmentsByItemIdQueryKey } from "./assessments";
+import { useRetryUnlessNotFound } from "./retry";
 
 export const ARCHETYPES_QUERY_KEY = "archetypes";
 export const ARCHETYPE_QUERY_KEY = "archetype";
@@ -52,6 +53,7 @@ export const useFetchArchetypeById = (
   id?: number | string,
   refetchInterval: number | false = DEFAULT_REFETCH_INTERVAL
 ) => {
+  const retry = useRetryUnlessNotFound();
   const { data, isLoading, error } = useQuery({
     queryKey: [ARCHETYPE_QUERY_KEY, String(id)],
     queryFn: () =>
@@ -59,6 +61,8 @@ export const useFetchArchetypeById = (
     onError: (error: AxiosError) => console.log("error, ", error),
     enabled: id !== undefined,
     refetchInterval,
+    // A missing archetype is said right away (no retries on 404).
+    retry,
   });
 
   return {

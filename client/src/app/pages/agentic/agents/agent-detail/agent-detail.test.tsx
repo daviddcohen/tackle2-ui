@@ -127,6 +127,10 @@ describe("AgentDetail", () => {
     });
     renderAt("7");
     await screen.findByRole("heading", { name: "Code Migrator" });
+    // The tab set has an accessible name, on the tablist itself.
+    expect(
+      screen.getByRole("tablist", { name: "agentic.agentDetail.tabsLabel" })
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "agentic.common.actions" })
     );

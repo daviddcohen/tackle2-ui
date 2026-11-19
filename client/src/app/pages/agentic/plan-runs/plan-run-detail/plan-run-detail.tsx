@@ -5,7 +5,7 @@ import { PageSection } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
-import { PlanRun, getOrderedStageRuns } from "@app/agentic";
+import { PlanRun, getOrderedStageRuns, isTerminalRunPhase } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { PageHeader } from "@app/components/PageHeader";
@@ -195,7 +195,9 @@ const PlanRunDetail: React.FC = () => {
           message={
             planRun.status === "Pending"
               ? t("terms.notStarted")
-              : t("agentic.common.unavailable")
+              : isTerminalRunPhase(planRun.status)
+                ? t("agentic.common.unavailable")
+                : t("agentic.stageRunsTable.notFinished")
           }
         />
       ),

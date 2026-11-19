@@ -120,6 +120,30 @@ describe("DetailFacts and LinkLabels", () => {
     expect(screen.getByText("None")).toBeVisible();
   });
 
+  it("adds a term's help after the term, only when given", () => {
+    render(
+      <DetailFacts
+        facts={[
+          ["Model", "Claude"],
+          [
+            "Context window",
+            "61%",
+            {
+              termHelp: <button type="button" aria-label="More information" />,
+            },
+          ],
+        ]}
+      />
+    );
+    const [model, context] = screen.getAllByRole("term");
+    expect(model.querySelector("button")).toBeNull();
+    expect(context.textContent).toBe("Context window ");
+    expect(context).toContainElement(
+      screen.getByRole("button", { name: "More information" })
+    );
+    expect(screen.getByText("61%")).toBeVisible();
+  });
+
   it("renders each item as a link label", () => {
     render(
       <MemoryRouter>

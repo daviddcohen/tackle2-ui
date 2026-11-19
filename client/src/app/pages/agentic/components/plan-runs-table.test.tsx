@@ -114,8 +114,9 @@ describe("PlanRunsTable", () => {
       "3 applications",
       "2026-11-10 10:06",
     ]);
-    // Its awaiting stage has no agent message to stop the clock: unknown.
-    expect(cells(actionRequired)[5]).toBe("Unavailable");
+    // Its awaiting stage has no agent message to stop the clock: the run
+    // has not finished, which is not the same as a value that failed.
+    expect(cells(actionRequired)[5]).toBe("Not finished");
     expect(cells(succeeded)[4]).toBe("2026-09-20 08:00");
     expect(cells(succeeded)[5]).toBe("2h 15m");
 
@@ -172,6 +173,20 @@ describe("PlanRunsTable", () => {
       ],
     });
     expect(cells(bodyRows()[0])[2]).toBe("Failed");
+  });
+
+  it("says Unavailable, not Not finished, for an ended run without a completion time", () => {
+    renderTable({
+      runs: [
+        run({
+          id: "5",
+          status: "Failed",
+          completedAt: undefined,
+          stageRuns: [stage(1, "Prepare proposal", "Failed")],
+        }),
+      ],
+    });
+    expect(cells(bodyRows()[0])[5]).toBe("Unavailable");
   });
 
   it("hides the Migration plan column on a plan's Runs tab", () => {

@@ -4,11 +4,13 @@ import { Link, generatePath, useLocation, useParams } from "react-router-dom";
 import {
   Alert,
   AlertActionLink,
+  Button,
   Content,
   EmptyState,
   EmptyStateBody,
   ExpandableSection,
   PageSection,
+  Popover,
   Skeleton,
   Spinner,
   Stack,
@@ -17,6 +19,7 @@ import {
   TabTitleText,
   Tabs,
 } from "@patternfly/react-core";
+import { RhUiQuestionMarkCircleIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths, StageRunDetailsRoute } from "@app/Paths";
@@ -48,22 +51,33 @@ import { AgentRunLogs } from "../../components/agent-run/agent-run-logs";
 import { AgentRunResource } from "../../components/agent-run/agent-run-resource";
 import { AgentRunTranscript } from "../../components/agent-run/agent-run-transcript";
 import {
-  ContextUsage,
+  ContextUsageValue,
   hasNoUsageYet,
 } from "../../components/agent-run/context-usage";
-import { LiveSentence } from "../../components/agent-run/live-status";
+import {
+  LiveSentence,
+  UpdatedAgo,
+} from "../../components/agent-run/live-status";
 import {
   formatCost,
   formatTokens,
 } from "../../components/agent-run/usage-format";
 import { useFillHeight } from "../../components/agent-run/use-fill-height";
-import { DetailFacts, DetailSection } from "../../components/detail-section";
+import {
+  DetailFacts,
+  DetailFactsProps,
+  DetailSection,
+} from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import {
   StageAttentionAlert,
   getStageAttention,
 } from "../../components/stage-attention-alert";
-import { RunPageBody, RunStatusLine } from "../components/run-page-layout";
+import {
+  RunPageBody,
+  RunStatusLine,
+  StageApplicationRow,
+} from "../components/run-page-layout";
 import { StageCommits } from "../components/stage-run-content";
 import { useApproveStage } from "../components/use-approve-stage";
 
@@ -98,10 +112,11 @@ interface AgentRunFactsState {
 }
 
 /**
- * The agent run facts of a started stage: Model, Turns,
- * Compactions, Tokens, Cost and Pod. A value the run does not report says
- * so, never 0 or a dash; a running stage that has not reported any usage
- * yet says "Not reported yet".
+ * The agent run facts of a started stage: Model, Pod,
+ * Turns, Compactions, Tokens and Cost; the page adds the context window
+ * last. A value the run does not report says so, never 0 or a dash; a
+ * running stage that has not reported any usage yet says "Not reported
+ * yet".
  */
 const useAgentRunFacts = ({
   agentRun,
@@ -156,10 +171,20 @@ const useAgentRunFacts = ({
           : undefined;
   return [
     [
-      t("agentic.stageRun.model"),
+      t("agentic.stageRun.modelId"),
       value(
         usage?.model != null ? (
           <span className={textStyles.fontFamilyMonospace}>{usage.model}</span>
+        ) : undefined
+      ),
+    ],
+    [
+      t("agentic.stageRun.pod"),
+      value(
+        agentRun?.podName != null ? (
+          <span className={textStyles.fontFamilyMonospace}>
+            {agentRun.podName}
+          </span>
         ) : undefined
       ),
     ],
@@ -196,16 +221,6 @@ const useAgentRunFacts = ({
           ? formatCost(usage.cost, usage.currency)
           : undefined,
         true
-      ),
-    ],
-    [
-      t("agentic.stageRun.pod"),
-      value(
-        agentRun?.podName != null ? (
-          <span className={textStyles.fontFamilyMonospace}>
-            {agentRun.podName}
-          </span>
-        ) : undefined
       ),
     ],
   ];
@@ -357,11 +372,14 @@ const StageRunDetail: React.FC = () => {
       )}
     />
   );
-  // The approval gate is still ahead of a gated stage until it succeeds; one
-  // that succeeded without an approval record went on without one (for
-  // example in an unattended run).
-  const isGateAhead = stage.requiresApproval && stageRun.status !== "Succeeded";
-  const facts: [string, React.ReactNode][] = [
+  // The approval gate is ahead of a gated stage until it succeeds, and of
+  // any stage waiting for approval. A gated stage that succeeded without an
+  // approval record (for example in an unattended run) says so, never "Not
+  // required".
+  const isGateAhead =
+    stageRun.status === "AwaitingApproval" ||
+    (stage.requiresApproval && stageRun.status !== "Succeeded");
+  const facts: DetailFactsProps["facts"] = [
     [
       t("agentic.entity.agent"),
       <Link
@@ -384,32 +402,59 @@ const StageRunDetail: React.FC = () => {
           message={
             stageRun.status === "Pending"
               ? t("terms.notStarted")
-              : t("agentic.common.unavailable")
+              : isTerminalRunPhase(stageRun.status)
+                ? t("agentic.common.unavailable")
+                : t("agentic.stageRunsTable.notFinished")
           }
         />
       ),
     ],
     [
       t("agentic.stageRun.approval"),
-      stage.requiresApproval && stageRun.approvedAt ? (
+      stageRun.approvedAt != null ? (
         t("agentic.stageRun.approvedOn", {
           date: formatDate(new Date(stageRun.approvedAt)),
         })
       ) : isGateAhead ? (
         t("agentic.stageRun.approvalRequired")
+      ) : stage.requiresApproval ? (
+        <EmptyTextMessage message={t("agentic.stageRun.approvalNotRecorded")} />
       ) : (
         <EmptyTextMessage message={t("agentic.stageRun.approvalNotRequired")} />
       ),
     ],
   ];
-  // A started stage has an agent run: its facts follow the stage's own
-  // (Model next to Agent, the usage after Approval). A Pending stage has
-  // none yet, so it keeps the three stage facts only.
-  if (stageRun.status !== "Pending") {
-    const [model, ...usageFacts] = agentRunFacts;
-    facts.splice(1, 0, model);
-    facts.push(...usageFacts);
-  }
+  // The context window is the agent run's last fact, alone in its row, with
+  // the same help as the plan run's Stages table.
+  const runFacts: DetailFactsProps["facts"] = [
+    ...agentRunFacts,
+    [
+      t("agentic.agentRun.context.title"),
+      <ContextUsageValue
+        key="context"
+        phase={stageRun.status}
+        usage={agentRun?.usage}
+        isLoading={isLoadingAgentRuns}
+        isUnavailable={agentRunsError != null && agentRun == null}
+      />,
+      {
+        termHelp: (
+          <Popover
+            aria-label={t("agentic.agentRun.context.title")}
+            bodyContent={t("agentic.planRun.contextHelp")}
+            closeBtnAriaLabel={t("actions.close")}
+          >
+            <Button
+              variant="plain"
+              hasNoPadding
+              aria-label={t("agentic.planRun.contextHelpLabel")}
+              icon={<RhUiQuestionMarkCircleIcon />}
+            />
+          </Popover>
+        ),
+      },
+    ],
+  ];
   // Instructions are prose: one paragraph per blank-line-separated block.
   const paragraphs = stage.instructions
     .split(/\n\s*\n/)
@@ -417,6 +462,27 @@ const StageRunDetail: React.FC = () => {
     .filter(Boolean);
 
   const attention = getStageAttention(planRun, stageRun);
+  // Transcript, Logs and YAML open with the alert of a stage that waits for
+  // this user's decision (Approve, or Run migration plan after a failure),
+  // in its own section above the view, without "View logs": those tabs
+  // already show the agent run. An alert with
+  // nothing to decide, and the pending alert, stay on Details.
+  const offersDecision =
+    (attention?.kind === "approval" && canManageRun) ||
+    (attention?.kind === "failed" && runMigrationPlan.open != null);
+  const viewAlert = offersDecision && (
+    <StageAttentionAlert
+      surface="stage"
+      planRun={planRun}
+      stageRun={stageRun}
+      onApprove={canManageRun ? approve : undefined}
+      isDeciding={isApproving}
+      onRunMigrationPlan={runMigrationPlan.open}
+      wrapper={(alert) => (
+        <PageSection hasBodyWrapper={false}>{alert}</PageSection>
+      )}
+    />
+  );
   const panelId = (tab: StageTab) => tabPanelId(TAB_PREFIX, tab);
   const isStarted = stageRun.status !== "Pending";
   const notStarted = (message: string) => (
@@ -481,58 +547,41 @@ const StageRunDetail: React.FC = () => {
           title={stage.name}
           breadcrumbs={breadcrumbs}
           description={
-            <RunStatusLine status={stageRun.status}>
-              {stageRun.startedAt ? (
-                <Trans
-                  i18nKey="agentic.stageRun.statusLineStarted"
-                  values={{
-                    ...position,
-                    started: formatDate(new Date(stageRun.startedAt)),
-                  }}
-                  components={{ runLink }}
-                />
-              ) : (
-                <Trans
-                  i18nKey="agentic.stageRun.statusLine"
-                  values={position}
-                  components={{ runLink }}
-                />
-              )}
-            </RunStatusLine>
+            <>
+              {/* The scope (the applications) reads before the status. */}
+              <StageApplicationRow
+                applications={planRun.applications}
+                runId={planRun.id}
+                linkCrumbs={stageChildCrumbs}
+              />
+              <RunStatusLine status={stageRun.status}>
+                {stageRun.startedAt ? (
+                  <Trans
+                    i18nKey="agentic.stageRun.statusLineStarted"
+                    values={{
+                      ...position,
+                      started: formatDate(new Date(stageRun.startedAt)),
+                    }}
+                    components={{ runLink }}
+                  />
+                ) : (
+                  <Trans
+                    i18nKey="agentic.stageRun.statusLine"
+                    values={position}
+                    components={{ runLink }}
+                  />
+                )}
+              </RunStatusLine>
+            </>
           }
         />
       </PageSection>
-
-      {/* The alert and the context window stay above the tabs, so they show
-          on every tab. A Pending stage has no context row. */}
-      {(attention != null || isStarted) && (
-        <RunPageBody>
-          {attention != null && (
-            <StageAttentionAlert
-              surface="stage"
-              planRun={planRun}
-              stageRun={stageRun}
-              viewLogsTo={viewLogsTo}
-              onViewLogs={requestLogsFocus}
-              onApprove={canManageRun ? approve : undefined}
-              isDeciding={isApproving}
-              onRunMigrationPlan={runMigrationPlan.open}
-            />
-          )}
-          <ContextUsage
-            phase={stageRun.status}
-            usage={agentRun?.usage}
-            isLoading={isLoadingAgentRuns}
-            isUnavailable={agentRunsError != null && agentRun == null}
-          />
-        </RunPageBody>
-      )}
 
       <PageSection hasBodyWrapper={false} type="tabs">
         <Tabs
           activeKey={activeTab}
           onSelect={(_event, key) => setActiveTab(key)}
-          aria-label={t("agentic.stageRun.tabsLabel")}
+          tabListAriaLabel={t("agentic.stageRun.tabsLabel")}
           mountOnEnter
           unmountOnExit
         >
@@ -574,12 +623,41 @@ const StageRunDetail: React.FC = () => {
         activeKey={activeTab}
       >
         <RunPageBody>
-          {stageRun.status === "Running" && (
-            <LiveSentence updatedAt={agentRunsUpdatedAt}>
-              {t("agentic.agentRun.refreshesWhileRunning")}
-            </LiveSentence>
+          {attention != null && (
+            <StageAttentionAlert
+              surface="stage"
+              planRun={planRun}
+              stageRun={stageRun}
+              viewLogsTo={viewLogsTo}
+              onViewLogs={requestLogsFocus}
+              onApprove={canManageRun ? approve : undefined}
+              isDeciding={isApproving}
+              onRunMigrationPlan={runMigrationPlan.open}
+            />
           )}
           <DetailFacts facts={facts} isTwoColumn />
+
+          {/* A Pending stage has no agent run yet. */}
+          {isStarted && (
+            <DetailSection
+              title={t("agentic.stageRun.agentRunTitle")}
+              description={
+                stageRun.status === "Running" ? (
+                  <>
+                    {t("agentic.agentRun.refreshesWhileRunning")}
+                    {agentRunsUpdatedAt != null && (
+                      <>
+                        {" "}
+                        <UpdatedAgo updatedAt={agentRunsUpdatedAt} />
+                      </>
+                    )}
+                  </>
+                ) : undefined
+              }
+            >
+              <DetailFacts facts={runFacts} isTwoColumn />
+            </DetailSection>
+          )}
 
           {paragraphs.length > 0 && (
             <DetailSection title={t("agentic.stageRun.instructions")}>
@@ -612,6 +690,7 @@ const StageRunDetail: React.FC = () => {
         eventKey="transcript"
         activeKey={activeTab}
       >
+        {viewAlert}
         <PageSection hasBodyWrapper={false}>
           {agentRunView(t("agentic.stageRun.transcriptNotStarted"), (shown) => (
             <AgentRunTranscript
@@ -635,6 +714,7 @@ const StageRunDetail: React.FC = () => {
         activeKey={activeTab}
         isFilled
       >
+        {viewAlert}
         <PageSection hasBodyWrapper={false} isFilled>
           {agentRunView(t("agentic.stageRun.logsNotStarted"), (shown) => (
             <FullHeightView>
@@ -664,6 +744,7 @@ const StageRunDetail: React.FC = () => {
         activeKey={activeTab}
         isFilled
       >
+        {viewAlert}
         <PageSection hasBodyWrapper={false} isFilled>
           {agentRunView(t("agentic.stageRun.yamlNotStarted"), (shown) => (
             <FullHeightView>

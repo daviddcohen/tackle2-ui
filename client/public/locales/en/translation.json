@@ -1644,9 +1644,13 @@
         "saveFailed": "Skills for {{name}} could not be saved"
       }
     },
+    "skills": {
+      "tabsLabel": "Skills and skill collections"
+    },
     "skillDetail": {
       "tabDetails": "Details",
       "tabAssociations": "Associations",
+      "tabsLabel": "Skill details",
       "createdAt": "Created",
       "updatedAt": "Updated",
       "contentDescription": "The Markdown that agents read when they use this skill.",
@@ -1946,10 +1950,13 @@
       "backToRun": "Back to {{run}}",
       "statusLine": "Stage {{position}} of {{total}} in <runLink>{{run}}</runLink>",
       "statusLineStarted": "Stage {{position}} of {{total}} in <runLink>{{run}}</runLink> · Started {{started}}",
+      "applicationLabel_one": "Application:",
+      "applicationLabel_other": "Applications:",
       "approval": "Approval",
       "approvalRequired": "Required after this stage",
       "approvedOn": "Approved {{date}}",
       "approvalNotRequired": "Not required",
+      "approvalNotRecorded": "No approval recorded",
       "instructions": "Instructions",
       "commitsTitle": "Commits ({{count}})",
       "commit": "Commit",
@@ -1967,7 +1974,7 @@
       "agentNeverStarted": "The agent did not start for this stage.",
       "loadingView": "Loading",
       "viewErrorTitle": "This view could not be loaded.",
-      "model": "Model",
+      "modelId": "Model ID",
       "turns": "Turns",
       "turnsOfMax": "{{used}} of {{max}}",
       "compactions": "Compactions",
@@ -1977,6 +1984,7 @@
       "tokensOutput": "{{output}} output",
       "cost": "Cost",
       "pod": "Pod",
+      "agentRunTitle": "Agent run",
       "loadingValue": "Loading"
     },
     "agentRun": {
@@ -1985,7 +1993,6 @@
         "label": "{{used}} of {{size}} tokens ({{percent}})",
         "labelWithPeak": "{{used}} of {{size}} tokens ({{percent}}) · Peak {{peak}}",
         "nearlyFull": "Context nearly full. The agent compacts its context automatically.",
-        "compactsAutomatically": "The agent compacts its context automatically when it gets full.",
         "notReported": "Not reported",
         "loading": "Loading context usage",
         "cellLabel": "Context window of {{stage}}"
@@ -2080,6 +2087,7 @@
     "agentDetail": {
       "tabDetails": "Details",
       "tabRuns": "Runs",
+      "tabsLabel": "Agent details",
       "createdAt": "Created",
       "updatedAt": "Updated",
       "usedInPlans": "Used in migration plans",
@@ -2131,7 +2139,8 @@
       "actions": "Actions",
       "loadError": "Error loading application",
       "notFound": "Application not found",
-      "notFoundDescription": "This application could not be found. It may have been deleted.",
+      "notFoundBody": "This application may have been deleted, or the link is out of date.",
+      "backToApplications": "Back to application inventory",
       "tabsLabel": "Application details",
       "taskCanceled": "Task canceled",
       "taskCancelFailed": "Task cancelation failed",

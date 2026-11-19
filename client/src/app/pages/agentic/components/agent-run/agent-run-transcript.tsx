@@ -706,7 +706,7 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
             ? t(`${KEY}.skippedAskUser`)
             : t(`${KEY}.notRecorded`);
     const viewLogs = onViewLogs != null && (
-      <Button variant="link" isInline onClick={onViewLogs}>
+      <Button variant="link" isInline size="sm" onClick={onViewLogs}>
         {t(`${KEY}.viewLogs`)}
       </Button>
     );

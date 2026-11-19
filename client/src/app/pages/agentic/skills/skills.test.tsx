@@ -119,6 +119,10 @@ describe("SkillsPage", () => {
     renderAt();
 
     const checklist = await rowOf("API compatibility checklist");
+    // The tab set has an accessible name, on the tablist itself.
+    expect(
+      screen.getByRole("tablist", { name: "Skills and skill collections" })
+    ).toBeInTheDocument();
     expect(within(checklist).getByText("Inline")).toBeInTheDocument();
     expect(
       within(checklist).getByRole("link", { name: "3 associations" })

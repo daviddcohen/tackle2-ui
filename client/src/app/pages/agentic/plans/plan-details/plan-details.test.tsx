@@ -215,11 +215,12 @@ describe("PlanDetailsPage", () => {
     expect(
       screen.getByRole("link", { name: "agentic.plan.viewModels" })
     ).toHaveAttribute("href", "/models");
+    // The alert says it; the Configuration fact would repeat it.
     expect(
-      within(fact("agentic.plan.configuration")).getByText(
-        "agentic.configurationStatus.issues"
-      )
-    ).toBeInTheDocument();
+      screen
+        .getAllByRole("term")
+        .filter((term) => term.textContent === "agentic.plan.configuration")
+    ).toHaveLength(0);
   });
 
   it("offers View models only to users who can open Models", async () => {

@@ -38,6 +38,20 @@ test("an unknown plan run shows not-found after a single request (no retries on 
   expect(hits.length).toBeLessThanOrEqual(2);
 });
 
+test("an unknown application shows not-found after a single request (no retries on 404)", async ({
+  page,
+}) => {
+  const hits: string[] = [];
+  page.on("request", (request) => {
+    if (/\/hub\/applications\/99999(\?|$)/.test(request.url()))
+      hits.push(request.url());
+  });
+  await page.goto(protoUrl("/applications/99999"));
+  await expect(mainHeading(page)).toHaveText("Application not found");
+  expect(hits.length).toBeGreaterThanOrEqual(1);
+  expect(hits.length).toBeLessThanOrEqual(2);
+});
+
 for (const path of ["/skills/abc", "/agents/abc", "/skills/collections/abc"]) {
   test(`${path} is not sent to the API as NaN`, async ({ page }) => {
     const nanRequests: string[] = [];

@@ -176,7 +176,11 @@ const AgentDetail: React.FC = () => {
       </PageSection>
 
       <PageSection hasBodyWrapper={false} type="tabs">
-        <Tabs activeKey={activeTab} onSelect={(_e, key) => setActiveTab(key)}>
+        <Tabs
+          activeKey={activeTab}
+          onSelect={(_e, key) => setActiveTab(key)}
+          tabListAriaLabel={t("agentic.agentDetail.tabsLabel")}
+        >
           <Tab
             eventKey="details"
             id={panelId("details")}

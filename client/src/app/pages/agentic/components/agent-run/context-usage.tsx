@@ -1,16 +1,14 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Content,
-  Flex,
-  FlexItem,
-  Grid,
-  GridItem,
   HelperText,
   HelperTextItem,
   Progress,
   Skeleton,
+  Stack,
+  StackItem,
 } from "@patternfly/react-core";
+import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
 import { AgentRunUsage, ControllerRunPhase } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
@@ -37,8 +35,6 @@ interface ContextUsageSource {
   /** The agent runs could not be read. */
   isUnavailable?: boolean;
 }
-
-export type ContextUsageProps = ContextUsageSource;
 
 /** "121K of 200K tokens (61%)", plus the peak once the stage is not running. */
 const useContextLabel = () => {
@@ -71,18 +67,19 @@ export const hasNoUsageYet = (
   usage: AgentRunUsage | undefined
 ) => phase === "Running" && !hasUsageReading(usage);
 
+export type ContextUsageValueProps = ContextUsageSource;
+
 /**
- * The stage's context window under the status line:
- * a neutral titled `Progress` with "121K of 200K tokens (61%)", and
- * the peak once the stage stopped running. While the stage runs the bar
- * always has a helper line, "The agent compacts its context automatically
- * when it gets full.", which says "Context nearly full." from 95 %: crossing
- * the threshold changes a word, not the height of the row.
- * While the runs load, and until a running stage reports any usage, the
- * same bar shell holds the row at its final height.
- * A Pending stage has no agent run yet, so nothing renders.
+ * The value of the stage's "Context window" fact: the
+ * reading as plain text, "121K of 200K tokens (61%)" plus the peak once the
+ * stage stopped running, over a small neutral bar named "Context window"
+ * like its term. While the stage runs at 95 % or more a helper line under
+ * the bar says "Context nearly full."; the term's help explains the rest.
+ * Loading, a failed read and a missing reading use the same words and look
+ * as the other agent run facts, with no empty bar. A Pending stage has no
+ * agent run yet, so nothing renders.
  */
-export const ContextUsage: React.FC<ContextUsageProps> = ({
+export const ContextUsageValue: React.FC<ContextUsageValueProps> = ({
   phase,
   usage,
   isLoading,
@@ -93,83 +90,56 @@ export const ContextUsage: React.FC<ContextUsageProps> = ({
   const helperId = `context-usage-help-${React.useId().replace(/:/g, "")}`;
   if (phase === "Pending") return null;
 
-  const title = t("agentic.agentRun.context.title");
-  const percent = contextPercent(usage);
-  const isRunning = phase === "Running";
-  const nearlyFull = percent != null && isContextNearlyFull(percent, phase);
-  const helperText = isRunning ? (
-    <HelperText>
-      <HelperTextItem id={helperId}>
-        {nearlyFull
-          ? t("agentic.agentRun.context.nearlyFull")
-          : t("agentic.agentRun.context.compactsAutomatically")}
-      </HelperTextItem>
-    </HelperText>
-  ) : undefined;
-  const shell = (label: React.ReactNode, valueText: string) => (
-    <Grid>
-      <GridItem md={8} lg={6} xl={5}>
-        <Progress
-          size="sm"
-          title={title}
-          value={0}
-          label={label}
-          valueText={valueText}
-          aria-describedby={isRunning ? helperId : undefined}
-          helperText={helperText}
-        />
-      </GridItem>
-    </Grid>
-  );
-
   if (isLoading) {
-    return shell(
-      <Skeleton fontSize="sm" width="16ch" />,
-      t("agentic.agentRun.context.loading")
+    return (
+      <Skeleton
+        fontSize="sm"
+        width="8ch"
+        screenreaderText={t("agentic.stageRun.loadingValue")}
+      />
     );
   }
   if (hasNoUsageYet(phase, usage) && !isUnavailable) {
-    // The same words and look as the usage facts and the Stages table.
-    const notReportedYet = t("agentic.agentRun.notReportedYet");
-    return shell(<EmptyTextMessage message={notReportedYet} />, notReportedYet);
+    return <EmptyTextMessage message={t("agentic.agentRun.notReportedYet")} />;
   }
+  const percent = contextPercent(usage);
   if (percent == null || usage == null) {
     return (
-      <Flex
-        spaceItems={{ default: "spaceItemsMd" }}
-        alignItems={{ default: "alignItemsBaseline" }}
-      >
-        <FlexItem>
-          <Content component="p">{title}</Content>
-        </FlexItem>
-        <FlexItem>
-          <EmptyTextMessage
-            message={
-              isUnavailable
-                ? t("agentic.common.unavailable")
-                : t("agentic.agentRun.context.notReported")
-            }
-          />
-        </FlexItem>
-      </Flex>
+      <EmptyTextMessage
+        message={
+          isUnavailable
+            ? t("agentic.common.unavailable")
+            : t("agentic.agentRun.context.notReported")
+        }
+      />
     );
   }
 
-  const label = contextLabel(usage, percent, phase);
+  const reading = contextLabel(usage, percent, phase);
+  const nearlyFull = isContextNearlyFull(percent, phase);
   return (
-    <Grid>
-      <GridItem md={8} lg={6} xl={5}>
+    <Stack hasGutter>
+      <StackItem>{reading}</StackItem>
+      <StackItem>
         <Progress
           size="sm"
-          title={title}
+          measureLocation="none"
           value={percent}
-          label={label}
-          valueText={label}
-          aria-describedby={isRunning ? helperId : undefined}
-          helperText={helperText}
+          valueText={reading}
+          aria-label={t("agentic.agentRun.context.title")}
+          aria-describedby={nearlyFull ? helperId : undefined}
         />
-      </GridItem>
-    </Grid>
+        {/* Not the Progress helperText: in the single-line layout that
+            slot sits a full row gap under the bar. */}
+        {nearlyFull && (
+          <HelperText className={spacing.mtSm}>
+            <HelperTextItem id={helperId}>
+              {t("agentic.agentRun.context.nearlyFull")}
+            </HelperTextItem>
+          </HelperText>
+        )}
+      </StackItem>
+    </Stack>
   );
 };
 

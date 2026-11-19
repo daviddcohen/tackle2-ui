@@ -274,6 +274,12 @@ const PlanDetailsPage: React.FC = () => {
       : undefined;
   const { used: usedSkillCount } = skillRowCounts(skillRows);
 
+  // The configuration alert says what is wrong; the Configuration fact
+  // would repeat it with another count, so it shows only without the alert
+  // (Ready, Not evaluated).
+  const hasConfigurationIssue = configurationChecks.some(
+    (check) => check.status === "issue"
+  );
   const facts: [string, React.ReactNode][] = [
     [
       t("terms.archetype"),
@@ -331,20 +337,21 @@ const PlanDetailsPage: React.FC = () => {
         </Button>
       ),
     ],
-    [
+  ];
+  if (!hasConfigurationIssue) {
+    facts.push([
       t("agentic.plan.configuration"),
       isLoadingConfiguration ? (
         <Skeleton width="8rem" screenreaderText={t("terms.loading")} />
-      ) : notEvaluatedDetails &&
-        !configurationChecks.some((check) => check.status === "issue") ? (
+      ) : notEvaluatedDetails ? (
         <Tooltip content={notEvaluatedDetails}>
           <span tabIndex={0}>{configurationStatus}</span>
         </Tooltip>
       ) : (
         configurationStatus
       ),
-    ],
-  ];
+    ]);
+  }
 
   return (
     <>
@@ -394,7 +401,7 @@ const PlanDetailsPage: React.FC = () => {
         <Tabs
           activeKey={activeTab}
           onSelect={(_e, key) => setActiveTab(key)}
-          aria-label={t("agentic.planDetail.tabsLabel")}
+          tabListAriaLabel={t("agentic.planDetail.tabsLabel")}
         >
           {PLAN_DETAIL_TABS.map((tab) => (
             <Tab
@@ -415,7 +422,7 @@ const PlanDetailsPage: React.FC = () => {
       >
         <PageSection hasBodyWrapper={false}>
           <DetailSections>
-            {configurationChecks.some((check) => check.status === "issue") && (
+            {hasConfigurationIssue && (
               <PlanConfigurationAlert
                 plan={migrationPlan}
                 checks={configurationChecks}

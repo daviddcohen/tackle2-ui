@@ -6,7 +6,7 @@ import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
-import { PlanRun } from "@app/agentic";
+import { PlanRun, isTerminalRunPhase } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar } from "@app/components/FilterToolbar";
 import { FilterCategory } from "@app/components/FilterToolbar/FilterToolbar";
@@ -167,6 +167,10 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
   const unavailable = (
     <EmptyTextMessage message={t("agentic.common.unavailable")} />
   );
+  // A run still going whose clock cannot be read yet has not finished.
+  const notFinished = (
+    <EmptyTextMessage message={t("agentic.stageRunsTable.notFinished")} />
+  );
 
   return (
     <>
@@ -319,7 +323,9 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
                         ? formatDuration(duration)
                         : run.status === "Pending"
                           ? notStarted
-                          : unavailable}
+                          : isTerminalRunPhase(run.status)
+                            ? unavailable
+                            : notFinished}
                     </Td>
                   </TableRowContentWithControls>
                 </Tr>

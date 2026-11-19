@@ -12,6 +12,7 @@ import {
   EntityId,
   StageAgentRun,
   StageRun,
+  isTerminalRunPhase,
 } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
@@ -66,6 +67,10 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
   const unavailable = (
     <EmptyTextMessage message={t("agentic.common.unavailable")} />
   );
+  // A stage still going whose clock cannot be read yet has not finished.
+  const notFinished = (
+    <EmptyTextMessage message={t("agentic.stageRunsTable.notFinished")} />
+  );
   const columns = {
     order: t("agentic.stageRunsTable.order"),
     stage: t("agentic.entity.stage"),
@@ -107,18 +112,14 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
                 <RunStatus status={stage.phase} />
               </Td>
               <Td dataLabel={columns.completed} modifier="nowrap">
-                {stage.completedAt ? (
-                  formatTableDate(new Date(stage.completedAt))
-                ) : stage.phase === "Pending" ? (
-                  notStarted
-                ) : stage.phase === "Running" ||
-                  stage.phase === "AwaitingApproval" ? (
-                  <EmptyTextMessage
-                    message={t("agentic.stageRunsTable.notFinished")}
-                  />
-                ) : (
-                  unavailable
-                )}
+                {stage.completedAt
+                  ? formatTableDate(new Date(stage.completedAt))
+                  : stage.phase === "Pending"
+                    ? notStarted
+                    : stage.phase === "Running" ||
+                        stage.phase === "AwaitingApproval"
+                      ? notFinished
+                      : unavailable}
               </Td>
             </Tr>
           ))}
@@ -145,6 +146,10 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
               info={{
                 popover: t("agentic.planRun.contextHelp"),
                 ariaLabel: t("agentic.planRun.contextHelpLabel"),
+                popoverProps: {
+                  "aria-label": t("agentic.agentRun.context.title"),
+                  closeBtnAriaLabel: t("actions.close"),
+                },
               }}
             >
               {columns.context}
@@ -200,7 +205,9 @@ export const StageRunsTable: React.FC<StageRunsTableProps> = (props) => {
                     ? formatDuration(duration)
                     : stageRun.status === "Pending"
                       ? notStarted
-                      : unavailable}
+                      : isTerminalRunPhase(stageRun.status)
+                        ? unavailable
+                        : notFinished}
                 </Td>
                 {agentRuns != null && (
                   // One line, like Started: the cell turns from "Not
