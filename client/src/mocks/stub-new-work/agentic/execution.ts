@@ -26,7 +26,6 @@ import {
   ApplicationMigrationStageExecution,
   ApplicationMigrationView,
   ControllerRunPhase,
-  EffectiveSkillAssociation,
   EntityId,
   EntityRef,
   PlanRun,
@@ -62,6 +61,7 @@ import {
   resolveAgentRef,
   resolvePlanRef,
   resolveSkillRef,
+  splitExcludedSkills,
   uniqueEffectiveSkills,
 } from "./db";
 import { PlanRunTemplate, mockMigrationPlans, mockPlanRuns } from "./fixtures";
@@ -681,6 +681,14 @@ const presentRun = (record: RunRecord, now = Date.now()): PlanRun => {
       ...entry,
       skill: resolveSkillRef(entry.skill),
     })),
+    ...(run.excludedSkills
+      ? {
+          excludedSkills: run.excludedSkills.map((entry) => ({
+            ...entry,
+            skill: resolveSkillRef(entry.skill),
+          })),
+        }
+      : {}),
     stageRuns: run.stageRuns.map((stageRun, index) => ({
       ...stageRun,
       agent: resolveAgentRef(stageRun.agent),
@@ -883,15 +891,27 @@ const stageExecution = (
   completedAt: stageRun.completedAt,
 });
 
+/**
+ * The application's skills: `effectiveSkills` are the ones its agents use,
+ * `excludedSkills` (only when there are some) the ones its Plan turns off.
+ */
 const effectiveSkillsFor = (
   plan: StoredPlan | undefined,
   applicationId: number
-): EffectiveSkillAssociation[] =>
-  uniqueEffectiveSkills([
-    ...(plan ? effectiveSkillsForPlan(plan) : []),
-    ...collectionSkillsForAgents(plan?.stages.map((s) => s.agent.id) ?? []),
-    ...applicationSkills(applicationId),
-  ]);
+): Pick<ApplicationMigrationView, "effectiveSkills" | "excludedSkills"> => {
+  const { used, excluded } = splitExcludedSkills(
+    uniqueEffectiveSkills([
+      ...(plan ? effectiveSkillsForPlan(plan) : []),
+      ...collectionSkillsForAgents(plan?.stages.map((s) => s.agent.id) ?? []),
+      ...applicationSkills(applicationId),
+    ]),
+    plan
+  );
+  return {
+    effectiveSkills: used,
+    ...(excluded.length > 0 ? { excludedSkills: excluded } : {}),
+  };
+};
 
 export const getApplicationMigration = (
   application: Application
@@ -916,7 +936,7 @@ export const getApplicationMigration = (
         : resolved.migrationPath?.targetProfiles[0],
       ...scenarioPreflight(application),
       intervention: "none",
-      effectiveSkills: effectiveSkillsFor(resolved, application.id),
+      ...effectiveSkillsFor(resolved, application.id),
       stages: [],
       updatedAt: "2026-09-01T08:30:00Z",
     };
@@ -963,7 +983,7 @@ export const getApplicationMigration = (
           requestedAction: "Review Migration Proposal",
         }
       : undefined,
-    effectiveSkills: effectiveSkillsFor(plan, application.id),
+    ...effectiveSkillsFor(plan, application.id),
     result:
       run.status === "Succeeded"
         ? {
@@ -1019,11 +1039,17 @@ const createRun = (
   now: number
 ): RunRecord => {
   const id = nextRunId();
-  const resolvedSkills = uniqueEffectiveSkills([
-    ...effectiveSkillsForPlan(plan),
-    ...collectionSkillsForAgents(plan.stages.map((s) => s.agent.id)),
-    ...applications.flatMap((application) => applicationSkills(application.id)),
-  ]);
+  const { used: resolvedSkills, excluded: excludedSkills } =
+    splitExcludedSkills(
+      uniqueEffectiveSkills([
+        ...effectiveSkillsForPlan(plan),
+        ...collectionSkillsForAgents(plan.stages.map((s) => s.agent.id)),
+        ...applications.flatMap((application) =>
+          applicationSkills(application.id)
+        ),
+      ]),
+      plan
+    );
   return {
     run: {
       id,
@@ -1038,6 +1064,7 @@ const createRun = (
       targetBranch,
       startedAt: new Date(now).toISOString(),
       resolvedSkills,
+      ...(excludedSkills.length > 0 ? { excludedSkills } : {}),
       stageRuns: [...plan.stages]
         .sort((a, b) => a.order - b.order)
         .map((stage) =>

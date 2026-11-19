@@ -4,7 +4,7 @@ import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
-import { MigrationPlan, Skill, SkillCollection } from "@app/agentic";
+import { Skill, SkillCollection, SkillPlan } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
@@ -77,36 +77,38 @@ const collections: SkillCollection[] = [
   },
 ];
 
-const plans = [
+/** GET /skills/1/plans: the server's plan skill resolution, in plan name order. */
+const skillPlans: SkillPlan[] = [
   {
-    id: "2",
-    name: "Spring Boot to Quarkus",
-    effectiveSkills: [
+    plan: { id: "1", name: ".NET Framework to .NET 8" },
+    sources: [
       {
-        skill: { id: "1", name: inlineSkill.name },
+        scope: "agent",
+        scopeName: "Code Migrator",
+        resource: { id: "2", name: "Code Migrator" },
+      },
+    ],
+    excluded: false,
+  },
+  {
+    plan: { id: "2", name: "Spring Boot to Quarkus" },
+    sources: [
+      {
+        scope: "agent",
+        scopeName: "Code Migrator",
+        resource: { id: "2", name: "Code Migrator" },
+      },
+      {
         scope: "targetProfile",
         scopeName: "Quarkus 3.x",
-      },
-      {
-        skill: { id: "1", name: inlineSkill.name },
-        scope: "agent",
-        scopeName: "Code Migrator",
+        resource: { id: 11, name: "Quarkus 3.x" },
       },
     ],
+    excluded: false,
   },
-  {
-    id: "1",
-    name: ".NET Framework to .NET 8",
-    effectiveSkills: [
-      {
-        skill: { id: "1", name: inlineSkill.name },
-        scope: "agent",
-        scopeName: "Code Migrator",
-      },
-    ],
-  },
-  { id: "3", name: "Unrelated plan", effectiveSkills: [] },
-] as unknown as MigrationPlan[];
+];
+
+const skillPlansUrl = `${AGENTIC_ENDPOINTS.skills}/:id/plans`;
 
 type Resolver = Parameters<typeof rest.get>[1];
 type MemoryRouterEntry = NonNullable<
@@ -129,8 +131,9 @@ const useEndpoints = (
       overrides.collections ?? ((_req, res, ctx) => res(ctx.json(collections)))
     ),
     rest.get(
-      AGENTIC_ENDPOINTS.plans,
-      overrides.plans ?? ((_req, res, ctx) => res(ctx.json(plans)))
+      skillPlansUrl,
+      overrides.plans ??
+        ((_req, res, ctx) => res(ctx.json({ plans: skillPlans })))
     ),
     rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.json(archetypes)))
   );
@@ -305,7 +308,7 @@ describe("SkillDetail, Details tab", () => {
       rest.get(AGENTIC_ENDPOINTS.skillCollections, (_req, res, ctx) =>
         res(ctx.json([]))
       ),
-      rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) => res(ctx.json([]))),
+      rest.get(skillPlansUrl, (_req, res, ctx) => res(ctx.json({ plans: [] }))),
       rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.json([])))
     );
     render(
@@ -347,7 +350,7 @@ describe("SkillDetail, Details tab", () => {
 });
 
 describe("SkillDetail, Associations tab", () => {
-  it("lists associations by type, plans by name and the collections", async () => {
+  it("lists associations by type, the server's plans and the collections", async () => {
     useEndpoints();
     renderPage("/skills/1?tab=associations");
 
@@ -378,7 +381,6 @@ describe("SkillDetail, Associations tab", () => {
     expect(planRows[2]).toHaveTextContent(
       "Spring Boot to QuarkusAgent: Code MigratorTarget profile: Quarkus 3.x"
     );
-    expect(screen.queryByText("Unrelated plan")).not.toBeInTheDocument();
 
     const collectionsGrid = screen.getByRole("grid", {
       name: "In skill collections",
@@ -391,10 +393,104 @@ describe("SkillDetail, Associations tab", () => {
     expect(within(collectionsGrid).getByText("2 skills")).toBeInTheDocument();
   });
 
+  it("keeps the server's order of the plans", async () => {
+    const reversed = [...skillPlans].reverse();
+    useEndpoints({
+      plans: (_req, res, ctx) => res(ctx.json({ plans: reversed })),
+    });
+    renderPage("/skills/1?tab=associations");
+
+    await screen.findByRole("heading", {
+      name: "Used in migration plans (2)",
+    });
+    const planRows = within(
+      screen.getByRole("grid", { name: "Used in migration plans" })
+    ).getAllByRole("row");
+    expect(planRows).toHaveLength(3);
+    expect(planRows[1]).toHaveTextContent("Spring Boot to Quarkus");
+    expect(planRows[2]).toHaveTextContent(".NET Framework to .NET 8");
+  });
+
+  it("lists a plan that gets the skill only through a skill collection, marked Excluded", async () => {
+    const collectionPlan: SkillPlan = {
+      plan: { id: "5", name: "Java EE to Quarkus" },
+      sources: [
+        {
+          scope: "agent",
+          scopeName: "Code Migrator via Java modernization foundation",
+          resource: { id: "2", name: "Code Migrator" },
+          collection: { id: "1", name: "Java modernization foundation" },
+        },
+      ],
+      excluded: true,
+    };
+    useEndpoints({
+      plans: (_req, res, ctx) =>
+        res(ctx.json({ plans: [...skillPlans, collectionPlan] })),
+    });
+    renderPage("/skills/1?tab=associations");
+
+    // The excluding plan is listed but does not use the skill.
+    await screen.findByRole("heading", {
+      name: "Used in migration plans (2 of 3)",
+    });
+    const planRows = within(
+      screen.getByRole("grid", { name: "Used in migration plans" })
+    ).getAllByRole("row");
+    expect(within(planRows[1]).queryByText("Excluded")).not.toBeInTheDocument();
+    expect(planRows[3]).toHaveTextContent(
+      "Java EE to QuarkusExcludedAgent: Code Migrator via Java modernization foundation"
+    );
+    expect(within(planRows[3]).getByText("Excluded")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Migration plans that get this skill from an agent, its skill collections, the archetype or the target profiles. Application skills are added when a plan runs. A plan marked Excluded does not give this skill to its agents."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("explains the sources without the Excluded sentence when no plan excludes the skill", async () => {
+    useEndpoints();
+    renderPage("/skills/1?tab=associations");
+
+    expect(
+      await screen.findByText(
+        "Migration plans that get this skill from an agent, its skill collections, the archetype or the target profiles. Application skills are added when a plan runs."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/A plan marked Excluded/)
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a skeleton while the plans load", async () => {
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => (release = resolve));
+    useEndpoints({
+      plans: async (_req, res, ctx) => {
+        await pending;
+        return res(ctx.json({ plans: [] }));
+      },
+    });
+    renderPage("/skills/1?tab=associations");
+
+    await findTitle();
+    expect(
+      await screen.findByText("Loading migration plans")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("grid", { name: "Used in migration plans" })
+    ).not.toBeInTheDocument();
+    release();
+    expect(
+      await screen.findByText("No migration plan uses this skill.")
+    ).toBeInTheDocument();
+  });
+
   it("shows the empty sections without a count", async () => {
     useEndpoints({
       skill: { ...inlineSkill, associations: [] },
-      plans: (_req, res, ctx) => res(ctx.json([])),
+      plans: (_req, res, ctx) => res(ctx.json({ plans: [] })),
       collections: (_req, res, ctx) => res(ctx.json([])),
     });
     renderPage("/skills/1?tab=associations");
@@ -414,17 +510,45 @@ describe("SkillDetail, Associations tab", () => {
     expect(
       screen.getByRole("heading", { name: "Used in migration plans" })
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Migration plans that get/)).toBeNull();
   });
 
-  it("says Unavailable when the plans do not report their skills", async () => {
+  it("counts none used when the only plan excludes the skill", async () => {
     useEndpoints({
       plans: (_req, res, ctx) =>
-        res(
-          ctx.json(
-            plans.map((plan) => ({ ...plan, effectiveSkills: undefined }))
-          )
-        ),
+        res(ctx.json({ plans: [{ ...skillPlans[0], excluded: true }] })),
     });
+    renderPage("/skills/1?tab=associations");
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Used in migration plans (0 of 1)",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("says the plans are not available when the server has no endpoint for them", async () => {
+    // A backend without the endpoint answers 404 (hand-off doc, step 8).
+    useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(404)) });
+    renderPage("/skills/1?tab=associations");
+
+    await findTitle();
+    const section = (
+      await screen.findByRole("heading", { name: "Used in migration plans" })
+    ).parentElement?.parentElement as HTMLElement;
+    expect(
+      await within(section).findByText(
+        "This server cannot list the migration plans that use this skill."
+      )
+    ).toBeInTheDocument();
+    expect(within(section).queryByText("Unavailable")).toBeNull();
+    expect(within(section).queryByRole("button")).toBeNull();
+    // No rows, so no description of them (as on plan Details).
+    expect(within(section).queryByText(/Migration plans that get/)).toBeNull();
+  });
+
+  it("says Unavailable, not unused, when the plans fail to load", async () => {
+    useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(500)) });
     renderPage("/skills/1?tab=associations");
 
     await findTitle();
@@ -435,28 +559,13 @@ describe("SkillDetail, Associations tab", () => {
     const section = screen.getByRole("heading", {
       name: "Used in migration plans",
     }).parentElement?.parentElement as HTMLElement;
-    expect(within(section).getByText("Unavailable")).toBeInTheDocument();
+    expect(await within(section).findByText("Unavailable")).toBeInTheDocument();
+    expect(within(section).queryByText(/Migration plans that get/)).toBeNull();
     expect(
       screen.queryByText("No migration plan uses this skill.")
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("grid", { name: "Used in migration plans" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("does not claim the skill is unused when the plans fail to load", async () => {
-    useEndpoints({ plans: (_req, res, ctx) => res(ctx.status(500)) });
-    renderPage("/skills/1?tab=associations");
-
-    await findTitle();
-    expect(
-      await screen.findByRole("heading", { name: "In skill collections (1)" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Used in migration plans" })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("No migration plan uses this skill.")
     ).not.toBeInTheDocument();
   });
 });

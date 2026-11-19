@@ -27,6 +27,7 @@ import {
   SkillsTable,
   groupSkillSources,
   skillAssociationSources,
+  skillRowCounts,
 } from "@app/pages/agentic/components/skills-table";
 import {
   useFetchApplicationMigrations,
@@ -78,8 +79,9 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
   const rows = React.useMemo(() => {
     if (hasPlan) {
       // The server did not say which skills apply: unknown, not none.
+      // Skills its migration plan excludes stay in the table, marked.
       return migration?.effectiveSkills != null
-        ? groupSkillSources(migration.effectiveSkills)
+        ? groupSkillSources(migration.effectiveSkills, migration.excludedSkills)
         : undefined;
     }
     const archetypeIds = new Set(archetypes.map((archetype) => archetype.id));
@@ -94,6 +96,8 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
       )
     );
   }, [hasPlan, migration, skills, archetypes, applicationId]);
+
+  const { used, total } = skillRowCounts(rows);
 
   if (isLoadingMigrations || (!hasPlan && isLoadingSkills)) {
     return <AppPlaceholder />;
@@ -133,10 +137,18 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
       </EmptyState>
     );
   } else {
-    title = t("agentic.applicationDetail.skillsTitle", { count: rows.length });
-    description = hasPlan
-      ? t("agentic.applicationDetail.skillsDescription")
-      : t("agentic.applicationDetail.skillsAssociatedDescription");
+    title =
+      used < total
+        ? t("agentic.applicationDetail.skillsTitleUsed", {
+            used,
+            count: total,
+          })
+        : t("agentic.applicationDetail.skillsTitle", { count: total });
+    description = !hasPlan
+      ? t("agentic.applicationDetail.skillsAssociatedDescription")
+      : used < total
+        ? t("agentic.applicationDetail.skillsDescriptionExcluded")
+        : t("agentic.applicationDetail.skillsDescription");
     content = <SkillsTable rows={rows} linkTo={linkTo} />;
   }
 

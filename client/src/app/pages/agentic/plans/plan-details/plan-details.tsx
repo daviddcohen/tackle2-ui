@@ -20,7 +20,11 @@ import { CubesIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths } from "@app/Paths";
-import { MigrationPlan, getPlanConfigurationChecks } from "@app/agentic";
+import {
+  MigrationPlan,
+  ResolvePlanSkillsRequest,
+  getPlanConfigurationChecks,
+} from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { adminViewScopes } from "@app/auth/roles-to-scopes";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
@@ -41,10 +45,12 @@ import {
 } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
+  planSkillsState,
   useFetchAgents,
   useFetchGateways,
   useFetchMigrationPlanById,
   useFetchPlanRuns,
+  useResolvePlanSkills,
 } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes, plansWriteScopes } from "@app/scopes";
 
@@ -55,9 +61,14 @@ import {
   DetailSection,
   DetailSections,
   LinkLabels,
+  SectionEmpty,
 } from "../../components/detail-section";
 import { PlanRunsTable } from "../../components/plan-runs-table";
-import { SkillsTable, groupSkillSources } from "../../components/skills-table";
+import {
+  SkillsTable,
+  planSkillRows,
+  skillRowCounts,
+} from "../../components/skills-table";
 import { PlanConfigurationAlert } from "../components/plan-configuration-alert";
 import {
   getPlanDeleteBlocker,
@@ -158,6 +169,33 @@ const PlanDetailsPage: React.FC = () => {
     isLoading: isLoadingRuns,
     fetchError: runsFetchError,
   } = useFetchPlanRuns(planId);
+  // The same server resolution the wizard shows, for the saved plan and its
+  // exclusions.
+  const skillsRequest = React.useMemo<ResolvePlanSkillsRequest | undefined>(
+    () =>
+      migrationPlan == null
+        ? undefined
+        : {
+            stages: migrationPlan.stages.map((stage) => ({
+              agent: { id: stage.agent.id },
+            })),
+            migrationPath:
+              migrationPlan.migrationPath != null
+                ? {
+                    archetype: { id: migrationPlan.migrationPath.archetype.id },
+                    targetProfiles:
+                      migrationPlan.migrationPath.targetProfiles.map(
+                        (profile) => ({ id: profile.id })
+                      ),
+                  }
+                : undefined,
+            excludedSkills: (migrationPlan.excludedSkills ?? []).map(
+              (skill) => ({ id: skill.id })
+            ),
+          },
+    [migrationPlan]
+  );
+  const skillsQuery = useResolvePlanSkills(skillsRequest);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   // Leave before the next render: this page would refetch the deleted plan (404).
   const { requestDelete, dialog: deleteDialog } = useDeletePlanDialog(() =>
@@ -218,10 +256,15 @@ const PlanDetailsPage: React.FC = () => {
   const childLink = (pathname: string) =>
     breadcrumbTo(pathname, `?from=plan-${migrationPlan.id}`, planChildCrumbs);
 
+  // After an edit the previous plan's rows are not shown while the saved
+  // plan resolves: their exclusions can be out of date.
+  const skillsState = planSkillsState(skillsQuery);
+  const isLoadingSkills = skillsState === "loading";
   const skillRows =
-    migrationPlan.effectiveSkills == null
-      ? undefined
-      : groupSkillSources(migrationPlan.effectiveSkills);
+    skillsState === "ready" && skillsQuery.planSkills != null
+      ? planSkillRows(skillsQuery.planSkills)
+      : undefined;
+  const { used: usedSkillCount } = skillRowCounts(skillRows);
 
   const facts: [string, React.ReactNode][] = [
     [
@@ -385,22 +428,44 @@ const PlanDetailsPage: React.FC = () => {
             </DetailSection>
             {skillRows == null ? (
               <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
-                <EmptyTextMessage message={t("agentic.common.unavailable")} />
+                {isLoadingSkills ? (
+                  <Skeleton
+                    width="16rem"
+                    screenreaderText={t("agentic.plan.loadingSkillsShort")}
+                  />
+                ) : (
+                  <EmptyTextMessage
+                    message={
+                      skillsState === "unavailable"
+                        ? t("agentic.planDetail.skillsNotAvailable")
+                        : t("agentic.common.unavailable")
+                    }
+                  />
+                )}
               </DetailSection>
             ) : skillRows.length === 0 ? (
               <DetailSection title={t("agentic.planDetail.skillsTitleEmpty")}>
-                <EmptyState
-                  variant="xs"
-                  headingLevel="h3"
-                  titleText={t("agentic.planDetail.skillsEmpty")}
-                />
+                <SectionEmpty>
+                  {t("agentic.planDetail.skillsEmpty")}
+                </SectionEmpty>
               </DetailSection>
             ) : (
               <DetailSection
-                title={t("agentic.planDetail.skillsTitle", {
-                  count: skillRows.length,
-                })}
-                description={t("agentic.planDetail.skillsDescription")}
+                title={
+                  usedSkillCount < skillRows.length
+                    ? t("agentic.planDetail.skillsTitleUsed", {
+                        used: usedSkillCount,
+                        count: skillRows.length,
+                      })
+                    : t("agentic.planDetail.skillsTitle", {
+                        count: skillRows.length,
+                      })
+                }
+                description={
+                  usedSkillCount < skillRows.length
+                    ? t("agentic.planDetail.skillsDescriptionExcluded")
+                    : t("agentic.planDetail.skillsDescription")
+                }
               >
                 <SkillsTable rows={skillRows} linkTo={childLink} />
               </DetailSection>

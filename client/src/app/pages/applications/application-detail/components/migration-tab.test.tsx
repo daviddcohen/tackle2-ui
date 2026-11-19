@@ -367,6 +367,49 @@ describe("MigrationTab", () => {
       );
     });
 
+    it("counts the skills its plan excludes like the Skills tab heading", () => {
+      const skill = (id: string) => ({
+        skill: { id, name: `Skill ${id}` },
+        scope: "agent" as const,
+        scopeName: "Code Migrator",
+      });
+      mockState.migration = view({
+        planRun: runRef,
+        runPhase: "Running",
+        effectiveSkills: [skill("1")],
+        excludedSkills: [skill("2"), skill("2")],
+      });
+      mockState.planRun = run("Running", []);
+      renderTab();
+      expect(
+        within(fact("agentic.applicationDetail.tabSkills")).getByRole("link", {
+          name: "agentic.execution.skillCountUsed",
+        })
+      ).toHaveAttribute("href", "/?tab=skills");
+    });
+
+    it("links to the Skills tab when its plan excludes every skill", () => {
+      mockState.migration = view({
+        planRun: runRef,
+        runPhase: "Running",
+        effectiveSkills: [],
+        excludedSkills: [
+          {
+            skill: { id: "2", name: "Skill 2" },
+            scope: "archetype",
+            scopeName: "Java EE",
+          },
+        ],
+      });
+      mockState.planRun = run("Running", []);
+      renderTab();
+      expect(
+        within(fact("agentic.applicationDetail.tabSkills")).getByRole("link", {
+          name: "agentic.execution.skillCountUsed",
+        })
+      ).toBeInTheDocument();
+    });
+
     it("sends the user to the run when it cannot be read and needs action", () => {
       mockState.migration = view({
         planRun: runRef,

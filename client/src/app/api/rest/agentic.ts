@@ -41,9 +41,12 @@ import {
   PlanRun,
   Provider,
   ProviderRequest,
+  ResolvePlanSkillsRequest,
+  ResolvePlanSkillsResponse,
   Skill,
   SkillCollection,
   SkillCollectionRequest,
+  SkillPlansResponse,
   SkillRequest,
   StartApplicationMigrationsRequest,
   StartApplicationMigrationsResponse,
@@ -64,6 +67,7 @@ export const AGENTIC_ENDPOINTS = {
   agents: `${PROTOTYPE_BASE}/agents`,
   agentRuns: `${PROTOTYPE_BASE}/agent-runs`,
   plans: `${PROTOTYPE_BASE}/plans`,
+  planSkillsResolve: `${PROTOTYPE_BASE}/plans/skills/resolve`,
   archetypes: `${PROTOTYPE_BASE}/archetypes`,
   applications: `${PROTOTYPE_BASE}/applications`,
   planRuns: `${PROTOTYPE_BASE}/plan-runs`,
@@ -79,6 +83,7 @@ const {
   agents: AGENTS,
   agentRuns: AGENT_RUNS,
   plans: PLANS,
+  planSkillsResolve: PLAN_SKILLS_RESOLVE,
   archetypes: ARCHETYPES,
   applications: APPLICATIONS,
   planRuns: PLAN_RUNS,
@@ -99,6 +104,18 @@ export const getSkills = () =>
 
 export const getSkillById = (skillId: EntityId) =>
   axios.get<Skill>(`${SKILLS}/${id(skillId)}`).then(({ data }) => data);
+
+/**
+ * The migration plans whose resolved skills include the Skill, with its
+ * sources and whether each plan excludes it: the plan skill resolution
+ * (`resolvePlanSkills`) of every saved Plan, keyed by the Skill. Real backend:
+ * missing (the same family as the proposed resolve endpoint; for example
+ * `GET /hub/agentic/skills/:name/workflows`).
+ */
+export const getSkillPlans = (skillId: EntityId) =>
+  axios
+    .get<SkillPlansResponse>(`${SKILLS}/${id(skillId)}/plans`)
+    .then(({ data }) => data);
 
 export const createSkill = (request: SkillRequest) =>
   axios.post<Skill>(SKILLS, request).then(({ data }) => data);
@@ -342,7 +359,9 @@ export const startAgentTestRun = (request: AgentTestRunRequest) =>
 // `execution.mode: approve` (per tool call, not per stage). The migration path
 // (archetype + target profiles), `effectiveSkills`, `applicationImpact` and
 // `runCount` are missing (Hub product vocabulary / Hub-computed views;
-// `runCount` can be counted client-side).
+// `runCount` can be counted client-side). `excludedSkills` and the skill
+// resolve preview are missing too (proposed: per-stage
+// `spec.stages[].skills.exclude[].ref` and a Hub resolve endpoint).
 // ---------------------------------------------------------------------------
 
 export const getMigrationPlans = () =>
@@ -362,6 +381,19 @@ export const updateMigrationPlan = ({
 
 export const deleteMigrationPlan = (planId: EntityId) =>
   axios.delete<void>(`${PLANS}/${id(planId)}`).then(() => undefined);
+
+/**
+ * The Skills a draft (or saved) Plan resolves to, one entry per Skill with its
+ * sources and whether the draft's `excludedSkills` turns it off. Reads only;
+ * a full `MigrationPlanRequest` is a valid body. Real backend: missing
+ * (proposed `POST /hub/agentic/workflows/skills/resolve` with a draft
+ * AgentWorkflow spec; today the controller resolves skills only when a stage's
+ * AgentRun starts, from the Agent's skill cards and collections).
+ */
+export const resolvePlanSkills = (request: ResolvePlanSkillsRequest) =>
+  axios
+    .post<ResolvePlanSkillsResponse>(PLAN_SKILLS_RESOLVE, request)
+    .then(({ data }) => data);
 
 /**
  * Makes `planId` the default Plan for one target profile of an archetype, in

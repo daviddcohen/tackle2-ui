@@ -5,6 +5,7 @@
  */
 import axios, { AxiosError, isAxiosError } from "axios";
 
+import { MigrationPlan, MigrationPlanRequest } from "@app/agentic";
 import {
   AGENTIC_ENDPOINTS,
   approveStageRun,
@@ -29,7 +30,9 @@ import {
   getPlanRuns,
   getSkillById,
   getSkillCollectionById,
+  getSkillPlans,
   getSkills,
+  resolvePlanSkills,
   startApplicationMigrations,
   updateAgent,
   updateMigrationPlan,
@@ -39,7 +42,13 @@ import {
 } from "@app/api/rest/agentic";
 import { server } from "@mocks/server";
 
-import { resetAgenticDb } from "./db";
+import {
+  collectionSkillsForAgents,
+  db,
+  effectiveSkillsForPlan,
+  resetAgenticDb,
+  uniqueEffectiveSkills,
+} from "./db";
 import { resetExecutionWorld } from "./execution";
 import handlers from "./handlers";
 
@@ -383,6 +392,272 @@ describe("plans", () => {
       ["1", false],
       ["3", true],
     ]);
+  });
+});
+
+describe("plan skill review", () => {
+  /** A saved Plan as the request the wizard would send for it. */
+  const requestFor = (plan: MigrationPlan): MigrationPlanRequest => ({
+    name: plan.name,
+    description: plan.description,
+    stages: plan.stages.map((stage) => ({
+      id: stage.id,
+      name: stage.name,
+      agent: { id: stage.agent.id },
+      instructions: stage.instructions,
+      requiresApproval: stage.requiresApproval,
+    })),
+    migrationPath: plan.migrationPath && {
+      archetype: { id: plan.migrationPath.archetype.id },
+      targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
+        id,
+      })),
+      isDefault: plan.migrationPath.isDefault,
+    },
+  });
+
+  it("resolves a draft's skills from every source, one entry per skill", async () => {
+    // A full MigrationPlanRequest is a valid resolve body.
+    const { skills } = await resolvePlanSkills(
+      requestFor(await getMigrationPlanById("5"))
+    );
+    const ids = skills.map(({ skill }) => skill.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect([...ids].sort((a, b) => Number(a) - Number(b))).toEqual([
+      "1",
+      "2",
+      "3",
+      "7",
+      "8",
+      "9",
+      "13",
+      "14",
+      "15",
+    ]);
+    expect(skills.every(({ excluded }) => !excluded)).toBe(true);
+    expect(skills.find(({ skill }) => skill.id === "9")?.sources).toEqual([
+      {
+        scope: "agent",
+        scopeName: "Code Migrator",
+        resource: { id: "2", name: "Code Migrator" },
+      },
+      {
+        scope: "archetype",
+        scopeName: "Legacy Java Application",
+        resource: { id: 3, name: "Legacy Java Application" },
+      },
+      {
+        scope: "targetProfile",
+        scopeName: "Java 17 on OpenShift",
+        resource: { id: 31, name: "Java 17 on OpenShift" },
+      },
+    ]);
+    const collection = { id: "1", name: "Java modernization foundation" };
+    expect(skills.find(({ skill }) => skill.id === "3")?.sources).toEqual([
+      {
+        scope: "agent",
+        scopeName: "Migration Proposal Agent via Java modernization foundation",
+        resource: { id: "1", name: "Migration Proposal Agent" },
+        collection,
+      },
+      {
+        scope: "agent",
+        scopeName: "Code Migrator via Java modernization foundation",
+        resource: { id: "2", name: "Code Migrator" },
+        collection,
+      },
+    ]);
+  });
+
+  it("lists each source once, even for an agent used by two stages", async () => {
+    const { skills } = await resolvePlanSkills({
+      stages: [{ agent: { id: "2" } }, { agent: { id: "2" } }],
+    });
+    const migration = skills.find(({ skill }) => skill.id === "1");
+    expect(migration?.sources.map((source) => source.scopeName)).toEqual([
+      "Code Migrator",
+      "Code Migrator via Java modernization foundation",
+    ]);
+  });
+
+  it("matches the sources the plan, run and application views resolve", async () => {
+    for (const plan of db.plans) {
+      const { skills } = await resolvePlanSkills(
+        requestFor(await getMigrationPlanById(plan.id))
+      );
+      const key = (scope: string, scopeName: string, skillId: string) =>
+        `${skillId}|${scope}|${scopeName}`;
+      const resolved = skills
+        .flatMap(({ skill, sources }) =>
+          sources.map((source) => key(source.scope, source.scopeName, skill.id))
+        )
+        .sort();
+      const expected = uniqueEffectiveSkills([
+        ...effectiveSkillsForPlan(plan),
+        ...collectionSkillsForAgents(plan.stages.map((s) => s.agent.id)),
+      ])
+        .map((entry) => key(entry.scope, entry.scopeName, entry.skill.id))
+        .sort();
+      expect(resolved).toEqual(expected);
+    }
+  });
+
+  it("flags excluded skills and ignores ids that reference nothing", async () => {
+    const draft = requestFor(await getMigrationPlanById("5"));
+    const { skills } = await resolvePlanSkills({
+      ...draft,
+      excludedSkills: [{ id: "9" }, { id: "9" }, { id: "9999" }],
+    });
+    expect(
+      skills.filter(({ excluded }) => excluded).map(({ skill }) => skill.id)
+    ).toEqual(["9"]);
+
+    const plain = await resolvePlanSkills(draft);
+    const withUnknown = await resolvePlanSkills({
+      stages: [...draft.stages, { agent: { id: "9999" } }],
+      migrationPath: {
+        archetype: draft.migrationPath!.archetype,
+        targetProfiles: [...draft.migrationPath!.targetProfiles, { id: 9999 }],
+      },
+    });
+    expect(withUnknown).toEqual(plain);
+    expect(
+      await resolvePlanSkills({
+        stages: [],
+        migrationPath: { archetype: { id: 9999 }, targetProfiles: [] },
+      })
+    ).toEqual({ skills: [] });
+  });
+
+  it("rejects a malformed body with 400", async () => {
+    const post = (body: unknown) =>
+      statusOf(axios.post(AGENTIC_ENDPOINTS.planSkillsResolve, body));
+    expect(await post({})).toBe(400);
+    expect(await post({ stages: [{ agent: "2" }] })).toBe(400);
+    expect(
+      await post({ stages: [], migrationPath: { archetype: { id: "3" } } })
+    ).toBe(400);
+    expect(await post({ stages: [], excludedSkills: ["9"] })).toBe(400);
+  });
+
+  it("follows the apiError scenario like every read", async () => {
+    setScenario("apiError");
+    expect(await statusOf(resolvePlanSkills({ stages: [] }))).toBe(503);
+  });
+
+  it("lists the plans that resolve a skill, with the resolution's sources and exclusion", async () => {
+    // Skill 3 reaches plan 5 only through an agent's skill collection.
+    const draft = requestFor(await getMigrationPlanById("5"));
+    await updateMigrationPlan({
+      ...draft,
+      id: "5",
+      excludedSkills: [{ id: "3" }],
+    });
+
+    const { plans } = await getSkillPlans("3");
+    const names = plans.map(({ plan }) => plan.name);
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    const plan5 = plans.find(({ plan }) => plan.id === "5");
+    const resolved = (
+      await resolvePlanSkills({ ...draft, excludedSkills: [{ id: "3" }] })
+    ).skills.find(({ skill }) => skill.id === "3");
+    expect(plan5).toEqual({
+      plan: { id: "5", name: draft.name },
+      sources: resolved?.sources,
+      excluded: true,
+    });
+    expect(plan5?.sources.every(({ collection }) => collection != null)).toBe(
+      true
+    );
+
+    // Every plan, the same as resolving it.
+    for (const plan of db.plans) {
+      const { skills } = await resolvePlanSkills({
+        ...requestFor(await getMigrationPlanById(plan.id)),
+        excludedSkills: plan.excludedSkills?.map(({ id }) => ({ id })),
+      });
+      const entry = skills.find(({ skill }) => skill.id === "3");
+      expect(plans.find((candidate) => candidate.plan.id === plan.id)).toEqual(
+        entry && {
+          plan: { id: plan.id, name: plan.name },
+          sources: entry.sources,
+          excluded: entry.excluded,
+        }
+      );
+    }
+  });
+
+  it("answers 404 for an unknown skill's plans and follows the scenarios", async () => {
+    expect(await statusOf(getSkillPlans("9999"))).toBe(404);
+    setScenario("apiError");
+    expect(await statusOf(getSkillPlans("3"))).toBe(503);
+    // `initial` hides the fixtures: a seeded skill is not found.
+    setScenario("initial");
+    expect(await statusOf(getSkillPlans("3"))).toBe(404);
+  });
+
+  it("stores excludedSkills on create and update, ignores ids that are not skills, and omits them when there are none", async () => {
+    const seeded = await getMigrationPlanById("5");
+    expect(seeded).not.toHaveProperty("excludedSkills");
+
+    const created = await createMigrationPlan({
+      ...requestFor(seeded),
+      name: "Plan with an exclusion",
+      migrationPath: { ...requestFor(seeded).migrationPath!, isDefault: false },
+      excludedSkills: [{ id: "9" }, { id: "9" }, { id: "9999" }, { id: "3" }],
+    });
+    const excluded = [
+      { id: "9", name: "Java runtime modernization" },
+      { id: "3", name: expect.any(String) },
+    ];
+    expect(created.excludedSkills).toEqual(excluded);
+    expect((await getMigrationPlanById(created.id)).excludedSkills).toEqual(
+      excluded
+    );
+
+    // A malformed value is a 400 and keeps what was stored.
+    const request = requestFor(created);
+    expect(
+      await statusOf(
+        updateMigrationPlan({
+          ...request,
+          id: created.id,
+          excludedSkills: ["9"] as unknown as { id: string }[],
+        })
+      )
+    ).toBe(400);
+    expect((await getMigrationPlanById(created.id)).excludedSkills).toEqual(
+      excluded
+    );
+
+    // An id that is not a skill is ignored, as the resolver ignores it.
+    await updateMigrationPlan({
+      ...request,
+      id: created.id,
+      excludedSkills: [{ id: "9999" }, { id: "13" }],
+    });
+    expect((await getMigrationPlanById(created.id)).excludedSkills).toEqual([
+      { id: "13", name: "API compatibility checklist" },
+    ]);
+
+    await updateMigrationPlan({
+      ...request,
+      id: created.id,
+      excludedSkills: [{ id: "9999" }],
+    });
+    expect(await getMigrationPlanById(created.id)).not.toHaveProperty(
+      "excludedSkills"
+    );
+
+    await updateMigrationPlan({
+      ...request,
+      id: created.id,
+      excludedSkills: [{ id: "13" }],
+    });
+    await updateMigrationPlan({ ...request, id: created.id });
+    expect(await getMigrationPlanById(created.id)).not.toHaveProperty(
+      "excludedSkills"
+    );
   });
 });
 

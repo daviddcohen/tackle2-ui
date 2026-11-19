@@ -14,11 +14,14 @@ import {
   ButtonVariant,
   ClipboardCopy,
   Content,
+  Flex,
   FlexItem,
+  Label,
   PageSection,
   Panel,
   PanelMain,
   PanelMainBody,
+  Skeleton,
   Tab,
   TabTitleText,
   Tabs,
@@ -42,7 +45,8 @@ import { breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
   SkillSources,
-  groupSkillSources,
+  planSkillRows,
+  skillRowCounts,
 } from "@app/pages/agentic/components/skills-table";
 import {
   DetailTabPanel,
@@ -53,10 +57,11 @@ import {
 import { skillAssociationPath } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
+  isResolveEndpointMissing,
   useDeleteSkillMutation,
-  useFetchMigrationPlans,
   useFetchSkillById,
   useFetchSkillCollections,
+  useFetchSkillPlans,
 } from "@app/queries/agentic";
 import { useFetchArchetypes } from "@app/queries/archetypes";
 import { skillsWriteScopes } from "@app/scopes";
@@ -146,10 +151,10 @@ const SkillDetail: React.FC = () => {
     fetchError: collectionsError,
   } = useFetchSkillCollections();
   const {
-    migrationPlans,
+    skillPlans,
     isLoading: isLoadingPlans,
     fetchError: plansError,
-  } = useFetchMigrationPlans();
+  } = useFetchSkillPlans(skillId);
 
   const [activeTab, setActiveTab] = useUrlTab<SkillDetailTab>(
     SKILL_DETAIL_TABS,
@@ -183,29 +188,20 @@ const SkillDetail: React.FC = () => {
     [skillCollections, skillId]
   );
 
-  // The real adapter leaves `effectiveSkills` undefined: unknown, not empty,
-  // so the section says "Unavailable" instead of "no plan".
-  const isPlanUsageUnknown = migrationPlans.some(
-    (plan) => plan.effectiveSkills === undefined
-  );
-  // Rows come from the plans' `effectiveSkills` only: never add sources here.
+  // Rows come from the server's plan skill resolution, the same as plan
+  // Details, in the server's plan name order: never add sources here. A
+  // plan that excludes the skill keeps its row, marked Excluded.
   const plansResolvingSkill = React.useMemo(
     () =>
-      migrationPlans
-        .filter((plan) =>
-          (plan.effectiveSkills ?? []).some((es) => es.skill.id === skillId)
-        )
-        .map((plan) => ({
-          plan,
-          sources:
-            groupSkillSources(
-              (plan.effectiveSkills ?? []).filter(
-                (es) => es.skill.id === skillId
-              )
-            )[0]?.sources ?? [],
-        }))
-        .sort((a, b) => a.plan.name.localeCompare(b.plan.name)),
-    [migrationPlans, skillId]
+      (skillPlans ?? []).map(({ plan, sources, excluded }) => ({
+        plan,
+        excluded,
+        sources:
+          planSkillRows([
+            { skill: { id: skillId, name: "" }, sources, excluded: false },
+          ])[0]?.sources ?? [],
+      })),
+    [skillPlans, skillId]
   );
 
   const { breadcrumbs, linkCrumbs: childLinkCrumbs } = useEntityBreadcrumbs(
@@ -232,12 +228,12 @@ const SkillDetail: React.FC = () => {
   const childLink = (path: string) =>
     breadcrumbTo(path, `?from=skill-${skillId}`, childLinkCrumbs);
 
-  const arePlansLoaded = !isLoadingPlans && plansError == null;
-  // Undefined until the plans loaded with a known `effectiveSkills`.
-  const planCount =
-    arePlansLoaded && !isPlanUsageUnknown
-      ? plansResolvingSkill.length
-      : undefined;
+  // Undefined while loading or after a failure: unknown, not empty.
+  const planCount = skillPlans?.length;
+  // A plan that excludes the skill is listed but does not use it: the
+  // heading counts it as the plan and application pages count exclusions.
+  const { used: usedPlanCount } = skillRowCounts(plansResolvingSkill);
+  const hasExcludingPlan = planCount != null && usedPlanCount < planCount;
 
   const knownCollections =
     isLoadingCollections || collectionsError != null
@@ -353,16 +349,38 @@ const SkillDetail: React.FC = () => {
             <FlexItem>
               <DetailSection
                 title={
-                  planCount
-                    ? t("agentic.skillDetail.usedInPlansTitle", {
-                        count: planCount,
-                      })
-                    : t("agentic.skillDetail.usedInPlans")
+                  !planCount
+                    ? t("agentic.skillDetail.usedInPlans")
+                    : hasExcludingPlan
+                      ? t("agentic.skillDetail.usedInPlansTitleUsed", {
+                          used: usedPlanCount,
+                          count: planCount,
+                        })
+                      : t("agentic.skillDetail.usedInPlansTitle", {
+                          count: planCount,
+                        })
                 }
-                description={t("agentic.skillDetail.usedInPlansDescription")}
+                description={
+                  !planCount
+                    ? undefined
+                    : hasExcludingPlan
+                      ? t("agentic.skillDetail.usedInPlansDescriptionExcluded")
+                      : t("agentic.skillDetail.usedInPlansDescription")
+                }
               >
-                {arePlansLoaded && isPlanUsageUnknown ? (
-                  <EmptyTextMessage message={t("agentic.common.unavailable")} />
+                {isLoadingPlans ? (
+                  <Skeleton
+                    width="16rem"
+                    screenreaderText={t("agentic.plan.loadingPlans")}
+                  />
+                ) : planCount == null ? (
+                  <EmptyTextMessage
+                    message={
+                      isResolveEndpointMissing(plansError)
+                        ? t("agentic.skillDetail.plansNotAvailable")
+                        : t("agentic.common.unavailable")
+                    }
+                  />
                 ) : planCount === 0 ? (
                   <SectionEmpty>
                     {t("agentic.skillDetail.noPlans")}
@@ -374,36 +392,47 @@ const SkillDetail: React.FC = () => {
                   >
                     <Thead>
                       <Tr>
-                        <Th width={30}>{t("agentic.entity.migrationPlan")}</Th>
+                        <Th width={40}>{t("agentic.entity.migrationPlan")}</Th>
                         <Th>{t("terms.source")}</Th>
                       </Tr>
                     </Thead>
-                    <ConditionalTableBody
-                      isLoading={isLoadingPlans}
-                      isError={plansError != null}
-                      numRenderedColumns={2}
-                    >
-                      <Tbody>
-                        {plansResolvingSkill.map(({ plan, sources }) => (
+                    <Tbody>
+                      {plansResolvingSkill.map(
+                        ({ plan, excluded, sources }) => (
                           <Tr key={plan.id}>
                             <Td dataLabel={t("agentic.entity.migrationPlan")}>
-                              <Link
-                                to={childLink(
-                                  generatePath(DevPaths.migrationPlanDetails, {
-                                    planId: String(plan.id),
-                                  })
-                                )}
+                              <Flex
+                                spaceItems={{ default: "spaceItemsSm" }}
+                                alignItems={{ default: "alignItemsCenter" }}
                               >
-                                {plan.name}
-                              </Link>
+                                <FlexItem>
+                                  <Link
+                                    to={childLink(
+                                      generatePath(
+                                        DevPaths.migrationPlanDetails,
+                                        { planId: String(plan.id) }
+                                      )
+                                    )}
+                                  >
+                                    {plan.name}
+                                  </Link>
+                                </FlexItem>
+                                {excluded && (
+                                  <FlexItem>
+                                    <Label variant="outline" isCompact>
+                                      {t("agentic.skillsTable.excluded")}
+                                    </Label>
+                                  </FlexItem>
+                                )}
+                              </Flex>
                             </Td>
                             <Td dataLabel={t("terms.source")}>
                               <SkillSources sources={sources} />
                             </Td>
                           </Tr>
-                        ))}
-                      </Tbody>
-                    </ConditionalTableBody>
+                        )
+                      )}
+                    </Tbody>
                   </Table>
                 )}
               </DetailSection>
@@ -419,7 +448,14 @@ const SkillDetail: React.FC = () => {
                       })
                     : t("agentic.skillDetail.inCollections")
                 }
-                description={t("agentic.skillDetail.inCollectionsDescription")}
+                description={
+                  // Only above rows: an empty section is its heading and
+                  // empty state, as for the plans above.
+                  knownCollections != null &&
+                  collectionsContainingSkill.length > 0
+                    ? t("agentic.skillDetail.inCollectionsDescription")
+                    : undefined
+                }
               >
                 {knownCollections != null &&
                 collectionsContainingSkill.length === 0 ? (

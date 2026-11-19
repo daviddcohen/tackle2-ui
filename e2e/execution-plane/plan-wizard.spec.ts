@@ -146,6 +146,12 @@ test.describe("Plan wizard", () => {
     await expect(next(dialog)).toBeEnabled();
     await next(dialog).click();
 
+    // Skills step: the draft's resolved skills; Next is never blocked.
+    await expect(
+      dialog.getByText(/^\d+ of \d+ skills will be used$/)
+    ).toBeVisible();
+    await next(dialog).click();
+
     const review = dialog.getByRole("grid", { name: "Stages to review" });
     const rows = review.locator(
       "tbody > tr:not(.pf-v6-c-table__expandable-row)"
@@ -157,9 +163,8 @@ test.describe("Plan wizard", () => {
     await expect(rows.nth(1)).toContainText("Code Migrator");
     await expect(dialog).toContainText("Quarkus 3.x");
 
-    await dialog.getByRole("button", { name: "Back" }).click();
-    await dialog.getByRole("button", { name: "Back" }).click();
-    await dialog.getByRole("button", { name: "Back" }).click();
+    for (let step = 0; step < 4; step += 1)
+      await dialog.getByRole("button", { name: "Back" }).click();
     await expect(dialog.getByRole("textbox", { name: /^Name/ })).toHaveValue(
       "E2E wizard plan"
     );
@@ -169,6 +174,7 @@ test.describe("Plan wizard", () => {
       "Stage 1: Stage C",
       "Stage 2: Stage B",
     ]);
+    await next(dialog).click();
     await next(dialog).click();
     await dialog.getByRole("button", { name: "Create", exact: true }).click();
 
@@ -232,6 +238,7 @@ test.describe("Plan wizard", () => {
     await expect(
       dialog.getByRole("textbox", { name: "Stage name" })
     ).toHaveCount(0);
+    await next(dialog).click();
     await next(dialog).click();
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
     await expect(dialog).toBeHidden();

@@ -23,8 +23,10 @@
  * - `approveStageRun`, `resolveApplicationMigrationRequest` (ACP permission
  *   answers inside a live session);
  * - Providers, available models, `setDefaultModel`, execution policy,
- *   `assignPlanToTargetProfile`, `getApplicationMigrations`, and "recommended
- *   Plan" starts;
+ *   `assignPlanToTargetProfile`, `getApplicationMigrations`, "recommended
+ *   Plan" starts, `resolvePlanSkills` (no resolve endpoint; Plan
+ *   `excludedSkills` has no CRD field and is dropped on save) and
+ *   `getSkillPlans` (no endpoint for the plans that resolve a skill);
  * - `updateArchetypeSkills`, `updateTargetProfileSkills` and
  *   `updateApplicationSkills` (Hub-scope Skill associations have no Hub
  *   table; `updateSkill` refuses them too).
@@ -430,7 +432,10 @@ export const getMigrationPlanById = async (planId: EntityId) => {
   return toMigrationPlan(workflow, runs);
 };
 
-/** `migrationPath` and `description` have no backend and are not stored. */
+/**
+ * `migrationPath`, `description` and `excludedSkills` have no backend and are
+ * not stored.
+ */
 export const createMigrationPlan = async (request: MigrationPlanRequest) =>
   toMigrationPlan(
     await hub.createWorkflow(

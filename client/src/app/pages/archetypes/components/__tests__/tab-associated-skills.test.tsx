@@ -100,7 +100,7 @@ describe("TabAssociatedSkills", () => {
     const table = await screen.findByRole("grid", { name: "Skills" });
     expect(
       screen.getByText(
-        "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications."
+        "Skills associated with this archetype and its target profiles. Agents use them when they migrate its applications, unless a migration plan excludes them."
       )
     ).toBeInTheDocument();
     expect(

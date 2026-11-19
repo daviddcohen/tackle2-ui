@@ -10,6 +10,8 @@
  * Every GET goes through `read()`, which applies the prototype scenario the
  * same way everywhere: `apiError` answers 503, `loading` delays 10 s, and
  * `initial` hides fixture entities (lists are empty, fixture ids are 404).
+ * A POST that only computes a preview goes through `query()`, which applies
+ * `apiError` and `loading` the same way.
  */
 import {
   DefaultBodyType,
@@ -37,6 +39,7 @@ const {
   agents: AGENTS,
   agentRuns: AGENT_RUNS,
   plans: PLANS,
+  planSkillsResolve: PLAN_SKILLS_RESOLVE,
   archetypes: ARCHETYPES,
   applications: APPLICATIONS,
   planRuns: PLAN_RUNS,
@@ -148,6 +151,38 @@ const read =
     }
   };
 
+/**
+ * A POST that only reads (it computes a preview and changes nothing): the
+ * scenario applies as in `read()`, so `apiError` answers 503 and `loading`
+ * delays 10 s. `initial` hides nothing here, on purpose: the preview is the
+ * same resolution as a plan's `effectiveSkills`, which `initial` does not
+ * filter either. Hub archetypes and target profiles are not scenario-aware,
+ * so in `initial` a draft with an archetype still resolves the fixture skills
+ * associated with it, as a plan saved with that archetype does; those skills
+ * are hidden from `GET /skills` and their pages are 404.
+ */
+const query =
+  (handler: (req: Req) => Promise<unknown>) =>
+  async (req: Req, res: Res, ctx: RestContext) => {
+    const scenario = getPrototypeScenario();
+    if (scenario === "apiError") {
+      return res(
+        ctx.status(503),
+        ctx.json({ message: "The prototype API dependency is unavailable." })
+      );
+    }
+    try {
+      return respond(
+        res,
+        ctx,
+        { status: 200, body: await handler(req) },
+        scenario === "loading" ? LOADING_DELAY_MS : 0
+      );
+    } catch (error) {
+      return fail(res, ctx, error);
+    }
+  };
+
 /** In `partialConfiguration`, every Model is still waiting for verification. */
 const withScenarioVerification = (model: ModelProjection): ModelProjection =>
   getPrototypeScenario() === "partialConfiguration"
@@ -167,6 +202,14 @@ const handlers = [
   rest.get(
     `${SKILLS}/:id`,
     read((req) => catalog.getSkill(param(req, "id")), { kind: "skills" })
+  ),
+  rest.get(
+    `${SKILLS}/:id/plans`,
+    read((req) =>
+      catalog.listSkillPlans(param(req, "id"), {
+        hideSeeded: getPrototypeScenario() === "initial",
+      })
+    )
   ),
   rest.post(
     SKILLS,
@@ -356,6 +399,10 @@ const handlers = [
   rest.get(
     PLANS,
     read(() => catalog.listPlans(), { kind: "plans" })
+  ),
+  rest.post(
+    PLAN_SKILLS_RESOLVE,
+    query(async (req) => catalog.resolvePlanSkills(await readJson(req)))
   ),
   rest.get(
     `${PLANS}/:id`,

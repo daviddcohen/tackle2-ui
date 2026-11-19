@@ -25,7 +25,8 @@ const toStage = (stage: Crd.AgentWorkflowStage, index: number): PlanStage => ({
  * (every AgentWorkflowRun) to count `runCount` client-side. No backend source
  * (documented defaults): `description` "" (`spec.guide` is guidance for the
  * agents, not a description), `migrationPath`, `effectiveSkills`,
- * `applicationImpact` and `updateTime` undefined. `operatorManaged` marks the
+ * `excludedSkills` (no exclusion field; proposed per-stage
+ * `skills.exclude[].ref`), `applicationImpact` and `updateTime` undefined. `operatorManaged` marks the
  * operator's built-in workflows.
  */
 export const toMigrationPlan = (
@@ -40,6 +41,7 @@ export const toMigrationPlan = (
     stages: workflow.spec.stages.map(toStage),
     migrationPath: undefined,
     effectiveSkills: undefined,
+    excludedSkills: undefined,
     applicationImpact: undefined,
     runCount: runs?.filter((run) => run.spec.workflowRef === id).length,
     operatorManaged: isOperatorManaged(workflow),
@@ -77,8 +79,8 @@ const uniqueName = (text: string, taken: Set<string>) => {
  * `workflow.spec` as `base`: the Hub replaces the whole spec, so `guide`,
  * `params`, each kept stage's own fields (execution limits, `askUser`) and any
  * field this contract does not know yet come from it. `name` (the resource
- * name, immutable: see `assertNotRenamed`), `description` and
- * `migrationPath` have no spec field and are dropped.
+ * name, immutable: see `assertNotRenamed`), `description`,
+ * `migrationPath` and `excludedSkills` have no spec field and are dropped.
  */
 export const toWorkflowSpec = (
   request: MigrationPlanRequest,

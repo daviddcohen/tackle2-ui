@@ -61,7 +61,10 @@ const toStageRun = (
  * permission request on the running stage's AgentRun and has to be overlaid
  * from the ACP session. No backend source (documented defaults): stage
  * `approvedAt`, `messages` (ACP transcript) and `commits`, and the run's
- * `resolvedSkills`, are undefined.
+ * `resolvedSkills` and `excludedSkills`, are undefined. Proposed sources:
+ * the exclusions from the `status.stages[].skills` snapshot; what the run
+ * mounted from agentic-controller#172 (`status.skillSources`,
+ * `status.skills`).
  */
 export const toPlanRun = (
   run: Crd.AgentWorkflowRun,
@@ -90,6 +93,7 @@ export const toPlanRun = (
       toStageRun(stage, index, runsByName)
     ),
     resolvedSkills: undefined,
+    excludedSkills: undefined,
   };
 };
 
