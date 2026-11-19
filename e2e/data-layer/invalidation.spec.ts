@@ -16,6 +16,10 @@ import {
   test,
 } from "../support";
 
+interface SkillPlans {
+  plans: { plan: Named; sources: { collection?: Named }[] }[];
+}
+
 interface PlanWithSkills extends Named {
   effectiveSkills?: { skill: Named }[];
   stages: Named[];
@@ -31,6 +35,7 @@ test("skill detail: the plans-resolving-skill table refreshes after its associat
     name: "Used in migration plans",
   });
   await expect(plansTable.locator("tbody tr").first()).toBeVisible();
+  await expect(plansTable.getByText(/^Archetype: /).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Actions", exact: true }).click();
   await page.getByRole("menuitem", { name: "Edit" }).click();
@@ -49,18 +54,23 @@ test("skill detail: the plans-resolving-skill table refreshes after its associat
   await dialog(page).getByRole("button", { name: "Save" }).click();
   await expect(dialog(page)).toHaveCount(0);
 
-  // The server recomputed the plans' effective skills ...
-  const plans = await agenticGet<PlanWithSkills[]>(page, "/plans");
+  // The server recomputed which plans resolve the skill: only those whose
+  // agents get it through a skill collection are left ...
+  const { plans } = await agenticGet<SkillPlans>(page, "/skills/3/plans");
   expect(
-    plans.filter((plan) =>
-      (plan.effectiveSkills ?? []).some((entry) => `${entry.skill.id}` === "3")
+    plans.every(({ sources }) =>
+      sources.every((source) => source.collection != null)
     )
-  ).toEqual([]);
+  ).toBe(true);
   // ... and the page shows it without a reload.
-  await expect(plansTable).toHaveCount(0);
+  await expect(plansTable.locator("tbody tr")).toHaveCount(plans.length);
   await expect(
-    main(page).getByText("No migration plan uses this skill.")
-  ).toBeVisible();
+    plansTable.getByText(/^(Archetype|Target profile): /)
+  ).toHaveCount(0);
+  for (const { plan } of plans)
+    await expect(
+      plansTable.getByRole("link", { name: plan.name })
+    ).toBeVisible();
 });
 
 test("editing a plan keeps its stage ids, so its runs keep their stage runs", async ({
@@ -83,6 +93,8 @@ test("editing a plan keeps its stage ids, so its runs keep their stage runs", as
   const wizard = dialog(page);
   await wizard.getByRole("button", { name: "Next" }).click();
   await wizard.getByRole("button", { name: "Next" }).click();
+  await wizard.getByRole("button", { name: "Next" }).click();
+  // Skills step.
   await wizard.getByRole("button", { name: "Next" }).click();
   await wizard.getByRole("button", { name: "Save", exact: true }).click();
   await expect(wizard).toHaveCount(0);

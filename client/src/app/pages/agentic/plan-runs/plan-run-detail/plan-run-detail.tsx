@@ -31,7 +31,11 @@ import {
   SectionEmpty,
 } from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
-import { SkillsTable, groupSkillSources } from "../../components/skills-table";
+import {
+  SkillsTable,
+  groupSkillSources,
+  skillRowCounts,
+} from "../../components/skills-table";
 import {
   StageAttentionAlert,
   getStageAttention,
@@ -94,11 +98,13 @@ const PlanRunDetail: React.FC = () => {
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
   // The run's snapshot of skills: render what the server returns, never
-  // more. Undefined is unknown, not "no skills".
+  // more. Undefined is unknown, not "no skills". Skills the
+  // plan excluded stay in the table, marked.
   const skillRows =
     planRun?.resolvedSkills != null
-      ? groupSkillSources(planRun.resolvedSkills)
+      ? groupSkillSources(planRun.resolvedSkills, planRun.excludedSkills)
       : undefined;
+  const { used: usedSkillCount, total: skillCount } = skillRowCounts(skillRows);
 
   const { approve, isApproving } = useApproveStage(runId);
 
@@ -240,14 +246,21 @@ const PlanRunDetail: React.FC = () => {
 
         <DetailSection
           title={
-            skillRows?.length
-              ? t("agentic.planRun.skillsTitle", { count: skillRows.length })
-              : t("agentic.planRun.skillsTitleEmpty")
+            !skillRows?.length
+              ? t("agentic.planRun.skillsTitleEmpty")
+              : usedSkillCount < skillCount
+                ? t("agentic.planRun.skillsTitleUsed", {
+                    used: usedSkillCount,
+                    count: skillCount,
+                  })
+                : t("agentic.planRun.skillsTitle", { count: skillCount })
           }
           description={
-            skillRows?.length
-              ? t("agentic.planRun.skillsDescription")
-              : undefined
+            !skillRows?.length
+              ? undefined
+              : usedSkillCount < skillCount
+                ? t("agentic.planRun.skillsDescriptionExcluded")
+                : t("agentic.planRun.skillsDescription")
           }
         >
           {skillRows == null ? (

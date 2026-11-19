@@ -110,6 +110,8 @@ test.describe("Plan impact and lifecycle", () => {
     await dialog.getByRole("button", { name: /^Agent/ }).click();
     await pickMenuOption(page, "Code Migrator");
     await dialog.getByRole("button", { name: "Next", exact: true }).click();
+    // Skills step.
+    await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await dialog.getByRole("button", { name: "Create", exact: true }).click();
     await expect(dialog).toBeHidden();
 

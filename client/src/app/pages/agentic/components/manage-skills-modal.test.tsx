@@ -152,7 +152,7 @@ describe("ManageSkillsModal", () => {
     });
     expect(
       within(dialog).getByText(
-        "Agents use these skills when they migrate applications in this archetype."
+        "Agents use these skills when they migrate applications in this archetype, unless a migration plan excludes them."
       )
     ).toBeInTheDocument();
     expect(
@@ -182,7 +182,7 @@ describe("ManageSkillsModal", () => {
       name: "Manage skills for Java EE Application",
     });
     expect(dialog).toHaveAccessibleDescription(
-      "Agents use these skills when they migrate applications in this archetype."
+      "Agents use these skills when they migrate applications in this archetype, unless a migration plan excludes them."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
@@ -263,7 +263,7 @@ describe("ManageSkillsModal", () => {
         name: "Manage skills for Quarkus 3.x (Java EE Application)",
       })
     ).toHaveAccessibleDescription(
-      "Agents use these skills when they migrate applications in this archetype that use this target profile."
+      "Agents use these skills when they migrate applications in this archetype that use this target profile, unless a migration plan excludes them."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
@@ -296,12 +296,12 @@ describe("ManageSkillsModal", () => {
         name: "Manage skills for Customer Management",
       })
     ).toHaveAccessibleDescription(
-      "Agents use these skills when they migrate this application."
+      "Agents use these skills when they migrate this application, unless its migration plan excludes them."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
     ).toHaveAccessibleDescription(
-      "Select the skills to associate directly with this application. The Skills tab shows every skill that applies and where it comes from."
+      "Select the skills to associate directly with this application. The Skills tab shows every skill for this application, where it comes from and whether its migration plan excludes it."
     );
     await openPicker();
     await toggleOption("Quarkus best practices");

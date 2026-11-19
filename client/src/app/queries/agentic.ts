@@ -31,7 +31,9 @@ import {
   MigrationPlan,
   ModelProjection,
   PlanRun,
+  PlanSkill,
   Provider,
+  ResolvePlanSkillsRequest,
   Skill,
   SkillCollection,
   StartApplicationMigrationsRequest,
@@ -68,8 +70,10 @@ import {
   getSkillById,
   getSkillCollectionById,
   getSkillCollections,
+  getSkillPlans,
   getSkills,
   resolveApplicationMigrationRequest,
+  resolvePlanSkills,
   setDefaultModel,
   startAgentTestRun,
   startApplicationMigrations,
@@ -103,6 +107,8 @@ export type AgenticQueryGroup =
   | "agents"
   | "agentTestRuns"
   | "plans"
+  | "planSkills"
+  | "skillPlans"
   | "planRuns"
   | "applicationMigrations"
   | "executionPolicy";
@@ -131,6 +137,8 @@ export const MUTATION_EFFECTS = {
     "skillCollections",
     "agents",
     "plans",
+    "planSkills",
+    "skillPlans",
     "planRuns",
     "applicationMigrations",
   ],
@@ -138,6 +146,8 @@ export const MUTATION_EFFECTS = {
     "skillCollections",
     "skills",
     "agents",
+    "planSkills",
+    "skillPlans",
     "applicationMigrations",
   ],
   model: ["models", "agents", "plans"],
@@ -147,12 +157,20 @@ export const MUTATION_EFFECTS = {
     "skills",
     "skillCollections",
     "plans",
+    "planSkills",
+    "skillPlans",
     "planRuns",
     "agentTestRuns",
     "applicationMigrations",
   ],
   agentTestRun: ["agentTestRuns"],
-  plan: ["plans", "planRuns", "applicationMigrations"],
+  plan: [
+    "plans",
+    "planSkills",
+    "skillPlans",
+    "planRuns",
+    "applicationMigrations",
+  ],
   startMigrations: ["applicationMigrations", "planRuns", "plans"],
   runDecision: ["planRuns", "applicationMigrations"],
   executionPolicy: ["executionPolicy", "applicationMigrations", "planRuns"],
@@ -378,6 +396,27 @@ export const useFetchSkillById = (id: EntityId | undefined) => {
     fetchError: error,
     isNotFound: isNotFoundError(error),
     refetch,
+  };
+};
+
+/**
+ * The migration plans that resolve one Skill (server-derived), for the
+ * skill page: the same resolution as `useResolvePlanSkills`, so a plan that
+ * gets the Skill only through an agent's skill collection is listed too.
+ * Invalidated by the writes that invalidate `planSkills`.
+ */
+export const useFetchSkillPlans = (skillId: EntityId | undefined) => {
+  const { data, isFetching, isInitialLoading, error } = useQuery({
+    queryKey: agenticKeys.detail("skillPlans", skillId ?? ""),
+    queryFn: () => getSkillPlans(skillId ?? ""),
+    enabled: isUsableId(skillId),
+    retry: agenticRetry,
+  });
+  return {
+    skillPlans: data?.plans,
+    isFetching,
+    isLoading: isInitialLoading,
+    fetchError: error,
   };
 };
 
@@ -943,6 +982,126 @@ export const useAssignPlanToTargetProfileMutation = (
     onError,
   });
 };
+
+/**
+ * The cache key of a resolve request: only what decides the resolved skills,
+ * so editing a draft's name or instructions refetches nothing. Stage agents
+ * keep their stage order (the server orders sources by it), without repeats;
+ * target profile and excluded skill ids are sorted and deduplicated. The
+ * request itself is sent as given, with its stages in stage order.
+ */
+export const normalizeResolvePlanSkillsRequest = (
+  request: ResolvePlanSkillsRequest
+): ResolvePlanSkillsRequest => {
+  const uniqueSorted = <T extends EntityId | number>(ids: T[]): T[] =>
+    [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return {
+    stages: [...new Set(request.stages.map((stage) => stage.agent.id))].map(
+      (agentId) => ({ agent: { id: agentId } })
+    ),
+    ...(request.migrationPath
+      ? {
+          migrationPath: {
+            archetype: { id: request.migrationPath.archetype.id },
+            targetProfiles: uniqueSorted(
+              request.migrationPath.targetProfiles.map((profile) => profile.id)
+            ).map((profileId) => ({ id: profileId })),
+          },
+        }
+      : {}),
+    excludedSkills: uniqueSorted(
+      (request.excludedSkills ?? []).map((skill) => skill.id)
+    ).map((skillId) => ({ id: skillId })),
+  };
+};
+
+/**
+ * The Skills a draft Plan resolves to (server-derived), for the plan
+ * wizard and plan pages. Disabled while `request` is undefined. A changed
+ * draft is a new query, so `planSkills` is undefined (and the surfaces show
+ * skeleton rows) until its result arrives; the previous draft's rows are not
+ * kept. Does not poll (agent, skill, collection and plan writes invalidate
+ * it).
+ */
+export const useResolvePlanSkills = (
+  request: ResolvePlanSkillsRequest | undefined,
+  { enabled = true }: AgenticListQueryOptions = {}
+) => {
+  const normalized =
+    request != null ? normalizeResolvePlanSkillsRequest(request) : undefined;
+  // The key is the normalized request, so drafts that resolve the same way
+  // share one entry; the body is the request as given, in stage order.
+  const { data, isFetching, isInitialLoading, error, refetch } =
+    // eslint-disable-next-line @tanstack/query/exhaustive-deps
+    useQuery({
+      queryKey: agenticKeys.list("planSkills", normalized),
+      queryFn: () =>
+        request != null
+          ? resolvePlanSkills(request)
+          : Promise.reject(new Error("No plan to resolve skills for.")),
+      enabled: enabled && request != null,
+      retry: agenticRetry,
+    });
+  return {
+    planSkills: data?.skills,
+    isFetching,
+    isLoading: isInitialLoading,
+    fetchError: error,
+    refetch,
+  };
+};
+
+/** What the plan skill surfaces read from `useResolvePlanSkills`. */
+export interface PlanSkillsQuery {
+  planSkills?: PlanSkill[];
+  isFetching: boolean;
+  fetchError: unknown;
+  refetch: () => Promise<{ isError: boolean }>;
+}
+
+type PlanSkillsState = "loading" | "unavailable" | "error" | "ready";
+
+/**
+ * True when the server does not serve a resolve endpoint at all (404, or 501
+ * Not Implemented): the state of a real backend without the plan skill
+ * resolution. Retrying cannot help, so the surfaces say so instead of
+ * offering a retry.
+ */
+export const isResolveEndpointMissing = (error: unknown) =>
+  isAxiosError(error) &&
+  (error.response?.status === 404 || error.response?.status === 501);
+
+/**
+ * Where a plan's skill resolution stands, one rule for the plan wizard and
+ * plan Details. A changed draft (or an edited plan) has no rows until it
+ * resolves (`useResolvePlanSkills` does not keep the previous draft's rows,
+ * which can hold skills that no longer resolve, or out-of-date exclusions).
+ * A retry after a failure is "loading" here; the wizard step keeps its alert
+ * up while a retry it started runs. A server
+ * without the resolve endpoint is "unavailable", not "error".
+ */
+export const planSkillsState = ({
+  planSkills,
+  isFetching,
+  fetchError,
+}: PlanSkillsQuery): PlanSkillsState => {
+  if (isFetching && (planSkills == null || fetchError != null)) {
+    return "loading";
+  }
+  if (fetchError != null) {
+    return isResolveEndpointMissing(fetchError) ? "unavailable" : "error";
+  }
+  return planSkills == null ? "loading" : "ready";
+};
+
+/**
+ * The latest resolution of the draft, or undefined while it loads or after
+ * it failed (then nothing is known about which skills resolve).
+ */
+export const currentPlanSkills = (
+  query: PlanSkillsQuery
+): PlanSkill[] | undefined =>
+  planSkillsState(query) === "ready" ? query.planSkills : undefined;
 
 // ---------------------------------------------------------------------------
 // Plan runs

@@ -20,8 +20,10 @@ import {
   PlanStage,
   Provider,
   ProviderType,
+  ResolvePlanSkillsResponse,
   Skill,
   SkillCollection,
+  SkillPlansResponse,
   SkillSourceType,
 } from "@app/agentic";
 
@@ -39,12 +41,14 @@ import {
   db,
   effectiveSkillsForPlan,
   entityIdOf,
+  excludedSkillIdsOf,
   findApplication,
   findArchetype,
   findHubResourceName,
   findOr404,
   findTargetProfile,
   hubIdOf,
+  isSeeded,
   listNames,
   nextId,
   notFound,
@@ -52,12 +56,14 @@ import {
   observeVerification,
   optionalArray,
   optionalString,
+  planSkillInput,
   requiredArray,
   requiredString,
   resolveAgentRef,
   resolveCollectionRef,
   resolveCredential,
   resolveModelRef,
+  resolvePlanSkillsFor,
   resolveProviderRef,
   resolveSkillRef,
   skillAssociations,
@@ -710,8 +716,21 @@ export const assignPlanToTargetProfile = (
   selected.updateTime = time;
 };
 
+/** Excluded Skills that still exist, with current names. */
+const presentExcludedSkills = (plan: StoredPlan) => {
+  const refs = (plan.excludedSkills ?? [])
+    .filter((ref) => db.skills.some((skill) => skill.id === ref.id))
+    .map(resolveSkillRef);
+  return refs.length > 0 ? { excludedSkills: refs } : {};
+};
+
+const withoutExcludedSkills = ({
+  excludedSkills: _excludedSkills,
+  ...plan
+}: StoredPlan) => plan;
+
 export const presentPlan = (plan: StoredPlan): MigrationPlan => ({
-  ...plan,
+  ...withoutExcludedSkills(plan),
   stages: plan.stages.map((stage) => ({
     ...stage,
     agent: resolveAgentRef(stage.agent),
@@ -735,6 +754,7 @@ export const presentPlan = (plan: StoredPlan): MigrationPlan => ({
       }
     : undefined,
   effectiveSkills: effectiveSkillsForPlan(plan),
+  ...presentExcludedSkills(plan),
   applicationImpact: { matching: planImpact(plan.id) },
   runCount: runsUsingPlan(plan.id).length,
 });
@@ -798,6 +818,15 @@ const assertSingleDefault = (
   });
 };
 
+/** Ids of the request's `excludedSkills` (shape only), deduplicated. */
+const excludedSkillIds = (body: Body): EntityId[] => [
+  ...new Set(
+    optionalArray(body, "excludedSkills").map((value, index) =>
+      entityIdOf(value, `excludedSkills[${index}]`)
+    )
+  ),
+];
+
 const parsePlan = (input: unknown, existing?: StoredPlan) => {
   const body = asBody(input);
   const planName = name(body, "Plan");
@@ -823,11 +852,17 @@ const parsePlan = (input: unknown, existing?: StoredPlan) => {
       ? parseMigrationPath(body.migrationPath)
       : undefined;
   if (migrationPath) assertSingleDefault(migrationPath, existing?.id);
+  // An id that is not a Skill matches nothing, so it is dropped, as the
+  // resolver and the reads do (a skill deleted after the wizard resolved).
+  const excludedSkills = excludedSkillIds(body)
+    .filter((skillId) => db.skills.some((skill) => skill.id === skillId))
+    .map((skillId) => resolveSkillRef({ id: skillId, name: "" }));
   return {
     name: planName,
     description: description(body, "Plan"),
     migrationPath,
     stages,
+    excludedSkills,
   };
 };
 
@@ -868,6 +903,9 @@ export const createPlan = (input: unknown) => {
     description: parsed.description,
     migrationPath: parsed.migrationPath,
     stages: buildStages(parsed.stages),
+    ...(parsed.excludedSkills.length > 0
+      ? { excludedSkills: parsed.excludedSkills }
+      : {}),
     createTime: time,
     updateTime: time,
   };
@@ -885,6 +923,79 @@ export const updatePlan = (id: EntityId, input: unknown) => {
     stages: buildStages(parsed.stages, plan),
     updateTime: nowIso(),
   });
+  if (parsed.excludedSkills.length > 0) {
+    plan.excludedSkills = parsed.excludedSkills;
+  } else {
+    delete plan.excludedSkills;
+  }
+};
+
+/**
+ * POST /plans/skills/resolve: the Skills a draft Plan resolves to (see
+ * `resolvePlanSkillsFor`), for the plan wizard and plan pages. Malformed
+ * bodies are a 400; ids that reference nothing (an agent, archetype, target
+ * profile or Skill deleted meanwhile, or a draft still being edited) add
+ * nothing, unlike a save, which rejects unknown agents.
+ */
+export const resolvePlanSkills = (
+  input: unknown
+): ResolvePlanSkillsResponse => {
+  const body = asBody(input);
+  const agentIds = requiredArray(body, "stages").map((value, index) =>
+    entityIdOf(asBody(value).agent, `stages[${index}].agent`)
+  );
+  let archetypeId: number | undefined;
+  let targetProfileIds: number[] = [];
+  if (body.migrationPath != null) {
+    const path = asBody(body.migrationPath);
+    archetypeId = hubIdOf(path.archetype, "migrationPath.archetype");
+    targetProfileIds = optionalArray(path, "targetProfiles").map((profile) =>
+      hubIdOf(profile, "migrationPath.targetProfiles")
+    );
+  }
+  return {
+    skills: resolvePlanSkillsFor(
+      { agentIds, archetypeId, targetProfileIds },
+      new Set(excludedSkillIds(body))
+    ),
+  };
+};
+
+/**
+ * GET /skills/:id/plans: every saved Plan whose resolution has the Skill,
+ * with that entry's sources and `excluded` flag, from the same resolver as
+ * POST /plans/skills/resolve (`resolvePlanSkillsFor`), in plan name order.
+ * 404 for an unknown Skill. `hideSeeded` (the `initial` scenario) treats
+ * fixture Skills and Plans as absent, as the list and detail reads do.
+ */
+export const listSkillPlans = (
+  skillId: EntityId,
+  { hideSeeded = false }: { hideSeeded?: boolean } = {}
+): SkillPlansResponse => {
+  const skill = findOr404(db.skills, skillId, "Skill");
+  if (hideSeeded && isSeeded("skills", skill.id)) {
+    throw notFound("Not found.");
+  }
+  return {
+    plans: db.plans
+      .filter((plan) => !(hideSeeded && isSeeded("plans", plan.id)))
+      .flatMap((plan) => {
+        const entry = resolvePlanSkillsFor(
+          planSkillInput(plan),
+          excludedSkillIdsOf(plan)
+        ).find((candidate) => candidate.skill.id === skill.id);
+        return entry
+          ? [
+              {
+                plan: { id: plan.id, name: plan.name },
+                sources: entry.sources,
+                excluded: entry.excluded,
+              },
+            ]
+          : [];
+      })
+      .sort((a, b) => a.plan.name.localeCompare(b.plan.name)),
+  };
 };
 
 export const deletePlan = (id: EntityId) => {

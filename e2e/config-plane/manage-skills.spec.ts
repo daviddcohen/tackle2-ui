@@ -281,7 +281,7 @@ test.describe("Manage skills: application", () => {
       "Manage skills for Customer Management"
     );
     await expect(skillsPicker(page)).toHaveAccessibleDescription(
-      "Select the skills to associate directly with this application. The Skills tab shows every skill that applies and where it comes from."
+      "Select the skills to associate directly with this application. The Skills tab shows every skill for this application, where it comes from and whether its migration plan excludes it."
     );
     await expect(chip(page, "Corporate coding standards")).toBeVisible();
 

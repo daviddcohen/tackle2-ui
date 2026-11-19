@@ -1,22 +1,37 @@
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
-import { EffectiveSkillAssociation, Skill } from "@app/agentic";
+import { EffectiveSkillAssociation, PlanSkill, Skill } from "@app/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 
 import {
   SkillSources,
   SkillsTable,
   groupSkillSources,
+  planSkillRows,
   skillAssociationSources,
+  skillRowCounts,
 } from "./skills-table";
 
-// Interpolate like i18next so the source lines read as users see them.
+const KNOWN_SCOPES = ["agent", "application", "archetype", "targetProfile"];
+
+// Interpolate like i18next so the source lines read as users see them; a
+// scope key this client does not define falls back to its defaultValue.
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: Record<string, string>) =>
-      key === "agentic.skillsTable.source" && values
-        ? `${values.scope}: ${values.name}`
-        : key,
+    t: (key: string, values?: Record<string, string>) => {
+      if (key === "agentic.skillsTable.source" && values) {
+        return `${values.scope}: ${values.name}`;
+      }
+      if (key === "agentic.skillsTable.useSkill" && values) {
+        return `Use ${values.name}`;
+      }
+      const scope = key.match(/^agentic\.skillsTable\.scope\.(.+)$/)?.[1];
+      if (scope != null && !KNOWN_SCOPES.includes(scope)) {
+        return values?.defaultValue ?? key;
+      }
+      return key;
+    },
   }),
 }));
 
@@ -95,6 +110,102 @@ describe("groupSkillSources", () => {
 
   it("returns no rows for no associations", () => {
     expect(groupSkillSources([])).toEqual([]);
+  });
+
+  it("keeps excluded skills as rows, marked, in name order", () => {
+    const rows = groupSkillSources(
+      [association("2", "Build checks", "agent", "Builder")],
+      [
+        association("1", "API checklist", "agent", "Proposer"),
+        association("1", "API checklist", "archetype", "Java EE"),
+      ]
+    );
+
+    expect(rows).toEqual([
+      {
+        skill: { id: "1", name: "API checklist" },
+        sources: [
+          { scope: "agent", name: "Proposer" },
+          { scope: "archetype", name: "Java EE" },
+        ],
+        excluded: true,
+      },
+      {
+        skill: { id: "2", name: "Build checks" },
+        sources: [{ scope: "agent", name: "Builder" }],
+      },
+    ]);
+  });
+
+  it("treats a skill the server reports as both used and excluded as used", () => {
+    const rows = groupSkillSources(
+      [association("1", "Skill", "agent", "Builder")],
+      [association("1", "Skill", "archetype", "Java EE")]
+    );
+    expect(rows[0].excluded).toBeUndefined();
+  });
+});
+
+describe("planSkillRows", () => {
+  const planSkill = (
+    id: string,
+    name: string,
+    excluded: boolean,
+    sources: PlanSkill["sources"]
+  ): PlanSkill => ({ skill: { id, name }, sources, excluded });
+
+  it("makes one row per plan skill with the server's sources and flag", () => {
+    const rows = planSkillRows([
+      planSkill("9", "Runtime upgrade", false, [
+        {
+          scope: "targetProfile",
+          scopeName: "Java 17",
+          resource: { id: 31, name: "Java 17" },
+        },
+        {
+          scope: "agent",
+          scopeName: "Coder",
+          resource: { id: "2", name: "Coder" },
+        },
+      ]),
+      planSkill("1", "API checklist", true, [
+        {
+          scope: "agent",
+          scopeName: "Coder via Foundation",
+          resource: { id: "2", name: "Coder" },
+          collection: { id: "1", name: "Foundation" },
+        },
+      ]),
+    ]);
+
+    expect(rows).toEqual([
+      {
+        skill: { id: "1", name: "API checklist" },
+        sources: [{ scope: "agent", name: "Coder via Foundation" }],
+        excluded: true,
+      },
+      {
+        skill: { id: "9", name: "Runtime upgrade" },
+        sources: [
+          { scope: "agent", name: "Coder" },
+          { scope: "targetProfile", name: "Java 17" },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("skillRowCounts", () => {
+  it("counts every row and the ones the plan does not exclude", () => {
+    const row = (id: string, excluded?: boolean) => ({
+      skill: { id, name: id },
+      sources: [],
+      ...(excluded != null ? { excluded } : {}),
+    });
+    expect(skillRowCounts([row("1"), row("2", true), row("3", false)])).toEqual(
+      { used: 2, total: 3 }
+    );
+    expect(skillRowCounts(undefined)).toEqual({ used: 0, total: 0 });
   });
 });
 
@@ -183,6 +294,61 @@ describe("SkillsTable", () => {
   });
 });
 
+describe("SkillsTable exclusions", () => {
+  const rows = groupSkillSources(
+    [association("2", "Build checks", "agent", "Builder")],
+    [association("1", "API checklist", "agent", "Proposer")]
+  );
+
+  it("marks excluded rows when read-only", () => {
+    render(
+      <MemoryRouter>
+        <SkillsTable rows={rows} linkTo={(pathname) => pathname} />
+      </MemoryRouter>
+    );
+    const [, excluded, used] = screen.getAllByRole("row");
+    expect(excluded).toHaveTextContent("agentic.skillsTable.excluded");
+    expect(used).not.toHaveTextContent("agentic.skillsTable.excluded");
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("adds a named checkbox per row in exclusion mode, without links or markers", async () => {
+    const user = userEvent.setup();
+    const onUsedChange = jest.fn();
+    render(<SkillsTable rows={rows} onUsedChange={onUsedChange} />);
+
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent)
+    ).toEqual([
+      "agentic.skillsTable.used",
+      "agentic.entity.skill",
+      "terms.source",
+    ]);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("agentic.skillsTable.excluded")
+    ).not.toBeInTheDocument();
+
+    const excluded = screen.getByRole("checkbox", {
+      name: "Use API checklist",
+    });
+    const used = screen.getByRole("checkbox", { name: "Use Build checks" });
+    expect(excluded).not.toBeChecked();
+    expect(used).toBeChecked();
+
+    await user.click(excluded);
+    expect(onUsedChange).toHaveBeenCalledWith(
+      { id: "1", name: "API checklist" },
+      true
+    );
+    await user.click(used);
+    expect(onUsedChange).toHaveBeenCalledWith(
+      { id: "2", name: "Build checks" },
+      false
+    );
+  });
+});
+
 describe("SkillSources", () => {
   it("renders the Source cell's lines on its own, for other tables", () => {
     render(
@@ -200,5 +366,21 @@ describe("SkillSources", () => {
       "agentic.skillsTable.scope.application: Customer Management",
     ]);
     expect(screen.getByRole("list")).toHaveClass("pf-m-plain");
+  });
+
+  it("reads a scope this client does not know as the server sent it", () => {
+    render(
+      <SkillSources
+        sources={[
+          {
+            scope: "migrationWave" as EffectiveSkillAssociation["scope"],
+            name: "Wave 1",
+          },
+        ]}
+      />
+    );
+    expect(screen.getByRole("listitem")).toHaveTextContent(
+      "migrationWave: Wave 1"
+    );
   });
 });

@@ -188,6 +188,98 @@ describe("PlanRunDetail", () => {
     ).toBeInTheDocument();
   });
 
+  const skill = (
+    id: string,
+    name: string,
+    scope: "agent" | "archetype" = "agent",
+    scopeName = "Code Migrator"
+  ) => ({ skill: { id, name }, scope, scopeName });
+
+  const skillsTable = () => screen.findByRole("grid", { name: "Skills" });
+
+  it("counts the run's skills when the plan excluded none", async () => {
+    useRun(
+      run({
+        resolvedSkills: [
+          skill("1", "Quarkus patterns"),
+          skill("2", "Java EE migration"),
+        ],
+      })
+    );
+    renderPage();
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Skills (2)" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Skills given to the agents when this run started.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Excluded")).not.toBeInTheDocument();
+  });
+
+  it("keeps one excluded skill in the table, marked, and counts what was used", async () => {
+    useRun(
+      run({
+        resolvedSkills: [
+          skill("1", "Quarkus patterns"),
+          skill("2", "Java EE migration"),
+        ],
+        excludedSkills: [
+          skill("8", "Containerization standards", "archetype", "Java EE"),
+        ],
+      })
+    );
+    renderPage();
+    expect(
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "Skills (2 of 3 used)",
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Skills for this run and where each one comes from. Excluded skills are not given to the agents."
+      )
+    ).toBeInTheDocument();
+    const rows = within(await skillsTable())
+      .getAllByRole("row")
+      .slice(1);
+    // Name order: the excluded row does not move to the end.
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Containerization standardsExcludedArchetype: Java EE",
+      "Java EE migrationAgent: Code Migrator",
+      "Quarkus patternsAgent: Code Migrator",
+    ]);
+    expect(
+      within(rows[0]).getByRole("link", { name: "Containerization standards" })
+    ).toHaveAttribute("href", expect.stringContaining("/skills/8"));
+    expect(within(rows[1]).queryByText("Excluded")).not.toBeInTheDocument();
+  });
+
+  it("counts several excluded skills, and none used when all were excluded", async () => {
+    useRun(
+      run({
+        resolvedSkills: [],
+        excludedSkills: [
+          skill("1", "Quarkus patterns"),
+          skill("2", "Java EE migration"),
+        ],
+      })
+    );
+    renderPage();
+    expect(
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "Skills (0 of 2 used)",
+      })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Excluded")).toHaveLength(2);
+    expect(
+      screen.queryByText(
+        "No skills were given to the agents when this run started."
+      )
+    ).not.toBeInTheDocument();
+  });
+
   it("offers no decision without the scope to approve", async () => {
     mockGrantedScopes.all = false;
     useRun(

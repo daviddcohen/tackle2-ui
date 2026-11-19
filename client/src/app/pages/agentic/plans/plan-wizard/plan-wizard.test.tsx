@@ -95,6 +95,9 @@ describe("PlanWizard", () => {
           ])
         )
       ),
+      rest.post(AGENTIC_ENDPOINTS.planSkillsResolve, (_req, res, ctx) =>
+        res(ctx.json({ skills: [] }))
+      ),
       rest.put(`${AGENTIC_ENDPOINTS.plans}/:id`, async (req, res, ctx) => {
         updates.push(await req.json());
         return res(ctx.status(204));
@@ -136,6 +139,8 @@ describe("PlanWizard", () => {
     await waitFor(() => expect(nextButton()).toBeEnabled());
     await user.click(nextButton());
     await waitFor(() => expect(nextButton()).toBeEnabled());
+    await user.click(nextButton());
+    // The Skills step never blocks Next.
     await user.click(nextButton());
     await user.click(
       await screen.findByRole("button", { name: "actions.save" })

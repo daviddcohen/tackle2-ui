@@ -1,5 +1,12 @@
-import { assignPlanToTargetProfile, createPlan } from "./catalog";
-import { db, resetAgenticDb } from "./db";
+import { assignPlanToTargetProfile, createPlan, updatePlan } from "./catalog";
+import {
+  applicationSkills,
+  collectionSkillsForAgents,
+  db,
+  effectiveSkillsForPlan,
+  resetAgenticDb,
+  uniqueEffectiveSkills,
+} from "./db";
 import {
   PENDING_MS,
   STAGE_MS,
@@ -213,5 +220,137 @@ describe("Plan resolution", () => {
     expect(() =>
       createPlan({ name: "Empty", description: "", stages: [] })
     ).toThrow(/at least one stage/);
+  });
+});
+
+describe("skill exclusions", () => {
+  // Application 13 resolves to Plan 5 (Legacy Java runtime modernization).
+  const APPLICATION_ID = 13;
+  const PLAN_ID = "5";
+
+  const excludeOnPlan = (skillIds: string[]) => {
+    const plan = db.plans.find((p) => p.id === PLAN_ID)!;
+    updatePlan(PLAN_ID, {
+      name: plan.name,
+      description: plan.description,
+      migrationPath: plan.migrationPath && {
+        archetype: { id: plan.migrationPath.archetype.id },
+        targetProfiles: plan.migrationPath.targetProfiles,
+        isDefault: plan.migrationPath.isDefault,
+      },
+      stages: plan.stages.map((stage) => ({ ...stage })),
+      excludedSkills: skillIds.map((id) => ({ id })),
+    });
+  };
+
+  const startRun = () => {
+    const {
+      planRuns: [ref],
+    } = startApplicationMigrations({
+      applicationIds: [APPLICATION_ID],
+      planSelection: "recommended",
+      targetBranch: "main",
+    });
+    return getPlanRun(ref.id);
+  };
+
+  const view = () => getApplicationMigrations([APPLICATION_ID])[APPLICATION_ID];
+
+  it("keeps runs and application views as they were when nothing is excluded", () => {
+    const plan = db.plans.find((p) => p.id === PLAN_ID)!;
+    const expected = (applicationIds: number[]) =>
+      uniqueEffectiveSkills([
+        ...effectiveSkillsForPlan(plan),
+        ...collectionSkillsForAgents(plan.stages.map((s) => s.agent.id)),
+        ...applicationIds.flatMap(applicationSkills),
+      ]);
+    expect(view().plan?.id).toBe(PLAN_ID);
+    expect(view()).not.toHaveProperty("excludedSkills");
+    expect(JSON.stringify(view().effectiveSkills)).toBe(
+      JSON.stringify(expected([APPLICATION_ID]))
+    );
+    const run = startRun();
+    expect(run).not.toHaveProperty("excludedSkills");
+    expect(JSON.stringify(run.resolvedSkills)).toBe(
+      JSON.stringify(expected([APPLICATION_ID]))
+    );
+  });
+
+  it("leaves excluded skills out of a started run and records them with their sources", () => {
+    excludeOnPlan(["9"]);
+    const run = startRun();
+    expect(run.resolvedSkills?.some((e) => e.skill.id === "9")).toBe(false);
+    expect(run.resolvedSkills?.some((e) => e.skill.id === "14")).toBe(true);
+    expect(run.excludedSkills).toEqual([
+      {
+        skill: { id: "9", name: "Java runtime modernization" },
+        scope: "archetype",
+        scopeName: "Legacy Java Application",
+      },
+      {
+        skill: { id: "9", name: "Java runtime modernization" },
+        scope: "targetProfile",
+        scopeName: "Java 17 on OpenShift",
+      },
+      {
+        skill: { id: "9", name: "Java runtime modernization" },
+        scope: "agent",
+        scopeName: "Code Migrator",
+      },
+    ]);
+
+    // The run keeps its snapshot when the Plan's exclusions change later.
+    excludeOnPlan([]);
+    expect(getPlanRun(run.id).excludedSkills).toEqual(run.excludedSkills);
+  });
+
+  it("splits the application view into skills used and skills excluded", () => {
+    const before = view().effectiveSkills ?? [];
+    excludeOnPlan(["9", "3"]);
+    const after = view();
+    const isExcluded = (skillId: string) => ["9", "3"].includes(skillId);
+    expect(after.effectiveSkills).toEqual(
+      before.filter((entry) => !isExcluded(entry.skill.id))
+    );
+    expect(after.excludedSkills).toEqual(
+      before.filter((entry) => isExcluded(entry.skill.id))
+    );
+    expect(after.excludedSkills?.map((e) => e.scopeName)).toContain(
+      "Code Migrator via Java modernization foundation"
+    );
+  });
+
+  it("applies an exclusion only while the plan still resolves the skill", () => {
+    // Spring Boot 3 upgrade reaches the plan through its archetype and the
+    // application directly; the plan excludes it.
+    const skill = db.skills.find((s) => s.id === "16")!;
+    skill.associations.push(
+      {
+        scope: "archetype",
+        resource: { id: 3, name: "Legacy Java Application" },
+      },
+      { scope: "application", resource: { id: 13, name: "Branch Operations" } }
+    );
+    excludeOnPlan(["16"]);
+    expect(view().excludedSkills?.map((e) => e.scope)).toEqual([
+      "archetype",
+      "application",
+    ]);
+
+    // Without the archetype association the plan no longer resolves it, so
+    // the stored exclusion does not apply to the application skill, as the
+    // plan page shows.
+    skill.associations = skill.associations.filter(
+      (association) => association.scope !== "archetype"
+    );
+    expect(view()).not.toHaveProperty("excludedSkills");
+    expect(view().effectiveSkills).toContainEqual({
+      skill: { id: "16", name: "Spring Boot 3 upgrade" },
+      scope: "application",
+      scopeName: "Branch Operations",
+    });
+    const run = startRun();
+    expect(run).not.toHaveProperty("excludedSkills");
+    expect(run.resolvedSkills?.some((e) => e.skill.id === "16")).toBe(true);
   });
 });

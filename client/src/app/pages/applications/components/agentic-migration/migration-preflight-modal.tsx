@@ -8,6 +8,8 @@ import { object, string } from "yup";
 import {
   Alert,
   Button,
+  Content,
+  ExpandableSection,
   Form,
   FormGroup,
   FormHelperText,
@@ -22,6 +24,7 @@ import {
   StackItem,
 } from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   Caption,
   Table,
@@ -54,6 +57,12 @@ import {
   MigrationStatus,
   preflightDisplayStatus,
 } from "@app/pages/agentic/components/agentic-status";
+import { SectionEmpty } from "@app/pages/agentic/components/detail-section";
+import {
+  SkillsTable,
+  groupSkillSources,
+  skillRowCounts,
+} from "@app/pages/agentic/components/skills-table";
 import {
   useFetchApplicationMigrations,
   useFetchMigrationPlans,
@@ -137,6 +146,69 @@ const PreflightReason: React.FC<{
 };
 
 /**
+ * The skills of one application's migration, from the view the dialog
+ * already holds (the same set as its Skills tab), behind a collapsed
+ * disclosure whose toggle carries the count. `isRerun` swaps the standard
+ * sentence for one saying the new run resolves them again. The dialog owns
+ * `isExpanded`, so hiding and showing the preview keeps what was open.
+ */
+const ApplicationSkillsPreview: React.FC<{
+  migration: ApplicationMigrationView;
+  isRerun: boolean;
+  isExpanded: boolean;
+  onExpandedChange: (isExpanded: boolean) => void;
+}> = ({ migration, isRerun, isExpanded, onExpandedChange }) => {
+  const { t } = useTranslation();
+  // Unknown is not "no skills".
+  const rows =
+    migration.effectiveSkills != null
+      ? groupSkillSources(migration.effectiveSkills, migration.excludedSkills)
+      : undefined;
+  const { used, total } = skillRowCounts(rows);
+  const hasExcluded = used < total;
+  const toggleText = !total
+    ? t("agentic.applicationDetail.tabSkills")
+    : hasExcluded
+      ? t("agentic.applicationDetail.skillsTitleUsed", { used, count: total })
+      : t("agentic.applicationDetail.skillsTitle", { count: total });
+  const description = isRerun
+    ? hasExcluded
+      ? t("agentic.execution.rerunSkillsDescriptionExcluded")
+      : t("agentic.execution.rerunSkillsDescription")
+    : hasExcluded
+      ? t("agentic.applicationDetail.skillsDescriptionExcluded")
+      : t("agentic.applicationDetail.skillsDescription");
+  return (
+    <ExpandableSection
+      toggleId="migration-preflight-skills-toggle"
+      contentId="migration-preflight-skills"
+      toggleText={toggleText}
+      isExpanded={isExpanded}
+      onToggle={(_event, expanded) => onExpandedChange(expanded)}
+      isIndented
+    >
+      {rows == null ? (
+        <EmptyTextMessage message={t("agentic.common.unavailable")} />
+      ) : rows.length === 0 ? (
+        <SectionEmpty>{t("agentic.execution.skillsEmpty")}</SectionEmpty>
+      ) : (
+        <Stack hasGutter>
+          <StackItem>
+            <Content component="p" className={textStyles.textColorSubtle}>
+              {description}
+            </Content>
+          </StackItem>
+          <StackItem>
+            {/* Plain names: a link would close the dialog and lose its choices. */}
+            <SkillsTable rows={rows} />
+          </StackItem>
+        </Stack>
+      )}
+    </ExpandableSection>
+  );
+};
+
+/**
  * "Run migration plan": the
  * readiness of each selected application first, then how to run the ready
  * ones. Mount it only while open, so every opening starts from a fresh form.
@@ -155,6 +227,8 @@ export const MigrationPreflightModal: React.FC<
 }) => {
   const { t } = useTranslation();
   const { pathname } = useLocation();
+  // Here, not in the preview, so it survives the preview hiding and showing.
+  const [isSkillsExpanded, setSkillsExpanded] = React.useState(false);
   const {
     migrations: fetchedMigrations,
     isLoading: isLoadingMigrations,
@@ -229,6 +303,24 @@ export const MigrationPreflightModal: React.FC<
       targetBranch: values.targetBranch.trim(),
     });
   };
+
+  // One application on its own migration plan: preview that plan's skills.
+  // A plan picked for all applications resolves other skills, and several
+  // applications have no single preview, so in both cases there is none (a
+  // follow-up needs a run preview endpoint).
+  const singleMigration =
+    rows.length === 1 && !isNoneReady && planSelection !== "single"
+      ? rows[0].migration
+      : undefined;
+  const skillsPreview =
+    singleMigration == null ? null : (
+      <ApplicationSkillsPreview
+        migration={singleMigration}
+        isRerun={rerunPlanId != null}
+        isExpanded={isSkillsExpanded}
+        onExpandedChange={setSkillsExpanded}
+      />
+    );
 
   const readinessTable = (
     <Table aria-label={t("agentic.execution.preflightTable")} variant="compact">
@@ -419,6 +511,8 @@ export const MigrationPreflightModal: React.FC<
             {!isNoneReady && (
               <StackItem className={spacing.mtMd}>{runOptions}</StackItem>
             )}
+            {/* After the options, so hiding it moves nothing above the pointer. */}
+            {skillsPreview != null && <StackItem>{skillsPreview}</StackItem>}
           </Stack>
         )}
       </ModalBody>

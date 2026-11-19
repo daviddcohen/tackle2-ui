@@ -273,10 +273,17 @@ const MigrationFacts: React.FC<{
     search: `?${skillsTab.toString()}`,
     state: location.state,
   });
-  const skillCount =
+  const usedSkillIds =
     migration.effectiveSkills != null
-      ? new Set(migration.effectiveSkills.map(({ skill }) => skill.id)).size
+      ? new Set(migration.effectiveSkills.map(({ skill }) => skill.id))
       : undefined;
+  const skillCount = usedSkillIds?.size;
+  // Skills its migration plan excludes, counted like the Skills tab heading.
+  const excludedSkillCount = new Set(
+    (migration.excludedSkills ?? [])
+      .map(({ skill }) => skill.id)
+      .filter((id) => !usedSkillIds?.has(id))
+  ).size;
   const unavailable = (
     <EmptyTextMessage message={t("agentic.common.unavailable")} />
   );
@@ -362,7 +369,7 @@ const MigrationFacts: React.FC<{
       skillCount == null ? (
         // The server did not say: unknown, never "None".
         unavailable
-      ) : skillCount === 0 ? (
+      ) : skillCount === 0 && excludedSkillCount === 0 ? (
         <EmptyTextMessage key="skills" message={t("agentic.execution.none")} />
       ) : (
         <Button
@@ -372,7 +379,12 @@ const MigrationFacts: React.FC<{
           className={textStyles.textNowrap}
           component={skillsLink}
         >
-          {t("agentic.execution.skillCount", { count: skillCount })}
+          {excludedSkillCount > 0
+            ? t("agentic.execution.skillCountUsed", {
+                used: skillCount,
+                count: skillCount + excludedSkillCount,
+              })
+            : t("agentic.execution.skillCount", { count: skillCount })}
         </Button>
       ),
     ],

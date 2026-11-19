@@ -3,7 +3,7 @@ import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
-import { Agent, MigrationPlan, ModelProjection } from "@app/agentic";
+import { Agent, MigrationPlan, ModelProjection, PlanSkill } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { adminScopes, architectScopes } from "@app/auth/roles-to-scopes";
 import { NotificationsContext } from "@app/components/NotificationsContext";
@@ -82,11 +82,26 @@ const plan: MigrationPlan = {
   runCount: 0,
 };
 
+/**
+ * The plan's skill resolution, from its effective skills; without them the
+ * resolution fails, as on a backend that cannot resolve a plan's skills.
+ */
+const resolvedSkills = (detail: MigrationPlan): PlanSkill[] | undefined =>
+  detail.effectiveSkills?.map(({ skill, scope, scopeName }) => ({
+    skill,
+    sources: [{ scope, scopeName, resource: { id: 0, name: scopeName } }],
+    excluded: false,
+  }));
+
 const useEndpoints = (
   detail: MigrationPlan,
   { models = [verifiedModel] }: { models?: ModelProjection[] } = {}
 ) =>
   server.use(
+    rest.post(AGENTIC_ENDPOINTS.planSkillsResolve, (_req, res, ctx) => {
+      const skills = resolvedSkills(detail);
+      return skills == null ? res(ctx.status(404)) : res(ctx.json({ skills }));
+    }),
     rest.get(`${AGENTIC_ENDPOINTS.plans}/:id`, (_req, res, ctx) =>
       res(ctx.json(detail))
     ),
@@ -174,8 +189,11 @@ describe("PlanDetailsPage", () => {
       within(stages).getByRole("link", { name: "Code Migrator" })
     ).toBeInTheDocument();
     expect(within(stages).getByText("Anthropic")).toBeInTheDocument();
+    // The skills come from the plan skill resolution, which answers on its own.
     expect(
-      screen.getByRole("heading", { name: "agentic.planDetail.skillsTitle" })
+      await screen.findByRole("heading", {
+        name: "agentic.planDetail.skillsTitle",
+      })
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });

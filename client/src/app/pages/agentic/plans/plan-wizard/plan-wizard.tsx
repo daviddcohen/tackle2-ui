@@ -35,17 +35,25 @@ import {
 import { PlusCircleIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
-import { MigrationPlan, MigrationPlanRequest } from "@app/agentic";
+import {
+  EntityId,
+  EntityRef,
+  MigrationPlan,
+  MigrationPlanRequest,
+  ResolvePlanSkillsRequest,
+} from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { MultiSelect } from "@app/components/FilterToolbar/components/MultiSelect";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { targetProfilesPath } from "@app/pages/agentic/entity-paths";
 import {
+  currentPlanSkills,
   useCreateMigrationPlanMutation,
   useFetchAgents,
   useFetchGateways,
   useFetchMigrationPlans,
+  useResolvePlanSkills,
   useUpdateMigrationPlanMutation,
 } from "@app/queries/agentic";
 import { useFetchArchetypes } from "@app/queries/archetypes";
@@ -54,6 +62,8 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 import { DetailSection, DetailSections } from "../../components/detail-section";
 import { StageCard, StageFormData } from "../components/stage-card";
 import { StagesTable } from "../components/stages-table";
+
+import { PlanSkillsStep, PlanSkillsSummary } from "./plan-skills-step";
 
 interface PlanWizardProps {
   isOpen: boolean;
@@ -67,6 +77,8 @@ interface PlanFormValues {
   archetypeId: number | null;
   targetProfileIds: number[];
   stages: StageFormData[];
+  /** Skills excluded from every stage; kept when the stages or path change. */
+  excludedSkillIds: EntityId[];
 }
 
 const NAME_MAX_LENGTH = 120;
@@ -78,6 +90,7 @@ const MODAL_ID = "plan-wizard";
 const DETAILS_STEP_ID = "step-plan-details";
 const PATH_STEP_ID = "step-migration-path";
 const STAGES_STEP_ID = "step-stages";
+const SKILLS_STEP_ID = "step-skills";
 type EditableStepId =
   | typeof DETAILS_STEP_ID
   | typeof PATH_STEP_ID
@@ -158,10 +171,11 @@ const helper = (
 );
 
 /**
- * Create or edit a migration plan in four steps:
- * Plan details, Migration path, Stages, Review. Next stays
- * disabled until the step is valid, and every control that blocks it says
- * why. Creating visits the steps in order; editing can open any step.
+ * Create or edit a migration plan in five steps:
+ * Plan details, Migration path, Stages, Skills, Review. Next
+ * stays disabled until the step is valid, and every control that blocks it
+ * says why (the Skills step never blocks it). Creating visits the steps in
+ * order; editing can open any step.
  */
 export const PlanWizard: React.FC<PlanWizardProps> = ({
   isOpen,
@@ -243,6 +257,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           )
           .min(1)
           .required(),
+        excludedSkillIds: array().of(string().required()).required(),
       }),
     [isDuplicateName, t]
   );
@@ -260,6 +275,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
       archetypeId: null,
       targetProfileIds: [],
       stages: [emptyStage(1)],
+      excludedSkillIds: [],
     },
     resolver: yupResolver(validationSchema),
     mode: "all",
@@ -270,6 +286,35 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
   const archetypeId = useWatch({ control, name: "archetypeId" });
   const targetProfileIds = useWatch({ control, name: "targetProfileIds" });
   const stages = useWatch({ control, name: "stages" });
+  const excludedSkillIds = useWatch({ control, name: "excludedSkillIds" });
+
+  // The draft's skills come from the server. The request holds only what
+  // decides the skills, not the exclusions: the checkboxes read the form, so
+  // clearing one refetches nothing.
+  const skillsRequest = React.useMemo<ResolvePlanSkillsRequest>(
+    () => ({
+      stages: stages.flatMap((stage) =>
+        stage.agentId != null ? [{ agent: { id: stage.agentId } }] : []
+      ),
+      migrationPath:
+        archetypeId != null
+          ? {
+              archetype: { id: archetypeId },
+              targetProfiles: targetProfileIds.map((id) => ({ id })),
+            }
+          : undefined,
+    }),
+    [stages, archetypeId, targetProfileIds]
+  );
+  const skillsQuery = useResolvePlanSkills(skillsRequest, { enabled: isOpen });
+  const setSkillUsed = (skill: EntityRef, used: boolean) =>
+    setValue(
+      "excludedSkillIds",
+      used
+        ? excludedSkillIds.filter((id) => id !== skill.id)
+        : [...excludedSkillIds.filter((id) => id !== skill.id), skill.id],
+      { shouldDirty: true }
+    );
 
   const [isArchetypeSelectOpen, setIsArchetypeSelectOpen] =
     React.useState(false);
@@ -312,6 +357,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
             requiresApproval: s.requiresApproval,
             order: s.order,
           })),
+        excludedSkillIds: (plan.excludedSkills ?? []).map((skill) => skill.id),
       });
       setExpandedStageKeys([]);
     } else {
@@ -322,6 +368,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
         archetypeId: null,
         targetProfileIds: [],
         stages: [first],
+        excludedSkillIds: [],
       });
       setExpandedStageKeys([first.formKey]);
     }
@@ -361,7 +408,22 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
       archetypeId: archetype,
       targetProfileIds: submittedTargetProfileIds,
       stages: submittedStages,
+      excludedSkillIds: submittedExcludedSkillIds,
     } = formValues;
+    // Only exclusions of skills in the latest resolution are saved, so none
+    // pile up unseen. Without a resolution (loading or failed) they are sent
+    // as they are.
+    const resolvedSkills = currentPlanSkills(skillsQuery);
+    const excludedSkills =
+      resolvedSkills != null
+        ? submittedExcludedSkillIds.filter((id) =>
+            resolvedSkills.some((entry) => entry.skill.id === id)
+          )
+        : submittedExcludedSkillIds;
+    // An edit that clears every exclusion sends an empty list, so a backend
+    // that merges updates drops the stored ones.
+    const sendsExclusions =
+      excludedSkills.length > 0 || (plan?.excludedSkills ?? []).length > 0;
     // Server-owned fields (ids of new stages, effective skills, impact) are
     // not sent; existing stages keep their ids so plan runs stay linked.
     const payload: MigrationPlanRequest = {
@@ -386,6 +448,9 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           instructions: s.instructions,
           requiresApproval: s.requiresApproval,
         })),
+      ...(sendsExclusions
+        ? { excludedSkills: excludedSkills.map((id) => ({ id })) }
+        : {}),
     };
 
     if (plan) {
@@ -727,6 +792,15 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           </Stack>
         </WizardStep>
 
+        <WizardStep id={SKILLS_STEP_ID} name={t("agentic.plan.skillsStep")}>
+          <PlanSkillsStep
+            query={skillsQuery}
+            excludedIds={excludedSkillIds}
+            onUsedChange={setSkillUsed}
+            isEdit={plan != null}
+          />
+        </WizardStep>
+
         <WizardStep
           id="step-review"
           name={t("agentic.plan.reviewStep")}
@@ -798,6 +872,20 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
                   ) : (
                     <EmptyTextMessage message={t("terms.none")} />
                   )}
+                </DescriptionListDescription>
+              </DescriptionListGroup>
+              <DescriptionListGroup>
+                <DescriptionListTerm>
+                  {t("agentic.plan.skillsStep")}
+                </DescriptionListTerm>
+                <DescriptionListDescription>
+                  <PlanSkillsSummary
+                    query={skillsQuery}
+                    excludedIds={excludedSkillIds}
+                    savedExcluded={
+                      plan != null ? (plan.excludedSkills ?? []) : undefined
+                    }
+                  />
                 </DescriptionListDescription>
               </DescriptionListGroup>
             </DescriptionList>
