@@ -116,7 +116,7 @@ export const mockGateways: ModelProjection[] = [
     credential: { id: 605, name: "Vertex AI evaluation credential" },
     verificationStatus: "pending",
     isOrganizationDefault: false,
-    statusReason: "Verification has not been run for this Model.",
+    statusReason: "Verification has not been run for this model.",
   },
 ];
 
@@ -752,7 +752,7 @@ export const mockMigrationPlans: MigrationPlan[] = [
         name: "Migrate",
         agent: { id: "9", name: "Java Code Migrator" },
         instructions:
-          "Execute the migration proposal produced in the previous Stage. Apply code transformations incrementally, committing each logical change separately.",
+          "Execute the migration proposal produced in the previous stage. Apply code transformations incrementally, committing each logical change separately.",
         requiresApproval: false,
         order: 2,
       },

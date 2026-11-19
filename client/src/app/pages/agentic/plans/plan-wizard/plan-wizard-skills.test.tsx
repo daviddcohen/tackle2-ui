@@ -209,7 +209,7 @@ describe("PlanWizard Skills step", () => {
   // The plan page's Every stage note sits in the intro, after its first
   // sentence.
   const intro =
-    "Each stage gets its agent's skills and the skills in Every stage. Skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application are always included: a plan cannot exclude them.";
+    "Each stage gets its agent's skills and the skills in Every stage. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application are always included: a plan cannot exclude them.";
   const user = () => userEvent.setup();
   const nextButton = () => screen.getByRole("button", { name: "Next" });
   const stepButton = (name: string) => screen.getByRole("button", { name });
@@ -278,7 +278,7 @@ describe("PlanWizard Skills step", () => {
       )
     ).toBeVisible();
     expect(
-      within(table).queryByText(/Skills of this plan's archetype/)
+      within(table).queryByText(/skills of this plan's archetype/)
     ).toBeNull();
     const rows = within(table).getAllByRole("row", {
       name: /EJB to CDI conversion patterns/,

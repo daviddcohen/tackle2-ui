@@ -613,17 +613,24 @@ const StageRunDetail: React.FC = () => {
   );
   /**
    * A view of the stage's agent run (Transcript, Logs, YAML): its "appears
-   * when this stage starts" state for a Pending stage, then the view, which
-   * owns its own loading, empty and error states. A started stage whose
-   * agent run is not listed yet (the controller creates it a moment after
-   * the stage starts) waits for it while it can still run, and says the
-   * agent never started once it ended.
+   * when this stage starts" state for a Pending stage ("did not start" once
+   * the run has ended), then the view, which owns its own loading, empty and
+   * error states. A started stage whose agent run is not listed yet (the
+   * controller creates it a moment after the stage starts) waits for it
+   * while it can still run, and says the agent never started once it ended.
    */
   const agentRunView = (
     notStartedMessage: string,
     view: (shown: StageAgentRun) => React.ReactNode
   ) => {
-    if (!isStarted) return notStarted(notStartedMessage);
+    if (!isStarted) {
+      // The run ended before this stage started: it never will.
+      return notStarted(
+        isTerminalRunPhase(planRun.status)
+          ? t("agentic.stageRun.agentNeverStarted")
+          : notStartedMessage
+      );
+    }
     if (agentRun != null) return view(agentRun);
     if (isLoadingAgentRuns) {
       return (

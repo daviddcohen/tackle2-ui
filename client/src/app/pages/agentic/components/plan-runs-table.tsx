@@ -196,10 +196,10 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
               {showPlan && (
                 <Th {...getThProps({ columnKey: "plan" })} modifier="wrap" />
               )}
-              <Th
-                {...getThProps({ columnKey: "status" })}
-                modifier="fitContent"
-              />
+              {/* Not fitContent: the cell's second line ("Approval needed:
+                  ...") must wrap so the run name keeps its room; nowrap keeps
+                  the header whole when every status is short. */}
+              <Th {...getThProps({ columnKey: "status" })} modifier="nowrap" />
               <Th {...getThProps({ columnKey: "applications" })} />
               <Th
                 {...getThProps({ columnKey: "started" })}
@@ -264,16 +264,10 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
                         </Link>
                       </Td>
                     )}
-                    <Td
-                      modifier="nowrap"
-                      {...getTdProps({ columnKey: "status" })}
-                    >
+                    <Td {...getTdProps({ columnKey: "status" })}>
                       <PlanRunStatus run={run} />
                     </Td>
-                    <Td
-                      modifier="nowrap"
-                      {...getTdProps({ columnKey: "applications" })}
-                    >
+                    <Td {...getTdProps({ columnKey: "applications" })}>
                       {run.applications.length === 1 &&
                       run.applications[0].id === currentApplicationId ? (
                         run.applications[0].name

@@ -214,6 +214,29 @@ describe("DetailFacts and LinkLabels", () => {
     );
   });
 
+  it("shows five labels, then our translated N more that expands to Show less", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <LinkLabels
+          items={[1, 2, 3, 4, 5, 6, 7].map((id) => ({
+            id,
+            name: `Skill ${id}`,
+            to: `/skills/${id}`,
+          }))}
+        />
+      </MemoryRouter>
+    );
+    expect(screen.getAllByRole("link")).toHaveLength(5);
+    // The test i18n renders keys: these are ours, not PatternFly's
+    // untranslated "2 more" and "Show Less".
+    await user.click(screen.getByRole("button", { name: "terms.moreCount" }));
+    expect(screen.getAllByRole("link")).toHaveLength(7);
+    expect(
+      screen.getByRole("button", { name: "terms.showLess" })
+    ).toBeVisible();
+  });
+
   it("renders an item without a destination as a plain label", () => {
     render(
       <MemoryRouter>

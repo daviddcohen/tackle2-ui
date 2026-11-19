@@ -254,6 +254,23 @@ test.describe("Stage tabs", () => {
     // A stage without an agent run reads no transcript, log or resource.
     expect(reads).toEqual([]);
   });
+
+  test("a stage its failed run never reached says on every tab that the agent did not start", async ({
+    page,
+  }) => {
+    // Run 4 failed at Assess packaging, so stage 8 never started.
+    await page.goto(stageUrl("4", "8", "configured"));
+    await expect(tabPanel(page)).toContainText(
+      "This stage did not run because Assess packaging failed."
+    );
+    for (const name of ["Transcript", "Logs", "YAML"]) {
+      await tab(page, name).click();
+      await expect(tabPanel(page)).toContainText(
+        "The agent did not start for this stage."
+      );
+      await expect(tabPanel(page)).not.toContainText("when this stage starts");
+    }
+  });
 });
 
 test.describe("Auto-refresh while the stage runs", () => {

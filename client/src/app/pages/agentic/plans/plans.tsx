@@ -164,6 +164,7 @@ const ApplicationsCell: React.FC<{
   }
   return (
     <LabelGroup
+      isCompact
       numLabels={2}
       aria-label={t("agentic.plan.applicationsOfPlan", { plan: plan.name })}
       collapsedText={t("agentic.plan.moreApplications", {

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { LocationDescriptor } from "history";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   Content,
@@ -193,34 +194,45 @@ export interface LinkLabelItem {
   to?: LocationDescriptor;
 }
 
+/** Labels a set-valued fact shows before "{n} more". */
+export const MAX_LABELS = 5;
+
 /**
  * A set-valued fact as outlined, clickable link labels, even for one item:
  * the first five, then "more". The caller renders
  * the empty case ("None").
  */
-export const LinkLabels: React.FC<{ items: LinkLabelItem[] }> = ({ items }) => (
-  <LabelGroup numLabels={5}>
-    {items.map((item) => {
-      const { to } = item;
-      return to != null ? (
-        <Label
-          key={item.id}
-          variant="outline"
-          isCompact
-          isClickable
-          render={({ className, content }) => (
-            <Link className={className} to={to}>
-              {content}
-            </Link>
-          )}
-        >
-          {item.name}
-        </Label>
-      ) : (
-        <Label key={item.id} variant="outline" isCompact>
-          {item.name}
-        </Label>
-      );
-    })}
-  </LabelGroup>
-);
+export const LinkLabels: React.FC<{ items: LinkLabelItem[] }> = ({ items }) => {
+  const { t } = useTranslation();
+  return (
+    <LabelGroup
+      isCompact
+      numLabels={MAX_LABELS}
+      collapsedText={t("terms.moreCount", { count: items.length - MAX_LABELS })}
+      expandedText={t("terms.showLess")}
+    >
+      {items.map((item) => {
+        const { to } = item;
+        return to != null ? (
+          <Label
+            key={item.id}
+            variant="outline"
+            isCompact
+            isClickable
+            render={({ className, content }) => (
+              <Link className={className} to={to}>
+                {content}
+              </Link>
+            )}
+          >
+            {item.name}
+          </Label>
+        ) : (
+          <Label key={item.id} variant="outline" isCompact>
+            {item.name}
+          </Label>
+        );
+      })}
+    </LabelGroup>
+  );
+};

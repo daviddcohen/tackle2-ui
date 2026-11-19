@@ -546,16 +546,19 @@ describe("PlanDetailsPage", () => {
     ).toEqual([runItemName]);
   });
 
-  it("says No runs yet and offers Run migration plan when the plan has no runs", async () => {
+  it("says in one sentence that the plan has no runs and offers Run migration plan", async () => {
     const user = userEvent.setup();
     useEndpoints(runnable);
     renderAt("/migration-plans/1?tab=runs");
     expect(
-      await screen.findByText("agentic.planDetail.runsEmptyTitle")
+      await screen.findByText("agentic.planDetail.runsEmptyDescription")
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "agentic.planDetail.runsTitleEmpty" })
-    ).toBeInTheDocument();
+    // Like the other section empty states: the section heading, then one
+    // sentence, no title of its own.
+    expect(screen.getAllByRole("heading").map((h) => h.textContent)).toContain(
+      "agentic.planDetail.runsTitleEmpty"
+    );
+    expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
     const runButton = screen.getByRole("button", { name: runItemName });
     expect(runButton).toHaveClass("pf-m-link");
     await user.click(runButton);
@@ -607,7 +610,7 @@ describe("PlanDetailsPage", () => {
     useEndpoints(runnable);
     renderAt("/migration-plans/1?tab=runs");
     expect(
-      await screen.findByText("agentic.planDetail.runsEmptyTitle")
+      await screen.findByText("agentic.planDetail.runsEmptyDescription")
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: runItemName })).toBeNull();
   });
@@ -618,7 +621,7 @@ describe("PlanDetailsPage", () => {
     useEndpoints(runnable);
     renderAt("/migration-plans/1?tab=runs");
     expect(
-      await screen.findByText("agentic.planDetail.runsEmptyTitle")
+      await screen.findByText("agentic.planDetail.runsEmptyDescription")
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: runItemName })).toBeNull();
   });
@@ -644,7 +647,9 @@ describe("PlanDetailsPage", () => {
       await screen.findByText("message.unableToConnect")
     ).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).toBeNull();
-    expect(screen.queryByText("agentic.planDetail.runsEmptyTitle")).toBeNull();
+    expect(
+      screen.queryByText("agentic.planDetail.runsEmptyDescription")
+    ).toBeNull();
   });
 
   it("falls back to Details for the removed Knowledge base tab", async () => {

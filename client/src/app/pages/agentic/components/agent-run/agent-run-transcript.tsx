@@ -706,32 +706,22 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
             ? t(`${KEY}.skippedAskUser`)
             : t(`${KEY}.notRecorded`);
     const viewLogs = onViewLogs != null && (
-      <Button variant="link" isInline size="sm" onClick={onViewLogs}>
+      <Button variant="link" isInline onClick={onViewLogs}>
         {t(`${KEY}.viewLogs`)}
       </Button>
     );
     if (messages.length > 0) {
       // Not recorded, but the live session's messages are known: show them
       // in the same table, after the sentence that says why. The
-      // View logs link next to it already points to the logs, so the
+      // View logs link that ends it already points to the logs, so the
       // sentence does not say so again.
       return withError(
         <Stack hasGutter>
           <StackItem>
-            <Flex
-              spaceItems={{ default: "spaceItemsSm" }}
-              alignItems={{ default: "alignItemsBaseline" }}
-            >
-              <FlexItem>
-                <Content
-                  component="small"
-                  className={textStyles.textColorSubtle}
-                >
-                  {body} {t(`${KEY}.liveMessages`)}
-                </Content>
-              </FlexItem>
-              {viewLogs && <FlexItem>{viewLogs}</FlexItem>}
-            </Flex>
+            <Content component="small" className={textStyles.textColorSubtle}>
+              {body} {t(`${KEY}.liveMessages`)}
+              {viewLogs && <> {viewLogs}</>}
+            </Content>
           </StackItem>
           <StackItem>
             <TranscriptTable

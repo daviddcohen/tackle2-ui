@@ -16,6 +16,7 @@ import {
   ToolbarGroup,
   ToolbarItem,
 } from "@patternfly/react-core";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import {
   ActionsColumn,
   Table,
@@ -373,6 +374,7 @@ export const SkillsTab: React.FC = () => {
                             />
                           ) : (
                             <CountLink
+                              canWrap
                               to={to(
                                 generatePath(DevPaths.skillDetails, {
                                   skillId: String(skill.id),
@@ -380,7 +382,15 @@ export const SkillsTab: React.FC = () => {
                                 "?tab=usage"
                               )}
                             >
-                              {usageParts.join(", ")}
+                              {/* Wraps between counts, never inside one. */}
+                              {usageParts.map((part, index) => (
+                                <React.Fragment key={part}>
+                                  {index > 0 && ", "}
+                                  <span className={textStyles.textNowrap}>
+                                    {part}
+                                  </span>
+                                </React.Fragment>
+                              ))}
                             </CountLink>
                           )}
                         </Td>

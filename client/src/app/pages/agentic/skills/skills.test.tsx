@@ -160,11 +160,20 @@ describe("SkillsPage", () => {
     expect(within(checklist).getByText("Inline")).toBeInTheDocument();
     expect(within(checklist).getByText("Always followed")).toBeInTheDocument();
     // Collections come after agents (origin order).
+    // Each count is its own unbreakable span. jsdom puts a space around
+    // every element in a name; browsers do not (e2e visual-consistency).
+    const usage = await within(checklist).findByRole("link", {
+      name: (name) =>
+        name.replace(/\s+,/g, ",") === "3 agents, 1 collection, 1 archetype",
+    });
+    expect(usage).toHaveAttribute("href", "/skills/1?tab=usage");
+    // It wraps between counts only: each count is one unbreakable span.
+    expect(usage).not.toHaveClass("pf-v6-u-text-nowrap");
     expect(
-      await within(checklist).findByRole("link", {
-        name: "3 agents, 1 collection, 1 archetype",
-      })
-    ).toHaveAttribute("href", "/skills/1?tab=usage");
+      Array.from(usage.querySelectorAll(".pf-v6-u-text-nowrap")).map(
+        (count) => count.textContent
+      )
+    ).toEqual(["3 agents", "1 collection", "1 archetype"]);
 
     const jakarta = await rowOf("Jakarta EE namespace migration");
     expect(within(jakarta).getByText("OCI image")).toBeInTheDocument();

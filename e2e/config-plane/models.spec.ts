@@ -81,7 +81,7 @@ test.describe("Models list", () => {
     const gemini = rowByText(page, "Gemini 2.5 Pro");
     await expect(gemini).toContainText("Pending");
     await expect(gemini).toContainText(
-      "Verification has not been run for this Model. Agents cannot use it until it is verified."
+      "Verification has not been run for this model. Agents cannot use it until it is verified."
     );
     expectHealthy(diagnostics);
   });

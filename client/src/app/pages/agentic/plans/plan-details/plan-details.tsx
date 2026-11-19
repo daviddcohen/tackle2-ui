@@ -513,11 +513,7 @@ const PlanDetailsPage: React.FC = () => {
             </DetailSection>
           ) : planRuns.length === 0 ? (
             <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
-              <EmptyState
-                headingLevel="h3"
-                titleText={t("agentic.planDetail.runsEmptyTitle")}
-                variant="xs"
-              >
+              <EmptyState variant="xs">
                 <EmptyStateBody>
                   {t("agentic.planDetail.runsEmptyDescription")}
                 </EmptyStateBody>
