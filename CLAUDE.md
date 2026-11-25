@@ -27,7 +27,8 @@ Conventions: see [.cursor/rules/tackle2-ui.mdc](.cursor/rules/tackle2-ui.mdc) or
 ## Commands
 
 ```bash
-npm run start:dev      # Dev server (port 9000) with port forwarding
+npm run start:dev      # Dev server (port 9000) against a real Hub, with port forwarding
+MOCK=stub AUTH_REQUIRED=false npm run start:dev   # Prototype with mock data, no Hub needed
 npm run test           # Unit tests (Jest)
 npm run lint           # ESLint
 npm run format:check   # Prettier check
