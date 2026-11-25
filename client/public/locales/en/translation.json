@@ -1811,7 +1811,7 @@
       "previewRunTitle_other": "{{plan}}: {{count}} applications",
       "previewTableLabel": "Skills by stage with {{plan}}",
       "previewSelectPlan": "Select a migration plan to see skills by stage.",
-      "previewRerun": "The new run uses the migration plan as it is now, so a stage can get different skills than in the failed run.",
+      "previewRerun": "The new run uses the migration plan as it is now, so its skills can differ from the failed run's.",
       "previewRunAnyway": "You can still run the migration plan.",
       "previewSkillsUnavailable": "This server does not report skills by stage before a run yet. You can still run the migration plan."
     },
@@ -1950,14 +1950,14 @@
       }
     },
     "runSkills": {
-      "intro": "Clear a skill to leave it out of this plan run: it is removed from every stage and every application that has it. Skills the migration plan excludes stay excluded.",
+      "intro": "Clear a skill to leave it out of every stage and every application in the plan run.",
       "toggleExcluded_one": "Review skills by stage ({{count}} skill excluded)",
       "toggleExcluded_other": "Review skills by stage ({{count}} skills excluded)",
       "excludedTotal_zero": "No skills excluded for this run.",
       "excludedTotal_one": "1 skill excluded for this run.",
       "excludedTotal_other": "{{count}} skills excluded for this run.",
       "excludedByPlan": "Excluded by plan",
-      "rerunExcluded": "The skills the failed run excluded on its own are excluded again.",
+      "rerunExcluded": "Skills the failed run excluded are excluded again.",
       "previewSelectProfile": "Select a target profile for each application to see skills by stage.",
       "archetypeTargetProfile": "Target profile for all applications of {{archetype}}",
       "targetProfileFor": "Target profile for {{application}}",

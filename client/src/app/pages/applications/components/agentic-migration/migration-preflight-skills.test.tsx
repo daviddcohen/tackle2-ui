@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryHistory } from "history";
 import { rest } from "msw";
 import { Router } from "react-router-dom";
+import a11yStyles from "@patternfly/react-styles/css/utilities/Accessibility/accessibility";
 
 import {
   ApplicationMigrationMap,
@@ -16,6 +17,7 @@ import {
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import {
   act,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -24,6 +26,7 @@ import {
 import { server } from "@mocks/server";
 
 import { MigrationPreflightModal } from "./migration-preflight-modal";
+import { RunSkillsPreview } from "./run-skills-preview";
 
 // The Skills by stage preview of the Run migration plan dialog, in English
 // (migration-preflight-modal.test.tsx covers the rest of the dialog).
@@ -133,9 +136,18 @@ const openPreview = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 const INTRO =
-  "Clear a skill to leave it out of this plan run: it is removed from every stage and every application that has it. Skills the migration plan excludes stay excluded.";
+  "Clear a skill to leave it out of every stage and every application in the plan run.";
 const ATTRIBUTION =
   "An application's archetype, target profile and own skills go to that application only.";
+const RERUN =
+  "The new run uses the migration plan as it is now, so its skills can differ from the failed run's.";
+const RERUN_EXCLUDED = "Skills the failed run excluded are excluded again.";
+
+/** Whether a table group's toggle is open, by the group's title. */
+const expanded = (table: HTMLElement, title: string) =>
+  within(table)
+    .getByRole("button", { name: `${title} Details` })
+    .getAttribute("aria-expanded");
 
 describe("MigrationPreflightModal, skills by stage", () => {
   beforeEach(() => {
@@ -201,7 +213,7 @@ describe("MigrationPreflightModal, skills by stage", () => {
     const user = userEvent.setup();
     renderModal({ 13: view() });
     await openPreview(user);
-    // One intro paragraph; one application needs no attribution sentence.
+    // One intro sentence.
     expect(screen.getByText(INTRO)).toBeInTheDocument();
     expect(screen.queryByText(ATTRIBUTION, { exact: false })).toBeNull();
     const table = screen.getByRole("grid", { name: "Skills by stage" });
@@ -219,6 +231,124 @@ describe("MigrationPreflightModal, skills by stage", () => {
     expect(within(table).queryByRole("link")).toBeNull();
     // Its view already says what each stage gets.
     expect(resolveRequests).toHaveLength(0);
+  });
+
+  describe("scroll on open", () => {
+    const scrollIntoView = jest.fn();
+    const { matchMedia } = window;
+    const { scrollIntoView: original } = Element.prototype;
+    beforeEach(() => {
+      scrollIntoView.mockClear();
+      Element.prototype.scrollIntoView = scrollIntoView;
+    });
+    afterEach(() => {
+      window.matchMedia = matchMedia;
+      Element.prototype.scrollIntoView = original;
+    });
+
+    it("brings the section to the top when the user opens it, focus on the toggle", async () => {
+      const user = userEvent.setup();
+      renderModal({ 13: view() });
+      await waitFor(() => expect(skillsToggle()).toBeInTheDocument());
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      await user.click(skillsToggle());
+      await waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          block: "start",
+          behavior: "smooth",
+        })
+      );
+      // The section, toggle first, not the toggle alone.
+      const section = scrollIntoView.mock.contexts[0] as HTMLElement;
+      expect(section).toContainElement(skillsToggle());
+      expect(section).toContainElement(screen.getByText(INTRO));
+      expect(skillsToggle()).toHaveFocus();
+      // Closing does not scroll.
+      scrollIntoView.mockClear();
+      await user.click(skillsToggle());
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it("scrolls again once a table it waited for has loaded", async () => {
+      const user = userEvent.setup();
+      renderModal(
+        { 13: view(), 14: view() },
+        {
+          applications: [branch, claims],
+          initialValues: { planSelection: "single", planId: "6" },
+        }
+      );
+      await openPreview(user);
+      await screen.findByRole("heading", {
+        name: "Every stage: Branch Operations",
+      });
+      // At once, as far as the loading table lets it, then once loaded.
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+      // Not on later renders.
+      await user.click(
+        screen.getByRole("button", {
+          name: "Every stage: Branch Operations Details",
+        })
+      );
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not scroll again once the user has moved on", async () => {
+      renderModal(
+        { 13: view(), 14: view() },
+        {
+          applications: [branch, claims],
+          initialValues: { planSelection: "single", planId: "6" },
+        }
+      );
+      await waitFor(() => expect(skillsToggle()).toBeInTheDocument());
+      // Synchronous: the table has not answered yet.
+      fireEvent.click(skillsToggle());
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      // Scrolls back up to the run options while the table loads.
+      fireEvent.wheel(document.body);
+      await screen.findByRole("heading", {
+        name: "Every stage: Branch Operations",
+      });
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    });
+
+    it("jumps without the animation when motion is reduced", async () => {
+      window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+        matches: query === "(prefers-reduced-motion: reduce)",
+      }));
+      const user = userEvent.setup();
+      renderModal({ 13: view() });
+      await openPreview(user);
+      await waitFor(() =>
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          block: "start",
+          behavior: "auto",
+        })
+      );
+    });
+
+    it("does not scroll when it is open from the start", () => {
+      render(
+        <RunSkillsPreview
+          groups={[]}
+          skills={[]}
+          excludedSkills={{}}
+          excludedCount={0}
+          onIncludeChange={jest.fn()}
+          isPlanMissing
+          isTargetProfileMissing={false}
+          isRerun={false}
+          hasRerunExclusions={false}
+          isExpanded
+          onExpandedChange={jest.fn()}
+        />
+      );
+      expect(
+        screen.getByText("Select a migration plan to see skills by stage.")
+      ).toBeInTheDocument();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
   });
 
   it("names the toggles of each table from its own row range", async () => {
@@ -249,7 +379,7 @@ describe("MigrationPreflightModal, skills by stage", () => {
     expect(resolveRequests).toHaveLength(0);
   });
 
-  it("previews one run of several applications, with the attribution once", async () => {
+  it("previews one run of several applications, each application's Every stage collapsed", async () => {
     const user = userEvent.setup();
     renderModal(
       { 13: view(), 14: view() },
@@ -260,7 +390,9 @@ describe("MigrationPreflightModal, skills by stage", () => {
     );
     await openPreview(user);
     const table = await screen.findByRole("grid", { name: "Skills by stage" });
-    expect(screen.getAllByText(ATTRIBUTION, { exact: false })).toHaveLength(1);
+    // The "Every stage: {application}" titles say it: no attribution line.
+    expect(screen.getByText(INTRO)).toBeInTheDocument();
+    expect(screen.queryByText(ATTRIBUTION, { exact: false })).toBeNull();
     expect(
       await within(table).findByRole("heading", {
         name: "Every stage: Branch Operations",
@@ -271,6 +403,12 @@ describe("MigrationPreflightModal, skills by stage", () => {
         name: "Every stage: Claims Processing",
       })
     ).toBeInTheDocument();
+    // The stage groups are open; each application's Every stage group
+    // starts collapsed, with its count.
+    expect(expanded(table, "Stage 1: Migrate")).toBe("true");
+    expect(expanded(table, "Every stage: Branch Operations")).toBe("false");
+    expect(expanded(table, "Every stage: Claims Processing")).toBe("false");
+    expect(within(table).getAllByText("1 skill")).toHaveLength(2);
     expect(resolveRequests).toEqual([
       {
         stages: [{ agent: { id: "a1" }, name: "Migrate" }],
@@ -294,7 +432,8 @@ describe("MigrationPreflightModal, skills by stage", () => {
       { applications: [branch, claims, orders] }
     );
     await openPreview(user);
-    expect(screen.getAllByText(ATTRIBUTION, { exact: false })).toHaveLength(1);
+    expect(screen.getByText(INTRO)).toBeInTheDocument();
+    expect(screen.queryByText(ATTRIBUTION, { exact: false })).toBeNull();
     // Runs by plan name, each with its own heading and table.
     expect(
       screen
@@ -324,24 +463,21 @@ describe("MigrationPreflightModal, skills by stage", () => {
     ).toHaveAttribute("id", "simple-node500");
     // The blocked application is in no table.
     expect(screen.queryByText("Every stage: Claims Processing")).toBeNull();
-    // Several plan runs: no "No skills excluded" under each heading, but
-    // the live line is there for a change.
+    // One application in a plan run: its Every stage group is open.
+    expect(expanded(dotnet, "Every stage: Order Service")).toBe("true");
+    // No visible "No skills excluded", but each plan run has its live line,
+    // empty until a change.
     expect(screen.queryByText("No skills excluded for this run.")).toBeNull();
-    expect(
-      document.querySelectorAll('[aria-live="polite"]').length
-    ).toBeGreaterThanOrEqual(2);
+    const lines = document.querySelectorAll('[aria-live="polite"]');
+    expect(lines).toHaveLength(2);
+    lines.forEach((line) => expect(line).toHaveTextContent(/^$/));
   });
 
   it("says a rerun resolves the skills again", async () => {
     const user = userEvent.setup();
     renderModal({ 13: view() }, { rerunPlanId: "5" });
     await openPreview(user);
-    expect(
-      screen.getByText(
-        "The new run uses the migration plan as it is now, so a stage can get different skills than in the failed run.",
-        { exact: false }
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByText(`${INTRO} ${RERUN}`)).toBeInTheDocument();
   });
 
   it("says Unavailable when the view does not report skills and the server has no resolver", async () => {
@@ -530,8 +666,11 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
     await openPreview(user);
     await expandGroups(user);
     expect(screen.getByText(INTRO)).toBeInTheDocument();
-    const live = screen.getByText("No skills excluded for this run.");
-    expect(live).toHaveAttribute("aria-live", "polite");
+    // For screen readers only, and empty until a change.
+    expect(screen.queryByText("No skills excluded for this run.")).toBeNull();
+    const live = document.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(live).toHaveClass(a11yStyles.screenReader);
+    expect(live).toBeEmptyDOMElement();
 
     await user.click(include("Quarkus patterns", /^Stage 1/));
     expect(include("Quarkus patterns", /^Stage 1/)).not.toBeChecked();
@@ -620,10 +759,7 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       screen.getByRole("button", { name: /^Review skills by stage/ })
     );
     expect(
-      screen.getByText(
-        "The skills the failed run excluded on its own are excluded again.",
-        { exact: false }
-      )
+      screen.getByText(`${INTRO} ${RERUN} ${RERUN_EXCLUDED}`)
     ).toBeInTheDocument();
     const request = await submitted(user, onStartReady);
     expect(request.excludedSkills).toEqual([
@@ -641,18 +777,8 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       name: "Review skills by stage",
     });
     await user.click(toggle);
-    expect(
-      screen.getByText(
-        "The new run uses the migration plan as it is now, so a stage can get different skills than in the failed run.",
-        { exact: false }
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(
-        "The skills the failed run excluded on its own are excluded again.",
-        { exact: false }
-      )
-    ).toBeNull();
+    expect(screen.getByText(`${INTRO} ${RERUN}`)).toBeInTheDocument();
+    expect(screen.queryByText(RERUN_EXCLUDED, { exact: false })).toBeNull();
     const request = await submitted(user, onStartReady);
     expect(request).not.toHaveProperty("excludedSkills");
   });
