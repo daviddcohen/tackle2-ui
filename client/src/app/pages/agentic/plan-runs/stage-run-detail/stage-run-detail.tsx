@@ -96,8 +96,9 @@ type StageTab = (typeof STAGE_TABS)[number];
 const TAB_PREFIX = "stage-run-detail";
 
 /**
- * A full height view (the log, the YAML): it reaches the bottom of the page
- * with a floor of 480 px, and the page scrolls when there is less room.
+ * A full height view (the transcript, the log, the YAML): it reaches the
+ * bottom of the page with a floor of 480 px, and the page scrolls when there
+ * is less room.
  * The view gets the height and passes it on to its
  * component's height prop. It mounts once the height is known,
  * so the log viewer and the editor lay out at their final size.
@@ -922,34 +923,44 @@ const StageRunDetail: React.FC = () => {
         </RunPageBody>
       </DetailTabPanel>
 
+      {/* The transcript, the log and the YAML fill the rest of the page,
+          like Task details, and never get shorter than 480 px. */}
       <DetailTabPanel
         prefix={TAB_PREFIX}
         eventKey="transcript"
         activeKey={activeTab}
+        isFilled
       >
         {viewAlert}
-        <PageSection hasBodyWrapper={false}>
+        <PageSection hasBodyWrapper={false} isFilled>
           {agentRunView(t("agentic.stageRun.transcriptNotStarted"), (shown) => (
-            <AgentRunTranscript
-              agentRun={shown}
-              messages={
-                shown.application == null ||
-                shown.application.id === planRun.applications[0]?.id
-                  ? stageRun.messages
-                  : undefined
-              }
-              phase={shown.phase}
-              onViewLogs={() => {
-                requestLogsFocus();
-                setActiveTab("logs");
-              }}
-            />
+            <FullHeightView>
+              {(height) => (
+                <AgentRunTranscript
+                  // Another application's agent run is another transcript:
+                  // no expanded entry or scroll position carries over.
+                  key={shown.name}
+                  agentRun={shown}
+                  agentName={stage.agent.name}
+                  messages={
+                    shown.application == null ||
+                    shown.application.id === planRun.applications[0]?.id
+                      ? stageRun.messages
+                      : undefined
+                  }
+                  phase={shown.phase}
+                  height={height}
+                  onViewLogs={() => {
+                    requestLogsFocus();
+                    setActiveTab("logs");
+                  }}
+                />
+              )}
+            </FullHeightView>
           ))}
         </PageSection>
       </DetailTabPanel>
 
-      {/* The log and the YAML fill the rest of the page, like Task details,
-          and never get shorter than 480 px. */}
       <DetailTabPanel
         prefix={TAB_PREFIX}
         eventKey="logs"

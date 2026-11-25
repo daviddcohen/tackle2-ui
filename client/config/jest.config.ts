@@ -52,7 +52,8 @@ const config: JestConfigWithTsJest = {
     "^.+\\.[cm]?[jt]sx?$": "ts-jest",
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(react-error-boundary|lodash-es)/)", // process esm only modules
+    // process esm only modules (unist-util-*: PatternFly Chatbot's Message)
+    "node_modules/(?!(react-error-boundary|lodash-es|unist-util-[a-z-]+)/)",
   ],
 
   // Code to set up the testing framework before each test file in the suite is executed

@@ -69,12 +69,25 @@ const alertTitle = (scope: Locator, variant: string, title?: RegExp) =>
     name: new RegExp(`^${variant} alert: ${title?.source ?? ""}`),
   });
 
-const transcriptTable = (page: Page) =>
-  main(page).getByRole("grid", { name: "Transcript", exact: true });
+/** The chat: a scrolling region of messages. */
+const transcript = (page: Page) =>
+  main(page).getByRole("region", { name: "Transcript", exact: true });
 
-/** One row group per transcript entry (an expandable entry keeps both rows in it). */
+/** The messages, named by who sent them and when. */
+const transcriptMessages = (page: Page) =>
+  transcript(page).getByRole("region", { name: /^Message from / });
+
+/** One per transcript entry: a message, or a divider (notice, gap). */
 const transcriptEntries = (page: Page) =>
-  transcriptTable(page).locator("tbody");
+  transcript(page).locator(
+    ".pf-chatbot__message, .pf-chatbot__message-divider"
+  );
+
+/** Distance (px) between the bottom of the chat and its latest entry. */
+const transcriptToBottom = (page: Page) =>
+  transcript(page).evaluate(
+    (box) => box.scrollHeight - box.scrollTop - box.clientHeight
+  );
 
 const logRegion = (page: Page) =>
   main(page).getByRole("region", { name: / log$/ });
@@ -163,7 +176,7 @@ test.describe("Stage tabs", () => {
       await expect(tabPanel(page)).toHaveCount(1);
       const shown = {
         details: page.getByRole("term").filter({ hasText: "Pod" }),
-        transcript: transcriptTable(page),
+        transcript: transcript(page),
         logs: logRegion(page),
         yaml: main(page).getByRole("group", { name: "Format" }),
       }[key];
@@ -281,7 +294,7 @@ test.describe("Auto-refresh while the stage runs", () => {
     await page.goto(
       stageUrl(runId, stageId, scenario, { ...options, tab: "transcript" })
     );
-    await expect(transcriptTable(page)).toBeVisible();
+    await expect(transcript(page)).toBeVisible();
     await expect(tabPanel(page)).toContainText(
       "Recording while the stage runs."
     );
@@ -370,7 +383,7 @@ test.describe("Refresh stops on a finished stage", () => {
     await page.goto(
       stageUrl(runId, stageId, scenario, { ...options, tab: "transcript" })
     );
-    await expect(transcriptTable(page)).toBeVisible();
+    await expect(transcript(page)).toBeVisible();
     const transcriptReads = () =>
       urls.filter((url) => url.includes("/transcript")).length;
     const before = transcriptReads();
@@ -383,7 +396,7 @@ test.describe("Refresh stops on a finished stage", () => {
   });
 
   for (const [name, key, content] of [
-    ["transcript", "transcript", (page: Page) => transcriptTable(page)],
+    ["transcript", "transcript", (page: Page) => transcript(page)],
     ["log", "logs", (page: Page) => logRegion(page)],
   ] as const) {
     test(`a finished stage's ${name} is read once and not polled`, async ({
@@ -423,6 +436,56 @@ test.describe("Refresh stops on a finished stage", () => {
       expect(await content(page).innerText()).toBe(text);
     });
   }
+});
+
+test.describe("Transcript while recording", () => {
+  test("opens at the latest entry, lets go when the reader scrolls up, and Back to latest follows again", async ({
+    page,
+  }) => {
+    // Jump the page's clock (the mock reads it too) so the chat overflows,
+    // as the Logs test does. Time keeps flowing from there.
+    await page.clock.install();
+    const [runId, stageId, scenario, options] = RUNNING_STAGE;
+    await page.goto(
+      stageUrl(runId, stageId, scenario, { ...options, tab: "transcript" })
+    );
+    await expect(transcriptMessages(page).first()).toBeVisible();
+    await page.clock.fastForward(60_000);
+    await expect
+      .poll(
+        () =>
+          transcript(page).evaluate(
+            (box) => box.scrollHeight - box.clientHeight
+          ),
+        { timeout: GROWTH_TIMEOUT }
+      )
+      .toBeGreaterThan(300);
+    // Following: at the latest entry.
+    await expect.poll(() => transcriptToBottom(page)).toBeLessThan(5);
+
+    await transcript(page).hover();
+    await page.mouse.wheel(0, -300);
+    await expect.poll(() => transcriptToBottom(page)).toBeGreaterThan(100);
+    const place = await transcript(page).evaluate((box) => box.scrollTop);
+    const count = await transcriptEntries(page).count();
+    // New entries arrive below; the reader's place stays.
+    await expect
+      .poll(() => transcriptEntries(page).count(), {
+        timeout: GROWTH_TIMEOUT,
+      })
+      .toBeGreaterThan(count);
+    expect(await transcript(page).evaluate((box) => box.scrollTop)).toBe(place);
+
+    await main(page).getByRole("button", { name: "Back to latest" }).click();
+    await expect.poll(() => transcriptToBottom(page)).toBeLessThan(5);
+    const followed = await transcriptEntries(page).count();
+    await expect
+      .poll(() => transcriptEntries(page).count(), {
+        timeout: GROWTH_TIMEOUT,
+      })
+      .toBeGreaterThan(followed);
+    await expect.poll(() => transcriptToBottom(page)).toBeLessThan(5);
+  });
 });
 
 test.describe("Logs", () => {
@@ -645,33 +708,150 @@ test.describe("Logs", () => {
 });
 
 test.describe("Transcript", () => {
-  test("a tool call row expands and collapses from the keyboard and shows its output", async ({
+  test("a tool call card expands and collapses from the keyboard and shows its output", async ({
     page,
   }) => {
     await page.goto(stageUrl("1", "3", "configured", { tab: "transcript" }));
-    await expect(transcriptTable(page)).toBeVisible();
-    // Tool call toggles are named by the call's title.
-    const entry = transcriptEntries(page)
-      .filter({
-        has: page.getByRole("button", {
-          name: /^developer__shell: .* Details$/,
-        }),
-      })
+    await expect(transcript(page)).toBeVisible();
+    // A tool call's toggle reads its kind, title and status.
+    const name = /developer__shell: mvn .*Completed$/;
+    const message = transcriptMessages(page)
+      .filter({ has: page.getByRole("button", { name }) })
       .first();
-    const toggle = entry.getByRole("button", { name: / Details$/ });
+    const toggle = message.getByRole("button", { name });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    const output = entry.locator(".pf-v6-c-code-block");
+    const output = message.locator(".pf-v6-c-code-block");
     await expect(output).toBeHidden();
 
     await toggle.focus();
     await page.keyboard.press("Enter");
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(output.first()).toBeVisible();
-    await expect(output.first()).not.toHaveText("");
+    await expect(output).toBeVisible();
+    await expect(output).toContainText("BUILD SUCCESS");
 
     await page.keyboard.press("Space");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await expect(output.first()).toBeHidden();
+    await expect(output).toBeHidden();
+  });
+
+  test("the transcript reads as a chat: named agent messages in Markdown, tool cards with their output", async ({
+    page,
+  }) => {
+    // Run 1, stage 2 (Migrate) succeeded with commits: it ends with a check
+    // that lists the changes and a Markdown summary.
+    await page.goto(stageUrl("1", "2", "configured", { tab: "transcript" }));
+    const first = transcriptMessages(page).first();
+    await expect(first).toHaveAccessibleName(
+      /^Message from .+ at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC \d{4}-.*Z\)$/
+    );
+    await expect(first.getByText("AI", { exact: true })).toBeVisible();
+
+    // The closing summary: emphasis, a nested list, inline code.
+    const summary = transcriptMessages(page).filter({
+      hasText: "Final check passed:",
+    });
+    await expect(summary.locator("em")).toHaveText("Final check passed:");
+    await expect(summary.locator("ul ul li")).toHaveCount(2);
+    await expect(summary.locator("code").first()).toHaveText(
+      "mvn -q -DskipTests package"
+    );
+
+    // The check's output, several lines, monospace, with a copy button.
+    const checkName = /git status --short && git diff --stat/;
+    const card = transcriptMessages(page).filter({
+      has: page.getByRole("button", { name: checkName }),
+    });
+    await card.getByRole("button", { name: checkName }).click();
+    const output = card.getByRole("region", { name: "Output" });
+    await expect(output).toBeVisible();
+    expect((await output.innerText()).split("\n").length).toBe(5);
+    await expect(
+      card.getByRole("button", { name: "Copy output" })
+    ).toBeVisible();
+    expect(
+      await output.evaluate((code) => getComputedStyle(code).fontFamily)
+    ).toMatch(/mono/i);
+
+    // Notices divide the conversation.
+    await expect(
+      transcript(page).locator(".pf-chatbot__message-divider")
+    ).toContainText(["Stage succeeded: results pushed to"]);
+  });
+
+  test("a stage without commits ends with a clean check that says nothing changed", async ({
+    page,
+  }) => {
+    // Run 1, stage 3 (Validate): its plan says 0 commits.
+    await page.goto(stageUrl("1", "3", "configured", { tab: "transcript" }));
+    await expect(transcriptMessages(page).first()).toHaveAccessibleName(
+      /^Message from Build Validator at /
+    );
+    const checkName = /git status --short && git diff --stat/;
+    const card = transcriptMessages(page).filter({
+      has: page.getByRole("button", { name: checkName }),
+    });
+    await card.getByRole("button", { name: checkName }).click();
+    await expect(card).toContainText("No output.");
+    await expect(
+      transcriptMessages(page).filter({ hasText: "Final check passed:" })
+    ).toContainText("The working tree is clean");
+  });
+
+  test("a failed tool call opens with its output", async ({ page }) => {
+    // Run 1, stage 2 (Migrate): some builds failed on the way.
+    await page.goto(stageUrl("1", "2", "configured", { tab: "transcript" }));
+    const name = /developer__shell: mvn .*Failed$/;
+    const message = transcriptMessages(page)
+      .filter({ has: page.getByRole("button", { name }) })
+      .first();
+    await expect(message.getByRole("button", { name })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    await expect(message.locator("pre")).toContainText("COMPILATION ERROR");
+  });
+
+  test("the chat fills the page and scrolls inside, with jump buttons", async ({
+    page,
+  }) => {
+    await page.goto(stageUrl("1", "3", "configured", { tab: "transcript" }));
+    await expect(transcriptMessages(page).first()).toBeVisible();
+    const box = await transcript(page).boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    // It reaches the bottom of the page (less the section padding).
+    expect(viewport!.height - (box!.y + box!.height)).toBeLessThan(40);
+    expect(
+      await transcript(page).evaluate(
+        (element) => element.scrollHeight > element.clientHeight
+      )
+    ).toBe(true);
+    // A finished transcript opens at its start.
+    expect(
+      await transcript(page).evaluate((element) => element.scrollTop)
+    ).toBe(0);
+    await main(page).getByRole("button", { name: "Back to latest" }).click();
+    await expect.poll(() => transcriptToBottom(page)).toBeLessThan(5);
+    await main(page).getByRole("button", { name: "Back to top" }).click();
+    await expect
+      .poll(() => transcript(page).evaluate((element) => element.scrollTop))
+      .toBe(0);
+  });
+
+  test("at a narrow width the chat keeps to the screen", async ({ page }) => {
+    await page.setViewportSize({ width: 400, height: 900 });
+    await page.goto(stageUrl("1", "3", "configured", { tab: "transcript" }));
+    await expect(transcriptMessages(page).first()).toBeVisible();
+    expect(
+      await transcript(page).evaluate(
+        (element) => element.scrollWidth <= element.clientWidth
+      )
+    ).toBe(true);
+    // A tool title keeps a line of its own.
+    const title = transcript(page)
+      .locator(".agent-run-transcript__toggle-title")
+      .first();
+    expect((await title.boundingBox())!.width).toBeGreaterThan(100);
   });
 
   test("a stage that requires approval shows its live messages and View logs opens the Logs tab", async ({
@@ -684,7 +864,7 @@ test.describe("Transcript", () => {
       "Stages that require approval are not recorded. These are the agent's messages from the live session."
     );
     await expect(
-      transcriptTable(page).getByText(/Starting "Prepare proposal"/)
+      transcript(page).getByText(/Starting "Prepare proposal"/)
     ).toBeVisible();
     await tabPanel(page).getByRole("button", { name: "View logs" }).click();
     await expect(tab(page, "Logs")).toHaveAttribute("aria-selected", "true");
@@ -700,18 +880,17 @@ test.describe("Transcript", () => {
     await expect(tabPanel(page)).toContainText(
       "Parts of this transcript were not recorded."
     );
-    const gap = transcriptTable(page).getByRole("row", {
-      name: /^Recording interrupted for \d+m( \d+s)?$/,
-    });
+    const gap = transcript(page)
+      .locator(".pf-chatbot__message-divider")
+      .filter({ hasText: /^Recording interrupted for \d+m( \d+s)?$/ });
     await expect(gap).toHaveCount(1);
     // The gap sits between recorded entries, not at an end.
-    const rows = await transcriptEntries(page).allInnerTexts();
-    // Its sentence starts under Time, after the empty expand cell.
-    const index = rows.findIndex((row) =>
-      row.trim().startsWith("Recording interrupted")
+    const entries = await transcriptEntries(page).allInnerTexts();
+    const index = entries.findIndex((entry) =>
+      entry.trim().startsWith("Recording interrupted")
     );
     expect(index).toBeGreaterThan(0);
-    expect(index).toBeLessThan(rows.length - 1);
+    expect(index).toBeLessThan(entries.length - 1);
   });
 });
 
