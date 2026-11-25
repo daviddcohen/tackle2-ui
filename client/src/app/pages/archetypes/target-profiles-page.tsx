@@ -35,6 +35,7 @@ import { ArchetypeTargetProfilesRoute, DevPaths } from "@app/Paths";
 import type { TargetProfile } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { PageHeader } from "@app/components/PageHeader";
 import { ConditionalTableBody } from "@app/components/TableControls";
@@ -54,12 +55,70 @@ import { archetypesWriteScopes, plansWriteScopes } from "@app/scopes";
 import { deleteActionProps, disabledActionProps } from "@app/utils/agentic";
 import { openModalAfterMenuClose } from "@app/utils/utils";
 
+import { AssignAnalysisProfileModal } from "./components/assign-analysis-profile-modal";
 import { AssignMigrationPlanModal } from "./components/assign-migration-plan-modal";
 import { AssignedMigrationPlan } from "./components/assigned-migration-plan";
-import TargetProfileForm from "./components/target-profile-form";
+import { ManageGeneratorsModal } from "./components/manage-generators-modal";
+import {
+  CreateTargetProfileModal,
+  EditTargetProfileModal,
+} from "./components/target-profile-form";
 import { TargetProfileSkills } from "./components/target-profile-skills";
 import { useArchetypeMutations } from "./hooks/useArchetypeMutations";
 import { useTargetProfilePlans } from "./hooks/useTargetProfilePlans";
+
+/** The modals a row's actions open, each for one target profile. */
+type RowModal = {
+  action: "edit" | "generators" | "analysisProfile" | "plan" | "delete";
+  profile: TargetProfile;
+};
+
+const CREATE_BUTTON_ID = "create-target-profile";
+const EMPTY_STATE_CREATE_BUTTON_ID = "create-target-profile-empty-state";
+
+const rowActionsCellId = (profileId: number) =>
+  `target-profile-${profileId}-actions`;
+
+/**
+ * Remembers the row whose action opened a modal and puts focus back on that
+ * row's kebab when the modal closes (Save, Cancel or Escape). The menu item
+ * that opened it is gone, and `openModalAfterMenuClose` blurs the kebab
+ * before the modal opens, so the modal has nowhere to return focus to.
+ * After a delete the row goes too, so focus goes to the Create target
+ * profile button in the toolbar, which stays (deleting needs the same scope
+ * as creating), also when no rows remain. It is also where focus goes when
+ * the row went while its modal was open (deleted elsewhere).
+ */
+const useRowModal = () => {
+  const [rowModal, setRowModal] = useState<RowModal | null>(null);
+  const focusOnClose = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (rowModal != null) return;
+    const selector = focusOnClose.current;
+    focusOnClose.current = null;
+    if (selector == null) return;
+    // After the modal's own focus handling, which returns to the body.
+    const frame = window.requestAnimationFrame(() =>
+      (
+        document.querySelector<HTMLElement>(selector) ??
+        document.getElementById(CREATE_BUTTON_ID)
+      )?.focus()
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, [rowModal]);
+  const open = (action: RowModal["action"], profile: TargetProfile) =>
+    openModalAfterMenuClose(() => {
+      focusOnClose.current = `#${rowActionsCellId(profile.id)} button`;
+      setRowModal({ action, profile });
+    });
+  const close = () => setRowModal(null);
+  /** Closes the Delete confirm once the profile is being deleted. */
+  const closeAfterDelete = () => {
+    focusOnClose.current = `#${CREATE_BUTTON_ID}`;
+    setRowModal(null);
+  };
+  return { rowModal, open, close, closeAfterDelete };
+};
 
 /** The archetype whose drawer a crumb opens on the Archetypes list, if any. */
 const drawerArchetypeId = (path: string | undefined) => {
@@ -82,16 +141,18 @@ const TargetProfilesPage: React.FC = () => {
   const canAssignPlans = useHasSomeScopes(plansWriteScopes);
   const canManageSkills = useCanManageSkills();
 
-  const [openCreateModal, setOpenCreateModal] = useState<boolean>(false);
-  const [profileToEdit, setProfileToEdit] = useState<TargetProfile | null>(
-    null
-  );
-  const [profileToDelete, setProfileToDelete] = useState<TargetProfile | null>(
-    null
-  );
-  const [profileForPlan, setProfileForPlan] = useState<TargetProfile | null>(
-    null
-  );
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const {
+    rowModal,
+    open: openRowModal,
+    close: closeRowModal,
+    closeAfterDelete,
+  } = useRowModal();
+  const profileToDelete =
+    rowModal?.action === "delete" ? rowModal.profile : null;
+  // Manage skills keeps its own target and is not part of `rowModal`:
+  // ManageSkillsModal is shared with other pages and returns focus to the
+  // kebab itself.
   const [skillsTarget, setSkillsTarget] = useState<ManageSkillsTarget | null>(
     null
   );
@@ -154,8 +215,7 @@ const TargetProfilesPage: React.FC = () => {
     }
   }, [selectedProfileId]);
 
-  const { addTargetProfile, updateTargetProfile, deleteTargetProfile } =
-    useArchetypeMutations();
+  const { deleteTargetProfile } = useArchetypeMutations();
   // Plans and skills exist only where the agentic API is available.
   const numericArchetypeId = Number(archetypeId);
   const {
@@ -180,22 +240,10 @@ const TargetProfilesPage: React.FC = () => {
           association.resource.id === profile.id
       )
     );
-  const onAddProfile = (profile: TargetProfile) => {
-    if (!archetype) return;
-    addTargetProfile(archetype, profile);
-    setOpenCreateModal(false);
-  };
-
-  const onEditProfile = (profile: TargetProfile) => {
-    if (!archetype) return;
-    updateTargetProfile(archetype, profile);
-    setProfileToEdit(null);
-  };
-
   const onDeleteProfile = (profile: TargetProfile | null) => {
     if (!archetype || !profile) return;
     deleteTargetProfile(archetype, profile);
-    setProfileToDelete(null);
+    closeAfterDelete();
   };
 
   if (!archetype && fetchError != null) {
@@ -214,17 +262,19 @@ const TargetProfilesPage: React.FC = () => {
   const profiles = archetype?.profiles ?? [];
   const hasRowActions =
     canWriteProfiles || (isAgenticEnabled && canAssignPlans) || canManageSkills;
-  const createButton = canWriteProfiles ? (
-    <Button
-      type="button"
-      id="create-target-profile"
-      variant={ButtonVariant.primary}
-      isDisabled={!archetype}
-      onClick={() => setOpenCreateModal(true)}
-    >
-      {t("dialog.title.newTargetProfile")}
-    </Button>
-  ) : null;
+  // In the toolbar, and also in the empty state when there are no rows.
+  const createButton = (id: string) =>
+    canWriteProfiles ? (
+      <Button
+        type="button"
+        id={id}
+        variant={ButtonVariant.primary}
+        isDisabled={!archetype}
+        onClick={() => setIsCreateModalOpen(true)}
+      >
+        {t("dialog.title.newTargetProfile")}
+      </Button>
+    ) : null;
   return (
     <>
       <PageSection hasBodyWrapper={false}>
@@ -252,10 +302,10 @@ const TargetProfilesPage: React.FC = () => {
             {t("agentic.archetype.agenticDataUnavailableBody")}
           </Alert>
         )}
-        {createButton && (
+        {canWriteProfiles && (
           <Toolbar>
             <ToolbarContent>
-              <ToolbarItem>{createButton}</ToolbarItem>
+              <ToolbarItem>{createButton(CREATE_BUTTON_ID)}</ToolbarItem>
             </ToolbarContent>
           </Toolbar>
         )}
@@ -294,7 +344,7 @@ const TargetProfilesPage: React.FC = () => {
                       ? t("agentic.archetype.noTargetProfilesBody")
                       : t("agentic.archetype.noTargetProfilesBodyWithoutPlans")
                 }
-                actions={createButton}
+                actions={createButton(EMPTY_STATE_CREATE_BUTTON_ID)}
               />
             }
             numRenderedColumns={
@@ -304,15 +354,26 @@ const TargetProfilesPage: React.FC = () => {
             <Tbody>
               {profiles.map((profile) => {
                 const assignedPlan = getAssignedPlan(profile.id);
+                // In the order of the columns. Generators and analysis
+                // profile are part of the archetype, like the name.
                 const editActions: IAction[] = [
                   ...(canWriteProfiles
                     ? [
                         {
                           title: t("actions.edit"),
+                          onClick: () => openRowModal("edit", profile),
+                        },
+                        {
+                          title: t("agentic.archetype.manageGenerators"),
+                          onClick: () => openRowModal("generators", profile),
+                        },
+                        {
+                          title:
+                            profile.analysisProfile != null
+                              ? t("agentic.archetype.changeAnalysisProfile")
+                              : t("agentic.archetype.assignAnalysisProfile"),
                           onClick: () =>
-                            openModalAfterMenuClose(() =>
-                              setProfileToEdit(profile)
-                            ),
+                            openRowModal("analysisProfile", profile),
                         },
                       ]
                     : []),
@@ -322,10 +383,7 @@ const TargetProfilesPage: React.FC = () => {
                           title: assignedPlan
                             ? t("agentic.archetype.changePlan")
                             : t("agentic.archetype.assignPlan"),
-                          onClick: () =>
-                            openModalAfterMenuClose(() =>
-                              setProfileForPlan(profile)
-                            ),
+                          onClick: () => openRowModal("plan", profile),
                           ...disabledActionProps(
                             isPlansError
                               ? t("agentic.archetype.plansNotLoaded")
@@ -378,10 +436,7 @@ const TargetProfilesPage: React.FC = () => {
                           : []),
                         {
                           title: t("actions.delete"),
-                          onClick: () =>
-                            openModalAfterMenuClose(() =>
-                              setProfileToDelete(profile)
-                            ),
+                          onClick: () => openRowModal("delete", profile),
                           ...deleteActionProps(
                             deleteBlocker,
                             `target-profiles-table-row-${profile.id}-delete`
@@ -402,7 +457,11 @@ const TargetProfilesPage: React.FC = () => {
                       <LabelsFromItems items={profile.generators} />
                     </Td>
                     <Td dataLabel={t("terms.analysisProfile")}>
-                      {profile.analysisProfile?.name ?? "-"}
+                      {profile.analysisProfile?.name ?? (
+                        <EmptyTextMessage
+                          message={t("agentic.archetype.notAssigned")}
+                        />
+                      )}
                     </Td>
                     {isAgenticEnabled && (
                       <>
@@ -427,7 +486,7 @@ const TargetProfilesPage: React.FC = () => {
                       </>
                     )}
                     {hasRowActions && (
-                      <Td isActionCell>
+                      <Td isActionCell id={rowActionsCellId(profile.id)}>
                         <ActionsColumn items={rowActions} />
                       </Td>
                     )}
@@ -441,35 +500,52 @@ const TargetProfilesPage: React.FC = () => {
 
       {archetype && (
         <>
-          {/* Create Modal */}
-          <TargetProfileForm
-            key={openCreateModal ? "opened" : "closed"}
-            isOpen={openCreateModal}
-            archetype={archetype}
-            onCancel={() => setOpenCreateModal(false)}
-            onSave={(profile) => onAddProfile(profile)}
-          />
-
-          {/* Edit Modal */}
-          <TargetProfileForm
-            key={profileToEdit?.id ?? -1}
-            isOpen={!!profileToEdit}
-            archetype={archetype}
-            profile={profileToEdit}
-            onCancel={() => setProfileToEdit(null)}
-            onSave={(profile) => onEditProfile(profile)}
-          />
-
-          {profileForPlan && (
-            <AssignMigrationPlanModal
-              key={profileForPlan.id}
+          {isCreateModalOpen && (
+            <CreateTargetProfileModal
               archetype={archetype}
-              profile={profileForPlan}
-              assignedPlan={getAssignedPlan(profileForPlan.id)}
+              onClose={() => setIsCreateModalOpen(false)}
+            />
+          )}
+
+          {rowModal?.action === "edit" && (
+            <EditTargetProfileModal
+              key={rowModal.profile.id}
+              archetype={archetype}
+              profile={rowModal.profile}
+              onClose={closeRowModal}
+            />
+          )}
+
+          {rowModal?.action === "generators" && (
+            <ManageGeneratorsModal
+              key={rowModal.profile.id}
+              archetype={archetype}
+              profile={rowModal.profile}
+              linkTo={(pathname) => to(pathname)}
+              onClose={closeRowModal}
+            />
+          )}
+
+          {rowModal?.action === "analysisProfile" && (
+            <AssignAnalysisProfileModal
+              key={rowModal.profile.id}
+              archetype={archetype}
+              profile={rowModal.profile}
+              linkTo={(pathname) => to(pathname)}
+              onClose={closeRowModal}
+            />
+          )}
+
+          {rowModal?.action === "plan" && (
+            <AssignMigrationPlanModal
+              key={rowModal.profile.id}
+              archetype={archetype}
+              profile={rowModal.profile}
+              assignedPlan={getAssignedPlan(rowModal.profile.id)}
               eligiblePlans={eligibleMigrationPlans}
               isPlansError={isPlansError}
               linkTo={(pathname) => to(pathname)}
-              onClose={() => setProfileForPlan(null)}
+              onClose={closeRowModal}
             />
           )}
 
@@ -499,8 +575,8 @@ const TargetProfilesPage: React.FC = () => {
             confirmBtnLabel={t("actions.delete")}
             confirmBtnVariant={ButtonVariant.danger}
             cancelBtnLabel={t("actions.cancel")}
-            onCancel={() => setProfileToDelete(null)}
-            onClose={() => setProfileToDelete(null)}
+            onCancel={closeRowModal}
+            onClose={closeRowModal}
             onConfirm={() => onDeleteProfile(profileToDelete)}
           />
         </>

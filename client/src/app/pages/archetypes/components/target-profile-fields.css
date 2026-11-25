@@ -1,0 +1,7 @@
+/*
+ * The two lists share the width at any size: by default each needs 12.5rem,
+ * which cuts off the Chosen list in a modal on a phone.
+ */
+.target-profile-generators .pf-v6-c-dual-list-selector {
+  --pf-v6-c-dual-list-selector--GridTemplateColumns--pane--MinMax--min: 0;
+}
