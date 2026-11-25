@@ -645,6 +645,12 @@ export const listAgentTestRuns = (agentId?: EntityId | null) =>
     .filter((run) => agentId == null || run.agent.id === agentId)
     .map(presentTestRun);
 
+/** One test run by id (its AgentRun name), as the list shows it. */
+export const getAgentTestRun = (id: EntityId): AgentTestRun | undefined => {
+  const run = db.agentTestRuns.find((candidate) => candidate.id === id);
+  return run != null ? presentTestRun(run) : undefined;
+};
+
 export const startAgentTestRun = (input: unknown) => {
   const body = asBody(input);
   const agentId = body.agentId;
@@ -669,8 +675,10 @@ export const startAgentTestRun = (input: unknown) => {
     db.skills,
     "Skill"
   );
+  // Numbered across all test runs, in start order (the seeded ones are #1 to #3).
   const run: AgentTestRun = {
     id: nextId("agentTestRuns"),
+    name: `Test run #${db.agentTestRuns.length + 1}`,
     agent: { id: agent.id, name: agent.name },
     application: { id: application.id, name: application.name },
     task,

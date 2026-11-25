@@ -232,6 +232,7 @@ const AgentDetail: React.FC = () => {
             isLoadingTestRuns={isLoadingTestRuns}
             testRunsError={agentTestRuns.length > 0 ? null : testRunsError}
             canTestAgent={canTestAgents}
+            onStartTest={() => setIsTestOpen(true)}
             linkCrumbs={agentChildCrumbs}
           />
         </PageSection>

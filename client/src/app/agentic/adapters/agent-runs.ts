@@ -20,6 +20,7 @@ import type * as Crd from "@app/api/agentic/contract";
 import { isTerminalPhase } from "@app/api/agentic/contract";
 
 import {
+  AGENT_RUN_CONTAINERS,
   AgentRunLogSource,
   AgentRunUsage,
   StageAgentRun,
@@ -28,12 +29,8 @@ import { ControllerRunPhase, EntityId } from "../types";
 
 import { ApplicationNameIndex, toEntityId, toRunApplication } from "./common";
 
-/**
- * Containers of an AgentRun pod with a log, in start order: the init
- * container that assembles the skills, then the harness with goose
- * (agentic-controller `internal/controller/agentrun_controller.go`).
- */
-export const AGENT_RUN_CONTAINERS = ["skill-loader", "agent"] as const;
+/** Defined with the agent run type; kept here for the adapters' callers. */
+export { AGENT_RUN_CONTAINERS };
 
 export interface StageAgentRunContext {
   runId: EntityId;

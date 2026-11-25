@@ -675,7 +675,7 @@ describe("StageRunDetail", () => {
       // The same live sentence as the other views of a running stage.
       expect(
         await screen.findByText(
-          /^Refreshes while the stage runs. Updated (just now|\d+ seconds? ago).$/
+          /^Refreshes while the agent runs. Updated (just now|\d+ seconds? ago).$/
         )
       ).toBeInTheDocument();
 
@@ -791,7 +791,7 @@ describe("StageRunDetail", () => {
       expect(
         await screen.findByText("Waiting for the agent to start.")
       ).toBeInTheDocument();
-      expect(screen.getByText(/Refreshes while the stage runs/)).toBeVisible();
+      expect(screen.getByText(/Refreshes while the agent runs/)).toBeVisible();
       expect(
         screen.queryByText("The logs appear when this stage starts.")
       ).toBeNull();
@@ -819,7 +819,7 @@ describe("StageRunDetail", () => {
       expect(
         await screen.findByText("The agent did not start for this stage.")
       ).toBeInTheDocument();
-      expect(screen.queryByText(/Refreshes while the stage runs/)).toBeNull();
+      expect(screen.queryByText(/Refreshes while the agent runs/)).toBeNull();
     });
 
     it("falls back to Details for an unknown tab", async () => {
@@ -919,7 +919,7 @@ describe("StageRunDetail", () => {
       expect(editor).toHaveTextContent("kind: AgentRun");
       expect(editor).not.toHaveTextContent("managedFields");
       expect(
-        screen.getByText(/^Refreshes while the stage runs. Updated /)
+        screen.getByText(/^Refreshes while the agent runs. Updated /)
       ).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole("button", { name: /JSON/ }));
@@ -1213,7 +1213,7 @@ describe("StageRunDetail", () => {
         name: "Agent run",
       });
       const description = await screen.findByText(
-        /^Refreshes while the stage runs. Updated (just now|\d+ seconds? ago).$/
+        /^Refreshes while the agent runs. Updated (just now|\d+ seconds? ago).$/
       );
       expect(heading.parentElement).toContainElement(description);
       unmount();
@@ -1223,7 +1223,7 @@ describe("StageRunDetail", () => {
       renderStage("1");
       await screen.findByRole("heading", { level: 2, name: "Agent run" });
       await waitFor(() => expect(fact("Turns")).toHaveTextContent("14 of 50"));
-      expect(screen.queryByText(/Refreshes while the stage runs/)).toBeNull();
+      expect(screen.queryByText(/Refreshes while the agent runs/)).toBeNull();
     });
 
     it("explains a pending stage on Details only", async () => {

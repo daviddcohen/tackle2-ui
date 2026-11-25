@@ -110,6 +110,9 @@ const AgentsPage = lazy(() => import("./pages/agentic/agents/agents"));
 const AgentDetail = lazy(
   () => import("./pages/agentic/agents/agent-detail/agent-detail")
 );
+const AgentTestRunDetail = lazy(
+  () => import("./pages/agentic/agents/test-run-detail/test-run-detail")
+);
 const SkillsPage = lazy(() => import("./pages/agentic/skills/skills"));
 const SkillDetail = lazy(
   () => import("./pages/agentic/skills/skill-detail/skill-detail")
@@ -365,6 +368,11 @@ export const agenticRoutes: IRoute<DevPathValues>[] = isAgenticEnabled
       {
         path: Paths.migrationPlans,
         comp: MigrationPlans,
+        exact: true,
+      },
+      {
+        path: Paths.agentTestRunDetails,
+        comp: AgentTestRunDetail,
         exact: true,
       },
       {

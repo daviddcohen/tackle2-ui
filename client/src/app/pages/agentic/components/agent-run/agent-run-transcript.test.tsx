@@ -178,7 +178,7 @@ describe("AgentRunTranscript", () => {
     ).toBeNull();
     expect(
       screen.getByText(
-        /^Recording while the stage runs. Updated (just now|\d+ seconds? ago).$/
+        /^Recording while the agent runs. Updated (just now|\d+ seconds? ago).$/
       )
     ).toBeInTheDocument();
   });
@@ -618,7 +618,7 @@ describe("AgentRunTranscript", () => {
     respond({ status: "recording", entries });
     renderTranscript();
     expect(
-      screen.getByText(/^Recording while the stage runs\./)
+      screen.getByText(/^Recording while the agent runs\./)
     ).toBeInTheDocument();
     // The chat's own Back to latest button is the one control.
     expect(screen.queryByRole("button", { name: /latest entry/ })).toBeNull();
@@ -781,7 +781,7 @@ describe("AgentRunTranscript", () => {
     renderTranscript(onViewLogs);
 
     expect(
-      screen.getByRole("heading", { name: "No transcript for this stage" })
+      screen.getByRole("heading", { name: "No transcript for this run" })
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -824,7 +824,7 @@ describe("AgentRunTranscript", () => {
       )
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "No transcript for this stage" })
+      screen.queryByRole("heading", { name: "No transcript for this run" })
     ).toBeNull();
     const shown = messages();
     expect(shown).toHaveLength(2);
@@ -861,15 +861,11 @@ describe("AgentRunTranscript", () => {
     expect(screen.queryByText("Only in messages")).toBeNull();
   });
 
-  it("has no View logs action without a handler", () => {
+  it("neither offers nor mentions the logs without a handler", () => {
     // No recording of a finished stage (a live one may not have started).
     respond({ status: "none", entries: [] });
     render(<AgentRunTranscript agentRun={agentRun} phase="Succeeded" />);
-    expect(
-      screen.getByText(
-        "This stage was not recorded. The logs show what the agent did."
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByText("This run was not recorded.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View logs" })).toBeNull();
   });
 
@@ -901,7 +897,7 @@ describe("AgentRunTranscript", () => {
     renderTranscript(jest.fn());
     expect(screen.getByText("No transcript entries yet.")).toBeInTheDocument();
     expect(
-      screen.getByText(/Refreshes while the stage runs\./)
+      screen.getByText(/Refreshes while the agent runs\./)
     ).toBeInTheDocument();
     expect(screen.queryByText(/was not recorded/)).toBeNull();
   });

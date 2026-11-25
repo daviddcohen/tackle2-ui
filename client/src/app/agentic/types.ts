@@ -292,6 +292,11 @@ export interface AgentTestRunRequest {
 
 export interface AgentTestRun {
   id: EntityId;
+  /**
+   * What the UI calls the run. The Hub has no run number: there it is the
+   * AgentRun `metadata.name`, as a plan run's name is.
+   */
+  name: string;
   agent: EntityRef;
   application: HubRef;
   task: string;

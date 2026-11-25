@@ -1621,6 +1621,7 @@ export const mockProviders: Provider[] = [
 export const mockAgentTestRuns: AgentTestRun[] = [
   {
     id: "9001",
+    name: "Test run #1",
     agent: { id: "1", name: "Migration Proposal Agent" },
     application: applicationRef(1),
     task: "Analyze the application and generate a migration proposal for moving from Java EE to Quarkus.",
@@ -1629,6 +1630,7 @@ export const mockAgentTestRuns: AgentTestRun[] = [
   },
   {
     id: "9002",
+    name: "Test run #2",
     agent: { id: "2", name: "Code Migrator" },
     application: applicationRef(5),
     task: "Apply the Spring Boot to Quarkus conversion patterns to the service layer.",
@@ -1638,6 +1640,7 @@ export const mockAgentTestRuns: AgentTestRun[] = [
   {
     // The same task again with skills the agent does not have, to compare.
     id: "9003",
+    name: "Test run #3",
     agent: { id: "2", name: "Code Migrator" },
     application: applicationRef(5),
     task: "Apply the Spring Boot to Quarkus conversion patterns to the service layer.",

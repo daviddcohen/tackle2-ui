@@ -4,7 +4,7 @@ import { AxiosError } from "axios";
 import { TFunction } from "i18next";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { generatePath } from "react-router-dom";
+import { Link, generatePath } from "react-router-dom";
 import { array, object, string } from "yup";
 import {
   Button,
@@ -296,13 +296,39 @@ const AgentTestModalContent: React.FC<{
       : undefined
   );
   const startRun = useStartAgentTestRunMutation(
-    () => {
+    (run) => {
+      // The new run's page needs its id; a run without a name or id falls
+      // back to the agent's Runs tab.
+      if (run.id == null || run.id === "" || !run.name) {
+        pushNotification({
+          title: t("agentic.agent.testQueued", { agent: agent?.name }),
+          // The run is listed on the agent's Runs tab.
+          message: (
+            <Button variant="link" isInline component={runsLink}>
+              {t("agentic.agent.viewRuns")}
+            </Button>
+          ),
+          variant: "success",
+        });
+        onClose();
+        return;
+      }
+      // The new run's own page. One link type per toast: the toast keeps
+      // this element as it is.
+      const runLocation = generatePath(DevPaths.agentTestRunDetails, {
+        agentId: run.agent.id,
+        runId: run.id,
+      });
+      const RunLink = React.forwardRef<HTMLAnchorElement, object>(
+        function RunLink(props, ref) {
+          return <Link {...props} ref={ref} to={runLocation} />;
+        }
+      );
       pushNotification({
-        title: t("agentic.agent.testQueued", { agent: agent?.name }),
-        // The run is listed on the agent's Runs tab.
+        title: t("agentic.agent.testRunQueued", { name: run.name }),
         message: (
-          <Button variant="link" isInline component={runsLink}>
-            {t("agentic.agent.viewRuns")}
+          <Button variant="link" isInline component={RunLink}>
+            {t("agentic.agent.viewTestRun")}
           </Button>
         ),
         variant: "success",
@@ -423,13 +449,14 @@ const AgentTestModalContent: React.FC<{
             control={control}
             name="applicationId"
             label={t("terms.application")}
-            fieldId="agent-test-application"
+            fieldId="agent-test-application-select-input"
             isRequired
             renderInput={({ field: { value, name, onChange } }) => (
               <TypeaheadSelect
                 toggleId="agent-test-application-select"
                 toggleAriaLabel={t("agentic.agent.testApplicationSelect")}
                 ariaLabel={name}
+                inputAriaLabel={t("terms.application")}
                 value={value}
                 options={applicationOptions}
                 onSelect={(selection) => onChange(selection ?? "")}
