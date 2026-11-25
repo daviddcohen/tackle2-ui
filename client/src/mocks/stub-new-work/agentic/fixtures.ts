@@ -135,10 +135,6 @@ export const mockSkills: Skill[] = [
     loadPolicy: "skill",
     associations: [
       {
-        scope: "archetype",
-        resource: { id: 2, name: "Spring Boot Application" },
-      },
-      {
         scope: "targetProfile",
         resource: { id: 21, name: "Quarkus 3.x" },
       },
@@ -179,8 +175,8 @@ export const mockSkills: Skill[] = [
     loadPolicy: "skill",
     associations: [
       {
-        scope: "archetype",
-        resource: { id: 1, name: "Java EE Application" },
+        scope: "targetProfile",
+        resource: { id: 11, name: "Quarkus 3.x" },
       },
       {
         scope: "application",
@@ -217,10 +213,6 @@ export const mockSkills: Skill[] = [
     sourceType: "git",
     loadPolicy: "skill",
     associations: [
-      {
-        scope: "archetype",
-        resource: { id: 1, name: "Java EE Application" },
-      },
       {
         scope: "targetProfile",
         resource: { id: 11, name: "Quarkus 3.x" },
@@ -386,10 +378,6 @@ export const mockSkills: Skill[] = [
     loadPolicy: "skill",
     associations: [
       {
-        scope: "archetype",
-        resource: { id: 3, name: "Legacy Java Application" },
-      },
-      {
         scope: "targetProfile",
         resource: { id: 31, name: "Java 17 on OpenShift" },
       },
@@ -426,6 +414,10 @@ export const mockSkills: Skill[] = [
     loadPolicy: "rule",
     associations: [
       { scope: "agent", resource: { id: "7", name: "Security Review Agent" } },
+      {
+        scope: "archetype",
+        resource: { id: 1, name: "Java EE Application" },
+      },
       {
         scope: "application",
         resource: applicationRef(16),

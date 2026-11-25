@@ -34,7 +34,7 @@ test("skill detail: the plans-resolving-skill table refreshes after its associat
     name: "Used in migration plans",
   });
   await expect(plansTable.locator("tbody tr").first()).toBeVisible();
-  await expect(plansTable.getByText(/^Archetype: /).first()).toBeVisible();
+  await expect(plansTable.getByText(/^Target profile: /).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Actions", exact: true }).click();
   await page.getByRole("menuitem", { name: "Edit" }).click();

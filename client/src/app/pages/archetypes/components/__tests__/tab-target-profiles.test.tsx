@@ -85,7 +85,7 @@ describe("TabTargetProfiles", () => {
 
     expect(
       screen.getByText(
-        "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it."
+        "Each target profile is a migration path for applications in this archetype, and can use one migration plan. A migration plan run picks one target profile for each application."
       )
     ).toBeInTheDocument();
     expect(
@@ -135,6 +135,21 @@ describe("TabTargetProfiles", () => {
 
   it("never reads a failed plans query as not assigned", async () => {
     servePlans((_req, res, ctx) => res(ctx.status(403)));
+    renderTab();
+
+    expect(await screen.findAllByText("Unavailable")).toHaveLength(2);
+    expect(screen.queryByText("Not assigned")).toBeNull();
+  });
+
+  it("never reads plans that do not report their paths as not assigned", async () => {
+    // The real Hub today: plans come without `migrationPaths`.
+    servePlans((_req, res, ctx) =>
+      res(
+        ctx.json([
+          { ...plan("1", "Java EE to Quarkus", []), migrationPaths: undefined },
+        ])
+      )
+    );
     renderTab();
 
     expect(await screen.findAllByText("Unavailable")).toHaveLength(2);

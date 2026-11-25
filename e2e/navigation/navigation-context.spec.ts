@@ -30,6 +30,11 @@ const crumbItems = (page: Page) => breadcrumb(page).getByRole("listitem");
 const crumbTitles = async (page: Page) =>
   (await crumbItems(page).allTextContents()).map((text) => text.trim());
 const usageTab = (page: Page) => page.getByRole("tab", { name: /^Usage/ });
+/**
+ * Every Run #1 stage group that gets this skill links it. It is attached to
+ * an archetype and a target profile, so its Usage tab links both.
+ */
+const skill = "API compatibility checklist";
 
 test("deep application, run, skill and association journeys retain tabs, survive reload and truncate cycles", async ({
   page,
@@ -44,7 +49,7 @@ test("deep application, run, skill and association journeys retain tabs, survive
   // A skill shows in each Skills by stage group that gets it: open the first.
   await page
     .getByRole("grid", { name: "Skills by stage", exact: true })
-    .getByRole("link", { name: "Jakarta EE namespace migration" })
+    .getByRole("link", { name: skill })
     .first()
     .click();
   await usageTab(page).click();
@@ -322,7 +327,7 @@ for (const action of ["persona", "reset"] as const) {
   test(`${action} changes start a fresh navigation trail even on the same Inventory route`, async ({
     page,
   }) => {
-    await page.goto(view("/skills/2?tab=usage"));
+    await page.goto(view("/skills/13?tab=usage"));
     // The "Attached to" label; the plans table links the archetype too.
     await page
       .locator(`main a[href^="${withBase("/archetypes?")}"]`)
@@ -365,7 +370,7 @@ test("Archetype application counts apply their filter when Inventory is an ances
   // Reach the archetype through one of its attached skills.
   await page
     .getByRole("region", { name: /^Archetype skills/ })
-    .getByRole("link", { name: "EJB to CDI conversion patterns" })
+    .getByRole("link", { name: "Platform security baseline" })
     .click();
   await usageTab(page).click();
   await page
@@ -449,7 +454,7 @@ for (const [name, viewport] of [
       .click();
     await page
       .getByRole("grid", { name: "Skills by stage", exact: true })
-      .getByRole("link", { name: "Jakarta EE namespace migration" })
+      .getByRole("link", { name: skill })
       .first()
       .click();
     await usageTab(page).click();
@@ -479,7 +484,7 @@ for (const [name, viewport] of [
         await expect(page.locator("tr:focus")).toBeVisible();
       await breadcrumb(page)
         .getByRole("link", {
-          name: "Jakarta EE namespace migration",
+          name: skill,
           exact: true,
         })
         .click();

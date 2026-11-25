@@ -438,6 +438,20 @@ describe("PlanDetailsPage", () => {
         "agentic.execution.notAssigned"
       )
     ).toBeInTheDocument();
+    // The next step, above the facts: assign it on an archetype's page.
+    expect(
+      screen.getByText("agentic.plan.notAssignedTitle")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "agentic.execution.goToArchetypes" })
+    ).toHaveAttribute("href", "/archetypes");
+  });
+
+  it("has no assignment note for a plan a target profile uses", async () => {
+    useEndpoints(plan);
+    renderAt();
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText("agentic.plan.notAssignedTitle")).toBeNull();
   });
 
   it("deletes an unused plan and returns to the list", async () => {

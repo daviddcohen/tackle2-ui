@@ -284,7 +284,8 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     }),
     [stages, plan]
   );
-  const hasTargetProfiles = (plan?.migrationPaths ?? []).length > 0;
+  const usedByCount = plan?.migrationPaths?.length ?? 0;
+  const hasTargetProfiles = usedByCount > 0;
   const skillsQuery = useResolvePlanSkills(skillsRequest, { enabled: isOpen });
   // The request's stages by position, numbered and named as in the form.
   const stageTitles = React.useMemo<DraftStageTitle[]>(
@@ -527,6 +528,17 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           footer={{ isBackHidden: true, isNextDisabled: !isDetailsValid }}
         >
           <Form onSubmit={(event) => event.preventDefault()}>
+            {/* As Models: an edit applies to every target profile that uses the plan. */}
+            {usedByCount > 0 && (
+              <Alert
+                isInline
+                isPlain
+                variant="warning"
+                title={t("agentic.plan.usedByTargetProfiles", {
+                  count: usedByCount,
+                })}
+              />
+            )}
             <FormGroup label={t("terms.name")} isRequired fieldId="plan-name">
               <TextInput
                 id="plan-name"

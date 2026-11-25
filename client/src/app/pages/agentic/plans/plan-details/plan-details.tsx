@@ -3,6 +3,8 @@ import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { generatePath, useHistory, useParams } from "react-router-dom";
 import {
+  Alert,
+  AlertActionLink,
   Button,
   Content,
   PageSection,
@@ -25,6 +27,7 @@ import { adminViewScopes } from "@app/auth/roles-to-scopes";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { PageHeader } from "@app/components/PageHeader";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
   DetailTabPanel,
@@ -190,6 +193,10 @@ const PlanDetailsPage: React.FC = () => {
     ]
   );
   const launcher = useRunMigrationPlanLauncher({ linkCrumbs: planChildCrumbs });
+  // Plans are assigned on an archetype's Target profiles page.
+  const ArchetypesLink = useLinkComponent(
+    breadcrumbTo(DevPaths.archetypes, "", planChildCrumbs)
+  );
 
   if (!migrationPlan) {
     if (isLoading) {
@@ -392,6 +399,20 @@ const PlanDetailsPage: React.FC = () => {
                 canViewModels={canViewModels}
                 onEdit={canManagePlans ? () => setIsEditOpen(true) : undefined}
               />
+            )}
+            {migrationPaths?.length === 0 && (
+              <Alert
+                variant="info"
+                isInline
+                title={t("agentic.plan.notAssignedTitle")}
+                actionLinks={
+                  <AlertActionLink component={ArchetypesLink}>
+                    {t("agentic.execution.goToArchetypes")}
+                  </AlertActionLink>
+                }
+              >
+                {t("agentic.plan.notAssignedBody")}
+              </Alert>
             )}
             <DetailFacts facts={facts} />
             <DetailSection

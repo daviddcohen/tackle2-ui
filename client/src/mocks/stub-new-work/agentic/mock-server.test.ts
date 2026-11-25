@@ -629,12 +629,8 @@ describe("plan skill review", () => {
     // Every stage: the archetype of the plan's target profile, then the
     // profile.
     expect(everyStage).toHaveLength(1);
-    expect(idsOf(everyStage[0].skills)).toEqual(["8", "9", "14", "15", "7"]);
+    expect(idsOf(everyStage[0].skills)).toEqual(["8", "14", "15", "7", "9"]);
     expect(everyStage[0].skills.find((e) => e.skill.id === "9")?.from).toEqual([
-      {
-        kind: "archetype",
-        archetype: { id: 3, name: "Legacy Java Application" },
-      },
       {
         kind: "targetProfile",
         targetProfile: { id: 31, name: "Java 17 on OpenShift" },

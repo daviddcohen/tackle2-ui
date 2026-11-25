@@ -223,6 +223,7 @@ const TargetProfilesPage: React.FC = () => {
     migrationPlans,
     isLoading: isPlansLoading,
     isError: isPlansError,
+    isUnknown: isPlanUnknown,
   } = useTargetProfilePlans(
     Number.isInteger(numericArchetypeId) ? numericArchetypeId : undefined
   );
@@ -417,7 +418,9 @@ const TargetProfilesPage: React.FC = () => {
                           ...disabledActionProps(
                             isPlansError
                               ? t("agentic.archetype.plansNotLoaded")
-                              : undefined,
+                              : isPlanUnknown
+                                ? t("agentic.archetype.plansNotReported")
+                                : undefined,
                             "left",
                             `target-profiles-table-row-${profile.id}-assign-plan`
                           ),
@@ -494,6 +497,7 @@ const TargetProfilesPage: React.FC = () => {
                         <Td dataLabel={t("agentic.entity.migrationPlan")}>
                           <AssignedMigrationPlan
                             plan={assignedPlan}
+                            isUnknown={isPlanUnknown}
                             isError={isPlansError}
                             linkTo={(pathname) => to(pathname)}
                           />

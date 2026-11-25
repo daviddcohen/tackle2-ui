@@ -3,6 +3,7 @@ import * as React from "react";
 import { isAgenticEnabled } from "@app/Constants";
 import type { MigrationPlan } from "@app/agentic";
 import { useFetchMigrationPlans } from "@app/queries/agentic";
+import { universalComparator } from "@app/utils/utils";
 
 /**
  * The one source for the migration plan each target profile of an archetype
@@ -11,13 +12,24 @@ import { useFetchMigrationPlans } from "@app/queries/agentic";
  * `migrationPaths` lists the profile. Any plan can be assigned to any
  * target profile: profiles of several archetypes can share one.
  *
- * Without the agentic API there is no plans query.
+ * Without the agentic API there is no plans query. A server that does not
+ * report `migrationPaths` for any plan (the real Hub today) leaves every
+ * profile's plan unknown (`isUnknown`): never read that as "Not assigned". Plans come
+ * sorted by name, for the Assign migration plan select.
  */
 export const useTargetProfilePlans = (archetypeId: number | undefined) => {
-  const { migrationPlans, isLoading, isSuccess, fetchError } =
-    useFetchMigrationPlans({
-      enabled: isAgenticEnabled && archetypeId != null,
-    });
+  const {
+    migrationPlans: plans,
+    isLoading,
+    isSuccess,
+    fetchError,
+  } = useFetchMigrationPlans({
+    enabled: isAgenticEnabled && archetypeId != null,
+  });
+  const migrationPlans = React.useMemo(
+    () => [...plans].sort((a, b) => universalComparator(a.name, b.name)),
+    [plans]
+  );
 
   const getAssignedPlan = React.useCallback(
     (profileId: number): MigrationPlan | undefined =>
@@ -35,5 +47,6 @@ export const useTargetProfilePlans = (archetypeId: number | undefined) => {
     isLoading,
     isSuccess,
     isError: fetchError != null,
+    isUnknown: isSuccess && plans.some((plan) => plan.migrationPaths == null),
   };
 };

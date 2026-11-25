@@ -61,11 +61,12 @@ test("plan detail links its stage agents and skills and shows where each skill c
   const jakarta = skills.getByRole("row", {
     name: /Jakarta EE namespace migration/,
   });
-  const everyStage = jakarta.filter({ hasText: "Archetype:" });
+  // A target-specific skill: its target profile only, not the archetype.
+  const everyStage = jakarta.filter({ hasText: "Target profile:" });
   await expect(everyStage).toHaveCount(1);
-  await expect(everyStage).toContainText("Archetype: Java EE Application");
+  await expect(everyStage).not.toContainText("Archetype:");
   await expect(everyStage).toContainText("Target profile: Quarkus 3.x");
-  await expect(everyStage.getByRole("link")).toHaveCount(3);
+  await expect(everyStage.getByRole("link")).toHaveCount(2);
   for (const name of [
     "Migration Proposal Agent",
     "API compatibility checklist",
@@ -104,7 +105,7 @@ test("application skills tab lists its own skills, then each archetype's", async
   // One section for every archetype: a term per archetype, its skills beside it.
   const archetypes = group(/^Archetype skills/);
   await expect(
-    archetypes.getByRole("link", { name: "EJB to CDI conversion patterns" })
+    archetypes.getByRole("link", { name: "Platform security baseline" })
   ).toBeVisible();
   // The archetype's name links where its skills are edited.
   await expect(
