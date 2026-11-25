@@ -781,24 +781,18 @@ No backend source. `planRun`, `planRunPlan` (the plan that run used), `runPhase`
 
 ### Plan runs by archetype
 
-The plan runs list has an Archetype filter and names each run's archetypes under its applications; the archetype
-drawer's Details tab has a "Plan runs" count that opens the list filtered by that archetype
-(`archetypePlanRunsLocation`). No data-layer change: it is a client join of `GET /plan-runs` with Hub `GET /archetypes`.
+The plan runs list has an Archetype filter. No data-layer change: it is a client join of `GET /plan-runs` with Hub
+`GET /archetypes`.
 
-- **Rule** (`runTouchesArchetype` in `utils/agentic.ts`, shared by the filter, the list and the count): a run belongs
-  to an archetype when any of its applications is in `archetype.applications`. It does not use the plan's
-  `migrationPaths`: a plan no profile uses, or one plan run on applications of several archetypes, still counts for each
-  archetype involved.
+- **Rule** (`runTouchesArchetype` in `utils/agentic.ts`): a run belongs to an archetype when any of its applications is
+  in `archetype.applications`. It does not use the plan's `migrationPaths`: a plan no profile uses, or one plan run on
+  applications of several archetypes, still counts for each archetype involved.
 - **Current membership, not a snapshot:** an application re-tagged into another archetype moves its earlier runs with
   it, the same as the inventory's Archetypes filter. Recording the archetypes on the run at start (a label or a
   `status` field on `AgentWorkflowRun`) would fix that; not needed now.
 - **Real backend:** the client join works while the list is read whole. If runs are ever paginated or filtered on the
   server, the run list needs an `archetype=<id>` query parameter with the same rule (runs labeled
-  `konveyor.io/application` with a member application), and a count per archetype for the drawer.
-- **Polling from the drawer:** today the drawer's count reads the whole run list (`useFetchPlanRuns`, shared cache with
-  the plan runs list), which polls every 5 s while a run is active (30 s when every active run awaits approval) for as
-  long as the archetype's Details tab is open. Fine at prototype scale; a real backend should serve the count per
-  archetype instead of the drawer polling the full list.
+  `konveyor.io/application` with a member application).
 
 ---
 

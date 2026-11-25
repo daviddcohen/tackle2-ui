@@ -87,7 +87,8 @@ const selectedArchetypeIds = (search: string): string[] => {
 
 const PlanRunsPage: React.FC = () => {
   const { t } = useTranslation();
-  // Opened from an archetype ("{n} plan runs"), the list keeps that trail.
+  // Opened from another page (starting migrations from the inventory), the
+  // list keeps that trail.
   const { breadcrumbs, to } = useBreadcrumbs(t("sidebar.planRuns"), []);
   // Runs are started from the application inventory, so the empty list
   // points there; without the scope to run a plan it only says what appears.
@@ -96,10 +97,9 @@ const PlanRunsPage: React.FC = () => {
 
   const { search } = useLocation();
   const { planRuns, isFetching, isLoading, fetchError } = useFetchPlanRuns();
-  // Hub membership (`archetype.applications`) relates a run to archetypes.
-  // The runs list without it; each run's archetypes appear under its
-  // applications once they arrive. A failed refresh keeps the last ones: they
-  // are unavailable only when an error left no data.
+  // Hub membership (`archetype.applications`) relates a run to archetypes,
+  // for the Archetype filter. The runs do not wait for it. A failed refresh
+  // keeps the last ones: they are unavailable only when an error left no data.
   const {
     archetypes,
     isLoading: isLoadingArchetypes,
@@ -118,7 +118,7 @@ const PlanRunsPage: React.FC = () => {
     [planRuns, archetypes, archetypesUnavailable]
   );
   const archetypeIds = selectedArchetypeIds(search);
-  // Filtered by archetype (a deep link), the rows wait for the first
+  // Filtered by archetype (from the URL), the rows wait for the first
   // archetypes answer instead of showing the unfiltered list, but not
   // through its retries: after a failed attempt the filter matches nothing
   // and its chip says why the list is empty.
@@ -199,7 +199,6 @@ const PlanRunsPage: React.FC = () => {
               isLoading={isLoading || isWaitingForArchetypes}
               fetchError={fetchError}
               filterCategories={filterCategories}
-              getArchetypes={(run) => archetypesByRun?.get(run.id)}
               emptyState={
                 <NoDataEmptyState
                   title={t("agentic.planRun.emptyTitle")}

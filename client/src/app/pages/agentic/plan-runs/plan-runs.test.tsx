@@ -191,19 +191,7 @@ describe("PlanRunsPage", () => {
     ]);
     renderPage();
     const table = await screen.findByRole("grid", { name: "Plan runs" });
-    const runRow = (name: string) =>
-      within(table).getByRole("row", { name: new RegExp(name) });
-    await waitFor(() =>
-      expect(
-        within(runRow("Run #3")).getByRole("link", {
-          name: "Java EE Application",
-        })
-      ).toBeInTheDocument()
-    );
-    expect(runRow("Run #3")).toHaveTextContent(
-      "Archetypes: Java EE Application, Spring Boot Application"
-    );
-    expect(runRow("Run #4")).not.toHaveTextContent(/Archetypes?:/);
+    await within(table).findByRole("link", { name: /^Run #4/ });
 
     await userEvent.click(screen.getByRole("button", { name: "Name" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Archetype" }));
@@ -211,12 +199,16 @@ describe("PlanRunsPage", () => {
       screen.getByRole("combobox", { name: "Type to filter" })
     );
     // Only archetypes that some run touches, by name.
-    const options = screen.getAllByRole("menuitem");
-    expect(options.map((option) => option.textContent?.trim())).toEqual([
-      "Java EE Application",
-      "Spring Boot Application",
-    ]);
-    await userEvent.click(within(options[0]).getByRole("checkbox"));
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole("menuitem")
+          .map((option) => option.textContent?.trim())
+      ).toEqual(["Java EE Application", "Spring Boot Application"])
+    );
+    await userEvent.click(
+      within(screen.getAllByRole("menuitem")[0]).getByRole("checkbox")
+    );
 
     await waitFor(() =>
       expect(
@@ -237,19 +229,7 @@ describe("PlanRunsPage", () => {
         { id: 4, name: "Order Service" },
       ]),
     ]);
-    // The list's URL state merges through document.location: a browser
-    // router keeps the two the same.
-    const filters = encodeURIComponent(JSON.stringify({ archetype: ["2"] }));
-    window.history.replaceState(
-      {},
-      "",
-      `/plan-runs?planRuns:filters=${filters}`
-    );
-    render(
-      <BrowserRouter>
-        <PlanRunsPage />
-      </BrowserRouter>
-    );
+    renderList({ archetype: ["2"] });
     const table = await screen.findByRole("grid", { name: "Plan runs" });
     await waitFor(() =>
       expect(
@@ -286,35 +266,6 @@ describe("PlanRunsPage", () => {
     expect(
       await screen.findByRole("link", { name: "Run #1: Java EE to Quarkus" })
     ).toBeInTheDocument();
-  });
-
-  it("keeps the trail it was opened with", async () => {
-    useRuns([run("1", "1", "Java EE to Quarkus")]);
-    render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: "/plan-runs",
-            state: {
-              breadcrumbs: [
-                { title: "Archetypes", path: "/archetypes" },
-                {
-                  title: "Java EE Application",
-                  path: "/archetypes?ar:activeItem=1",
-                },
-              ],
-            },
-          },
-        ]}
-      >
-        <PlanRunsPage />
-      </MemoryRouter>
-    );
-    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(
-      within(trail).getByRole("link", { name: "Java EE Application" })
-    ).toHaveAttribute("href", "/archetypes?ar:activeItem=1");
-    expect(within(trail).getByText("Plan runs")).toBeInTheDocument();
   });
 
   describe("a selected archetype the runs do not offer", () => {
@@ -356,16 +307,25 @@ describe("PlanRunsPage", () => {
         return res(ctx.status(500));
       })
     );
-    useRuns([run("1", "1", "Java EE to Quarkus")]);
-    renderList({}, queryClient);
-    const row = await screen.findByRole("row", { name: /Run #1/ });
+    useRuns([
+      run("1", "1", "Java EE to Quarkus"),
+      run("2", "2", "Spring Boot to Quarkus", [
+        { id: 4, name: "Order Service" },
+      ]),
+    ]);
+    renderList({ archetype: ["1"] }, queryClient);
     await waitFor(() => expect(refreshed).toHaveBeenCalled());
     await waitFor(() =>
       expect(queryClient.getQueryState([ARCHETYPES_QUERY_KEY])?.status).toBe(
         "error"
       )
     );
-    expect(row).toHaveTextContent("Archetype: Java EE Application");
+    const table = screen.getByRole("grid", { name: "Plan runs" });
+    expect(
+      within(table)
+        .getAllByRole("link", { name: /^Run #/ })
+        .map((link) => link.textContent)
+    ).toEqual(["Run #1: Java EE to Quarkus"]);
     queryClient.clear();
   });
 
@@ -383,14 +343,11 @@ describe("PlanRunsPage", () => {
     });
     afterEach(() => release());
 
-    it("lists the runs, and their archetypes when they arrive", async () => {
+    it("lists the runs without waiting for them", async () => {
       renderList({});
-      const row = await screen.findByRole("row", { name: /Run #1/ });
-      expect(row).not.toHaveTextContent(/Archetypes?:/);
-      release();
-      await waitFor(() =>
-        expect(row).toHaveTextContent("Archetype: Java EE Application")
-      );
+      expect(
+        await screen.findByRole("link", { name: "Run #1: Java EE to Quarkus" })
+      ).toBeInTheDocument();
     });
 
     it("filtered by archetype, waits for them instead of listing every run", async () => {
@@ -436,7 +393,6 @@ describe("PlanRunsPage", () => {
     renderPage();
     const row = await screen.findByRole("row", { name: /Run #1/ });
     expect(row).toHaveTextContent("Customer Management");
-    expect(row).not.toHaveTextContent(/Archetypes?:/);
   });
 
   it("orders the status options with the runs that need a person first", async () => {
