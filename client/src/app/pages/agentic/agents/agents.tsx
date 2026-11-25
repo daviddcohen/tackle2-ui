@@ -492,7 +492,7 @@ export const AgentsPage: React.FC = () => {
         onClose={closeCreateUpdateModal}
       />
       <AgentTestModal
-        agent={agentToTest}
+        target={agentToTest != null ? { agent: agentToTest } : null}
         onClose={() => setAgentToTest(null)}
       />
       {isConfirmDialogOpen && (

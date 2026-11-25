@@ -418,8 +418,17 @@ export const getAgentTestRuns = async (agentId?: EntityId) =>
     .filter((run) => agentId == null || run.spec.agentRef === agentId)
     .map((run) => toAgentTestRun(run));
 
-export const startAgentTestRun = async (request: AgentTestRunRequest) =>
-  toAgentTestRun(await hub.createAgentRun(toCreateRunInput(request)));
+/**
+ * An AgentRun stages only its Agent's skills (controller
+ * `resolveSkillVolumes`), so a run with added skills is refused rather than
+ * started without them.
+ */
+export const startAgentTestRun = async (request: AgentTestRunRequest) => {
+  if ((request.addedSkills ?? []).length > 0) {
+    throw new Error("Skills added to a test run have no Hub backend.");
+  }
+  return toAgentTestRun(await hub.createAgentRun(toCreateRunInput(request)));
+};
 
 // ---------------------------------------------------------------------------
 // Plans

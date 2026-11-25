@@ -48,9 +48,10 @@ import {
   useFetchSkillPlans,
 } from "@app/queries/agentic";
 import { useFetchArchetypes } from "@app/queries/archetypes";
-import { skillsWriteScopes } from "@app/scopes";
+import { agenticAgentRunsWriteScopes, skillsWriteScopes } from "@app/scopes";
 import { formatDate, getAxiosErrorMessage } from "@app/utils/utils";
 
+import { AgentTestModal } from "../../agents/components/agent-test-modal";
 import { CountLink } from "../../components/count-link";
 import {
   DetailFacts,
@@ -129,6 +130,7 @@ const SkillDetail: React.FC = () => {
   const history = useHistory();
   const { pushNotification } = React.useContext(NotificationsContext);
   const canManageSkills = useHasSomeScopes(skillsWriteScopes);
+  const canTestAgents = useHasSomeScopes(agenticAgentRunsWriteScopes);
 
   const { skill, isLoading, fetchError, isNotFound, refetch } =
     useFetchSkillById(skillId);
@@ -167,6 +169,7 @@ const SkillDetail: React.FC = () => {
   const activeTab = isLegacyUsageTab ? "usage" : urlTab;
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
+  const [isTestOpen, setIsTestOpen] = React.useState(false);
 
   const onDeleteSuccess = () => {
     pushNotification({
@@ -243,14 +246,25 @@ const SkillDetail: React.FC = () => {
           }
           breadcrumbs={breadcrumbs}
           btnActions={
-            canManageSkills && (
-              <EntityDetailActions
-                onEdit={() => setIsEditOpen(true)}
-                onDelete={() => setIsDeleteOpen(true)}
-                managedReason={managedReason}
-                deleteDisabledReason={deleteBlockedReason}
-              />
-            )
+            <EntityDetailActions
+              onEdit={canManageSkills ? () => setIsEditOpen(true) : undefined}
+              items={
+                canTestAgents
+                  ? [
+                      {
+                        key: "test",
+                        label: t("agentic.skillDetail.testWithAgent"),
+                        onClick: () => setIsTestOpen(true),
+                      },
+                    ]
+                  : []
+              }
+              onDelete={
+                canManageSkills ? () => setIsDeleteOpen(true) : undefined
+              }
+              managedReason={managedReason}
+              deleteDisabledReason={deleteBlockedReason}
+            />
           }
         />
       </PageSection>
@@ -350,6 +364,11 @@ const SkillDetail: React.FC = () => {
           setIsEditOpen(false);
           refetch();
         }}
+      />
+
+      <AgentTestModal
+        target={isTestOpen ? { skill } : null}
+        onClose={() => setIsTestOpen(false)}
       />
 
       {isDeleteOpen && (

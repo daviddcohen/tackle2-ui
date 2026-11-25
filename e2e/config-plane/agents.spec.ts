@@ -277,6 +277,17 @@ test.describe("Agent test modal", () => {
       "Customer Management"
     );
     await field(dialog(page), "Task").fill("Run the unit tests");
+    // The agent's own skill is listed but cannot be added again.
+    await page.locator("#agent-test-added-skills-input").click();
+    await expect(
+      page.getByRole("menuitem", { name: /Database migration patterns/ })
+    ).toContainText("Already included: the agent has this skill");
+    await expect(
+      page.getByRole("menuitem", { name: /Spring Boot 3 upgrade/ })
+    ).toContainText("Available when needed");
+    await page.getByRole("menuitem", { name: /Spring Boot 3 upgrade/ }).click();
+    // Close the menu by clicking outside it (Escape would close the modal).
+    await dialog(page).getByRole("heading", { name: "Test agent" }).click();
     await start.click();
     await expect(toast(page, "Test run for Test Runner queued")).toBeVisible();
     await page
@@ -298,6 +309,9 @@ test.describe("Agent test modal", () => {
       .getByRole("grid", { name: "Test runs" })
       .getByRole("row", { name: /Run the unit tests/ });
     await expect(runRow).toContainText("Customer Management");
+    await expect(
+      runRow.getByRole("link", { name: "Spring Boot 3 upgrade" })
+    ).toBeVisible();
   });
 
   // Regression guard: AgentTestModal stays mounted and never resets react-hook-form on close/agent change; previous application + task leak into the next agent's test

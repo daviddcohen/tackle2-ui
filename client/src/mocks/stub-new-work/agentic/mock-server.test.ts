@@ -21,6 +21,7 @@ import {
   deleteSkill,
   deleteSkillCollection,
   getAgentById,
+  getAgentTestRuns,
   getAgents,
   getApplicationMigrations,
   getMigrationPlanById,
@@ -33,6 +34,7 @@ import {
   getSkillPlans,
   getSkills,
   resolvePlanSkills,
+  startAgentTestRun,
   startApplicationMigrations,
   updateAgent,
   updateMigrationPlan,
@@ -362,6 +364,65 @@ describe("rename cascades (names are resolved by the server)", () => {
       parameters: agent.parameters,
     });
     expect((await getAgentById("2")).skills).toHaveLength(before.skills.length);
+  });
+});
+
+describe("agent test runs", () => {
+  const request = {
+    agentId: "2",
+    applicationId: 5,
+    task: "Apply the conversion patterns.",
+  };
+
+  it("stores added skills once each, with names resolved on read", async () => {
+    const run = await startAgentTestRun({
+      ...request,
+      addedSkills: [{ id: "16" }, { id: "4" }, { id: "16" }],
+    });
+    expect(run.addedSkills).toEqual([
+      { id: "16", name: "Spring Boot 3 upgrade" },
+      { id: "4", name: "Quarkus best practices" },
+    ]);
+    await updateSkill({
+      id: "16",
+      name: "Spring Boot 3.x upgrade",
+      description: "",
+      sourceType: "inline",
+    });
+    const listed = (await getAgentTestRuns("2")).find((r) => r.id === run.id);
+    expect(listed?.addedSkills?.[0]).toEqual({
+      id: "16",
+      name: "Spring Boot 3.x upgrade",
+    });
+    // Nothing is saved on the agent.
+    expect((await getAgentById("2")).skills.map((s) => s.id)).toEqual(["14"]);
+  });
+
+  it("leaves addedSkills out when none are added", async () => {
+    const run = await startAgentTestRun({ ...request, addedSkills: [] });
+    expect(run).not.toHaveProperty("addedSkills");
+    const plain = await startAgentTestRun(request);
+    expect(plain).not.toHaveProperty("addedSkills");
+  });
+
+  it("400s malformed or unknown added skills", async () => {
+    const start = (addedSkills: unknown) =>
+      messageOf(
+        startAgentTestRun({
+          ...request,
+          addedSkills,
+        } as unknown as Parameters<typeof startAgentTestRun>[0])
+      );
+    expect(await start("16")).toBe("addedSkills must be an array.");
+    expect(await start([{ id: 16 }])).toBe(
+      "addedSkills must reference an entity by id."
+    );
+    expect(await start([{ id: "9999" }])).toBe('Skill "9999" does not exist.');
+    expect(
+      await statusOf(
+        startAgentTestRun({ ...request, addedSkills: [{ id: "9999" }] })
+      )
+    ).toBe(400);
   });
 });
 

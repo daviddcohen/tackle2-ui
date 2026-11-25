@@ -248,7 +248,7 @@ const AgentDetail: React.FC = () => {
       />
 
       <AgentTestModal
-        agent={isTestOpen ? agent : null}
+        target={isTestOpen ? { agent } : null}
         onClose={() => setIsTestOpen(false)}
       />
 

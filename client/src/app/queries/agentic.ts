@@ -807,11 +807,14 @@ export const useFetchAvailableModels = (providerId: EntityId | undefined) => {
 // Agents
 // ---------------------------------------------------------------------------
 
-export const useFetchAgents = () => {
+export const useFetchAgents = ({
+  enabled = true,
+}: AgenticListQueryOptions = {}) => {
   const { data, isFetching, isInitialLoading, isSuccess, error, refetch } =
     useQuery({
       queryKey: agenticKeys.list("agents"),
       queryFn: getAgents,
+      enabled,
       retry: agenticRetry,
     });
   return {
