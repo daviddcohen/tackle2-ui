@@ -1,6 +1,4 @@
 .prototype-scope-switcher {
-  position: relative;
-  z-index: 10000;
   display: flex;
   min-height: 28px;
   box-sizing: border-box;

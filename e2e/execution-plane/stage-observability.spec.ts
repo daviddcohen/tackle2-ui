@@ -816,10 +816,12 @@ test.describe("Transcript", () => {
     await page.goto(stageUrl("1", "3", "configured", { tab: "transcript" }));
     await expect(transcriptMessages(page).first()).toBeVisible();
     const box = await transcript(page).boundingBox();
-    const viewport = page.viewportSize();
+    const area = await main(page).boundingBox();
     expect(box).not.toBeNull();
-    // It reaches the bottom of the page (less the section padding).
-    expect(viewport!.height - (box!.y + box!.height)).toBeLessThan(40);
+    // It reaches the bottom of the main area (less the section padding).
+    const gap = area!.y + area!.height - (box!.y + box!.height);
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThan(40);
     expect(
       await transcript(page).evaluate(
         (element) => element.scrollHeight > element.clientHeight
