@@ -12,7 +12,6 @@ import {
 } from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
-import { isAgenticEnabled } from "@app/Constants";
 import { Paths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
 import { BreadCrumbPath } from "@app/components/BreadCrumbPath";
@@ -29,14 +28,13 @@ import { ManageSkillsTarget } from "@app/pages/agentic/components/manage-skills-
 
 import { ArchetypeDrawerTab as TabKey } from "./archetype-drawer-tabs";
 import { TabDetailsContent } from "./tab-details-content";
-import { TabSkills } from "./tab-skills";
 import { TabTargetProfiles } from "./tab-target-profiles";
 
 interface IArchetypeDetailDrawerProps {
   breadcrumbs: BreadcrumbEntry[];
   onCloseClick: () => void;
   archetype: Archetype | null;
-  /** Opens the page's Manage skills modal for the archetype or one of its target profiles. */
+  /** Opens the page's Manage skills modal for the archetype (Details tab). */
   onManageSkills: (target: ManageSkillsTarget) => void;
 }
 
@@ -66,12 +64,9 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
     serialize: (tab) => ({ tab: String(tab) }),
     deserialize: ({ tab }) => {
       const value = Number(tab);
-      return [
-        TabKey.Details,
-        TabKey.TargetProfiles,
-        ...(isAgenticEnabled ? [TabKey.Skills] : []),
-        TabKey.Reviews,
-      ].includes(value)
+      return [TabKey.Details, TabKey.TargetProfiles, TabKey.Reviews].includes(
+        value
+      )
         ? value
         : TabKey.Details;
     },
@@ -114,7 +109,10 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
               eventKey={TabKey.Details}
               title={<TabTitleText>{t("terms.details")}</TabTitleText>}
             >
-              <TabDetailsContent archetype={archetype} />
+              <TabDetailsContent
+                archetype={archetype}
+                onManageSkills={onManageSkills}
+              />
             </Tab>
             <Tab
               eventKey={TabKey.TargetProfiles}
@@ -122,19 +120,6 @@ const ArchetypeDetailDrawer: React.FC<IArchetypeDetailDrawerProps> = ({
             >
               <TabTargetProfiles archetype={archetype} />
             </Tab>
-            {isAgenticEnabled && (
-              <Tab
-                eventKey={TabKey.Skills}
-                title={
-                  <TabTitleText>{t("agentic.archetype.skills")}</TabTitleText>
-                }
-              >
-                <TabSkills
-                  archetype={archetype}
-                  onManageSkills={onManageSkills}
-                />
-              </Tab>
-            )}
             <Tab
               eventKey={TabKey.Reviews}
               title={<TabTitleText>{t("terms.review")}</TabTitleText>}

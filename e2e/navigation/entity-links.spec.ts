@@ -124,7 +124,8 @@ const surfaces = (graph: FixtureGraph, group: Group): string[] => {
       ]);
     case "archetypes":
       return graph.archetypes.flatMap((archetype) => [
-        ...[0, 1, 2].map(
+        // Details, Target profiles, Review (2 was the Skills tab).
+        ...[0, 1, 3].map(
           (tab) => `/archetypes?ar:activeItem=${archetype.id}&ar:tab=${tab}`
         ),
         `/archetypes/${archetype.id}/target-profiles`,
@@ -295,6 +296,11 @@ for (const group of GROUPS) {
               /#target-profile-\d+$/.test(href) &&
               label.startsWith(`${expected} (`) &&
               label.endsWith(")");
+            // A skill label of an always-followed skill says so in its
+            // name: "{skill} (Always followed)".
+            const isAlwaysFollowedSkill =
+              /^\/skills\/\d+$/.test(destination.pathname) &&
+              label === `${expected} (Always followed)`;
             // The inventory Migration status links to the application's
             // Migration tab; its words are the status.
             const isMigrationStatusLink =
@@ -307,6 +313,7 @@ for (const group of GROUPS) {
               !isPlanRunsCountLink &&
               !isSkillsCountLink &&
               !isQualifiedTargetProfile &&
+              !isAlwaysFollowedSkill &&
               !isMigrationStatusLink
             )
               expect(label, `mislabelled reference ${source} -> ${href}`).toBe(

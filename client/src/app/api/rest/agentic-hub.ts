@@ -34,8 +34,8 @@
  *   (agentic-controller#172);
  * - run skill review (`ApplicationMigrationView.migrationPaths`, a run's
  *   target profile picks and own exclusions on the start request,
- *   `PlanRun.excludedSkills`): no CRD field; starts drop the picks and
- *   exclusions (`toWorkflowRunInputs`).
+ *   `PlanRun.excludedSkills`, `PlanRun.targetProfiles`): no CRD field;
+ *   starts drop the picks and exclusions (`toWorkflowRunInputs`).
  * - `updateArchetypeSkills`, `updateTargetProfileSkills` and
  *   `updateApplicationSkills` (Hub-scope Skill associations have no Hub
  *   table; `updateSkill` refuses them too).

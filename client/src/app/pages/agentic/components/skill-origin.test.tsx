@@ -55,7 +55,7 @@ describe("formatSkillOrigin", () => {
       i18nKey: "agentic.stageSkills.origin.archetype",
       values: { name: "Java EE Application" },
       // The archetype drawer, on its Skills tab.
-      path: "/archetypes?ar%3AactiveItem=1&ar%3Atab=2",
+      path: "/archetypes?ar%3AactiveItem=1",
     });
     expect(formatSkillOrigin(application)).toEqual({
       i18nKey: "agentic.stageSkills.origin.application",
@@ -115,8 +115,8 @@ describe("linkToPath", () => {
 describe("searchWithFrom", () => {
   it("adds the origin and keeps the drawer query and the anchor", () => {
     expect(searchWithFrom("", "run-4")).toBe("?from=run-4");
-    expect(searchWithFrom("?ar%3AactiveItem=1&ar%3Atab=2", "run-4")).toBe(
-      "?ar%3AactiveItem=1&ar%3Atab=2&from=run-4"
+    expect(searchWithFrom("?ar%3AactiveItem=1", "run-4")).toBe(
+      "?ar%3AactiveItem=1&from=run-4"
     );
     expect(searchWithFrom("#target-profile-11", "plan-1")).toBe(
       "?from=plan-1#target-profile-11"
@@ -172,10 +172,7 @@ describe("SkillOriginList", () => {
     );
     expect(
       screen.getByRole("link", { name: "Java EE Application" })
-    ).toHaveAttribute(
-      "href",
-      "/archetypes?ar%3AactiveItem=1&ar%3Atab=2&from=run-4"
-    );
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1&from=run-4");
     expect(screen.getByRole("link", { name: "Quarkus 3.x" })).toHaveAttribute(
       "href",
       "/archetypes/1/target-profiles?from=run-4#target-profile-11"

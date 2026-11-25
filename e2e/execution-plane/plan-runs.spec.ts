@@ -194,7 +194,8 @@ test.describe("Plan run detail", () => {
   test("links: plan, applications, agent and stage run", async ({ page }) => {
     await page.goto(protoUrl("/plan-runs/1", { scenario: "completed" }));
     const summary = page.getByRole("main").locator("dl").first();
-    await expect(summary.getByRole("link")).toHaveCount(4); // plan + 3 applications
+    // The plan, then each of the 3 applications with the target profile it ran on.
+    await expect(summary.getByRole("link")).toHaveCount(7);
     await stageLinks(page).first().click();
     await expect(page).toHaveURL(/\/plan-runs\/1\/stages\/1\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(

@@ -1515,7 +1515,7 @@
       "deleted": "Skill deleted",
       "deleteDescription": "{{name}} will be deleted. This action cannot be undone.",
       "deleteTitle": "Delete skill?",
-      "description": "Skills give agents migration knowledge. Attach a skill to an agent, archetype, target profile or application, or add it to a skill collection, so agents use it.",
+      "description": "Skills give agents migration knowledge. Attach a skill to an agent, archetype, target profile or application, or add it to a skill collection, so agents can use it.",
       "edit": "Edit skill",
       "emptyDescription": "Create a skill, or import one from a Markdown file.",
       "emptyDescriptionReadOnly": "Skills appear here once they are created.",
@@ -1561,6 +1561,7 @@
       "backToSkills": "Back to skills",
       "targetProfileOption": "{{profile}} ({{archetype}})",
       "usage": "Usage",
+      "skillsOf": "Skills of {{name}}",
       "usageSummary": {
         "agents_one": "{{count}} agent",
         "agents_other": "{{count}} agents",
@@ -1594,22 +1595,22 @@
       "associationFields": {
         "agents": {
           "label": "Agents",
-          "helper": "These agents use this skill in every stage they run, unless a migration plan excludes it. This also updates each agent's skills.",
+          "helper": "These agents can use this skill in every stage they run, unless a migration plan excludes it. This also updates each agent's skills.",
           "placeholder": "Select agents"
         },
         "archetypes": {
           "label": "Archetypes",
-          "helper": "Agents use this skill in every stage when they migrate applications in these archetypes, unless a migration plan excludes it.",
+          "helper": "Agents can use this skill in every stage when they migrate applications in these archetypes, unless a migration plan excludes it.",
           "placeholder": "Select archetypes"
         },
         "targetProfiles": {
           "label": "Target profiles",
-          "helper": "Agents use this skill in every stage when they migrate applications that target these profiles, unless a migration plan excludes it.",
+          "helper": "Agents can use this skill in every stage when they migrate applications that target these profiles, unless a migration plan excludes it.",
           "placeholder": "Select target profiles"
         },
         "applications": {
           "label": "Applications",
-          "helper": "Agents use this skill in every stage when they migrate these applications.",
+          "helper": "Agents can use this skill in every stage when they migrate these applications.",
           "placeholder": "Select applications"
         },
         "skillCollections": {
@@ -1643,15 +1644,16 @@
         "field": "Skills",
         "placeholder": "Select skills",
         "helper": {
-          "archetype": "Select the skills to attach to this archetype. Each target profile has its own skills.",
+          "archetype": "Select the skills to attach to this archetype. Agents can use them whichever target profile a run uses, so attach a skill that fits only one target to that target profile instead.",
           "targetProfile": "Select the skills to attach to this target profile. Skills for {{archetype}} itself are attached on the archetype.",
-          "application": "Select the skills to attach to this application. Archetype and target profile skills are attached on the archetype."
+          "application": "Select the skills to attach to this application. Archetype skills are attached on each archetype, and target profile skills on each archetype's target profiles page."
         },
         "loadFailed": "Skills could not be loaded. Try again later.",
         "unavailable": "Attached skills are not available. Try again later.",
         "empty": "No skills exist yet. Create a skill first, then attach it here.",
         "goToSkills": "Go to skills",
         "optionDescription": "{{policy}} · {{description}}",
+        "inheritedFrom": "Inherited from {{archetypes}}",
         "saved": "Skills for {{name}} updated",
         "saveFailed": "Skills for {{name}} could not be saved"
       },
@@ -1665,11 +1667,9 @@
         "helpLabel": "More information about how agents use it"
       },
       "scopeSentence": {
-        "application": "Agents also use these skills in every stage when they migrate this application.",
-        "archetype": "Agents also use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them.",
-        "targetProfile": "Agents also use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them.",
-        "archetypeStandalone": "Agents use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them.",
-        "targetProfileStandalone": "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
+        "application": "Agents can use these skills in every stage when they migrate this application.",
+        "archetype": "Agents can use these skills in every stage when they migrate applications in this archetype, whichever target profile the run uses.",
+        "targetProfile": "Agents can use these skills in every stage when a migration plan runs on this target profile."
       }
     },
     "skills": {
@@ -1686,7 +1686,7 @@
       "attachedTo": "Attached to",
       "attachedToTitle_one": "Attached to ({{count}})",
       "attachedToTitle_other": "Attached to ({{count}})",
-      "attachedToDescription": "An agent uses this skill in every stage it runs. An archetype, target profile or application adds it to every stage when a matching application is migrated. A migration plan can exclude it, except where it is attached to the application itself.",
+      "attachedToDescription": "An agent can use this skill in every stage it runs. An archetype, target profile or application adds it to every stage when a matching application is migrated. A migration plan can exclude it, except where it is attached to the application itself.",
       "notAttached": "This skill is not attached to an agent, archetype, target profile or application.",
       "attachedAgents": "Agents",
       "attachedArchetypes": "Archetypes",
@@ -1761,6 +1761,7 @@
       "notSelected": "Not selected",
       "none": "None",
       "viewPlanRun": "View plan run",
+      "runTargetProfile": "Run's target profile",
       "overrideCaution": "Applications run this migration plan even if none of their target profiles uses it. Those applications get no target profile skills.",
       "planRunsStarted_one": "{{count}} plan run started",
       "planRunsStarted_other": "{{count}} plan runs started",
@@ -1775,7 +1776,7 @@
       "goToArchetypes": "Go to archetypes",
       "cannotStartTitle": "Migration cannot start",
       "cannotStartBody": "{{reason}} Resolve it, then run the migration plan.",
-      "noRunYet": "This application has no plan run yet. Run the migration plan to start migrating it.",
+      "noRunYet": "This application has no plan run yet. Run a migration plan to start migrating it.",
       "stagesAppearHere": "Stages appear here once the migration plan runs on this application.",
       "planRunUnavailable": "Plan run could not be loaded",
       "commitsTitle": "Commits ({{count}})",
@@ -1796,9 +1797,10 @@
       "archetypes": "Archetypes",
       "skillsByStageLatestRun": "What each stage got for this application in <runLink>{{run}}</runLink>, its latest plan run.",
       "skillsByStageNoRun": "Skills are resolved for each stage when a migration plan runs on this application. Run migration plan lists them before the run starts, and you can exclude some for that run.",
-      "latestRunOtherPlan": "The <runLink>latest run</runLink> ran <planLink>{{plan}}</planLink>. This application's migration plan is <ownPlanLink>{{ownPlan}}</ownPlanLink>.",
-      "latestRunUnusedPlan": "The <runLink>latest run</runLink> ran <planLink>{{plan}}</planLink>, which none of this application's target profiles uses.",
+      "latestRunOtherPlan": "The <runLink>latest run</runLink> ran <planLink>{{plan}}</planLink>. Its next run uses <ownPlanLink>{{ownPlan}}</ownPlanLink> unless you pick another.",
+      "latestRunUnusedPlan": "The <runLink>latest run</runLink> ran <planLink>{{plan}}</planLink>, which none of its target profiles uses.",
       "migrationPathPlan": "<profileLink>{{profile}}</profileLink> ({{archetype}}): <planLink>{{plan}}</planLink>",
+      "migrationPathPlanOneArchetype": "<profileLink>{{profile}}</profileLink>: <planLink>{{plan}}</planLink>",
       "migrationPathsNote": "Each run picks one of these target profiles and runs the migration plan it uses.",
       "previewOneDescription": "The skills each stage's agent gets when {{plan}} runs on {{application}}.",
       "previewRunTitle_one": "{{plan}}: {{count}} application",
@@ -1845,7 +1847,7 @@
         "skillsRequired": "Select at least one skill."
       },
       "selectAgents": "Select agents",
-      "agentsHelper": "These agents use every skill in this skill collection in every stage they run, unless a migration plan excludes it. This also updates each agent's skill collections.",
+      "agentsHelper": "These agents can use every skill in this skill collection in every stage they run, unless a migration plan excludes it. This also updates each agent's skill collections.",
       "agentsLocked_one": "{{names, list}} is managed by Konveyor and cannot be removed here.",
       "agentsLocked_other": "{{names, list}} are managed by Konveyor and cannot be removed here.",
       "agentsLoading": "Loading agents.",
@@ -1900,24 +1902,26 @@
     },
     "attachedSkills": {
       "application": "Application skills",
-      "archetypeOwn": "Archetype skills",
-      "archetype": "Archetype skills: <nameLink>{{name}}</nameLink>",
-      "targetProfile": "Target profile skills: <nameLink>{{name}}</nameLink>",
+      "applicationWithCount_one": "Application skills ({{count}})",
+      "applicationWithCount_other": "Application skills ({{count}})",
+      "archetypes": "Archetype skills",
+      "archetypesWithCount_one": "Archetype skills ({{count}})",
+      "archetypesWithCount_other": "Archetype skills ({{count}})",
+      "inherited": "This application inherits these skills from its archetypes, where they are edited. Agents can use them in every stage.",
       "applicationEmpty": "No skills are attached to this application.",
-      "archetypeEmpty": "No skills are attached to this archetype.",
       "noArchetype": "This application is not in any archetype, so it inherits no archetype skills.",
-      "targetProfilesPointer": "Each target profile of this archetype has its own skills, which agents get only when a migration plan runs on that target profile. <targetProfilesLink>View target profiles</targetProfilesLink>",
-      "targetProfilesPointerNone": "This archetype has no target profile yet. A target profile's skills reach agents only when a migration plan runs on it. <targetProfilesLink>View target profiles</targetProfilesLink>",
-      "headingWithCount": "<heading/> ({{count}})"
+      "archetypeHelp": "Agents can use these skills in every stage when they migrate applications in this archetype, whichever target profile the run uses. Each target profile adds its own skills when a run uses it: <targetProfilesLink>View target profiles</targetProfilesLink>",
+      "archetypeHelpLabel": "More about archetype skills"
     },
     "stageSkills": {
       "title": "Skills by stage",
       "runBy": "Run by <agentLink>{{agent}}</agentLink>",
       "everyStage": "Every stage",
       "everyStageApplication": "Every stage: <applicationLink>{{application}}</applicationLink>",
-      "everyStagePlanNote": "Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills.",
-      "everyStageNoPath": "No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetype's skills and its own skills, and no target profile skills.",
+      "everyStagePlanNote": "Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetypes' skills, the skills of the target profile it runs on, and its own skills.",
+      "everyStageNoPath": "No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetypes' skills and its own skills, and no target profile skills.",
       "everyStageSubtitle": "Archetype, target profile and application skills",
+      "everyStagePlanSubtitle": "Archetype and target profile skills",
       "everyStagePerApplication": "An application's archetype, target profile and own skills go to that application only.",
       "summary_zero": "No skills",
       "summary_one": "{{count}} skill",
@@ -2020,6 +2024,8 @@
       "title": "Plan runs",
       "description": "Each plan run applies a migration plan to one or more applications.",
       "applications": "Applications",
+      "applicationOnProfile": "<applicationLink>{{application}}</applicationLink> (<profileLink>{{profile}}</profileLink>)",
+      "applicationNoProfile": "<applicationLink>{{application}}</applicationLink> (no target profile)",
       "targetBranch": "Target branch",
       "filterByStatus": "Filter by status",
       "filterByName": "Filter by run name",
@@ -2270,10 +2276,7 @@
       "taskCancelFailed": "Task cancelation failed",
       "planRunsTitle": "Plan runs ({{count}})",
       "planRunsDescription": "Plan runs that include this application.",
-      "planRunsEmpty": "This application has not been in a plan run yet.",
-      "skillsIntro": "When a migration plan runs, each stage also gets its agent's skills and the skills of the target profile the run uses.",
-      "skillsIntroNoRun": "Run migration plan lists them before the run starts, and you can exclude some for that run.",
-      "seeSkillsByStage": "See what each stage got in the latest run"
+      "planRunsEmpty": "This application has not been in a plan run yet."
     },
     "archetype": {
       "skills": "Skills",
@@ -2323,8 +2326,7 @@
       "noTargetProfilesTitle": "No target profiles yet",
       "noneSelected": "No archetype selected",
       "profileGone": "Target profile {{profile}} no longer exists",
-      "profileSkillsButton_one": "{{count}} skill for {{profile}}",
-      "profileSkillsButton_other": "{{count}} skills for {{profile}}",
+      "profileSkillsHelpLabel": "More about target profile skills",
       "notAssigned": "Not assigned",
       "notFoundBody": "This archetype may have been deleted, or the link is out of date.",
       "notFoundTitle": "Archetype not found",
@@ -2332,8 +2334,6 @@
       "plansLoadFailed": "Migration plans could not be loaded",
       "plansNotLoaded": "Migration plans are not loaded yet.",
       "selectPlan": "Select a migration plan",
-      "skillCount_one": "{{count}} skill",
-      "skillCount_other": "{{count}} skills",
       "targetProfileCount_one": "{{count}} target profile",
       "targetProfileCount_other": "{{count}} target profiles",
       "targetProfileFormDescription": "A target profile is where applications in this archetype are going. After you create it, assign a migration plan to it.",

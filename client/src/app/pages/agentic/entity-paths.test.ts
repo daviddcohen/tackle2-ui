@@ -22,14 +22,8 @@ const association = (
   ({ scope, resource: { id, name: "Resource" } }) as SkillAssociation;
 
 describe("entity paths", () => {
-  it("opens an archetype as the selected drawer item of the archetypes table", () => {
+  it("opens an archetype as the selected drawer item of the archetypes table, on Details, which lists its skills", () => {
     expect(archetypePath(4)).toBe("/archetypes?ar%3AactiveItem=4");
-  });
-
-  it("opens an archetype's drawer on its Skills tab", () => {
-    expect(archetypePath(4, "skills")).toBe(
-      "/archetypes?ar%3AactiveItem=4&ar%3Atab=2"
-    );
   });
 
   it("opens an application on its Skills tab", () => {
@@ -52,7 +46,7 @@ describe("entity paths", () => {
   it.each([
     [association("agent", "7"), "/agents/7"],
     [association("application", 5), "/applications/5?tab=skills"],
-    [association("archetype", 2), "/archetypes?ar%3AactiveItem=2&ar%3Atab=2"],
+    [association("archetype", 2), "/archetypes?ar%3AactiveItem=2"],
     [
       association("targetProfile", 21),
       "/archetypes/2/target-profiles#target-profile-21",

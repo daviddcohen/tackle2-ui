@@ -32,6 +32,8 @@ import {
 } from "@app/agentic";
 import { useFetchAgentRunTranscript } from "@app/queries/agentic-observability";
 
+import { SectionEmpty } from "../detail-section";
+
 import { LiveSentence } from "./live-status";
 import {
   TRANSCRIPT_CLASS,
@@ -278,9 +280,7 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
           </LiveSentence>
         </StackItem>
         <StackItem>
-          <EmptyState variant="xs">
-            <EmptyStateBody>{t(`${KEY}.emptyRecording`)}</EmptyStateBody>
-          </EmptyState>
+          <SectionEmpty>{t(`${KEY}.emptyRecording`)}</SectionEmpty>
         </StackItem>
       </Stack>
     );
@@ -348,11 +348,9 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
       <Stack hasGutter>
         <StackItem>{sentence}</StackItem>
         <StackItem>
-          <EmptyState variant="xs">
-            <EmptyStateBody>
-              {isRecording ? t(`${KEY}.emptyRecording`) : t(`${KEY}.empty`)}
-            </EmptyStateBody>
-          </EmptyState>
+          <SectionEmpty>
+            {isRecording ? t(`${KEY}.emptyRecording`) : t(`${KEY}.empty`)}
+          </SectionEmpty>
         </StackItem>
       </Stack>
     );

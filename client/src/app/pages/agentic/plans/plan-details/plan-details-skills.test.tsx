@@ -177,7 +177,7 @@ const skillsSection = async () =>
 
 /** The section sentence, then the note on application skills. */
 const description =
-  "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills.";
+  "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetypes' skills, the skills of the target profile it runs on, and its own skills.";
 
 describe("PlanDetailsPage Skills by stage", () => {
   beforeEach(() => {
@@ -204,11 +204,9 @@ describe("PlanDetailsPage Skills by stage", () => {
         .map((heading) => heading.textContent)
     ).toEqual(["Stage 1: Migrate", "Every stage"]);
     // The note on application skills is in the section description (above); the Every stage
-    // title has the subtitle every context shows.
+    // title has the plan's subtitle: a plan holds no application skills.
     expect(
-      within(table).getByText(
-        "Archetype, target profile and application skills"
-      )
+      within(table).getByText("Archetype and target profile skills")
     ).toBeVisible();
     expect(
       within(table).queryByText(/target profiles that use this plan/)
@@ -317,7 +315,7 @@ describe("PlanDetailsPage Skills by stage", () => {
     });
     expect(
       within(section).getByText(
-        "What each stage's agent gets when this plan runs, and where each skill comes from. No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetype's skills and its own skills, and no target profile skills."
+        "What each stage's agent gets when this plan runs, and where each skill comes from. No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetypes' skills and its own skills, and no target profile skills."
       )
     ).toBeVisible();
     expect(within(table).getByText("No skills")).toBeVisible();

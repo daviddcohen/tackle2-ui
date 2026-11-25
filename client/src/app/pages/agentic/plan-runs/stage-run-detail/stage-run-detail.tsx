@@ -70,6 +70,7 @@ import {
   DetailFacts,
   DetailFactsProps,
   DetailSection,
+  SectionEmpty,
 } from "../../components/detail-section";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
 import { searchWithFrom } from "../../components/skill-origin";
@@ -658,7 +659,8 @@ const StageRunDetail: React.FC = () => {
           </LiveSentence>
         </StackItem>
         <StackItem>
-          {notStarted(t("agentic.stageRun.waitingForAgent"))}
+          {/* Under the live sentence: left-aligned with it. */}
+          <SectionEmpty>{t("agentic.stageRun.waitingForAgent")}</SectionEmpty>
         </StackItem>
       </Stack>
     );

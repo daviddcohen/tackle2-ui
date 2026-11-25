@@ -91,15 +91,11 @@ for (const [path, name] of [
   });
 }
 
-test("the Skills tab link opens the Migration tab on its section, focused", async ({
+test("a link to the Migration tab's Skills by stage opens that section, focused", async ({
   page,
 }) => {
-  await page.goto(protoUrl("/applications/3?tab=skills"));
-  // Claims Processing was in Run #1: the link opens that run's skills.
-  await main(page)
-    .getByRole("link", { name: "See what each stage got in the latest run" })
-    .click();
-  await expect(page).toHaveURL(/tab=migration.*#skills-by-stage$/);
+  // Claims Processing was in Run #1: the section shows that run's skills.
+  await page.goto(protoUrl("/applications/3?tab=migration#skills-by-stage"));
   await expect(
     page.getByRole("tab", { name: "Migration", selected: true })
   ).toBeVisible();
@@ -146,7 +142,7 @@ test("the Migration tab names both plans when the latest run ran another one", a
   await spaNavigate(page, "/applications/4?tab=migration");
   const stages = main(page).getByRole("region", { name: "Stages" });
   await expect(stages).toContainText(
-    "The latest run ran Java lift and shift. This application's migration plan is Spring Boot to Quarkus."
+    "The latest run ran Java lift and shift. Its next run uses Spring Boot to Quarkus unless you pick another."
   );
   await expect(
     stages.getByRole("link", { name: "latest run", exact: true })
@@ -171,7 +167,7 @@ test("the Migration tab says when the latest run ran a plan none of its target p
   await spaNavigate(page, "/applications/1?tab=migration");
   const stages = main(page).getByRole("region", { name: "Stages" });
   await expect(stages).toContainText(
-    "The latest run ran Spring Boot to Quarkus, which none of this application's target profiles uses."
+    "The latest run ran Spring Boot to Quarkus, which none of its target profiles uses."
   );
   await expect(
     stages.getByRole("link", { name: "Spring Boot to Quarkus", exact: true })
@@ -193,4 +189,15 @@ test("the Migration tab names no other plan when the latest run ran one of its t
   ).toHaveAttribute("href", /\/plan-runs\/4(\?|$)/);
   const stages = main(page).getByRole("region", { name: "Stages" });
   await expect(stages).not.toContainText("The latest run ran");
+  // Its archetype has two target profiles: Skills by stage holds the skills
+  // of the one Run #4 used, none from Quarkus 3.x.
+  const grid = skills.getByRole("grid", { name: "Skills by stage" });
+  // Its Every stage row (a stage row also has it, from the agent).
+  const fromProfile = grid
+    .getByRole("row")
+    .filter({ hasText: "Target profile: OpenJDK 21 on OpenShift" });
+  await expect(fromProfile).toHaveCount(1);
+  await expect(fromProfile).toContainText("OpenShift deployment conventions");
+  await expect(grid).not.toContainText("Target profile: Quarkus 3.x");
+  await expect(grid).not.toContainText("Quarkus best practices");
 });

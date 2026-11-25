@@ -158,7 +158,7 @@ describe("ManageSkillsModal", () => {
     });
     expect(
       within(dialog).getByText(
-        "Agents also use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them."
+        "Agents can use these skills in every stage when they migrate applications in this archetype, whichever target profile the run uses."
       )
     ).toBeInTheDocument();
     expect(
@@ -174,7 +174,7 @@ describe("ManageSkillsModal", () => {
     ).toBeNull();
     expect(
       within(dialog).getByText(
-        "Select the skills to attach to this archetype. Each target profile has its own skills."
+        "Select the skills to attach to this archetype. Agents can use them whichever target profile a run uses, so attach a skill that fits only one target to that target profile instead."
       )
     ).toBeInTheDocument();
     expect(saveButton()).toBeDisabled();
@@ -188,12 +188,12 @@ describe("ManageSkillsModal", () => {
       name: "Manage skills for Java EE Application",
     });
     expect(dialog).toHaveAccessibleDescription(
-      "Agents also use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them."
+      "Agents can use these skills in every stage when they migrate applications in this archetype, whichever target profile the run uses."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
     ).toHaveAccessibleDescription(
-      "Select the skills to attach to this archetype. Each target profile has its own skills."
+      "Select the skills to attach to this archetype. Agents can use them whichever target profile a run uses, so attach a skill that fits only one target to that target profile instead."
     );
   });
 
@@ -269,7 +269,7 @@ describe("ManageSkillsModal", () => {
         name: "Manage skills for Quarkus 3.x (Java EE Application)",
       })
     ).toHaveAccessibleDescription(
-      "Agents also use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
+      "Agents can use these skills in every stage when a migration plan runs on this target profile."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
@@ -302,12 +302,12 @@ describe("ManageSkillsModal", () => {
         name: "Manage skills for Customer Management",
       })
     ).toHaveAccessibleDescription(
-      "Agents also use these skills in every stage when they migrate this application."
+      "Agents can use these skills in every stage when they migrate this application."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })
     ).toHaveAccessibleDescription(
-      "Select the skills to attach to this application. Archetype and target profile skills are attached on the archetype."
+      "Select the skills to attach to this application. Archetype skills are attached on each archetype, and target profile skills on each archetype's target profiles page."
     );
     await openPicker();
     await toggleOption("Quarkus best practices");

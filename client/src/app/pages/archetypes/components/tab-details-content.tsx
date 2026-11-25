@@ -12,14 +12,17 @@ import {
 } from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
+import { isAgenticEnabled } from "@app/Constants";
 import { Archetype, Ref, Tag, TagRef } from "@app/api/models";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { RiskLabel } from "@app/components/RiskLabel";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { LabelsFromItems } from "@app/components/labels/labels-from-items/labels-from-items";
 import { LabelsFromTags } from "@app/components/labels/labels-from-tags/labels-from-tags";
+import { ManageSkillsTarget } from "@app/pages/agentic/components/manage-skills-modal";
 import { dedupeArrayOfObjects } from "@app/utils/utils";
 
+import { ArchetypeSkills, ArchetypeSkillsHelp } from "./archetype-skills";
 import LinkToArchetypeApplications from "./link-to-archetype-applications";
 
 const TagLabels: React.FC<{ tags?: Tag[] }> = ({ tags }) => (
@@ -36,7 +39,9 @@ const StakeholderGroupsLabels: React.FC<{ archetype: Archetype }> = ({
 
 export const TabDetailsContent: React.FC<{
   archetype: Archetype;
-}> = ({ archetype }) => {
+  /** Opens the page's Manage skills modal for the archetype. */
+  onManageSkills: (target: ManageSkillsTarget) => void;
+}> = ({ archetype, onManageSkills }) => {
   const { t } = useTranslation();
 
   const manualTags: TagRef[] = useMemo(() => {
@@ -74,6 +79,21 @@ export const TabDetailsContent: React.FC<{
             />
           </DescriptionListDescription>
         </DescriptionListGroup>
+
+        {isAgenticEnabled && (
+          <DescriptionListGroup>
+            <DescriptionListTerm>
+              {t("agentic.archetype.skills")}{" "}
+              <ArchetypeSkillsHelp archetype={archetype} />
+            </DescriptionListTerm>
+            <DescriptionListDescription>
+              <ArchetypeSkills
+                archetype={archetype}
+                onManageSkills={onManageSkills}
+              />
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+        )}
 
         <DescriptionListGroup>
           <DescriptionListTerm>{t("terms.tagsCriteria")}</DescriptionListTerm>

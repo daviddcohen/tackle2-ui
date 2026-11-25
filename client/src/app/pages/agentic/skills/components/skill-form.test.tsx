@@ -183,13 +183,13 @@ describe("SkillForm", () => {
 
     expect(
       screen.getByText(
-        "Agents use this skill in every stage when they migrate applications in these archetypes, unless a migration plan excludes it."
+        "Agents can use this skill in every stage when they migrate applications in these archetypes, unless a migration plan excludes it."
       )
     ).toBeInTheDocument();
     // A plan cannot exclude an application's own skill.
     expect(
       screen.getByText(
-        "Agents use this skill in every stage when they migrate these applications."
+        "Agents can use this skill in every stage when they migrate these applications."
       )
     ).toBeInTheDocument();
   });

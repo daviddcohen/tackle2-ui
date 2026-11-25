@@ -221,7 +221,7 @@ describe("StageSkillsTable", () => {
     }
     expect(
       screen.getByRole("link", { name: "Java EE Application" })
-    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1&ar%3Atab=2");
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1");
     expect(screen.getByRole("link", { name: "Quarkus 3.x" })).toHaveAttribute(
       "href",
       "/archetypes/1/target-profiles#target-profile-11"
@@ -325,8 +325,9 @@ describe("StageSkillsTable", () => {
       "Stage 2: Migrate",
       "Every stage",
     ]);
+    // A plan holds no application skills.
     expect(
-      screen.getByText("Archetype, target profile and application skills")
+      screen.getByText("Archetype and target profile skills")
     ).toBeVisible();
     // The plan's own archetype: no suffix.
     expect(screen.getByText(/^Target profile:/).textContent).toBe(

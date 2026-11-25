@@ -459,7 +459,10 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
           const leadsIn =
             runBy ??
             (group.kind === "everyStage"
-              ? t("agentic.stageSkills.everyStageSubtitle")
+              ? // A plan's Every stage holds no application skills.
+                group.group.application != null
+                ? t("agentic.stageSkills.everyStageSubtitle")
+                : t("agentic.stageSkills.everyStagePlanSubtitle")
               : null);
           return (
             <Tbody key={group.key} isExpanded={isExpanded}>

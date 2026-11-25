@@ -140,7 +140,7 @@ describe("SkillsPage", () => {
 
     expect(
       await screen.findByText(
-        "Skills give agents migration knowledge. Attach a skill to an agent, archetype, target profile or application, or add it to a skill collection, so agents use it."
+        "Skills give agents migration knowledge. Attach a skill to an agent, archetype, target profile or application, or add it to a skill collection, so agents can use it."
       )
     ).toBeInTheDocument();
   });

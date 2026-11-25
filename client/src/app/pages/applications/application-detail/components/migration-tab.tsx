@@ -8,14 +8,9 @@ import {
   AlertActionLink,
   Button,
   Content,
-  EmptyState,
-  EmptyStateActions,
-  EmptyStateBody,
-  EmptyStateFooter,
   List,
   ListItem,
 } from "@patternfly/react-core";
-import { RouteIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
@@ -187,6 +182,8 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         <MigrationFacts
           migration={migration}
           archetypes={archetypes}
+          planRun={planRun}
+          applicationId={applicationId}
           linkTo={linkTo}
         />
         <NoMigrationPlan
@@ -198,6 +195,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         {migration.planRun != null && (
           <LatestRunSkills
             migration={migration}
+            archetypes={archetypes}
             planRun={planRun}
             isRunError={runError != null}
             applicationId={applicationId}
@@ -298,6 +296,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           migration={migration}
           archetypes={archetypes}
           planRun={planRun}
+          applicationId={applicationId}
           linkTo={linkTo}
         />
         <DetailSection
@@ -345,19 +344,19 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           {hasRun && stages.length > 0 ? (
             <StageRunsTable stages={stages} />
           ) : status === "preflightReady" && runMigrationPlan.open != null ? (
-            <EmptyState variant="xs">
-              <EmptyStateBody>{t("agentic.execution.noRunYet")}</EmptyStateBody>
-              <EmptyStateFooter>
-                <EmptyStateActions>
-                  <Button
-                    variant="link"
-                    onClick={() => runMigrationPlan.open?.()}
-                  >
-                    {t("agentic.execution.startMigration")}
-                  </Button>
-                </EmptyStateActions>
-              </EmptyStateFooter>
-            </EmptyState>
+            <SectionEmpty
+              action={
+                <Button
+                  variant="link"
+                  isInline
+                  onClick={() => runMigrationPlan.open?.()}
+                >
+                  {t("agentic.execution.startMigration")}
+                </Button>
+              }
+            >
+              {t("agentic.execution.noRunYet")}
+            </SectionEmpty>
           ) : (
             <SectionEmpty>
               {t("agentic.execution.stagesAppearHere")}
@@ -367,6 +366,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         {migration.result && <CommitsSection result={migration.result} />}
         <LatestRunSkills
           migration={migration}
+          archetypes={archetypes}
           planRun={planRun}
           isRunError={runError != null}
           applicationId={applicationId}
@@ -405,9 +405,11 @@ const shownPath = (
 
 /**
  * Every migration path of an application without a default, one per line:
- * "Quarkus 3.x (Java EE Application): Java EE to Quarkus", the profile and
- * the plan linked, "Not assigned" for a profile without a plan. With
- * several plans to run, a note says a run picks one.
+ * "Quarkus 3.x: Java EE to Quarkus", the profile and the plan linked, "Not
+ * assigned" for a profile without a plan. The archetype follows the profile
+ * ("Quarkus 3.x (Java EE Application)") only when the paths span several
+ * archetypes; otherwise the Archetype fact above names it. With several
+ * plans to run, a note says a run picks one.
  */
 const MigrationPathsFact: React.FC<{
   paths: ApplicationMigrationPath[];
@@ -416,13 +418,19 @@ const MigrationPathsFact: React.FC<{
 }> = ({ paths, to, linkTo }) => {
   const { t } = useTranslation();
   const runnableCount = paths.filter(({ plan }) => plan != null).length;
+  const isOneArchetype =
+    new Set(paths.map(({ archetype }) => archetype.id)).size === 1;
   return (
     <>
       <List isPlain>
         {paths.map(({ archetype, targetProfile, plan }) => (
           <ListItem key={`${archetype.id}-${targetProfile.id}`}>
             <Trans
-              i18nKey="agentic.execution.migrationPathPlan"
+              i18nKey={
+                isOneArchetype
+                  ? "agentic.execution.migrationPathPlanOneArchetype"
+                  : "agentic.execution.migrationPathPlan"
+              }
               values={{
                 profile: targetProfile.name,
                 archetype: archetype.name,
@@ -464,16 +472,18 @@ const MigrationPathsFact: React.FC<{
  * The facts: Status, then the chain that decides the plan
  * (Archetype, Target profile, Migration plan; or, for several target
  * profiles and no default, Target profiles with the plan each uses), then
- * Plan run and Target branch once there is a run. Each name links where it
- * is edited.
+ * Plan run, the target profile this application ran on in it (when the run
+ * reports it) and Target branch once there is a run. Each name links where
+ * it is edited.
  */
 const MigrationFacts: React.FC<{
   migration: ApplicationMigrationView;
   /** The application's archetypes; the target profile's comes first. */
   archetypes: Ref[];
   planRun?: PlanRun;
+  applicationId: number;
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
-}> = ({ migration, archetypes, planRun, linkTo }) => {
+}> = ({ migration, archetypes, planRun, applicationId, linkTo }) => {
   const { t } = useTranslation();
   const unavailable = (
     <EmptyTextMessage message={t("agentic.common.unavailable")} />
@@ -483,6 +493,11 @@ const MigrationFacts: React.FC<{
   const to = (path: string) => linkToPath(linkTo, path);
 
   const chainPath = shownPath(migration);
+  // The target profile this application ran on in its latest run; absent
+  // when the run does not report it.
+  const ranOn = planRun?.targetProfiles?.find(
+    (entry) => entry.application.id === applicationId
+  );
   const paths = migration.migrationPaths ?? [];
   // The target profile's archetype first, then the others by name.
   const chainArchetype = chainPath?.archetype;
@@ -511,7 +526,7 @@ const MigrationFacts: React.FC<{
       orderedArchetypes.length === 0 ? (
         none
       ) : orderedArchetypes.length === 1 ? (
-        <Link to={to(archetypePath(orderedArchetypes[0].id, "skills"))}>
+        <Link to={to(archetypePath(orderedArchetypes[0].id))}>
           {orderedArchetypes[0].name}
         </Link>
       ) : (
@@ -519,7 +534,7 @@ const MigrationFacts: React.FC<{
           items={orderedArchetypes.map((archetype) => ({
             id: archetype.id,
             name: archetype.name,
-            to: to(archetypePath(archetype.id, "skills")),
+            to: to(archetypePath(archetype.id)),
           }))}
         />
       ),
@@ -582,6 +597,30 @@ const MigrationFacts: React.FC<{
               {migration.planRun.name}
             </Link>,
           ],
+          ...(ranOn != null
+            ? ([
+                [
+                  t("agentic.execution.runTargetProfile"),
+                  ranOn.targetProfile == null ? (
+                    none
+                  ) : ranOn.archetype != null ? (
+                    <Link
+                      key="ran-on"
+                      to={to(
+                        targetProfilePath(
+                          ranOn.archetype.id,
+                          ranOn.targetProfile.id
+                        )
+                      )}
+                    >
+                      {ranOn.targetProfile.name}
+                    </Link>
+                  ) : (
+                    ranOn.targetProfile.name
+                  ),
+                ],
+              ] as [string, React.ReactNode][])
+            : []),
           [
             t("agentic.execution.targetBranch"),
             // The tab waits for the run, so no branch here means the run
@@ -617,14 +656,32 @@ const MigrationFacts: React.FC<{
  */
 const LatestRunSkills: React.FC<{
   migration: ApplicationMigrationView;
+  /** The application's archetypes. */
+  archetypes: Ref[];
   planRun?: PlanRun;
   isRunError: boolean;
   applicationId: number;
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
-}> = ({ migration, planRun, isRunError, applicationId, linkTo }) => {
+}> = ({
+  migration,
+  archetypes,
+  planRun,
+  isRunError,
+  applicationId,
+  linkTo,
+}) => {
   const { t } = useTranslation();
   const runRef = migration.planRun;
   const hasSnapshot = planRun?.skills != null;
+  // The archetype in context, so a target profile origin names its
+  // archetype only when it is another one: the run's, else the default
+  // path's, else the application's only archetype.
+  const contextArchetypeId =
+    planRun?.targetProfiles?.find(
+      (entry) => entry.application.id === applicationId
+    )?.archetype?.id ??
+    migration.archetype?.id ??
+    (archetypes.length === 1 ? archetypes[0].id : undefined);
   return (
     <DetailSection
       id={SKILLS_BY_STAGE_ID}
@@ -651,7 +708,7 @@ const LatestRunSkills: React.FC<{
           filter={{ applicationId }}
           linkTo={linkTo}
           originOptions={{
-            archetypeId: migration.archetype?.id,
+            archetypeId: contextArchetypeId,
             thisApplicationId: applicationId,
           }}
           unavailableText={
@@ -786,23 +843,19 @@ const NoMigrationPlan: React.FC<{
               archetype: archetype.name,
             });
   return (
-    <EmptyState
-      headingLevel="h2"
-      icon={RouteIcon}
-      titleText={t("agentic.execution.noMigrationPathTitle")}
-      variant="sm"
-    >
-      <EmptyStateBody>{body}</EmptyStateBody>
-      <EmptyStateFooter>
-        <EmptyStateActions>
-          <Button variant="link" component={link}>
+    <DetailSection title={t("agentic.execution.noMigrationPathTitle")}>
+      <SectionEmpty
+        action={
+          <Button variant="link" isInline component={link}>
             {archetype != null
               ? t("agentic.execution.viewTargetProfiles")
               : t("agentic.execution.goToArchetypes")}
           </Button>
-        </EmptyStateActions>
-      </EmptyStateFooter>
-    </EmptyState>
+        }
+      >
+        {body}
+      </SectionEmpty>
+    </DetailSection>
   );
 };
 

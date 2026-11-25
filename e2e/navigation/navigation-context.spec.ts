@@ -328,11 +328,13 @@ for (const action of ["persona", "reset"] as const) {
       .locator(`main a[href^="${withBase("/archetypes?")}"]`)
       .first()
       .click();
-    // Archetype links from a skills surface open the drawer's Skills tab.
-    await page
-      .locator("#page-drawer-content")
-      .getByRole("tab", { name: "Details", exact: true })
-      .click();
+    // Archetype links from a skills surface open the drawer on Details,
+    // whose Skills fact lists the archetype's skills.
+    await expect(
+      page
+        .locator("#page-drawer-content")
+        .getByRole("tab", { name: "Details", exact: true })
+    ).toHaveAttribute("aria-selected", "true");
     await page
       .locator(`#page-drawer-content a[href^="${withBase("/applications?")}"]`)
       .click();
@@ -362,7 +364,7 @@ test("Archetype application counts apply their filter when Inventory is an ances
   await page.getByRole("tab", { name: "Skills", exact: true }).click();
   // Reach the archetype through one of its attached skills.
   await page
-    .getByRole("region", { name: /^Archetype skills: Java EE Application/ })
+    .getByRole("region", { name: /^Archetype skills/ })
     .getByRole("link", { name: "EJB to CDI conversion patterns" })
     .click();
   await usageTab(page).click();
@@ -370,11 +372,12 @@ test("Archetype application counts apply their filter when Inventory is an ances
     .locator(`main a[href^="${withBase("/archetypes?")}"]`)
     .first()
     .click();
-  // Archetype links from a skills surface open the drawer's Skills tab.
-  await page
-    .locator("#page-drawer-content")
-    .getByRole("tab", { name: "Details", exact: true })
-    .click();
+  // Archetype links from a skills surface open the drawer on Details.
+  await expect(
+    page
+      .locator("#page-drawer-content")
+      .getByRole("tab", { name: "Details", exact: true })
+  ).toHaveAttribute("aria-selected", "true");
   await page
     .locator("#page-drawer-content")
     .getByRole("tabpanel", { name: "Details", exact: true })

@@ -1532,6 +1532,7 @@ export const ApplicationsTable: FC = () => {
                                       scope: "application",
                                       id: application.id,
                                       name: application.name,
+                                      archetypes: application.archetypes,
                                     })
                                   ),
                               },

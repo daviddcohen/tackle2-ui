@@ -197,9 +197,9 @@ describe("PlanWizard Skills step", () => {
   const intro = (everyStage: string) =>
     `Each stage gets its agent's skills and the skills in Every stage. ${everyStage} Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can.`;
   const usedNote =
-    "Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills.";
+    "Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetypes' skills, the skills of the target profile it runs on, and its own skills.";
   const unusedNote =
-    "No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetype's skills and its own skills, and no target profile skills.";
+    "No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetypes' skills and its own skills, and no target profile skills.";
   const user = () => userEvent.setup();
   const nextButton = () => screen.getByRole("button", { name: "Next" });
   const stepButton = (name: string) => screen.getByRole("button", { name });
@@ -290,12 +290,10 @@ describe("PlanWizard Skills step", () => {
 
     expect(screen.getByText(intro(usedNote))).toBeInTheDocument();
     const table = skillsTable();
-    // The table's Every stage title has only the subtitle every context
-    // shows; the note on application skills is in the intro above.
+    // The table's Every stage title has only the plan's subtitle (a plan
+    // holds no application skills); the note on them is in the intro above.
     expect(
-      within(table).getByText(
-        "Archetype, target profile and application skills"
-      )
+      within(table).getByText("Archetype and target profile skills")
     ).toBeVisible();
     const rows = within(table).getAllByRole("row", {
       name: /EJB to CDI conversion patterns/,

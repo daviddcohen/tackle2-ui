@@ -157,6 +157,81 @@ describe("seeded worlds", () => {
     }
   );
 
+  it.each(["configured", "running", "failed"])(
+    "records the target profile each application of a seeded run ran on, the one its snapshot resolves with (%s)",
+    (scenario) => {
+      setScenario(scenario);
+      listPlanRuns().forEach((run) => {
+        const picks = seedPicksFor(run.planId, run.applications);
+        expect(run.targetProfiles?.map((entry) => entry.application)).toEqual(
+          run.applications
+        );
+        run.targetProfiles?.forEach((entry, index) => {
+          expect(entry.targetProfile?.id ?? null).toBe(
+            picks.get(entry.application.id)
+          );
+          // Every Every stage target profile skill comes from that profile.
+          run.skills!.everyStage[index].skills.forEach(({ from }) =>
+            from.forEach((origin) => {
+              if (origin.kind === "targetProfile") {
+                expect(origin.targetProfile.id).toBe(entry.targetProfile?.id);
+              }
+            })
+          );
+        });
+      });
+    }
+  );
+
+  it("records Run #4 (Java lift and shift on Partner Portal) on OpenJDK 21 on OpenShift", () => {
+    expect(getPlanRun("4").targetProfiles).toEqual([
+      {
+        application: { id: 7, name: "Partner Portal" },
+        targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+        archetype: { id: 1, name: "Java EE Application" },
+      },
+    ]);
+  });
+
+  it("records the picked target profile on a started run, none for a null pick or a plan no target profile of the application uses", () => {
+    const {
+      planRuns: [picked],
+    } = startApplicationMigrations({
+      applicationIds: [1],
+      planSelection: "recommended",
+      targetBranch: "main",
+      targetProfiles: [{ application: { id: 1 }, targetProfile: { id: 12 } }],
+    });
+    expect(getPlanRun(picked.id).targetProfiles).toEqual([
+      {
+        application: { id: 1, name: "Customer Management" },
+        targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+        archetype: { id: 1, name: "Java EE Application" },
+      },
+    ]);
+    // One plan for all: Java EE to Quarkus on a .NET application uses no
+    // target profile; an explicit null pick is recorded as none too.
+    const {
+      planRuns: [single],
+    } = startApplicationMigrations({
+      applicationIds: [2, 15],
+      planSelection: "single",
+      planId: "1",
+      targetBranch: "main",
+      targetProfiles: [{ application: { id: 2 }, targetProfile: null }],
+    });
+    expect(
+      getPlanRun(single.id).targetProfiles?.map((entry) => [
+        entry.application.id,
+        entry.targetProfile,
+        entry.archetype,
+      ])
+    ).toEqual([
+      [2, null, undefined],
+      [15, null, undefined],
+    ]);
+  });
+
   it("asks for a target profile when a Java EE application starts on its own plan, then runs the picked path", () => {
     expect(() =>
       startApplicationMigrations({

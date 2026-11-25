@@ -281,6 +281,7 @@ const ApplicationDetail: React.FC = () => {
         scope: "application",
         id: application.id,
         name: application.name,
+        archetypes: application.archetypes,
       });
     }
   };

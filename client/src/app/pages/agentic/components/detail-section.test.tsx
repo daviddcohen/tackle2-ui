@@ -193,6 +193,36 @@ describe("DetailFacts and LinkLabels", () => {
     expect(screen.getByText("61%")).toBeVisible();
   });
 
+  it("takes a link as a term, keyed by its option", () => {
+    render(
+      <DetailFacts
+        facts={[
+          [
+            <a key="1" href="/archetypes/1">
+              Java EE
+            </a>,
+            "Two skills",
+            { key: 1 },
+          ],
+          [
+            <a key="3" href="/archetypes/3">
+              Legacy Java
+            </a>,
+            "None",
+            { key: 3 },
+          ],
+        ]}
+      />
+    );
+    expect(screen.getAllByRole("term").map((term) => term.textContent)).toEqual(
+      ["Java EE", "Legacy Java"]
+    );
+    expect(screen.getByRole("link", { name: "Legacy Java" })).toHaveAttribute(
+      "href",
+      "/archetypes/3"
+    );
+  });
+
   it("renders each item as a link label", () => {
     render(
       <MemoryRouter>

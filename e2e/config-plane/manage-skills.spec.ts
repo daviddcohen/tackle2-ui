@@ -52,23 +52,29 @@ const save = async (page: Page, toastText: string) => {
   await expect(manageDialog(page)).toHaveCount(0);
 };
 
-const openArchetypeDrawerSkills = async (page: Page, archetype: string) => {
+/** Opens the archetype's drawer, on its Details tab. */
+const openArchetypeDrawer = async (page: Page, archetype: string) => {
   await rowByText(page, archetype)
     .getByText(archetype, { exact: true })
     .click();
-  await page.getByRole("tab", { name: "Skills", exact: true }).click();
-  return page.locator("#page-drawer-content");
+  const drawer = page.locator("#page-drawer-content");
+  await expect(
+    drawer.getByRole("tab", { name: "Details", exact: true })
+  ).toHaveAttribute("aria-selected", "true");
+  return drawer;
 };
+
+/** The Skills fact of the drawer's Details tab: link labels, "None" when empty. */
+const skillsFact = (drawer: Locator) =>
+  drawer.locator(".pf-v6-c-description-list__group").filter({
+    has: drawer.page().getByRole("term").getByText("Skills", { exact: true }),
+  });
 
 /** The skill's "Attached to" facts on its Usage tab. */
 const attachedTo = async (page: Page, skillId: string) => {
   await spaNavigate(page, `/skills/${skillId}?tab=usage`);
   return main(page).getByRole("region", { name: /^Attached to/ });
 };
-
-/** One owner group of the drawer's Skills tab ("Archetype skills (2)"). */
-const drawerGroup = (drawer: Locator, heading: RegExp) =>
-  drawer.getByRole("region", { name: heading });
 
 /**
  * Delays every later skills read by `ms`. The app reads with XMLHttpRequest
@@ -134,7 +140,7 @@ test.describe("Manage skills: archetype", () => {
       "Manage skills for Java EE Application"
     );
     await expect(skillsPicker(page)).toHaveAccessibleDescription(
-      "Select the skills to attach to this archetype. Each target profile has its own skills."
+      "Select the skills to attach to this archetype. Agents can use them whichever target profile a run uses, so attach a skill that fits only one target to that target profile instead."
     );
     // Direct skills only: preselected and Save waits for a change.
     await expect(chip(page, "EJB to CDI conversion patterns")).toBeVisible();
@@ -147,12 +153,10 @@ test.describe("Manage skills: archetype", () => {
     await expect(chip(page, NEW_SKILL)).toBeVisible();
     await save(page, "Skills for Java EE Application updated");
 
-    const drawer = await openArchetypeDrawerSkills(page, "Java EE Application");
+    const drawer = await openArchetypeDrawer(page, "Java EE Application");
     await expect(
-      drawerGroup(drawer, /^Archetype skills/).getByRole("link", {
-        name: NEW_SKILL,
-      })
-    ).toBeVisible();
+      skillsFact(drawer).getByRole("link", { name: NEW_SKILL })
+    ).toHaveAttribute("href", /\/skills\/16(\?|$)/);
 
     await expect(
       (await attachedTo(page, "16")).getByRole("link", {
@@ -162,10 +166,10 @@ test.describe("Manage skills: archetype", () => {
     expectHealthy(diagnostics);
   });
 
-  test("remove a skill from the drawer Skills tab", async ({ page }) => {
+  test("remove a skill from the drawer's Skills fact", async ({ page }) => {
     await gotoProto(page, "/archetypes");
-    const drawer = await openArchetypeDrawerSkills(page, "Java EE Application");
-    const own = drawerGroup(drawer, /^Archetype skills/);
+    const drawer = await openArchetypeDrawer(page, "Java EE Application");
+    const own = skillsFact(drawer);
     const link = own.getByRole("link", {
       name: "EJB to CDI conversion patterns",
     });
@@ -189,21 +193,23 @@ test.describe("Manage skills: archetype", () => {
     ).toHaveCount(0);
   });
 
-  test("a save that fills an empty Skills tab leaves focus on Manage skills", async ({
+  test("a save that fills an empty Skills fact leaves focus on Manage skills", async ({
     page,
   }) => {
-    // Empty the tab first: the archetype's one skill.
+    // Empty the fact first: the archetype's one skill.
     await gotoProto(page, "/archetypes");
-    const drawer = await openArchetypeDrawerSkills(page, "Node.js Service");
-    const button = drawer.getByRole("button", {
+    const drawer = await openArchetypeDrawer(page, "Node.js Service");
+    const button = skillsFact(drawer).getByRole("button", {
       name: "Manage skills for Node.js Service",
     });
+    await expect(button).toHaveId(/^manage-skills-archetype-\d+$/);
     await button.click();
     await chip(page, "Node.js runtime modernization").click();
     await save(page, "Skills for Node.js Service updated");
-    await expect(
-      drawer.getByText("No skills are attached to this archetype.")
-    ).toBeVisible();
+    await expect(skillsFact(drawer).getByRole("definition")).toHaveText(
+      /^None/
+    );
+    await expect(skillsFact(drawer).getByRole("link")).toHaveCount(0);
 
     // The mock answers at once; a real server does not. Hold the skills
     // reads so the refetch lands after the modal has returned focus, as it
@@ -217,9 +223,7 @@ test.describe("Manage skills: archetype", () => {
     await manageDialog(page).getByRole("button", { name: "Save" }).click();
     await expect(manageDialog(page)).toHaveCount(0);
     await expect(
-      drawerGroup(drawer, /^Archetype skills/).getByRole("link", {
-        name: NEW_SKILL,
-      })
+      skillsFact(drawer).getByRole("link", { name: NEW_SKILL })
     ).toBeVisible();
     await expect(button).toBeFocused();
   });
@@ -228,34 +232,50 @@ test.describe("Manage skills: archetype", () => {
     page,
   }) => {
     await gotoProto(page, "/archetypes");
-    const drawer = await openArchetypeDrawerSkills(page, "Java EE Application");
-    await expect(drawerGroup(drawer, /^Archetype skills/)).toBeVisible();
+    const drawer = await openArchetypeDrawer(page, "Java EE Application");
+    // The Skills tab is gone: the archetype's skills are a Details fact.
+    await expect(
+      drawer.getByRole("tab", { name: "Skills", exact: true })
+    ).toHaveCount(0);
+    await expect(
+      skillsFact(drawer).getByRole("link", {
+        name: "EJB to CDI conversion patterns",
+      })
+    ).toBeVisible();
     // A target profile is a migration path: its skills come with a run on
     // it, so the archetype does not list them.
-    await expect(drawerGroup(drawer, /^Target profile skills/)).toHaveCount(0);
     await expect(
       drawer.getByRole("link", { name: "Quarkus best practices" })
     ).toHaveCount(0);
     await expect(
       drawer.getByRole("button", { name: "Manage skills for Quarkus 3.x" })
     ).toHaveCount(0);
-    await expect(drawer).toContainText(
-      "Each target profile of this archetype has its own skills, which agents get only when a migration plan runs on that target profile."
+    await skillsFact(drawer)
+      .getByRole("button", { name: "More about archetype skills" })
+      .click();
+    const help = page.getByRole("dialog", { name: "Skills", exact: true });
+    await expect(help).toHaveText(
+      /Agents can use these skills in every stage when they migrate applications in this archetype, whichever target profile the run uses\. Each target profile adds its own skills when a run uses it: View target profiles/
     );
-    await drawer.getByRole("link", { name: "View target profiles" }).click();
+    await help.getByRole("link", { name: "View target profiles" }).click();
     await expect(page).toHaveURL(/\/archetypes\/1\/target-profiles(\?|$)/);
 
-    // Each profile's own skills are there, with its own Manage skills.
-    await rowByText(page, "Quarkus 3.x")
-      .getByRole("button", { name: "2 skills for Quarkus 3.x", exact: true })
+    // Each profile's own skills are there as links, with its own Manage
+    // skills, and the column help says when agents use them.
+    const row = rowByText(page, "Quarkus 3.x");
+    for (const skill of [
+      "Jakarta EE namespace migration",
+      "Quarkus best practices",
+    ])
+      await expect(row.getByRole("link", { name: skill })).toBeVisible();
+    await main(page)
+      .getByRole("button", { name: "More about target profile skills" })
       .click();
-    const popover = dialog(page, "Target profile skills: Quarkus 3.x");
-    await expect(popover).toContainText(
-      "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
-    );
     await expect(
-      popover.getByRole("link", { name: "Quarkus best practices" })
-    ).toBeVisible();
+      page.getByRole("dialog", { name: "Skills", exact: true })
+    ).toContainText(
+      "Agents can use these skills in every stage when a migration plan runs on this target profile."
+    );
   });
 
   test("Cancel and Escape close without saving and return focus to the kebab", async ({
@@ -288,8 +308,9 @@ test.describe("Manage skills: target profile", () => {
     await gotoProto(page, "/archetypes/1/target-profiles");
     const row = rowByText(page, "Quarkus 3.x");
     await expect(
-      row.getByRole("button", { name: "2 skills for Quarkus 3.x", exact: true })
+      row.getByRole("link", { name: "Quarkus best practices" })
     ).toBeVisible();
+    await expect(row.getByRole("link", { name: NEW_SKILL })).toHaveCount(0);
     await openRowActions(page, "Quarkus 3.x");
     await menuItem(page, MANAGE).click();
     await expect(manageDialog(page)).toHaveAccessibleName(
@@ -302,16 +323,14 @@ test.describe("Manage skills: target profile", () => {
 
     await pickSkill(page, NEW_SKILL);
     await save(page, "Skills for Quarkus 3.x (Java EE Application) updated");
-    const count = row.getByRole("button", {
-      name: "3 skills for Quarkus 3.x",
-      exact: true,
-    });
-    await expect(count).toBeVisible();
-    // The popover is titled like the drawer group and lists the new skill.
-    await count.click();
-    const popover = dialog(page, "Target profile skills: Quarkus 3.x");
-    await expect(popover.getByRole("link", { name: NEW_SKILL })).toBeVisible();
-    await page.keyboard.press("Escape");
+    // The Skills cell lists every skill, the new one included.
+    await expect(row.getByRole("link", { name: NEW_SKILL })).toHaveAttribute(
+      "href",
+      /\/skills\/16(\?|$)/
+    );
+    await expect(
+      row.getByRole("link", { name: "Quarkus best practices" })
+    ).toBeVisible();
 
     await expect(
       (await attachedTo(page, "16")).getByRole("link", {
@@ -322,17 +341,21 @@ test.describe("Manage skills: target profile", () => {
 });
 
 test.describe("Manage skills: application", () => {
-  test("attach a skill from the Actions menu and see it on the Skills tab and the skill", async ({
+  test("attach a skill from the Skills tab and see it there and on the skill", async ({
     page,
   }) => {
     await gotoProto(page, "/applications/1?tab=skills");
+    // Manage skills is on the Skills tab and in the Actions menu, like the
+    // inventory row menu.
     await page.getByRole("button", { name: "Actions", exact: true }).click();
-    await menuItem(page, MANAGE).click();
+    await expect(menuItem(page, MANAGE)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await manageApplicationSkills(page, "Customer Management").click();
     await expect(manageDialog(page)).toHaveAccessibleName(
       "Manage skills for Customer Management"
     );
     await expect(skillsPicker(page)).toHaveAccessibleDescription(
-      "Select the skills to attach to this application. Archetype and target profile skills are attached on the archetype."
+      "Select the skills to attach to this application. Archetype skills are attached on each archetype, and target profile skills on each archetype's target profiles page."
     );
     await expect(chip(page, "Corporate coding standards")).toBeVisible();
 
@@ -341,14 +364,6 @@ test.describe("Manage skills: application", () => {
     await expect(
       applicationSkills(page).getByRole("link", { name: NEW_SKILL })
     ).toBeVisible();
-
-    // No run yet: what each stage gets is listed when a plan runs.
-    await expect(main(page)).toContainText(
-      "Run migration plan lists them before the run starts, and you can exclude some for that run."
-    );
-    await expect(
-      main(page).getByRole("link", { name: /latest run/ })
-    ).toHaveCount(0);
 
     await expect(
       (await attachedTo(page, "16")).getByRole("link", {
@@ -424,9 +439,15 @@ const expectNoManageSkills = async (page: Page, persona: Persona) => {
     await expect(menuItem(page, MANAGE)).toHaveCount(0);
     await page.keyboard.press("Escape");
   }
-  const drawer = await openArchetypeDrawerSkills(page, "Java EE Application");
-  await expect(drawerGroup(drawer, /^Archetype skills/)).toBeVisible();
-  await expect(drawer.getByRole("button", { name: MANAGE })).toHaveCount(0);
+  const drawer = await openArchetypeDrawer(page, "Java EE Application");
+  await expect(
+    skillsFact(drawer).getByRole("link", {
+      name: "EJB to CDI conversion patterns",
+    })
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: /^Manage skills/ })
+  ).toHaveCount(0);
 
   await spaNavigate(page, "/archetypes/1/target-profiles");
   await expect(rowByText(page, "Quarkus 3.x")).toBeVisible();

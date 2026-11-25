@@ -214,7 +214,11 @@ test.describe("Archetypes", () => {
       level: 2,
     });
     await expect(drawerHeading).toBeVisible();
-    for (const tab of ["Details", "Target profiles", "Skills", "Review"]) {
+    // The archetype's skills are a Details fact, not a tab.
+    await expect(
+      page.getByRole("tab", { name: "Skills", exact: true })
+    ).toHaveCount(0);
+    for (const tab of ["Details", "Target profiles", "Review"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
       await expect(
         page.getByRole("tab", { name: tab, exact: true })
@@ -227,6 +231,22 @@ test.describe("Archetypes", () => {
       .click();
     await expect(page.getByRole("dialog")).toBeVisible();
     expect(pageErrors).toEqual([]);
+  });
+
+  test("an old link to the drawer's Skills tab opens Details", async ({
+    page,
+  }) => {
+    // 2 was the Skills tab; its skills are a fact on Details now.
+    await page.goto(protoUrl("/archetypes?ar:activeItem=1&ar:tab=2"));
+    await expect(
+      page.getByRole("tab", { name: "Details", exact: true })
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page
+        .locator("#page-drawer-content")
+        .getByRole("term")
+        .getByText("Skills", { exact: true })
+    ).toBeVisible();
   });
 
   test("target profiles page opens the create form", async ({ page }) => {
