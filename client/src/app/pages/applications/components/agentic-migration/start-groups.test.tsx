@@ -6,6 +6,7 @@ import { rest } from "msw";
 import { Router } from "react-router-dom";
 
 import {
+  ApplicationMigrationPath,
   ApplicationMigrationView,
   MigrationPlan,
   StartApplicationMigrationsRequest,
@@ -19,6 +20,8 @@ import {
   PreflightRow,
   groupReadyApplicationsByPlan,
   startApplicationIds,
+  startTargetProfiles,
+  targetProfileChoice,
 } from "./start-groups";
 
 jest.mock("react-i18next", () =>
@@ -130,6 +133,193 @@ describe("groupReadyApplicationsByPlan", () => {
         plans
       )
     ).toEqual([]);
+  });
+});
+
+describe("target profile picks", () => {
+  const javaEE = { id: 1, name: "Java EE Application" };
+  const legacy = { id: 3, name: "Legacy Java Application" };
+  const quarkus = { id: 11, name: "Quarkus 3.x" };
+  const openJdk = { id: 19, name: "OpenJDK 21 on OpenShift" };
+  const unassigned = { id: 18, name: "Payara 6" };
+  const java17 = { id: 31, name: "Java 17 on OpenShift" };
+  const openJdkPlan = plan("8", "Java EE to OpenJDK 21");
+  const allPlans: MigrationPlan[] = [
+    ...plans,
+    openJdkPlan,
+    {
+      ...plan("9", "Two Java EE profiles"),
+      migrationPath: {
+        archetype: javaEE,
+        targetProfiles: [quarkus, openJdk],
+        isDefault: false,
+      },
+    },
+  ];
+  const paths: ApplicationMigrationPath[] = [
+    { archetype: javaEE, targetProfile: quarkus, plan: plans[0] },
+    { archetype: javaEE, targetProfile: openJdk, plan: openJdkPlan },
+    { archetype: javaEE, targetProfile: unassigned },
+  ];
+  /** On Java EE to Quarkus by default (Quarkus 3.x), three profiles to pick. */
+  const several = (overrides: Partial<ApplicationMigrationView> = {}) => ({
+    ...view("1"),
+    archetype: javaEE,
+    targetProfile: quarkus,
+    migrationPaths: paths,
+    ...overrides,
+  });
+  const recommended = { planSelection: "recommended", planId: "" } as const;
+  const single = (planId: string) =>
+    ({ planSelection: "single", planId }) as const;
+
+  it("reads the server's default as text when the paths are not reported", () => {
+    expect(
+      targetProfileChoice(
+        { ...view("1"), archetype: javaEE, targetProfile: quarkus },
+        recommended,
+        undefined,
+        19
+      )
+    ).toEqual({
+      kind: "server",
+      path: {
+        archetype: javaEE,
+        targetProfile: quarkus,
+        plan: { id: "1", name: "Java EE to Quarkus" },
+      },
+    });
+  });
+
+  it("offers every profile with each application's plan, preselecting the default", () => {
+    expect(
+      targetProfileChoice(several(), recommended, undefined, undefined)
+    ).toEqual({ kind: "picked", path: paths[0], candidates: paths });
+    expect(targetProfileChoice(several(), recommended, undefined, 19)).toEqual({
+      kind: "picked",
+      path: paths[1],
+      candidates: paths,
+    });
+    // A default that is not one of the profiles: a pick is required.
+    expect(
+      targetProfileChoice(
+        several({ targetProfile: undefined }),
+        recommended,
+        undefined,
+        undefined
+      )
+    ).toEqual({ kind: "required", candidates: paths });
+    // One profile: no choice.
+    expect(
+      targetProfileChoice(
+        several({ migrationPaths: [paths[0]] }),
+        recommended,
+        undefined,
+        undefined
+      )
+    ).toEqual({ kind: "picked", path: paths[0], candidates: [paths[0]] });
+  });
+
+  it("offers a plan's own profiles with one plan for all, none for a plan without a path", () => {
+    const multi = allPlans.find(({ id }) => id === "9");
+    expect(targetProfileChoice(several(), single("9"), multi, 19)).toEqual({
+      kind: "picked",
+      path: paths[1],
+      candidates: paths.slice(0, 2),
+    });
+    // Java EE lift and shift has no migration path: no target profile.
+    expect(targetProfileChoice(several(), single("7"), plans[2], 19)).toEqual({
+      kind: "picked",
+      path: null,
+      candidates: [],
+    });
+    // A path on another archetype: none either.
+    const onLegacy: MigrationPlan = {
+      ...plans[2],
+      migrationPath: {
+        archetype: legacy,
+        targetProfiles: [java17],
+        isDefault: true,
+      },
+    };
+    expect(
+      targetProfileChoice(several(), single("7"), onLegacy, undefined)
+    ).toMatchObject({ kind: "picked", path: null });
+    // The plans list has not loaded the plan yet.
+    expect(
+      targetProfileChoice(several(), single("9"), undefined, undefined)
+    ).toEqual({ kind: "loading" });
+  });
+
+  it("regroups the applications by the plan of the profile they pick", () => {
+    const pickRows: PreflightRow[] = [
+      {
+        application: { id: 1, name: "Customer Management" },
+        migration: several(),
+      },
+      {
+        application: { id: 2, name: "Policy Administration" },
+        migration: several(),
+      },
+    ];
+    const byDefault = groupReadyApplicationsByPlan(
+      pickRows,
+      recommended,
+      allPlans
+    );
+    expect(byDefault.map((group) => group.plan.id)).toEqual(["1"]);
+    expect(startTargetProfiles(byDefault)).toEqual([
+      { application: { id: 1 }, targetProfile: { id: 11 } },
+      { application: { id: 2 }, targetProfile: { id: 11 } },
+    ]);
+
+    const picked = groupReadyApplicationsByPlan(
+      pickRows,
+      recommended,
+      allPlans,
+      { 2: 19 }
+    );
+    expect(
+      picked.map((group) => [
+        group.plan.name,
+        group.applications.map(({ id }) => id),
+      ])
+    ).toEqual([
+      ["Java EE to OpenJDK 21", [2]],
+      ["Java EE to Quarkus", [1]],
+    ]);
+    expect(picked[0].migrationPlan).toBe(openJdkPlan);
+    expect(startTargetProfiles(picked)).toEqual([
+      { application: { id: 2 }, targetProfile: { id: 19 } },
+      { application: { id: 1 }, targetProfile: { id: 11 } },
+    ]);
+  });
+
+  it("starts nothing for an application whose pick is missing, and flags a plan run waiting for one", () => {
+    const waiting: PreflightRow = {
+      application: { id: 1, name: "Customer Management" },
+      migration: several({ targetProfile: undefined }),
+    };
+    expect(
+      groupReadyApplicationsByPlan([waiting], recommended, allPlans)
+    ).toEqual([]);
+    const [group] = groupReadyApplicationsByPlan(
+      [waiting],
+      single("9"),
+      allPlans
+    );
+    expect(group.isTargetProfileMissing).toBe(true);
+    expect(startTargetProfiles([group])).toBeUndefined();
+    // A plan without a path sends an explicit none.
+    const [none] = groupReadyApplicationsByPlan(
+      [waiting],
+      single("7"),
+      allPlans
+    );
+    expect(none.isTargetProfileMissing).toBe(false);
+    expect(startTargetProfiles([none])).toEqual([
+      { application: { id: 1 }, targetProfile: null },
+    ]);
   });
 });
 

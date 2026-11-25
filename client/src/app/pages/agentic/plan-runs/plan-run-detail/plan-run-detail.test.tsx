@@ -430,6 +430,57 @@ describe("PlanRunDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("lists the skills the run excluded on its own, apart from the plan's", async () => {
+    const skills = snapshot([claims]);
+    // The run excluded the application's own skill: its row is marked too.
+    skills.everyStage[0].skills[1].excluded = true;
+    useRun(
+      run({
+        applications: [claims],
+        skills,
+        excludedSkills: [
+          { id: "8", name: "EJB to CDI conversion patterns" },
+          { id: "3", name: "Quarkus best practices" },
+        ],
+      })
+    );
+    renderPage();
+    await skillsTable();
+    expect(
+      screen.getByText(
+        "Excluded for this run only, in addition to the migration plan's exclusions: EJB to CDI conversion patterns and Quarkus best practices."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("says the run's exclusions plainly when the plan excluded nothing", async () => {
+    const skills = snapshot([claims]);
+    // Only the run's own exclusion is marked: the plan excluded nothing.
+    skills.stages[1].skills[0].excluded = false;
+    skills.everyStage[0].skills[1].excluded = true;
+    useRun(
+      run({
+        applications: [claims],
+        skills,
+        excludedSkills: [{ id: "8", name: "EJB to CDI conversion patterns" }],
+      })
+    );
+    renderPage();
+    await skillsTable();
+    expect(
+      screen.getByText(
+        "Excluded for this run only: EJB to CDI conversion patterns."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing of its own exclusions when the run has none", async () => {
+    useRun(run({ applications: [claims], skills: snapshot([claims]) }));
+    renderPage();
+    await skillsTable();
+    expect(screen.queryByText(/^Excluded for this run only/)).toBeNull();
+  });
+
   it("keeps every group open with three applications", async () => {
     const applications = [11, 12, 13].map((id) => ({
       id,

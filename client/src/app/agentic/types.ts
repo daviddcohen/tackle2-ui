@@ -344,7 +344,11 @@ export interface StageSkill {
    * archetype, target profile, application.
    */
   from: SkillOrigin[];
-  /** The plan excludes it. Never true when one origin is the application itself. */
+  /**
+   * The plan excludes it (never when one origin is the application itself),
+   * or, in a run snapshot, the run does (`PlanRun.excludedSkills`, whatever
+   * the origin).
+   */
   excluded: boolean;
 }
 
@@ -396,7 +400,19 @@ export interface ResolvePlanSkillsRequest {
    * from its own archetypes, target profile and attachments. Absent: the plan
    * preview (one `everyStage` group from `migrationPath`).
    */
-  applications?: IdRef<number>[];
+  applications?: ResolvePlanSkillsApplication[];
+}
+
+/** One application of a `ResolvePlanSkillsRequest`. */
+export interface ResolvePlanSkillsApplication extends IdRef<number> {
+  /**
+   * The target profile a run picks for this application: a profile of one of
+   * its archetypes (`ApplicationMigrationView.migrationPaths`). Absent: the
+   * server's default (`ApplicationMigrationView.targetProfile`). Null: no
+   * target profile, so no target profile skills (a plan without a migration
+   * path on this application's archetype).
+   */
+  targetProfile?: IdRef<number> | null;
 }
 
 /** The per-stage resolution of a draft plan. */
@@ -573,11 +589,39 @@ export interface StartApplicationMigrationsRequest {
    * collected by the UI yet (the prototype API ignores it).
    */
   params?: Record<string, string>;
+  /**
+   * The target profile each listed application runs on, picked in the Run
+   * migration plan dialog (`ResolvePlanSkillsApplication.targetProfile`:
+   * null is none). With "recommended" the pick also decides the plan: the
+   * plan assigned to that target profile. An application left out runs on
+   * the server's default.
+   */
+  targetProfiles?: {
+    application: IdRef<number>;
+    targetProfile: IdRef<number> | null;
+  }[];
+  /**
+   * Skills excluded for this start only, per plan run it creates (`plan`):
+   * added to the plan's own exclusions, for every stage and application of
+   * that run, an application's own skills included. Absent or empty: none.
+   */
+  excludedSkills?: { plan: IdRef; skills: IdRef[] }[];
 }
 
 export interface StartApplicationMigrationsResponse {
   /** The plan runs the server created: one per resolved Plan. */
   planRuns: EntityRef[];
+}
+
+/**
+ * A target profile an application can migrate on: a profile of one of its
+ * archetypes, and the plan assigned to it.
+ */
+export interface ApplicationMigrationPath {
+  archetype: HubRef;
+  targetProfile: HubRef;
+  /** The plan assigned to the profile (`migrationPath.isDefault`); absent: none. */
+  plan?: EntityRef;
 }
 
 export interface ApplicationMigrationView {
@@ -595,6 +639,13 @@ export interface ApplicationMigrationView {
   planRun?: EntityRef;
   /** The plan `planRun` used (it can differ from `plan`). */
   planRunPlan?: EntityRef;
+  /**
+   * Every target profile of the application's archetypes (archetype order,
+   * then profile order), each with its assigned plan: what a run can pick
+   * from. Absent when the server does not report it: the run uses
+   * `targetProfile` and `plan`, with no choice.
+   */
+  migrationPaths?: ApplicationMigrationPath[];
   preflight?: ApplicationPreflightStatus;
   preflightReason?: string;
   runPhase?: ControllerRunPhase;
@@ -657,8 +708,16 @@ export interface PlanRun {
   /**
    * Snapshot at start, computed by the server's skill resolver: what each
    * stage got (`stageId` set) and one `everyStage` group per application.
+   * Its rows are marked excluded by the plan's exclusions and by the run's
+   * own (`excludedSkills`).
    */
   skills?: SkillsByStage;
+  /**
+   * Skills this run excluded on its own when it started, beyond the plan's
+   * (`StartApplicationMigrationsRequest.excludedSkills`), in name order.
+   * Absent when it excluded none (and on a server that does not report it).
+   */
+  excludedSkills?: EntityRef[];
 }
 
 export type ApplicationMigrationDisplayStatus =

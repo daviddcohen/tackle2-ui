@@ -559,6 +559,40 @@ describe("plan skill review", () => {
     expect(view.skills?.everyStage).toEqual(forApplication.everyStage);
   });
 
+  it("resolves each application with the target profile its entry picks", async () => {
+    const plan = await getMigrationPlanById("1");
+    const profileSkills = async (
+      targetProfile?: { id: number } | null
+    ): Promise<string[]> => {
+      const { everyStage } = await resolvePlanSkills({
+        ...requestFor(plan),
+        applications: [
+          { id: 1, ...(targetProfile !== undefined ? { targetProfile } : {}) },
+        ],
+      });
+      return everyStage[0].skills
+        .filter(({ from }) =>
+          from.some((origin) => origin.kind === "targetProfile")
+        )
+        .map(({ skill }) => skill.id);
+    };
+    // Absent: the default profile (Quarkus 3.x); the same profile picked
+    // explicitly answers the same; null: none.
+    const byDefault = await profileSkills();
+    expect(byDefault.length).toBeGreaterThan(0);
+    expect(await profileSkills({ id: 11 })).toEqual(byDefault);
+    expect(await profileSkills(null)).toEqual([]);
+    // Spring Boot Application's profile is not one of Customer Management's.
+    expect(
+      await statusOf(
+        resolvePlanSkills({
+          stages: [],
+          applications: [{ id: 1, targetProfile: { id: 21 } }],
+        })
+      )
+    ).toBe(400);
+  });
+
   it("flags excluded skills and ignores ids that reference nothing", async () => {
     const draft = requestFor(await getMigrationPlanById("5"));
     const excludedDraft = await resolvePlanSkills({

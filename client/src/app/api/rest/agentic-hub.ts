@@ -31,7 +31,11 @@
  *   `getSkillPlans` (no endpoint for the plans that resolve a skill);
  * - run skills snapshots (`PlanRun.skills`) and the application view's
  *   `skills`: the controller records no per-stage skills yet
- *   (agentic-controller#172).
+ *   (agentic-controller#172);
+ * - run skill review (`ApplicationMigrationView.migrationPaths`, a run's
+ *   target profile picks and own exclusions on the start request,
+ *   `PlanRun.excludedSkills`): no CRD field; starts drop the picks and
+ *   exclusions (`toWorkflowRunInputs`).
  * - `updateArchetypeSkills`, `updateTargetProfileSkills` and
  *   `updateApplicationSkills` (Hub-scope Skill associations have no Hub
  *   table; `updateSkill` refuses them too).

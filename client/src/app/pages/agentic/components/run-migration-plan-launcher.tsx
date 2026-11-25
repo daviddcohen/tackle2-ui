@@ -44,7 +44,10 @@ interface RunMigrationPlanLauncherOptions {
   applications?: Ref[];
   /** Migration views the caller already holds (the preflight fetches them otherwise). */
   migrations?: ApplicationMigrationMap;
-  /** A failed run to run again: the preflight starts from its plan and branch. */
+  /**
+   * A failed run to run again: the preflight starts from its plan, branch
+   * and own skill exclusions.
+   */
   rerunOf?: PlanRun;
   /** The caller's breadcrumb trail, kept by links in the preflight and after starting. */
   linkCrumbs: BreadcrumbEntry[];
@@ -61,7 +64,8 @@ interface RunMigrationPlanLauncherOptions {
  * instead of the hook's, and `open(applications, plan)` runs exactly that
  * plan on them (a plan's own Run migration plan action). Render `modal`
  * anywhere in the page. A rerun (`rerunOf`) starts from the failed run's
- * values and shows no override caution while its own plan is picked.
+ * values (and its own skill exclusions, for its plan) and shows no override
+ * caution while its own plan is picked.
  */
 export const useRunMigrationPlanLauncher = ({
   applications,
@@ -120,6 +124,16 @@ export const useRunMigrationPlanLauncher = ({
             : undefined
         }
         rerunPlanId={rerunOf?.planId}
+        // The failed run's own exclusions apply to its plan again.
+        initialExcludedSkills={
+          rerunOf?.excludedSkills != null
+            ? {
+                [rerunOf.planId]: rerunOf.excludedSkills.map(
+                  (skill) => skill.id
+                ),
+              }
+            : undefined
+        }
         plan={opened?.plan}
         isStarting={isStarting}
         linkTo={(pathname, search = "") =>

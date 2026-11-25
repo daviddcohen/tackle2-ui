@@ -70,12 +70,23 @@ export interface StageSkillsTableProps {
    */
   linkTo?: SkillLinkTo;
   /**
-   * Wizard: a checkbox per row, checked unless the plan excludes the skill.
-   * A skill attached to the application itself cannot be excluded.
+   * A checkbox per row, checked unless the row is excluded (plan wizard, Run
+   * migration plan dialog).
    */
   include?: {
     onChange: (skill: EntityRef, included: boolean) => void;
     isDisabled?: boolean;
+    /**
+     * Rows whose checkbox cannot change. Default (plan wizard): a skill
+     * attached to the application itself, which a plan cannot exclude.
+     */
+    isLocked?: (entry: StageSkill) => boolean;
+    /**
+     * The label of an excluded row, for example why it cannot be included
+     * again (undefined: "Excluded"). It also describes a locked row's
+     * checkbox.
+     */
+    excludedLabel?: (entry: StageSkill) => string | undefined;
   };
   /** "all" (default, pages), "none" (Run dialog), "stages" (stage groups only). */
   defaultExpanded?: "all" | "none" | "stages";
@@ -108,6 +119,10 @@ type Group =
   | { kind: "stage"; key: string; group: StageSkillsGroup }
   | { kind: "everyStage"; key: string; group: EveryStageSkillsGroup };
 
+/** A plan cannot exclude a skill attached to the application itself. */
+export const isAttachedToApplication = ({ from }: StageSkill) =>
+  from.some((origin) => origin.kind === "application");
+
 const sortedSkills = (skills: StageSkill[]) =>
   [...skills].sort((a, b) => universalComparator(a.skill.name, b.skill.name));
 
@@ -123,7 +138,8 @@ const sortedSkills = (skills: StageSkill[]) =>
  * names the toggle "{title} Details" through PF's `simple-node{n}`), and,
  * while collapsed, how many skills it has. Its skill rows line up with the
  * header: [Include] · Skill · From · How agents use it. An excluded skill
- * shows the outline "Excluded" label in the last column.
+ * shows the outline "Excluded" label (or `include.excludedLabel`) in the
+ * last column.
  */
 export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
   skills,
@@ -318,10 +334,8 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
 
   const skillRow = (group: Group, entry: StageSkill, isExpanded: boolean) => {
     const { skill, loadPolicy, excluded, from } = entry;
-    // A plan cannot exclude a skill attached to the application itself.
-    const isAttachedToApplication = from.some(
-      (origin) => origin.kind === "application"
-    );
+    const isLocked = (include?.isLocked ?? isAttachedToApplication)(entry);
+    const excludedLabelId = `${id}-excluded-${group.key}-${skill.id}`;
     return (
       <Tr key={`${group.key}-${skill.id}`} isExpanded={isExpanded}>
         <Td />
@@ -330,8 +344,11 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
             <Checkbox
               id={`${id}-include-${group.key}-${skill.id}`}
               aria-label={includeLabel(group, skill)}
+              aria-describedby={
+                isLocked && excluded ? excludedLabelId : undefined
+              }
               isChecked={!excluded}
-              isDisabled={include.isDisabled || isAttachedToApplication}
+              isDisabled={include.isDisabled || isLocked}
               onChange={(_event, checked) => include.onChange(skill, checked)}
             />
           </Td>
@@ -351,8 +368,9 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
         </Td>
         <Td dataLabel={columns.loadPolicy} modifier="nowrap">
           {excluded ? (
-            <Label variant="outline" isCompact>
-              {t("agentic.skillsTable.excluded")}
+            <Label variant="outline" isCompact id={excludedLabelId}>
+              {include?.excludedLabel?.(entry) ??
+                t("agentic.skillsTable.excluded")}
             </Label>
           ) : (
             t(`agentic.skill.loadPolicy.${loadPolicy}`)

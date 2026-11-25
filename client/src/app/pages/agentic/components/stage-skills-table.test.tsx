@@ -2,7 +2,7 @@ import * as React from "react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
-import { SkillsByStage } from "@app/agentic";
+import { SkillsByStage, StageSkill } from "@app/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 
 import {
@@ -384,6 +384,53 @@ describe("StageSkillsTable", () => {
         name: "Include EJB to CDI conversion patterns in every stage",
       })
     ).toBeDisabled();
+  });
+
+  it("takes the caller's lock rule and excluded label for each row", async () => {
+    const onChange = jest.fn();
+    const isLocked = (entry: StageSkill) => entry.skill.id === "20";
+    renderTable({
+      linkTo: undefined,
+      include: {
+        onChange,
+        isLocked,
+        excludedLabel: (entry) =>
+          isLocked(entry) ? "Excluded by plan" : undefined,
+      },
+    });
+
+    // Locked and excluded: disabled, its label says why and describes it.
+    const locked = screen.getByRole("checkbox", {
+      name: "Include Spring Boot to Quarkus migration in stage 2",
+    });
+    expect(locked).toBeDisabled();
+    expect(locked).not.toBeChecked();
+    expect(locked).toHaveAccessibleDescription("Excluded by plan");
+
+    // The rule replaces the default: an application's own skill can change.
+    const own = screen.getByRole("checkbox", {
+      name: "Include EJB to CDI conversion patterns in every stage",
+    });
+    expect(own).toBeEnabled();
+    expect(own).not.toHaveAccessibleDescription();
+    await userEvent.click(own);
+    expect(onChange).toHaveBeenLastCalledWith(
+      { id: "8", name: "EJB to CDI conversion patterns" },
+      false
+    );
+  });
+
+  it("labels an excluded row Excluded when the caller gives no label", () => {
+    renderTable({
+      linkTo: undefined,
+      include: { onChange: jest.fn(), excludedLabel: () => undefined },
+    });
+    const row = screen
+      .getByRole("checkbox", {
+        name: "Include Spring Boot to Quarkus migration in stage 2",
+      })
+      .closest("tr") as HTMLElement;
+    expect(within(row).getByText("Excluded")).toBeInTheDocument();
   });
 
   it("has a help popover on How agents use it", async () => {

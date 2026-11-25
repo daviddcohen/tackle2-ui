@@ -229,7 +229,7 @@ test.describe("Skill associations in the plan skill review", () => {
 
     // No run yet: the tab says where every stage's skills are listed.
     await expect(main(page)).toContainText(
-      "Run migration plan lists them before the run starts."
+      "Run migration plan lists them before the run starts, and you can exclude some for that run."
     );
 
     // Every stage of the run gets it, from this application.
