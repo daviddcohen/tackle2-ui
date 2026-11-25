@@ -1,0 +1,76 @@
+/*
+ * Layout rules for the stage transcript over PatternFly Chatbot 6.9 and
+ * PatternFly 6.7 internals (class names, the message grid, the code block's
+ * pre). A minor bump can move them silently: the e2e truncation and narrow
+ * width checks are the guard.
+ *
+ * A tool call or thought toggle stays on one line: the title gives way with
+ * an ellipsis, the status label does not. PatternFly sizes a toggle button
+ * to its text, so the button and its text may not grow past the card.
+ */
+.agent-run-transcript .pf-v6-c-expandable-section__toggle .pf-v6-c-button {
+  max-width: 100%;
+}
+
+.agent-run-transcript
+  .pf-v6-c-expandable-section__toggle
+  .pf-v6-c-button__text {
+  min-width: 0;
+}
+
+.agent-run-transcript__toggle-title {
+  display: flex;
+  min-width: 0;
+}
+
+/*
+ * PatternFly Chatbot lets a message grow with its widest line; in a page the
+ * message must keep to the transcript's width, so its toggles truncate and
+ * its code blocks scroll.
+ */
+.agent-run-transcript .pf-chatbot__message-contents {
+  min-width: 0;
+}
+
+.agent-run-transcript .pf-chatbot__message-and-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The agent's avatar: the chatbot icon on brand blue, in either theme. */
+.agent-run-transcript
+  .pf-chatbot__message--bot
+  .pf-chatbot__message-avatar.pf-v6-c-avatar {
+  --pf-v6-c-avatar--BackgroundColor: var(--pf-t--global--color--brand--default);
+  --pf-v6-c-avatar--BorderColor: var(--pf-t--global--color--brand--default);
+  --pf-v6-c-avatar--Color: var(--pf-t--global--icon--color--on-brand--default);
+}
+
+/*
+ * Tool output and diffs keep their lines, like a terminal: a long line
+ * scrolls in its block instead of breaking mid-word. Prose still wraps.
+ */
+.agent-run-transcript .pf-v6-c-code-block__pre {
+  overflow-x: auto;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+/*
+ * On a narrow screen the avatar would take a third of the width; the name
+ * above each message already says who speaks.
+ */
+@media (max-width: 576px) {
+  .agent-run-transcript .pf-chatbot__message-avatar {
+    display: none;
+  }
+}
+
+/*
+ * An entry without a valid time: PF's Timestamp would show the render time
+ * (the chatbot passes it `new Date()`), so no time shows at all.
+ */
+.agent-run-transcript
+  .pf-chatbot__message[data-has-time="false"]
+  .pf-v6-c-timestamp {
+  display: none;
+}

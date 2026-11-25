@@ -53,6 +53,23 @@ jest.mock("react-oidc-context", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
+// PatternFly Chatbot's messages load their Markdown renderer on demand, and
+// it is built on ESM-only packages (react-markdown, remark, rehype) that Jest
+// does not transform. Only that module is replaced (by its resolved path:
+// the package's exports map hides it from a package path), with a stand-in
+// that shows the Markdown source (chatbot-markdown-renderer.tsx).
+jest.mock(
+  jest
+    .requireActual<typeof import("node:path")>("node:path")
+    .join(
+      jest
+        .requireActual<typeof import("node:path")>("node:path")
+        .dirname(require.resolve("@patternfly/chatbot")),
+      "MarkdownContent/MarkdownRenderer.js"
+    ),
+  () => jest.requireActual("@app/test-config/chatbot-markdown-renderer")
+);
+
 jest.mock("react-router-dom", () => ({
   ...jest.requireActual("react-router-dom"),
   useLocation: () => ({

@@ -1665,6 +1665,55 @@ describe("StageRunDetail", () => {
       }
     );
 
+    it("starts the transcript afresh for another application's agent run", async () => {
+      // Entry ids are per transcript: the same id in another agent run is
+      // another entry, so it must not open because the reader opened its
+      // namesake.
+      useRun(severalRun("Failed"));
+      useSeveralAgentRuns("Succeeded", "Failed");
+      server.use(
+        rest.get(
+          `${AGENTIC_ENDPOINTS.agentRuns}/:name/transcript`,
+          (req, res, ctx) =>
+            res(
+              ctx.json({
+                status: "complete",
+                entries: [
+                  {
+                    kind: "toolCall",
+                    id: "1",
+                    at: "2026-11-10T10:07:00Z",
+                    toolCallId: "",
+                    title: `Build ${req.params.name}`,
+                    status: "completed",
+                    output: "ok",
+                  },
+                ],
+              } satisfies AgentRunTranscript)
+            )
+        )
+      );
+      // Inventory Service first, so its transcript is cached and shows at
+      // once when the reader comes back to it (no loading in between).
+      renderStage("1", "?tab=transcript&application=2");
+      await screen.findByRole("button", {
+        name: /Build run-1-stage-1-app-2\s*Completed/,
+      });
+      await pickApplication("Customer Management");
+      const first = await screen.findByRole("button", {
+        name: /Build run-1-stage-1\s*Completed/,
+      });
+      await userEvent.click(first);
+      expect(first).toHaveAttribute("aria-expanded", "true");
+
+      await pickApplication("Inventory Service");
+      expect(
+        await screen.findByRole("button", {
+          name: /Build run-1-stage-1-app-2\s*Completed/,
+        })
+      ).toHaveAttribute("aria-expanded", "false");
+    });
+
     it("keeps the application when the tab changes", async () => {
       useRun(severalRun("Failed"));
       useSeveralAgentRuns("Succeeded", "Failed");

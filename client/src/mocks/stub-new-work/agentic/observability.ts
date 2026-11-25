@@ -1023,6 +1023,68 @@ const buildScript = (ctx: StageContext): Script => {
         stage.commits?.filter((commit) =>
           isCommitOf(commit, ctx.application?.id)
         ).length ?? 0;
+      // A last check before the push, then a closing summary in Markdown
+      // (emphasis, a list, inline code). A stage with commits for this
+      // application shows its changes (a tool output of several lines); one
+      // without has a clean working tree (no output) and says nothing
+      // changed, as its "0 commits" plan step does. Plain frames, not
+      // `tool()`: they add no turn or usage.
+      const [changedA, changedB] = eco.files;
+      const hasChanges = commits > 0;
+      const validateId = `toolu_${hash(`${seed}:validate`).toString(36)}`;
+      const validateTitle =
+        "developer__shell: git status --short && git diff --stat";
+      acp(at - 1300, {
+        sessionUpdate: "tool_call",
+        toolCallId: validateId,
+        title: validateTitle,
+        kind: "execute",
+        status: "in_progress",
+      });
+      info(at - 1300, `  tool: ${validateTitle} (in_progress)`);
+      acp(at - 900, {
+        sessionUpdate: "tool_call_update",
+        toolCallId: validateId,
+        status: "completed",
+        content: hasChanges
+          ? [
+              {
+                type: "content",
+                content: {
+                  type: "text",
+                  text: [
+                    ` M ${changedA}`,
+                    ` M ${changedB}`,
+                    ` ${changedA} | 6 ++++--`,
+                    ` ${changedB} | 4 ++--`,
+                    " 2 files changed, 6 insertions(+), 4 deletions(-)",
+                  ].join("\n"),
+                },
+              },
+            ]
+          : [],
+      });
+      info(at - 900, "  tool: completed");
+      say(
+        at - 600,
+        "agent_message_chunk",
+        (hasChanges
+          ? [
+              "*Final check passed:*",
+              "",
+              `- \`${eco.build}\`: build OK`,
+              "- The working tree holds only the intended changes:",
+              `  - \`${changedA}\` (modified)`,
+              `  - \`${changedB}\` (modified)`,
+            ]
+          : [
+              "*Final check passed:*",
+              "",
+              `- \`${eco.build}\`: build OK`,
+              "- The working tree is clean: this stage changed no files, so there is nothing to commit.",
+            ]
+        ).join("\n")
+      );
       say(
         at,
         "agent_message_chunk",
