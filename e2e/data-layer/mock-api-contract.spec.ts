@@ -419,11 +419,19 @@ test("run observability: agent runs, resource, transcript and logs by offset", a
   }>(page, `/agent-runs/${first.name}`);
   expect(resource.kind).toBe("AgentRun");
   expect(resource.metadata.name).toBe(first.name);
-  const transcript = await agenticGet<{ status: string; entries: unknown[] }>(
-    page,
-    `/agent-runs/${first.name}/transcript`
-  );
+  // The recorded transcript: NDJSON lines from a line offset, the recording
+  // status in a header, as the hub serves it.
+  const transcript = await page.evaluate(async (url) => {
+    const response = await fetch(url);
+    return {
+      httpStatus: response.status,
+      status: response.headers.get("X-Transcript-Status"),
+      body: await response.text(),
+    };
+  }, `/hub/prototype/agentic/agent-runs/${first.name}/transcript?offset=0`);
+  expect(transcript.httpStatus).toBe(200);
   expect(["complete", "incomplete", "skipped"]).toContain(transcript.status);
+  expect(transcript.body === "" || transcript.body.endsWith("\n")).toBe(true);
   const chunk = await agenticGet<{
     text: string;
     offset: number;

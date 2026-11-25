@@ -31,6 +31,11 @@ const UP_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
  * the bottom, and must not stop following on the way. Back at the bottom,
  * by any means, it follows again.
  *
+ * MessageBox `enableSmartScroll` (Chatbot 6.9) is not enough here: it
+ * notices growth only when the box itself resizes, so a fixed-height box
+ * does not follow new entries, and a reader who scrolled up by keyboard or
+ * scrollbar is pulled back by `scrollToBottom`.
+ *
  * Returns the ref to put on the scrolling element (a callback, so a view
  * that mounts it later, when the first entry arrives, is followed too), and
  * `resumeFollowing`, for a control that scrolls to the latest entry itself
@@ -74,6 +79,10 @@ export const useFollowLatest = (isFollowing: boolean) => {
       lastTouchY = undefined;
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      // In a focusable scroll area of its own (tool output), the key
+      // scrolls that area, not the box.
+      const target = event.target as Element | null;
+      if (target?.closest('[tabindex="0"]') !== element) return;
       if (UP_KEYS.has(event.key)) letGo();
     };
     element.addEventListener("scroll", onScroll, { passive: true });

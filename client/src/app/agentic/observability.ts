@@ -231,6 +231,21 @@ export interface AgentRunTranscript {
   entries: TranscriptEntry[];
 }
 
+/**
+ * An incremental read of a recorded transcript (NDJSON `{t, frame}` and gap
+ * lines). Offsets count lines, as on the hub branch (ADR 0024, proposed).
+ */
+export interface AgentRunTranscriptChunk {
+  /** `X-Transcript-Status`. */
+  status: AgentRunRecordingStatus;
+  /** `X-Transcript-Skip-Reason`, when the run is skipped. */
+  skipReason?: string;
+  /** The complete lines read (each was ended by a newline), unparsed. */
+  lines: string[];
+  /** Pass back as `?offset=` to get only new lines. */
+  nextOffset: number;
+}
+
 /** An incremental log read. Offsets count bytes, as on the hub branch. */
 export interface AgentRunLogChunk {
   container: string;

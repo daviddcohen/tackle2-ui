@@ -24,9 +24,11 @@
  *
  * One script per stage drives all three views, so they agree with each
  * other: a timeline of ACP frames (what the recorder would save) and log
- * lines over `OBSERVABILITY_SCRIPT_MS`. The transcript and usage are the
- * frames folded by the real adapter (`foldTranscript`), the logs are the
- * lines, the AgentRun's status follows the stage. A recorded stage's own
+ * lines over `OBSERVABILITY_SCRIPT_MS`. The transcript is the frames as
+ * recorded lines (NDJSON read by line offset, with the recording status in
+ * headers, as the hub serves it; the UI folds them with `foldTranscript`),
+ * usage is the frames folded by that adapter, the logs are the lines, the
+ * AgentRun's status follows the stage. A recorded stage's own
  * messages (the plan run's activity, including a running stage's live
  * progress messages) are part of its transcript; an approve mode stage is
  * not recorded, so the UI shows its `StageRun.messages` instead. A stage's
@@ -57,6 +59,7 @@
  */
 import {
   AgentRunLogChunk,
+  AgentRunRecordingStatus,
   AgentRunTranscript,
   ControllerRunPhase,
   EntityId,
@@ -66,6 +69,7 @@ import {
   RECORDING_SKIP_REASONS,
   SkillLoadPolicy,
   StageAgentRun,
+  StageMessage,
   StageRun,
   isCommitOf,
   isTerminalRunPhase,
@@ -674,6 +678,9 @@ const occupancy = (curve: ContextCurve, seed: string): number[] => {
 
 const stepStart = (step: number) => FIRST_STEP_MS + step * STEP_MS;
 
+/** A tool title in the ASCII log: its middle dot prints as a colon. */
+const logTitle = (title: string) => title.replace(" · ", ": ");
+
 /** Builds the stage's whole script (finish block only once the stage stopped). */
 const buildScript = (ctx: StageContext): Script => {
   const { run, stage, gateway } = ctx;
@@ -818,7 +825,7 @@ const buildScript = (ctx: StageContext): Script => {
       kind,
       status: "in_progress",
     });
-    info(rel, `  tool: ${title} (in_progress)`);
+    info(rel, `  tool: ${logTitle(title)} (in_progress)`);
     acp(rel + 900, {
       sessionUpdate: "tool_call_update",
       toolCallId,
@@ -938,7 +945,7 @@ const buildScript = (ctx: StageContext): Script => {
         );
         tool(
           at + 800,
-          `developer__text_editor: view ${file}`,
+          `text_editor · ${file}`,
           "read",
           "completed",
           `Read ${between(`${seed}:lines:${step}`, 40, 420)} lines.`
@@ -948,7 +955,7 @@ const buildScript = (ctx: StageContext): Script => {
         const edit = eco.edits[step % eco.edits.length];
         tool(
           at + 300,
-          `developer__text_editor: str_replace ${file}`,
+          `text_editor · ${file}`,
           "edit",
           "completed",
           "The file has been edited.",
@@ -962,7 +969,7 @@ const buildScript = (ctx: StageContext): Script => {
         if (buildOutputAt == null) buildOutputAt = at + 400;
         tool(
           at + 300,
-          `developer__shell: ${eco.build}`,
+          `shell · ${eco.build}`,
           "execute",
           fails ? "failed" : "completed",
           fails ? eco.error : eco.ok
@@ -995,7 +1002,7 @@ const buildScript = (ctx: StageContext): Script => {
     if (ctx.phase === "Failed") {
       const output =
         ctx.output ?? "The stage failed before it could push its changes.";
-      tool(at, `developer__shell: ${eco.build}`, "execute", "failed", output);
+      tool(at, `shell · ${eco.build}`, "execute", "failed", output);
       acp(at + 1200, ladder("completed", "in_progress", "pending"));
       const notice = `Stage failed: ${output}`;
       gooseFrame(at + 1300, {
@@ -1032,8 +1039,7 @@ const buildScript = (ctx: StageContext): Script => {
       const [changedA, changedB] = eco.files;
       const hasChanges = commits > 0;
       const validateId = `toolu_${hash(`${seed}:validate`).toString(36)}`;
-      const validateTitle =
-        "developer__shell: git status --short && git diff --stat";
+      const validateTitle = "shell · git status --short && git diff --stat";
       acp(at - 1300, {
         sessionUpdate: "tool_call",
         toolCallId: validateId,
@@ -1041,7 +1047,7 @@ const buildScript = (ctx: StageContext): Script => {
         kind: "execute",
         status: "in_progress",
       });
-      info(at - 1300, `  tool: ${validateTitle} (in_progress)`);
+      info(at - 1300, `  tool: ${logTitle(validateTitle)} (in_progress)`);
       acp(at - 900, {
         sessionUpdate: "tool_call_update",
         toolCallId: validateId,
@@ -1193,11 +1199,58 @@ const recordedLines = (
       line: { t, frame: frame(update, method) },
     });
   });
-  const messages = ctx.applicationIndex === 0 ? (ctx.stage.messages ?? []) : [];
-  messages.forEach((message, i) => {
-    const ms = Date.parse(message.timestamp);
+  // A chunked agent message spans from its first chunk to its last; a stage
+  // message stamped inside one goes after it, as one session would emit it.
+  const spans = new Map<string, { first: number; last: number }>();
+  script.frames.forEach(({ rel, update }) => {
+    const goose = (update._meta as { goose?: { messageId?: string } })?.goose;
+    if (goose?.messageId == null) return;
+    const ms = Date.parse(timeAt(ctx, rel));
+    const span = spans.get(goose.messageId);
+    spans.set(goose.messageId, {
+      first: span?.first ?? ms,
+      last: Math.max(span?.last ?? ms, ms),
+    });
+  });
+  const splitSpan = (ms: number) =>
+    [...spans.values()].find(({ first, last }) => ms >= first && ms <= last);
+  const own = ctx.applicationIndex === 0 ? (ctx.stage.messages ?? []) : [];
+  const { cutAt } = ctx.timeline;
+  // A stage that stopped before its script ran (the 4 s stages of a run
+  // started in the prototype) was read while it ran, and the recording only
+  // grows (the hooks read it by line offset): it keeps the progress messages
+  // the stage sent while it ran, and its final messages, which replace them
+  // on the plan run, come after everything recorded then, at its end (just
+  // before the closing frames).
+  // Known mock limit: a stage watched while it ran that ends after its
+  // script has played rescales its times to its real duration, so its lines
+  // change after they were read. The hub's recording only grows.
+  const end = cutAt == null ? undefined : ctx.timeline.start + cutAt - 1;
+  const messages: { message: StageMessage; at?: number }[] =
+    end == null || own.length === 0
+      ? own.map((message) => ({ message }))
+      : [
+          ...execution
+            .progressMessages(
+              ctx.stage.name,
+              (cutAt ?? 0) - 1,
+              ctx.timeline.start
+            )
+            .map((message) => ({ message })),
+          ...own.map((message) => ({ message, at: end })),
+        ];
+  messages.forEach(({ message, at }, i) => {
+    const stamped = at ?? Date.parse(message.timestamp);
+    const span = at == null ? splitSpan(stamped) : undefined;
+    const ms = span == null ? stamped : span.last + 1;
     const rel = (ms - ctx.timeline.start) / ctx.timeline.scale;
-    if (Number.isNaN(ms) || inGap(rel)) return;
+    // Moved past a message still arriving: it shows once that message ends.
+    if (
+      Number.isNaN(ms) ||
+      inGap(rel) ||
+      (span != null && !isVisible(ctx, rel))
+    )
+      return;
     timed.push({
       ms,
       line: {
@@ -1547,15 +1600,48 @@ export const getAgentRunResource = (name: string): Crd.AgentRun => {
   return agentRunResource(ctx, buildScript(ctx));
 };
 
-/** GET /agent-runs/:name/transcript */
-export const getAgentRunTranscript = (name: string): AgentRunTranscript => {
+/** A recorded transcript read, as the hub branch serves it (ADR 0024). */
+export interface RecordedTranscriptReply {
+  /** 404 before the recorder has created the run's directory, else 200. */
+  httpStatus: 200 | 404;
+  /** `X-Transcript-Status`. */
+  status: AgentRunRecordingStatus;
+  /** `X-Transcript-Skip-Reason`. */
+  skipReason?: string;
+  /** The NDJSON body: the recorded lines from the offset on, each ended by a newline. */
+  ndjson: string;
+}
+
+/**
+ * GET /agent-runs/:name/transcript?offset=. The recorded lines (`{t, frame}`
+ * and gap lines) from line `offset` on, as NDJSON, with the recording status
+ * in headers. An offset at or past the end answers no lines, a malformed one
+ * a 400. A running stage answers 404 (`none`) until its sandbox is ready
+ * (`ACP_READY_AFTER_MS`), as the hub does before its recorder has created
+ * the run's directory; a skipped run is decided before the run starts.
+ */
+export const getAgentRunTranscript = (
+  name: string,
+  offsetParam: string | null = null
+): RecordedTranscriptReply => {
   const ctx = findAgentRun(name);
+  const offset =
+    offsetParam == null || offsetParam === "" ? 0 : Number(offsetParam);
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw badRequest("offset must be a non-negative integer.");
+  }
   const recording = recordingFor(ctx);
   if (recording.status === "skipped") {
-    return { ...recording, entries: [] };
+    return { httpStatus: 200, ...recording, ndjson: "" };
   }
-  const { entries } = foldTranscript(recordedLines(ctx, buildScript(ctx)));
-  return { ...recording, entries };
+  if (ctx.live && !isVisible(ctx, ACP_READY_AFTER_MS)) {
+    return { httpStatus: 404, status: "none", ndjson: "" };
+  }
+  const ndjson = recordedLines(ctx, buildScript(ctx))
+    .slice(offset)
+    .map((line) => `${JSON.stringify(line)}\n`)
+    .join("");
+  return { httpStatus: 200, ...recording, ndjson };
 };
 
 /** UTF-8 length of one code point. */

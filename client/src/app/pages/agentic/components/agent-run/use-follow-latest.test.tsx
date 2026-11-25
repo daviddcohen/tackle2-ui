@@ -12,6 +12,9 @@ const Box: React.FC<{ count: number; isFollowing: boolean }> = ({
   return (
     <>
       <div ref={ref} data-testid="box" tabIndex={0}>
+        <pre data-testid="output" tabIndex={0}>
+          <code>output</code>
+        </pre>
         {Array.from({ length: count }, (_, i) => (
           <p key={i}>line {i}</p>
         ))}
@@ -110,6 +113,14 @@ describe("useFollowLatest", () => {
       expect(box.scrollTop).toBe(400);
     }
   );
+
+  it("keeps following on an up key in an output block, which scrolls that block", async () => {
+    const { box, rerender } = setUp(true);
+    fireEvent.keyDown(screen.getByText("output"), { key: "ArrowUp" });
+    fireEvent.keyDown(screen.getByTestId("output"), { key: "Home" });
+    await grow(rerender, 30);
+    expect(box.scrollTop).toBe(600);
+  });
 
   it("keeps following on a wheel move down, a touch move down or ArrowDown", async () => {
     const { box, rerender } = setUp(true);

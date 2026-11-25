@@ -230,7 +230,8 @@ const PROGRESS_SCRIPT: Array<{ relativeMs: number; content: string }> = [
   },
 ];
 
-const progressMessages = (
+/** The progress messages a running stage has sent `elapsedMs` after it started. */
+export const progressMessages = (
   stageName: string,
   elapsedMs: number,
   startedAt: number

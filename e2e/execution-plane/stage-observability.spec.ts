@@ -73,15 +73,22 @@ const alertTitle = (scope: Locator, variant: string, title?: RegExp) =>
 const transcript = (page: Page) =>
   main(page).getByRole("region", { name: "Transcript", exact: true });
 
-/** The messages, named by who sent them and when. */
+/** The messages (one per turn), named by who sent them and when. */
 const transcriptMessages = (page: Page) =>
   transcript(page).getByRole("region", { name: /^Message from / });
 
-/** One per transcript entry: a message, or a divider (notice, gap). */
+/** What a turn holds (prose, cards, the plan), and the dividers between. */
 const transcriptEntries = (page: Page) =>
   transcript(page).locator(
-    ".pf-chatbot__message, .pf-chatbot__message-divider"
+    ".pf-chatbot__message-and-actions > *, .pf-chatbot__message-divider"
   );
+
+/** The tool call card whose toggle has this name. */
+const toolCard = (page: Page, name: RegExp) =>
+  transcript(page)
+    .locator(".pf-chatbot__tool-response")
+    .filter({ has: page.getByRole("button", { name }) })
+    .first();
 
 /** Distance (px) between the bottom of the chat and its latest entry. */
 const transcriptToBottom = (page: Page) =>
@@ -414,9 +421,9 @@ test.describe("Refresh stops on a finished stage", () => {
           logRegion(page).getByRole("button", { name: /following/ })
         ).toHaveCount(0);
       } else {
-        await expect(tabPanel(page)).toContainText(
-          "The whole stage was recorded."
-        );
+        // A complete recording needs no sentence above the chat.
+        await expect(transcript(page)).toBeVisible();
+        await expect(tabPanel(page)).not.toContainText("was recorded");
       }
       await expect
         .poll(() =>
@@ -714,13 +721,11 @@ test.describe("Transcript", () => {
     await page.goto(stageUrl("1", "3", "configured", { tab: "transcript" }));
     await expect(transcript(page)).toBeVisible();
     // A tool call's toggle reads its kind, title and status.
-    const name = /developer__shell: mvn .*Completed$/;
-    const message = transcriptMessages(page)
-      .filter({ has: page.getByRole("button", { name }) })
-      .first();
-    const toggle = message.getByRole("button", { name });
+    const name = /shell · mvn .*Completed$/;
+    const card = toolCard(page, name);
+    const toggle = card.getByRole("button", { name });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    const output = message.locator(".pf-v6-c-code-block");
+    const output = card.locator(".pf-v6-c-code-block");
     await expect(output).toBeHidden();
 
     await toggle.focus();
@@ -742,7 +747,7 @@ test.describe("Transcript", () => {
     await page.goto(stageUrl("1", "2", "configured", { tab: "transcript" }));
     const first = transcriptMessages(page).first();
     await expect(first).toHaveAccessibleName(
-      /^Message from .+ at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(UTC \d{4}-.*Z\)$/
+      /^Message from .+ at .*\d{1,2}:\d{2}:\d{2}.* \(UTC \d{2}:\d{2}:\d{2}\)$/
     );
     await expect(first.getByText("AI", { exact: true })).toBeVisible();
 
@@ -758,9 +763,7 @@ test.describe("Transcript", () => {
 
     // The check's output, several lines, monospace, with a copy button.
     const checkName = /git status --short && git diff --stat/;
-    const card = transcriptMessages(page).filter({
-      has: page.getByRole("button", { name: checkName }),
-    });
+    const card = toolCard(page, checkName);
     await card.getByRole("button", { name: checkName }).click();
     const output = card.getByRole("region", { name: "Output" });
     await expect(output).toBeVisible();
@@ -787,9 +790,7 @@ test.describe("Transcript", () => {
       /^Message from Build Validator at /
     );
     const checkName = /git status --short && git diff --stat/;
-    const card = transcriptMessages(page).filter({
-      has: page.getByRole("button", { name: checkName }),
-    });
+    const card = toolCard(page, checkName);
     await card.getByRole("button", { name: checkName }).click();
     await expect(card).toContainText("No output.");
     await expect(
@@ -800,15 +801,13 @@ test.describe("Transcript", () => {
   test("a failed tool call opens with its output", async ({ page }) => {
     // Run 1, stage 2 (Migrate): some builds failed on the way.
     await page.goto(stageUrl("1", "2", "configured", { tab: "transcript" }));
-    const name = /developer__shell: mvn .*Failed$/;
-    const message = transcriptMessages(page)
-      .filter({ has: page.getByRole("button", { name }) })
-      .first();
-    await expect(message.getByRole("button", { name })).toHaveAttribute(
+    const name = /shell · mvn .*Failed$/;
+    const card = toolCard(page, name);
+    await expect(card.getByRole("button", { name })).toHaveAttribute(
       "aria-expanded",
       "true"
     );
-    await expect(message.locator("pre")).toContainText("COMPILATION ERROR");
+    await expect(card.locator("pre")).toContainText("COMPILATION ERROR");
   });
 
   test("the chat fills the page and scrolls inside, with jump buttons", async ({
@@ -849,9 +848,20 @@ test.describe("Transcript", () => {
     ).toBe(true);
     // A tool title keeps a line of its own.
     const title = transcript(page)
-      .locator(".agent-run-transcript__toggle-title")
+      .locator(".pf-chatbot__tool-response .pf-v6-u-text-truncate")
       .first();
     expect((await title.boundingBox())!.width).toBeGreaterThan(100);
+    // The agent's name shows whole: the time wraps under it instead.
+    await page.goto(stageUrl("1", "2", "configured", { tab: "transcript" }));
+    const name = transcriptMessages(page)
+      .first()
+      .locator(".pf-chatbot__message-name .pf-v6-c-truncate");
+    await expect(name).toHaveText("Java Code Migrator");
+    expect(
+      await name.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth
+      )
+    ).toBe(true);
   });
 
   test("a stage that requires approval shows its live messages and View logs opens the Logs tab", async ({

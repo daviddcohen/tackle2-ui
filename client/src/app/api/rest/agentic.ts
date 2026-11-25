@@ -27,7 +27,8 @@ import {
   Agent,
   AgentRequest,
   AgentRunLogChunk,
-  AgentRunTranscript,
+  AgentRunRecordingStatus,
+  AgentRunTranscriptChunk,
   AgentTestRun,
   AgentTestRunRequest,
   ApplicationMigrationMap,
@@ -458,9 +459,10 @@ export const approveStageRun = ({
 //   `/hub/agentic/workflowruns/:name`, then GET `/hub/agentic/agentruns/:name`
 //   per stage (merged), mapped by `toStageAgentRun`;
 // - the AgentRun resource: GET `/hub/agentic/agentruns/:name` (merged);
-// - transcript and logs: GET `/hub/agentic/agentruns/:name/transcript` (NDJSON,
-//   fold with `foldTranscript`) and `.../logs?container&offset` (text plus
-//   `X-Log-Source`), observability hub branch only (agentic-controller#341).
+// - transcript and logs: GET `/hub/agentic/agentruns/:name/transcript?offset`
+//   (NDJSON lines, fold with `foldTranscript`) and
+//   `.../logs?container&offset` (text plus `X-Log-Source`), observability
+//   hub branch only (agentic-controller#341).
 // The prototype serves stage agent runs under `/agent-runs/:name`, next to the
 // agent test runs: both are AgentRuns on the Hub.
 // ---------------------------------------------------------------------------
@@ -475,10 +477,49 @@ export const getPlanRunAgentRuns = (runId: EntityId) =>
 export const getAgentRunResource = (name: string) =>
   axios.get<AgentRun>(`${AGENT_RUNS}/${id(name)}`).then(({ data }) => data);
 
-export const getAgentRunTranscript = (name: string) =>
+const RECORDING_STATUSES: readonly string[] = [
+  "recording",
+  "complete",
+  "incomplete",
+  "skipped",
+  "none",
+] satisfies AgentRunRecordingStatus[];
+
+/**
+ * The recorded transcript from line `offset` on: NDJSON lines with the
+ * recording status in `X-Transcript-Status` and `X-Transcript-Skip-Reason`
+ * (observability hub branch; ADR 0024, agentic-controller#353, proposed).
+ * Only lines ended by a newline are returned and counted in `nextOffset`: a
+ * line still being written is read again, whole, from `nextOffset`. A status
+ * the UI does not know is read as `incomplete` (a recording exists, nothing
+ * says it is whole). A 404 rejects: no recording (yet).
+ */
+export const getAgentRunTranscript = (name: string, offset = 0) =>
   axios
-    .get<AgentRunTranscript>(`${AGENT_RUNS}/${id(name)}/transcript`)
-    .then(({ data }) => data);
+    .get<string>(`${AGENT_RUNS}/${id(name)}/transcript`, {
+      params: { offset },
+      headers: { Accept: "application/x-ndjson" },
+      // The body is NDJSON, never one JSON document: keep it as text.
+      responseType: "text",
+      transformResponse: (data: unknown) => data,
+    })
+    .then(({ data, headers }): AgentRunTranscriptChunk => {
+      const body = typeof data === "string" ? data : "";
+      const end = body.lastIndexOf("\n");
+      const lines = end === -1 ? [] : body.slice(0, end).split("\n");
+      const status = String(headers["x-transcript-status"] ?? "");
+      const skipReason = headers["x-transcript-skip-reason"];
+      return {
+        status: RECORDING_STATUSES.includes(status)
+          ? (status as AgentRunRecordingStatus)
+          : "incomplete",
+        ...(typeof skipReason === "string" && skipReason !== ""
+          ? { skipReason }
+          : {}),
+        lines,
+        nextOffset: offset + lines.length,
+      };
+    });
 
 /** The log text of one container from `offset` (bytes) on. */
 export const getAgentRunLog = ({
