@@ -125,11 +125,15 @@ const stageSkillsTable = (
     ...(typeof name === "string" ? { exact: true } : {}),
   });
 
-/** Opens every collapsed group of a Skills by stage table (the dialog's). */
+/**
+ * Opens every collapsed group of a Skills by stage table. A table of a few
+ * applications starts with every group open; with more, the Every stage
+ * groups start collapsed.
+ */
 const expandAllGroups = async (table: Locator) => {
+  // Wait for the (re)loaded table's first group toggle.
+  await expect(table.locator("button[aria-expanded]").first()).toBeVisible();
   const collapsed = table.locator('button[aria-expanded="false"]');
-  // Groups start collapsed: wait for the (re)loaded table's first one.
-  await expect(collapsed.first()).toBeVisible();
   while ((await collapsed.count()) > 0) await collapsed.first().click();
 };
 
@@ -138,6 +142,16 @@ const expandAllGroups = async (table: Locator) => {
  * dialog labels a plan's exclusion "Excluded by plan" (it cannot be undone
  * there).
  */
+/** A locked row's checkbox description: its label, then its tooltip. */
+const EXCLUDED_BY_PLAN_DESCRIPTION =
+  "Excluded by plan The migration plan excludes this skill. To include it, edit the migration plan.";
+
+/** The rows of the groups whose title matches (one tbody per group). */
+const groupBody = (table: Locator, title: RegExp) =>
+  table
+    .locator("tbody")
+    .filter({ has: table.page().getByRole("heading", { name: title }) });
+
 const expectExcludedStageRows = async (
   scope: Locator,
   skillName: string,
@@ -169,15 +183,15 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     await expect(preflight).toBeVisible();
     await pickTargetProfile(page, preflight);
 
-    // Collapsed until asked for; every group in it collapsed too.
-    const toggle = preflight.getByRole("button", { name: "Skills by stage" });
+    // Collapsed until asked for; then its groups are open.
+    const toggle = preflight.getByRole("button", {
+      name: "Review skills by stage",
+    });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     const table = stageSkillsTable(preflight);
     await expect(table).toBeVisible();
-    // The collapsed summary of the stage that loses the skill says so.
-    await expect(table.getByText(/, 1 excluded$/).first()).toBeVisible();
     await expandAllGroups(table);
     await expectExcludedStageRows(
       preflight,
@@ -211,7 +225,9 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     ).toBeVisible();
     // Sub-pixel scroll rounding aside.
     expect(Math.abs((await offset()) - before)).toBeLessThan(2);
-    await preflight.getByLabel("Use each application's migration plan").check();
+    await preflight
+      .getByLabel("Use the migration plan of each target profile")
+      .check();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     // The run snapshots the exclusion.
@@ -232,7 +248,12 @@ test.describe("Skills in the run dialog and on the run pages", () => {
         "Worked out when the run started. Each stage's agent reads its own skills when the stage starts, so a change to that agent before then can change what the stage gets."
       )
     ).toBeVisible();
-    await expectExcludedStageRows(main(page), skillName);
+    await expectExcludedStageRows(
+      main(page),
+      skillName,
+      undefined,
+      "Excluded by plan"
+    );
 
     // The Migration tab shows that run's snapshot: the same exclusion.
     await spaNavigate(page, `/applications/${APPLICATION_ID}?tab=migration`);
@@ -246,7 +267,12 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     // Without the write scopes the run page shows the same rows, read-only.
     await spaNavigate(page, `${runPath}?protoPersona=hubMigrator`);
     await expect(personaSelect(page)).toHaveValue("hubMigrator");
-    await expectExcludedStageRows(main(page), skillName);
+    await expectExcludedStageRows(
+      main(page),
+      skillName,
+      undefined,
+      "Excluded by plan"
+    );
     await expect(
       stageSkillsTable(main(page)).getByRole("checkbox")
     ).toHaveCount(0);
@@ -321,7 +347,9 @@ test.describe("Skills in the run dialog and on the run pages", () => {
       "Claims Processing",
     ]);
     await pickTargetProfile(page, preflight);
-    await preflight.getByRole("button", { name: "Skills by stage" }).click();
+    await preflight
+      .getByRole("button", { name: "Review skills by stage" })
+      .click();
     // Each application on its own plan: one table per run.
     await expect(
       stageSkillsTable(
@@ -417,32 +445,44 @@ test.describe("Excluding skills and picking the target profile for a run", () =>
   }) => {
     await bootMockApi(page);
     const preflight = await openRunDialog(page);
-    const toggle = preflight.getByRole("button", { name: /^Skills by stage/ });
+    const toggle = preflight.getByRole("button", {
+      name: /^Review skills by stage/,
+    });
     await toggle.click();
     const table = stageSkillsTable(preflight);
     await expandAllGroups(table);
-    const first = table.getByRole("checkbox", { name: / in stage 1$/ }).first();
+    const first = groupBody(table, /^Stage 1:/)
+      .getByRole("checkbox", { name: / in this plan run$/ })
+      .first();
     const label = (await first.getAttribute("aria-label"))!;
     const skillName = label
       .replace(/^Include /, "")
-      .replace(/ in stage 1$/, "");
+      .replace(/ in this plan run$/, "");
     await first.uncheck();
     await expect(
       preflight.getByText(
         `${skillName} excluded from stage 1. 1 skill excluded for this run.`
       )
     ).toBeVisible();
-    await expect(toggle).toHaveText("Skills by stage (1 skill excluded)");
+    await expect(toggle).toHaveText(
+      "Review skills by stage (1 skill excluded)"
+    );
 
     const run = await runAndOpen(page, preflight);
     expect(run.excludedSkills?.map(({ name }) => name)).toEqual([skillName]);
+    // A fact names the run's own exclusions.
     await expect(
-      main(page).getByText(
-        // The plan excludes nothing here: the plain sentence.
-        `Excluded for this run only: ${skillName}.`
-      )
+      main(page)
+        .locator("dl")
+        .first()
+        .getByRole("link", { name: skillName, exact: true })
     ).toBeVisible();
-    await expectExcludedStageRows(main(page), skillName);
+    await expectExcludedStageRows(
+      main(page),
+      skillName,
+      undefined,
+      "Excluded for this run"
+    );
 
     // The first stage's skill loader does not stage it.
     const firstStage = main(page)
@@ -482,24 +522,27 @@ test.describe("Excluding skills and picking the target profile for a run", () =>
     const { skillName } = await excludeSkillOnPlan(page);
 
     const preflight = await openRunDialog(page);
-    await preflight.getByRole("button", { name: /^Skills by stage/ }).click();
+    await preflight
+      .getByRole("button", { name: /^Review skills by stage/ })
+      .click();
     const table = stageSkillsTable(preflight);
     await expandAllGroups(table);
-    const locked = table.getByRole("checkbox", {
-      name: new RegExp(`^Include ${skillName} in stage \\d+$`),
+    // One name per skill in the dialog: the group tells the rows apart.
+    const locked = groupBody(table, /^Stage \d+:/).getByRole("checkbox", {
+      name: `Include ${skillName} in this plan run`,
     });
     await expect(locked.first()).toBeDisabled();
     await expect(locked.first()).toHaveAccessibleDescription(
-      "Excluded by plan"
+      EXCLUDED_BY_PLAN_DESCRIPTION
     );
-    const own = table.getByRole("checkbox", {
-      name: `Include ${skillName} in every stage`,
+    const own = groupBody(table, /^Every stage/).getByRole("checkbox", {
+      name: `Include ${skillName} in this plan run`,
     });
     await expect(own).toBeEnabled();
     await expect(own).toBeChecked();
     await own.uncheck();
     await expect(locked.first()).toHaveAccessibleDescription(
-      "Excluded by plan"
+      EXCLUDED_BY_PLAN_DESCRIPTION
     );
 
     const run = await runAndOpen(page, preflight);
@@ -534,6 +577,9 @@ test.describe("Excluding skills and picking the target profile for a run", () =>
     await expect(select).toHaveAccessibleDescription(
       "Select a target profile to run this application."
     );
+    await expect(
+      preflight.getByText(/1 needs a target profile before it can run\./)
+    ).toBeVisible();
     await expect(run).toBeDisabled();
     await select.click();
     // Each option says the plan it runs.
@@ -548,9 +594,7 @@ test.describe("Excluding skills and picking the target profile for a run", () =>
       "Target profile for Customer Management OpenJDK 21 on OpenShift"
     );
     const row = preflight.getByRole("row", { name: /Customer Management/ });
-    await expect(
-      row.getByRole("link", { name: "Java lift and shift" })
-    ).toBeVisible();
+    await expect(row).toContainText("Java lift and shift");
     await expect(run).toBeEnabled();
 
     const created = await runAndOpen(page, preflight);
@@ -598,7 +642,9 @@ test.describe("Excluding skills and picking the target profile for a run", () =>
       preflight.getByRole("button", { name: /^Run on \d+ applications/ })
     ).toBeEnabled();
     // The preview shows which: each application's own target profile skills.
-    await preflight.getByRole("button", { name: "Skills by stage" }).click();
+    await preflight
+      .getByRole("button", { name: "Review skills by stage" })
+      .click();
     const preview = stageSkillsTable(preflight);
     await expandAllGroups(preview);
     await expect(

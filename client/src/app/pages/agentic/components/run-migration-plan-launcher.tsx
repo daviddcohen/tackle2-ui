@@ -3,7 +3,7 @@ import * as React from "react";
 import { ApplicationMigrationMap, PlanRun } from "@app/agentic";
 import { Ref } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
-import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { BreadcrumbEntry } from "@app/hooks/useBreadcrumbs";
 import {
   MigrationPreflightModal,
   MigrationPreflightValues,
@@ -49,7 +49,7 @@ interface RunMigrationPlanLauncherOptions {
    * and own skill exclusions.
    */
   rerunOf?: PlanRun;
-  /** The caller's breadcrumb trail, kept by links in the preflight and after starting. */
+  /** The caller's breadcrumb trail, carried to the runs it starts. */
   linkCrumbs: BreadcrumbEntry[];
   /** Called once the runs are created, before the page moves to them (for example to clear a selection). */
   onStarted?: () => void;
@@ -136,9 +136,6 @@ export const useRunMigrationPlanLauncher = ({
         }
         plan={opened?.plan}
         isStarting={isStarting}
-        linkTo={(pathname, search = "") =>
-          breadcrumbTo(pathname, search, linkCrumbs)
-        }
         onClose={() => setOpened(undefined)}
         onStartReady={startMigrations}
       />

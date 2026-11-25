@@ -392,21 +392,31 @@ describe("StageSkillsTable", () => {
     const isLocked = (entry: StageSkill) => entry.skill.id === "20";
     renderTable({
       linkTo: undefined,
-      include: {
-        onChange,
-        isLocked,
-        excludedLabel: (entry) =>
-          isLocked(entry) ? "Excluded by plan" : undefined,
-      },
+      include: { onChange, isLocked },
+      excludedLabel: (entry) =>
+        isLocked(entry)
+          ? {
+              text: "Excluded by plan",
+              tooltip: "Edit the plan to include it.",
+            }
+          : undefined,
     });
 
-    // Locked and excluded: disabled, its label says why and describes it.
+    // Locked and excluded: disabled, its label and tooltip say why and
+    // describe it.
     const locked = screen.getByRole("checkbox", {
       name: "Include Spring Boot to Quarkus migration in stage 2",
     });
     expect(locked).toBeDisabled();
     expect(locked).not.toBeChecked();
-    expect(locked).toHaveAccessibleDescription("Excluded by plan");
+    expect(locked).toHaveAccessibleDescription(
+      "Excluded by plan Edit the plan to include it."
+    );
+    const label = screen.getByText("Excluded by plan");
+    await userEvent.hover(label);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Edit the plan to include it."
+    );
 
     // The rule replaces the default: an application's own skill can change.
     const own = screen.getByRole("checkbox", {
@@ -424,7 +434,8 @@ describe("StageSkillsTable", () => {
   it("labels an excluded row Excluded when the caller gives no label", () => {
     renderTable({
       linkTo: undefined,
-      include: { onChange: jest.fn(), excludedLabel: () => undefined },
+      include: { onChange: jest.fn() },
+      excludedLabel: () => undefined,
     });
     const row = screen
       .getByRole("checkbox", {

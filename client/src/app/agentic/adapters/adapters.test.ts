@@ -882,6 +882,27 @@ describe("AgentWorkflowRun -> Plan run", () => {
     ]);
   });
 
+  it("gives the recommended Plan resolver each application's target profile pick", () => {
+    const recommendedPlanId = jest.fn(() => "migrate-app");
+    toWorkflowRunInputs(
+      {
+        applicationIds: [12, 13, 14],
+        planSelection: "recommended",
+        targetBranch: "b",
+        targetProfiles: [
+          { application: { id: 12 }, targetProfile: { id: 3 } },
+          { application: { id: 13 }, targetProfile: null },
+        ],
+      },
+      recommendedPlanId
+    );
+    expect(recommendedPlanId.mock.calls).toEqual([
+      [12, 3],
+      [13, null],
+      [14, undefined],
+    ]);
+  });
+
   it("returns the created runs as the start response", () => {
     expect(toStartResponse([workflowRun])).toEqual({
       planRuns: [{ id: "ui-x7k2p", name: "ui-x7k2p" }],

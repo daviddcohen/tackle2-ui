@@ -44,7 +44,7 @@ export type TargetProfileChoice =
 
 /**
  * Which target profile an application runs on, among its migration paths.
- * "Use each application's migration plan": the paths whose target profile
+ * "Use the migration plan of each target profile": the paths whose target profile
  * has a plan (the pick decides the plan; a profile without one cannot run).
  * One plan for all: the paths whose target profile uses that plan; none
  * when no path does (the run gets no target profile). One candidate is
@@ -87,6 +87,89 @@ export const targetProfileChoice = (
     : { kind: "required", candidates };
 };
 
+/**
+ * One archetype's target profile select in the Run migration plan dialog:
+ * a pick there sets the pick of every listed application that can run on
+ * that profile. A target profile belongs to one archetype, so "the same
+ * target profile for all" exists per archetype.
+ */
+export interface ArchetypeTargetProfiles {
+  archetype: Ref;
+  /** The archetype's profiles a listed application can run on, in order. */
+  profiles: ApplicationMigrationPath[];
+  /** Each application with the ids of those profiles it can run on. */
+  applications: { id: number; profileIds: ReadonlySet<number> }[];
+}
+
+/**
+ * The archetypes whose target profile two or more of the given applications
+ * choose among (`candidates`: each one's choices, two or more), in the
+ * order they first appear. One application alone keeps only its row select,
+ * and an archetype with one profile among the choices offers no choice (an
+ * application can be in several archetypes).
+ */
+export const archetypeTargetProfiles = (
+  choices: { applicationId: number; candidates: ApplicationMigrationPath[] }[]
+): ArchetypeTargetProfiles[] => {
+  const byArchetype = new Map<number, ArchetypeTargetProfiles>();
+  for (const { applicationId, candidates } of choices) {
+    const profileIds = new Map<number, Set<number>>();
+    for (const path of candidates) {
+      let group = byArchetype.get(path.archetype.id);
+      if (group == null) {
+        group = { archetype: path.archetype, profiles: [], applications: [] };
+        byArchetype.set(path.archetype.id, group);
+      }
+      if (
+        !group.profiles.some(
+          ({ targetProfile }) => targetProfile.id === path.targetProfile.id
+        )
+      ) {
+        group.profiles.push(path);
+      }
+      const ids = profileIds.get(path.archetype.id) ?? new Set<number>();
+      ids.add(path.targetProfile.id);
+      profileIds.set(path.archetype.id, ids);
+    }
+    for (const [archetypeId, ids] of profileIds) {
+      byArchetype
+        .get(archetypeId)
+        ?.applications.push({ id: applicationId, profileIds: ids });
+    }
+  }
+  return [...byArchetype.values()].filter(
+    ({ applications, profiles }) =>
+      applications.length > 1 && profiles.length > 1
+  );
+};
+
+/** The profile every application of the group has picked, if they agree. */
+export const sharedTargetProfilePick = (
+  group: ArchetypeTargetProfiles,
+  picks: TargetProfilePicks
+): number | undefined => {
+  const [first, ...others] = group.applications.map(({ id }) => picks[id]);
+  return first != null &&
+    group.profiles.some(({ targetProfile }) => targetProfile.id === first) &&
+    others.every((id) => id === first)
+    ? first
+    : undefined;
+};
+
+/** `picks` with `targetProfileId` for every application of the group that can run on it. */
+export const pickForArchetype = (
+  group: ArchetypeTargetProfiles,
+  targetProfileId: number,
+  picks: TargetProfilePicks
+): TargetProfilePicks => ({
+  ...picks,
+  ...Object.fromEntries(
+    group.applications
+      .filter(({ profileIds }) => profileIds.has(targetProfileId))
+      .map(({ id }) => [id, targetProfileId])
+  ),
+});
+
 /** One plan run the Run button starts: a plan and its ready applications. */
 export interface StartGroup {
   plan: EntityRef;
@@ -106,7 +189,7 @@ export interface StartGroup {
 
 /**
  * The plan runs the Run button starts, from the ready applications only.
- * "Use each application's migration plan" groups them by
+ * "Use the migration plan of each target profile" groups them by
  * the plan of the target profile they run on (an application without one
  * starts nothing). "Use one migration plan for all applications" is one
  * group with the picked plan, none before a plan is picked. Groups are

@@ -61,7 +61,6 @@ const renderModal = (
       <MigrationPreflightModal
         applications={applications}
         migrations={migrations}
-        linkTo={(pathname) => pathname}
         onClose={jest.fn()}
         onStartReady={onStartReady}
         {...props}
@@ -220,7 +219,7 @@ describe("MigrationPreflightModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("links the run a reason names, and offers the run otherwise", () => {
+  it("names applications, plans and blocking runs as plain text", () => {
     const run = { id: "1", name: "Run #1: Java EE to Quarkus" };
     renderModal({
       migrations: {
@@ -230,79 +229,15 @@ describe("MigrationPreflightModal", () => {
           planRun: run,
           preflightReason: `${run.name} already migrated this application.`,
         }),
-        3: view({
-          preflight: "blocked",
-          planRun: run,
-          preflightReason: "A source control credential reference is missing.",
-        }),
       },
     });
-    expect(screen.getByRole("link", { name: run.name })).toHaveAttribute(
-      "href",
-      "/plan-runs/1"
-    );
-    expect(
-      screen.getByText("already migrated this application.", { exact: false })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "agentic.execution.viewPlanRun" })
-    ).toHaveAttribute("href", "/plan-runs/1");
-  });
-
-  it("does not link the page it was opened from", () => {
-    const run = { id: "1", name: "Run #1: Java EE to Quarkus" };
-    renderModal(
-      {
-        migrations: {
-          ...migrations,
-          2: view({
-            preflight: "blocked",
-            planRun: run,
-            preflightReason: `${run.name} already migrated this application.`,
-          }),
-        },
-      },
-      "/applications/1"
-    );
-    expect(
-      screen.queryByRole("link", { name: "Customer Management" })
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("Customer Management")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Branch Operations" })
-    ).toHaveAttribute("href", "/applications/2");
-    expect(screen.getByRole("link", { name: run.name })).toBeInTheDocument();
-  });
-
-  it("does not link the run it was opened from", () => {
-    const run = { id: "1", name: "Run #1: Java EE to Quarkus" };
-    renderModal(
-      {
-        migrations: {
-          ...migrations,
-          2: view({
-            preflight: "blocked",
-            planRun: run,
-            preflightReason: `${run.name} already migrated this application.`,
-          }),
-          3: view({
-            preflight: "blocked",
-            planRun: run,
-            preflightReason:
-              "A source control credential reference is missing.",
-          }),
-        },
-      },
-      "/plan-runs/1"
-    );
-    expect(
-      screen.queryByRole("link", { name: run.name })
-    ).not.toBeInTheDocument();
+    // A link would close the dialog and lose its choices.
     expect(
       screen.getByText(`${run.name} already migrated this application.`)
     ).toBeInTheDocument();
+    expect(screen.getByText("Branch Operations")).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "agentic.execution.viewPlanRun" })
+      within(screen.getByRole("dialog")).queryByRole("link")
     ).not.toBeInTheDocument();
   });
 
@@ -342,7 +277,7 @@ describe("MigrationPreflightModal opened from a plan", () => {
       ...props,
     });
   const rowOf = (name: string) =>
-    screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+    screen.getByText(name).closest("tr") as HTMLElement;
   const checkboxOf = (name: string) =>
     within(rowOf(name)).getByRole("checkbox");
   // PF names the header checkbox itself; it cannot be renamed.

@@ -173,6 +173,6 @@ test("run dialog from one application speaks of that application", async ({
     .click();
   const dialog = page.getByRole("dialog", { name: "Run migration plan" });
   await expect(dialog).toContainText(
-    "Starts migrating Customer Management. It is checked before it starts."
+    "Runs a migration plan on Customer Management."
   );
 });

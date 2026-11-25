@@ -127,14 +127,15 @@ test("a run with an excluded skill: skills, context and the skill loader agree",
   await expect(
     main(page).getByRole("heading", { level: 2, name: "Skills by stage" })
   ).toBeVisible();
-  // An exclusion is per plan: every row of the skill is marked.
+  // An exclusion is per plan: every row of the skill reads "Excluded by
+  // plan".
   const excludedRows = skillsTable(main(page))
     .getByRole("row")
     .filter({ hasText: excluded[0] });
   await expect(excludedRows.first()).toContainText("Excluded");
   const excludedRowCount = await excludedRows.count();
   await expect(
-    skillsTable(main(page)).getByText("Excluded", { exact: true })
+    skillsTable(main(page)).getByText("Excluded by plan", { exact: true })
   ).toHaveCount(excludedRowCount);
   await expect(
     stagesTable(page).getByRole("columnheader", { name: /^Context/ })
@@ -150,7 +151,7 @@ test("a run with an excluded skill: skills, context and the skill loader agree",
     main(page).getByRole("heading", { level: 2, name: /^Skills/ })
   ).toHaveCount(1);
   await expect(
-    skillsTable(main(page)).getByText("Excluded", { exact: true })
+    skillsTable(main(page)).getByText("Excluded by plan", { exact: true })
   ).toHaveCount(excludedRowCount);
 
   // The stage page: tabs, the context row, and the skill loader's log.

@@ -107,22 +107,34 @@ export const toPlanRun = (
  * `modelId` becomes `spec.gateway` and `params` `spec.params` on every run;
  * each is omitted when the request leaves it out. "Use recommended Plan"
  * needs the Hub's application-to-Plan resolution, which does not exist yet:
- * pass `recommendedPlanId` to supply it. Throws for an application with no
+ * pass `recommendedPlanId` to supply it. It gets the application's target
+ * profile pick from `targetProfiles` (undefined when the request has none,
+ * null for no profile), because with "recommended" the pick decides the
+ * Plan: the one that target profile uses. Throws for an application with no
  * Plan. Not mapped, because the AgentWorkflowRun has no field for them
- * (docs/agentic-handoff.md, "Run skill review"): `targetProfiles` (the
- * target profile only decides Hub-scope skills, which the controller does
- * not resolve) and `excludedSkills` (would be the run-level skills field's
+ * (docs/agentic-handoff.md, "Run skill review"): the pick itself (it also
+ * decides the target profile's skills, which the controller does not
+ * resolve) and `excludedSkills` (would be the run-level skills field's
  * exclusions, stamped on each stage AgentRun's `spec.skills`).
  */
 export const toWorkflowRunInputs = (
   request: StartApplicationMigrationsRequest,
-  recommendedPlanId?: (applicationId: number) => EntityId | undefined
+  recommendedPlanId?: (
+    applicationId: number,
+    targetProfileId: number | null | undefined
+  ) => EntityId | undefined
 ): Crd.CreateWorkflowRunInput[] =>
   request.applicationIds.map((applicationId) => {
+    const pick = request.targetProfiles?.find(
+      ({ application }) => application.id === applicationId
+    );
     const workflowRef =
       request.planSelection === "single"
         ? request.planId
-        : recommendedPlanId?.(applicationId);
+        : recommendedPlanId?.(
+            applicationId,
+            pick === undefined ? undefined : (pick.targetProfile?.id ?? null)
+          );
     if (workflowRef == null || workflowRef === "") {
       throw new Error(`No Plan selected for application ${applicationId}.`);
     }

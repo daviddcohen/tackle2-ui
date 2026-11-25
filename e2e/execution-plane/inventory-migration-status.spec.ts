@@ -324,7 +324,7 @@ test.describe("Preflight modal", () => {
       "Inventory Service",
     ]);
     await expect(dialog).toContainText(
-      "Starts migrating the selected applications. Each application is checked before it starts."
+      "Runs a migration plan on the ready applications below."
     );
     // The readiness table comes first, with its count as the caption.
     await expect(dialog.locator("caption")).toHaveText(
@@ -392,7 +392,9 @@ test.describe("Preflight modal", () => {
       .getByLabel("Use one migration plan for all applications")
       .check();
     await expect(start).toBeDisabled();
-    await dialog.getByLabel("Use each application's migration plan").check();
+    await dialog
+      .getByLabel("Use the migration plan of each target profile")
+      .check();
     await expect(start).toBeEnabled();
     const branch = dialog.getByRole("textbox", { name: /Target branch/ });
     await branch.fill("   ");
@@ -426,10 +428,9 @@ test.describe("Preflight modal", () => {
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
     const row = dialog.getByRole("row", { name: /Customer Management/ });
     await expect(row).toContainText("Blocked");
-    // The reason names the run and links to it.
-    await expect(
-      row.getByRole("link", { name: /^Run #\d+: / })
-    ).toHaveAttribute("href", /\/plan-runs\/\d+/);
+    // The reason names the run, as text: a link would close the dialog.
+    await expect(row).toContainText(/Run #\d+: /);
+    await expect(row.getByRole("link")).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: /^Run on/ })).toHaveCount(
       0
     );

@@ -18,7 +18,10 @@ import { server } from "@mocks/server";
 import { MigrationPreflightModal } from "./migration-preflight-modal";
 import {
   PreflightRow,
+  archetypeTargetProfiles,
   groupReadyApplicationsByPlan,
+  pickForArchetype,
+  sharedTargetProfilePick,
   startApplicationIds,
   startTargetProfiles,
   targetProfileChoice,
@@ -323,6 +326,65 @@ describe("target profile picks", () => {
   });
 });
 
+describe("archetypeTargetProfiles", () => {
+  const javaEE = { id: 1, name: "Java EE Application" };
+  const legacy = { id: 3, name: "Legacy Java Application" };
+  const quarkus: ApplicationMigrationPath = {
+    archetype: javaEE,
+    targetProfile: { id: 11, name: "Quarkus 3.x" },
+  };
+  const openJdk: ApplicationMigrationPath = {
+    archetype: javaEE,
+    targetProfile: { id: 19, name: "OpenJDK 21 on OpenShift" },
+  };
+  const java8: ApplicationMigrationPath = {
+    archetype: legacy,
+    targetProfile: { id: 32, name: "Java 8 on OpenShift" },
+  };
+  const java17: ApplicationMigrationPath = {
+    archetype: legacy,
+    targetProfile: { id: 31, name: "Java 17 on OpenShift" },
+  };
+
+  it("groups the choices per archetype, and only when two or more applications share one", () => {
+    const groups = archetypeTargetProfiles([
+      { applicationId: 1, candidates: [quarkus, openJdk] },
+      { applicationId: 2, candidates: [openJdk, quarkus] },
+      { applicationId: 7, candidates: [java8, java17] },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].archetype).toEqual(javaEE);
+    expect(
+      groups[0].profiles.map(({ targetProfile }) => targetProfile.id)
+    ).toEqual([11, 19]);
+    expect(groups[0].applications.map(({ id }) => id)).toEqual([1, 2]);
+  });
+
+  it("offers no select for an archetype with one profile among the choices", () => {
+    // Two applications in both archetypes, one runnable profile in each.
+    expect(
+      archetypeTargetProfiles([
+        { applicationId: 1, candidates: [quarkus, java8] },
+        { applicationId: 2, candidates: [quarkus, java8] },
+      ])
+    ).toEqual([]);
+  });
+
+  it("sets every application that can run on the picked profile, and reads a shared pick", () => {
+    const [group] = archetypeTargetProfiles([
+      { applicationId: 1, candidates: [quarkus, openJdk] },
+      // On a plan for all that only OpenJDK 21 and Java 8 use.
+      { applicationId: 2, candidates: [openJdk, java8] },
+    ]);
+    expect(pickForArchetype(group, 11, { 9: 31 })).toEqual({ 9: 31, 1: 11 });
+    const picks = pickForArchetype(group, 19, {});
+    expect(picks).toEqual({ 1: 19, 2: 19 });
+    expect(sharedTargetProfilePick(group, picks)).toBe(19);
+    expect(sharedTargetProfilePick(group, { ...picks, 2: 32 })).toBeUndefined();
+    expect(sharedTargetProfilePick(group, { 1: 19 })).toBeUndefined();
+  });
+});
+
 describe("Run migration plan: the preview covers exactly what Run sends", () => {
   beforeEach(() => {
     server.use(
@@ -370,14 +432,13 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
             rows.map((row) => [row.application.id, row.migration])
           )}
           initialValues={initialValues}
-          linkTo={(pathname) => pathname}
           onClose={jest.fn()}
           onStartReady={onStartReady}
         />
       </Router>
     );
     await user.click(
-      await screen.findByRole("button", { name: "Skills by stage" })
+      await screen.findByRole("button", { name: "Review skills by stage" })
     );
     // Every application a table names in an "Every stage: {application}" title.
     await waitFor(() =>
@@ -438,7 +499,6 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
             planRows.map((row) => [row.application.id, row.migration])
           )}
           plan={{ id: "1", name: "Java EE to Quarkus" }}
-          linkTo={(pathname) => pathname}
           onClose={jest.fn()}
           onStartReady={onStartReady}
         />
@@ -449,7 +509,7 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
       .closest("tr") as HTMLElement;
     await user.click(within(policyRow).getByRole("checkbox"));
     await user.click(
-      await screen.findByRole("button", { name: "Skills by stage" })
+      await screen.findByRole("button", { name: "Review skills by stage" })
     );
     await waitFor(() =>
       expect(
@@ -497,14 +557,13 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
             rows.slice(2).map((row) => [row.application.id, row.migration])
           )}
           plan={{ id: "1", name: "Java EE to Quarkus" }}
-          linkTo={(pathname) => pathname}
           onClose={jest.fn()}
           onStartReady={jest.fn()}
         />
       </Router>
     );
     expect(
-      await screen.findByRole("button", { name: "Skills by stage" })
+      await screen.findByRole("button", { name: "Review skills by stage" })
     ).toBeInTheDocument();
     for (const name of ["Customer Management", "Policy Administration"]) {
       const row = screen
@@ -513,16 +572,17 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
       await user.click(within(row).getByRole("checkbox"));
     }
     expect(
-      screen.queryByRole("button", { name: "Skills by stage" })
+      screen.queryByRole("button", { name: "Review skills by stage" })
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Run on 0 applications" })
     ).toBeDisabled();
   });
 
-  it("with the plan fixed, names the plan in the preview while the plans load", async () => {
+  it("with the plan fixed, waits for the plans list instead of saying the plan is gone", async () => {
     const user = userEvent.setup();
-    // The plans list answers late: meanwhile the preview names the fixed plan.
+    // The plans list answers late: meanwhile the preview loads the fixed
+    // plan's skills for the selected application.
     server.use(
       rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
         res(ctx.delay(5000), ctx.json([]))
@@ -536,7 +596,6 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
             rows.slice(2).map((row) => [row.application.id, row.migration])
           )}
           plan={{ id: "1", name: "Java EE to Quarkus" }}
-          linkTo={(pathname) => pathname}
           onClose={jest.fn()}
           onStartReady={jest.fn()}
         />
@@ -547,13 +606,10 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
       .closest("tr") as HTMLElement;
     await user.click(within(policy).getByRole("checkbox"));
     await user.click(
-      await screen.findByRole("button", { name: "Skills by stage" })
+      await screen.findByRole("button", { name: "Review skills by stage" })
     );
-    expect(
-      await screen.findByText(
-        "The skills each stage's agent gets when Java EE to Quarkus runs on Customer Management."
-      )
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Loading skills")).toBeInTheDocument();
+    expect(screen.queryByText("Skills could not be loaded.")).toBeNull();
   });
 
   it("counts in the Run button what Run sends", async () => {
@@ -566,7 +622,6 @@ describe("Run migration plan: the preview covers exactly what Run sends", () => 
         <MigrationPreflightModal
           applications={[rows[0].application, odd]}
           migrations={{ 15: rows[0].migration, 9: view(undefined) }}
-          linkTo={(pathname) => pathname}
           onClose={jest.fn()}
           onStartReady={onStartReady}
         />
