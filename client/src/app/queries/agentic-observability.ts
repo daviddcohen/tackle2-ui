@@ -42,12 +42,14 @@ import {
   AgentRunLogChunk,
   AgentRunLogSource,
   AgentRunTranscript,
+  AgentRunTranscriptChunk,
   ControllerRunPhase,
   EntityId,
   StageAgentRun,
   isTerminalRunPhase,
   stageAgentRunsOf,
 } from "@app/agentic";
+import { foldTranscript, parseRecordedTranscript } from "@app/agentic/adapters";
 import type { AgentRun } from "@app/api/agentic/contract";
 import { isTerminalPhase } from "@app/api/agentic/contract";
 import {
@@ -275,38 +277,95 @@ export const useFetchAgentRunResource = (
 /** No recording (yet): the hub's 404 with `X-Transcript-Status: none`. */
 const NO_RECORDING: AgentRunTranscript = { status: "none", entries: [] };
 
+/** The transcript of an agent run as read so far. */
+export interface AgentRunTranscriptState {
+  /** The complete recorded lines read so far (NDJSON, unparsed). */
+  lines: string[];
+  /** Offset (lines) to read on from. */
+  nextOffset: number;
+  transcript: AgentRunTranscript;
+}
+
+const NO_RECORDING_STATE: AgentRunTranscriptState = {
+  lines: [],
+  nextOffset: 0,
+  transcript: NO_RECORDING,
+};
+
+/**
+ * The transcript after `chunk`: its lines are added to the lines held and
+ * the whole list is folded again (a frame can change an earlier entry: a
+ * tool call update, the next chunk of a message), so entry ids stay the
+ * same across reads. No new line: the entries held are kept as they are.
+ * A skipped run has no recording: the lines held are dropped.
+ */
+export const appendTranscriptChunk = (
+  held: AgentRunTranscriptState,
+  { status, skipReason, lines: read, nextOffset }: AgentRunTranscriptChunk
+): AgentRunTranscriptState => {
+  const recording = { status, ...(skipReason != null ? { skipReason } : {}) };
+  if (status === "skipped") {
+    return {
+      lines: [],
+      nextOffset: 0,
+      transcript: { ...recording, entries: [] },
+    };
+  }
+  const lines = read.length > 0 ? [...held.lines, ...read] : held.lines;
+  const entries =
+    lines === held.lines
+      ? held.transcript.entries
+      : foldTranscript(parseRecordedTranscript(lines.join("\n"))).entries;
+  return { lines, nextOffset, transcript: { ...recording, entries } };
+};
+
+const selectTranscript = (read: PhasedRead<AgentRunTranscriptState>) =>
+  read.value.transcript;
+
 /**
  * A transcript that cannot change any more: only a skipped one, which the
  * recorder decides before the run starts (approve mode, askUser).
  */
-const isFinalTranscript = ({ status }: AgentRunTranscript) =>
-  status === "skipped";
+const isFinalTranscript = ({ transcript }: AgentRunTranscriptState) =>
+  transcript.status === "skipped";
 
 /**
- * The stage's transcript and its recording status. A 404 is no recording
- * (`none`), which a live stage polls until the recorder starts. A skipped
- * transcript is final: it is not polled again (a mutation that changes the
- * stage invalidates it). Any other status is polled by the stage's phase,
- * and once the phase is terminal read once more.
+ * The stage's transcript and its recording status, read incrementally:
+ * every fetch asks only for the lines after those held (`nextOffset`,
+ * lines) and folds the whole held list again. Unchanged entries stay the
+ * same objects (the query's structural sharing), so the view renders only
+ * new or changed ones. A 404 is no recording (`none`), which a live stage
+ * polls until the recorder starts. A skipped transcript is final: it is not
+ * polled again (a mutation that changes the stage invalidates it). Any
+ * other status is polled by the stage's phase, and once the phase is
+ * terminal read once more.
  */
 export const useFetchAgentRunTranscript = (
   name: string | undefined,
   phase: ControllerRunPhase | undefined
 ) => {
+  const queryClient = useQueryClient();
   const { data, isFetching, isInitialLoading, error, refetch, dataUpdatedAt } =
     useQuery({
       queryKey: agentRunObservabilityKeys.transcript(name ?? ""),
-      queryFn: ({ meta }) =>
+      queryFn: ({ queryKey, meta }) =>
         readInPhase(meta, async () => {
+          const held =
+            queryClient.getQueryData<PhasedRead<AgentRunTranscriptState>>(
+              queryKey
+            )?.value ?? NO_RECORDING_STATE;
           try {
-            return await getAgentRunTranscript(name ?? "");
+            return appendTranscriptChunk(
+              held,
+              await getAgentRunTranscript(name ?? "", held.nextOffset)
+            );
           } catch (failure) {
-            if (isNotFoundError(failure)) return NO_RECORDING;
+            if (isNotFoundError(failure)) return NO_RECORDING_STATE;
             throw failure;
           }
         }),
       meta: { phase } satisfies PhaseMeta,
-      select: selectValue<AgentRunTranscript>,
+      select: selectTranscript,
       enabled: isUsableId(name),
       retry: agenticRetry,
       refetchInterval: (_transcript, query) =>

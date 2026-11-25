@@ -45,11 +45,10 @@ const respond = (
     isFetching: false,
     isLoading: false,
     fetchError: null,
-    isNotFound: false,
     lastUpdatedAt: Date.now(),
     refetch,
     ...overrides,
-  } as unknown as ReturnType<typeof useFetchAgentRunTranscript>);
+  });
 
 const at = (time: string) => `2026-11-16T${time}Z`;
 
@@ -58,7 +57,7 @@ const edit: TranscriptEntry = {
   id: "4",
   at: at("21:24:20"),
   toolCallId: "toolu_edit",
-  title: "developer__text_editor: str_replace src/Main.java",
+  title: "text_editor · src/Main.java",
   toolKind: "edit",
   status: "completed",
   output: "The file has been edited.",
@@ -104,7 +103,7 @@ const entries: TranscriptEntry[] = [
     toolKind: "execute",
     status: "failed",
     // Tools print ANSI colors; the transcript shows the plain text.
-    output: "[\u001b[1;31mERROR\u001b[m] BUILD FAILURE",
+    output: "[\u001b[1;31mERROR\u001b[m] BUILD FAILURE\n[ERROR] 1 error",
   },
   edit,
   {
@@ -162,9 +161,13 @@ describe("AgentRunTranscript", () => {
     renderTranscript();
     await markdownLoaded();
 
-    // Plan, message, thought, two tool calls and the user's message; the
-    // notice and the gap divide the conversation.
-    expect(messages()).toHaveLength(6);
+    // Turns: the plan; the agent's message with the thought and the two
+    // tool calls after it; the user's message. The notice and the gap
+    // divide the conversation.
+    expect(messages()).toHaveLength(3);
+    expect(
+      within(messages()[1]).getAllByRole("button", { expanded: false })
+    ).toHaveLength(2);
     const region = transcriptRegion();
     expect(within(region).getByText("Context compacted.")).toBeInTheDocument();
     expect(
@@ -222,10 +225,10 @@ describe("AgentRunTranscript", () => {
     respond({ status: "complete", entries: [edit] });
     renderTranscript();
 
-    const toggle = toggleFor(/str_replace src\/Main\.java/);
+    const toggle = toggleFor(/text_editor · src\/Main\.java/);
     // Kind (the title does not say edit as a word), title and status.
     expect(toggle).toHaveTextContent(
-      "Editdeveloper__text_editor: str_replace src/Main.javaCompleted"
+      "Edittext_editor · src/Main.javaCompleted"
     );
     expect(within(toggle).getByText("Completed")).toHaveClass(
       "pf-v6-c-label__text"
@@ -237,14 +240,21 @@ describe("AgentRunTranscript", () => {
     respond({ status: "recording", entries });
     renderTranscript();
 
-    const toggle = toggleFor(/str_replace src\/Main\.java/);
+    const toggle = toggleFor(/text_editor · src\/Main\.java/);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     toggle.focus();
     await user.keyboard("{Enter}");
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    const diff = screen.getByText(/@@ -1,3 \+1,3 @@/);
-    expect(diff).toHaveTextContent("-@Stateless");
-    expect(diff).toHaveTextContent("+@ApplicationScoped");
+    const diff = screen.getByRole("region", { name: "Diff of src/Main.java" });
+    expect(diff.textContent).toBe(
+      " package a;\n-@Stateless\n+@ApplicationScoped\n class Main {}"
+    );
+    expect(within(diff).getByText("-@Stateless")).toHaveClass(
+      "pf-v6-u-text-color-status-danger"
+    );
+    expect(within(diff).getByText("+@ApplicationScoped")).toHaveClass(
+      "pf-v6-u-text-color-status-success"
+    );
     expect(screen.getByText("src/Main.java")).toBeVisible();
     expect(screen.getByText("The file has been edited.")).toBeVisible();
 
@@ -262,7 +272,9 @@ describe("AgentRunTranscript", () => {
     expect(toggle).toHaveTextContent("Failed");
     // "Run mvn compile" does not say execute: the kind shows.
     expect(toggle).toHaveTextContent("Execute");
-    expect(screen.getByText("[ERROR] BUILD FAILURE")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Output" }).textContent).toBe(
+      "[ERROR] BUILD FAILURE\n[ERROR] 1 error"
+    );
   });
 
   it("opens a running tool call while the stage runs, and says when it has no output yet", () => {
@@ -313,8 +325,8 @@ describe("AgentRunTranscript", () => {
       expect(
         within(toggle).getByText("Not finished").closest(".pf-v6-c-label")
       ).not.toHaveClass("pf-m-blue");
-      // A tool call that will not run on is no longer opened for it.
-      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      // Opened while it ran, it stays open for the reader.
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
     }
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
@@ -327,7 +339,7 @@ describe("AgentRunTranscript", () => {
     renderTranscript();
 
     const plan = messages()[0];
-    expect(within(plan).getByText("Plan")).toBeVisible();
+    expect(within(plan).getByText("Plan (latest status)")).toBeVisible();
     expect(
       within(plan)
         .getAllByRole("listitem")
@@ -385,7 +397,7 @@ describe("AgentRunTranscript", () => {
     const failed = entries[3];
     respond({ status: "recording", entries: [edit, failed] });
     const { rerender } = renderTranscript();
-    await user.click(toggleFor(/str_replace src\/Main\.java/));
+    await user.click(toggleFor(/text_editor · src\/Main\.java/));
     await user.click(toggleFor(/Run mvn compile/));
 
     respond({
@@ -419,7 +431,7 @@ describe("AgentRunTranscript", () => {
       />
     );
 
-    expect(toggleFor(/str_replace src\/Main\.java/)).toHaveAttribute(
+    expect(toggleFor(/text_editor · src\/Main\.java/)).toHaveAttribute(
       "aria-expanded",
       "true"
     );
@@ -462,7 +474,9 @@ describe("AgentRunTranscript", () => {
 
     const copy = screen.getByRole("button", { name: "Copy output" });
     await user.click(copy);
-    expect(await navigator.clipboard.readText()).toBe("[ERROR] BUILD FAILURE");
+    expect(await navigator.clipboard.readText()).toBe(
+      "[ERROR] BUILD FAILURE\n[ERROR] 1 error"
+    );
     await user.unhover(copy);
     await user.hover(copy);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Copied");
@@ -472,13 +486,13 @@ describe("AgentRunTranscript", () => {
     const user = userEvent.setup();
     respond({ status: "complete", entries: [edit] });
     renderTranscript();
-    await user.click(toggleFor(/str_replace src\/Main\.java/));
+    await user.click(toggleFor(/text_editor · src\/Main\.java/));
 
     await user.click(
       screen.getByRole("button", { name: "Copy diff of src/Main.java" })
     );
-    expect(await navigator.clipboard.readText()).toMatch(
-      /^--- a\/src\/Main\.java\n\+\+\+ b\/src\/Main\.java\n@@/
+    expect(await navigator.clipboard.readText()).toBe(
+      " package a;\n-@Stateless\n+@ApplicationScoped\n class Main {}"
     );
   });
 
@@ -541,12 +555,11 @@ describe("AgentRunTranscript", () => {
     });
     renderTranscript();
     await markdownLoaded();
-    expect(screen.getByText("2026-11-16 12:00:00")).toBeInTheDocument();
-    expect(screen.getByText("12:00:05")).toBeInTheDocument();
-    expect(screen.getByText("2026-11-17 00:00:01")).toBeInTheDocument();
-    expect(
-      screen.getByText("The whole stage was recorded.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Nov 16, 2026 12:00:00 PM")).toBeInTheDocument();
+    expect(screen.getByText("12:00:05 PM")).toBeInTheDocument();
+    expect(screen.getByText("Nov 17, 2026 12:00:01 AM")).toBeInTheDocument();
+    // A complete recording needs no sentence.
+    expect(screen.queryByText(/was recorded/)).toBeNull();
   });
 
   it("gives each message its UTC time, in its name and the time's tooltip, to match the log", async () => {
@@ -557,9 +570,9 @@ describe("AgentRunTranscript", () => {
 
     // The tests run in UTC, so local and UTC read the same here.
     expect(messages()[0]).toHaveAccessibleName(
-      "Message from Java Code Migrator at 2026-11-16 21:24:05 (UTC 2026-11-16T21:24:05.000Z)"
+      "Message from Java Code Migrator at Nov 16, 2026 9:24:05 PM (UTC 21:24:05)"
     );
-    await user.hover(screen.getByText("2026-11-16 21:24:05"));
+    await user.hover(screen.getByText("Nov 16, 2026 9:24:05 PM"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       /\(UTC 2026-11-16T21:24:05\.000Z\)$/
     );
@@ -684,7 +697,7 @@ describe("AgentRunTranscript", () => {
     respond({ status: "complete", entries: [edit] });
     renderTranscript();
 
-    const toggle = toggleFor(/str_replace src\/Main\.java/);
+    const toggle = toggleFor(/text_editor · src\/Main\.java/);
     const card = toggle.closest("section") as HTMLElement;
     expect(card.querySelector(".pf-v6-c-code-block")).toBeNull();
     expect(
@@ -698,11 +711,11 @@ describe("AgentRunTranscript", () => {
     const user = userEvent.setup();
     respond({ status: "complete", entries: [edit] });
     renderTranscript();
-    await user.click(toggleFor(/str_replace src\/Main\.java/));
+    await user.click(toggleFor(/text_editor · src\/Main\.java/));
 
-    const output = screen.getByRole("region", { name: "Output" });
-    expect(output).toHaveAttribute("tabindex", "0");
-    expect(output).toHaveTextContent("The file has been edited.");
+    // Next to the diff, the one-line output is a sentence.
+    expect(screen.getByText("The file has been edited.")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Output" })).toBeNull();
     expect(
       screen.getByRole("region", { name: "Diff of src/Main.java" })
     ).toHaveTextContent("+@ApplicationScoped");
@@ -816,12 +829,14 @@ describe("AgentRunTranscript", () => {
     const shown = messages();
     expect(shown).toHaveLength(2);
     expect(shown[0]).toHaveAccessibleName(
-      "Message from Migration Proposal Agent at 2026-11-16 21:20:00 (UTC 2026-11-16T21:20:00.000Z)"
+      "Message from Migration Proposal Agent at Nov 16, 2026 9:20:00 PM (UTC 21:20:00)"
     );
     expect(shown[0]).toHaveTextContent(
       "Identified 4 high-risk migration areas."
     );
-    expect(shown[1]).toHaveAccessibleName(/^Message from User at 21:21:00 /);
+    expect(shown[1]).toHaveAccessibleName(
+      "Message from User at 9:21:00 PM (UTC 21:21:00)"
+    );
     expect(shown[1]).toHaveTextContent("Go ahead.");
     await user.click(screen.getByRole("button", { name: "View logs" }));
     expect(onViewLogs).toHaveBeenCalledTimes(1);
@@ -951,5 +966,157 @@ describe("AgentRunTranscript", () => {
       );
     });
     expect(box.scrollTop).toBe(3000);
+  });
+
+  it("starts a turn where the agent speaks, with the thoughts just before it", async () => {
+    const thought = (id: string): TranscriptEntry => ({
+      kind: "thought",
+      id,
+      at: at("21:24:00"),
+      text: id,
+    });
+    const say = (id: string): TranscriptEntry => ({
+      kind: "message",
+      id,
+      at: at("21:24:01"),
+      role: "agent",
+      text: id,
+    });
+    respond({
+      status: "complete",
+      entries: [
+        thought("t1"),
+        say("Reading."),
+        entries[3],
+        thought("t2"),
+        say("Building."),
+        edit,
+      ],
+    });
+    renderTranscript();
+    await markdownLoaded();
+
+    const [first, second] = messages();
+    expect(messages()).toHaveLength(2);
+    expect(within(first).getByText(/^t1$/)).toBeInTheDocument();
+    expect(within(first).getByText("Reading.")).toBeInTheDocument();
+    expect(within(first).getByText(/^t2$/)).toBeInTheDocument();
+    expect(within(first).getByText("Run mvn compile")).toBeInTheDocument();
+    expect(within(second).getByText("Building.")).toBeInTheDocument();
+    expect(
+      within(second).getByText("text_editor · src/Main.java")
+    ).toBeInTheDocument();
+  });
+
+  it("ends a running stage's chat with the agent working, and a finished one without", () => {
+    respond({ status: "recording", entries: [entries[1]] });
+    const { rerender } = renderTranscript();
+    expect(
+      within(messages()[0]).getByText("The agent is working")
+    ).toBeInTheDocument();
+
+    respond({ status: "complete", entries: [entries[1]] });
+    rerender(<AgentRunTranscript agentRun={agentRun} phase="Succeeded" />);
+    expect(screen.queryByText("The agent is working")).toBeNull();
+  });
+
+  it("tells screen readers how many entries arrived, not the ones already there", () => {
+    respond({ status: "recording", entries: [entries[1]] });
+    const { rerender } = renderTranscript();
+    const announcement = () =>
+      transcriptRegion().querySelector(".pf-chatbot__messagebox-announcement");
+    expect(announcement()).toHaveTextContent("");
+
+    respond({
+      status: "recording",
+      entries: [entries[1], entries[2], entries[3]],
+    });
+    rerender(
+      <AgentRunTranscript
+        agentRun={agentRun}
+        agentName="Java Code Migrator"
+        phase="Running"
+      />
+    );
+    expect(announcement()).toHaveTextContent("2 new transcript entries");
+  });
+
+  it("announces a second batch of the same size too", () => {
+    jest.useFakeTimers();
+    try {
+      const shown = (count: number) => {
+        respond({ status: "recording", entries: entries.slice(1, 1 + count) });
+        rerender(
+          <AgentRunTranscript
+            agentRun={agentRun}
+            agentName="Java Code Migrator"
+            phase="Running"
+          />
+        );
+      };
+      respond({ status: "recording", entries: [entries[1]] });
+      const { rerender } = renderTranscript();
+      const announcement = () =>
+        transcriptRegion().querySelector(
+          ".pf-chatbot__messagebox-announcement"
+        );
+      shown(2);
+      expect(announcement()).toHaveTextContent("1 new transcript entry");
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(announcement()).toHaveTextContent("");
+      shown(3);
+      expect(announcement()).toHaveTextContent("1 new transcript entry");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("offers a copy button only for output of more than one line", async () => {
+    const user = userEvent.setup();
+    const oneLine: TranscriptEntry = {
+      ...entries[3],
+      output: "BUILD FAILURE",
+    } as TranscriptEntry;
+    respond({ status: "complete", entries: [oneLine] });
+    renderTranscript();
+    const output = screen.getByRole("region", { name: "Output" });
+    expect(output).toHaveAttribute("tabindex", "0");
+    expect(screen.queryByRole("button", { name: "Copy output" })).toBeNull();
+
+    respond({ status: "complete", entries: [entries[3]] });
+    renderTranscript();
+    await user.click(screen.getAllByRole("button", { name: "Copy output" })[0]);
+    expect(await navigator.clipboard.readText()).toContain("BUILD FAILURE");
+  });
+
+  it("names a recording gap whose times are not known", () => {
+    respond({
+      status: "incomplete",
+      entries: [entries[1], { kind: "gap", id: "g", from: "", to: "" }],
+    });
+    renderTranscript();
+    expect(
+      within(transcriptRegion()).getByText("Recording interrupted")
+    ).toBeInTheDocument();
+  });
+
+  it("sums up a collapsed thought without its Markdown marks", () => {
+    respond({
+      status: "complete",
+      entries: [
+        {
+          kind: "thought",
+          id: "t",
+          at: at("21:24:00"),
+          text: "## **Analyzing** the _pom_\nMore.",
+        },
+      ],
+    });
+    renderTranscript();
+    expect(
+      screen.getByRole("button", { name: "Thought: Analyzing the pom" })
+    ).toBeInTheDocument();
   });
 });

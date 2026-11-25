@@ -525,10 +525,37 @@ const handlers = [
     `${AGENT_RUNS}/:name`,
     read((req) => observability.getAgentRunResource(param(req, "name")))
   ),
-  rest.get(
-    `${AGENT_RUNS}/:name/transcript`,
-    read((req) => observability.getAgentRunTranscript(param(req, "name")))
-  ),
+  rest.get(`${AGENT_RUNS}/:name/transcript`, async (req, res, ctx) => {
+    // NDJSON and headers, as the hub serves a recorded transcript; the
+    // scenario applies as in `read()`.
+    const scenario = getPrototypeScenario();
+    if (scenario === "apiError") {
+      return res(
+        ctx.status(503),
+        ctx.json({ message: "The prototype API dependency is unavailable." })
+      );
+    }
+    try {
+      const reply = observability.getAgentRunTranscript(
+        param(req, "name"),
+        req.url.searchParams.get("offset")
+      );
+      return res(
+        ...(scenario === "loading" ? [ctx.delay(LOADING_DELAY_MS)] : []),
+        ctx.status(reply.httpStatus),
+        ctx.set({
+          "Content-Type": "application/x-ndjson",
+          "X-Transcript-Status": reply.status,
+          ...(reply.skipReason != null
+            ? { "X-Transcript-Skip-Reason": reply.skipReason }
+            : {}),
+        }),
+        ctx.body(reply.ndjson)
+      );
+    } catch (error) {
+      return fail(res, ctx, error);
+    }
+  }),
   rest.get(
     `${AGENT_RUNS}/:name/logs`,
     read((req) =>

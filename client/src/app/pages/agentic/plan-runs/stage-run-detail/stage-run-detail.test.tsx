@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { rest } from "msw";
+import { RestContext, RestRequest, rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
@@ -114,7 +114,7 @@ const useAgentRuns = (agentRuns: StageAgentRun[] | "error") =>
     ),
     rest.get(
       `${AGENTIC_ENDPOINTS.agentRuns}/:name/transcript`,
-      (_req, res, ctx) => res(ctx.json(mockTranscript))
+      (req, res, ctx) => res(...transcriptReply(req, ctx, mockTranscript))
     ),
     rest.get(`${AGENTIC_ENDPOINTS.agentRuns}/:name/logs`, (req, res, ctx) =>
       res(
@@ -131,6 +131,40 @@ const useAgentRuns = (agentRuns: StageAgentRun[] | "error") =>
   );
 
 let mockTranscript: AgentRunTranscript = { status: "recording", entries: [] };
+
+/**
+ * The hub's transcript answer: the recording status in headers and the
+ * recorded ACP updates as NDJSON lines from the line offset asked for
+ * (`entries` is not served: the UI folds the lines).
+ */
+const transcriptReply = (
+  req: RestRequest,
+  ctx: RestContext,
+  { status, skipReason }: Pick<AgentRunTranscript, "status" | "skipReason">,
+  updates: Record<string, unknown>[] = []
+) => [
+  ctx.set({
+    "Content-Type": "application/x-ndjson",
+    "X-Transcript-Status": status,
+    ...(skipReason != null ? { "X-Transcript-Skip-Reason": skipReason } : {}),
+  }),
+  ctx.body(
+    updates
+      .slice(Number(req.url.searchParams.get("offset") ?? 0))
+      .map(
+        (update) =>
+          `${JSON.stringify({
+            t: "2026-11-10T10:07:00Z",
+            frame: {
+              jsonrpc: "2.0",
+              method: "session/update",
+              params: { update },
+            },
+          })}\n`
+      )
+      .join("")
+  ),
+];
 
 const resourceOf = (name: string): AgentRun => ({
   apiVersion: "konveyor.io/v1alpha1",
@@ -1299,18 +1333,15 @@ describe("StageRunDetail", () => {
           `${AGENTIC_ENDPOINTS.agentRuns}/:name/transcript`,
           (req, res, ctx) =>
             res(
-              ctx.json({
-                status: "complete",
-                entries: [
-                  {
-                    kind: "message",
-                    id: "m1",
-                    at: "2026-11-10T10:07:00Z",
-                    role: "agent",
+              ...transcriptReply(req, ctx, { status: "complete" }, [
+                {
+                  sessionUpdate: "agent_message_chunk",
+                  content: {
+                    type: "text",
                     text: `Working on ${req.params.name}`,
                   },
-                ],
-              } satisfies AgentRunTranscript)
+                },
+              ])
             )
         ),
         rest.get(
@@ -1676,20 +1707,16 @@ describe("StageRunDetail", () => {
           `${AGENTIC_ENDPOINTS.agentRuns}/:name/transcript`,
           (req, res, ctx) =>
             res(
-              ctx.json({
-                status: "complete",
-                entries: [
-                  {
-                    kind: "toolCall",
-                    id: "1",
-                    at: "2026-11-10T10:07:00Z",
-                    toolCallId: "",
-                    title: `Build ${req.params.name}`,
-                    status: "completed",
-                    output: "ok",
-                  },
-                ],
-              } satisfies AgentRunTranscript)
+              ...transcriptReply(req, ctx, { status: "complete" }, [
+                {
+                  sessionUpdate: "tool_call",
+                  title: `Build ${req.params.name}`,
+                  status: "completed",
+                  content: [
+                    { type: "content", content: { type: "text", text: "ok" } },
+                  ],
+                },
+              ])
             )
         )
       );

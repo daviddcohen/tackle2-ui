@@ -6,8 +6,17 @@
  */
 import { isAxiosError } from "axios";
 
-import { AgentRunUsage, PlanRun, TranscriptEntry } from "@app/agentic";
-import { toResourceName } from "@app/agentic/adapters";
+import {
+  AgentRunTranscript,
+  AgentRunUsage,
+  PlanRun,
+  TranscriptEntry,
+} from "@app/agentic";
+import {
+  foldTranscript,
+  parseRecordedTranscript,
+  toResourceName,
+} from "@app/agentic/adapters";
 import {
   getAgentRunLog as fetchAgentRunLog,
   getAgentRunResource as fetchAgentRunResource,
@@ -33,7 +42,7 @@ import {
   OBSERVABILITY_SCRIPT_MS,
   getAgentRunLog,
   getAgentRunResource,
-  getAgentRunTranscript,
+  getAgentRunTranscript as readRecordedTranscript,
   listPlanRunAgentRuns,
   utf8Length,
 } from "./observability";
@@ -68,6 +77,18 @@ const fraction = (usage: AgentRunUsage | undefined) =>
 
 const texts = (entries: TranscriptEntry[]) =>
   entries.flatMap((entry) => (entry.kind === "message" ? [entry.text] : []));
+
+/** The whole recorded transcript, folded as the UI shows it (a 404 is `none`). */
+const getAgentRunTranscript = (name: string): AgentRunTranscript => {
+  const { httpStatus, status, skipReason, ndjson } =
+    readRecordedTranscript(name);
+  if (httpStatus === 404) return { status: "none", entries: [] };
+  return {
+    status,
+    ...(skipReason != null ? { skipReason } : {}),
+    entries: foldTranscript(parseRecordedTranscript(ndjson)).entries,
+  };
+};
 
 const lineCount = (text: string) => text.split("\n").length - 1;
 
@@ -150,6 +171,24 @@ describe("observability mock", () => {
       messages.forEach((message) =>
         expect(transcript).toContain(message.content)
       );
+    });
+
+    it("never puts a progress message inside an agent message", () => {
+      // The script's agent messages are whole sentences, sent in chunks.
+      for (let ms = 0; ms <= 60000; ms += 1000) {
+        jest.setSystemTime(START + ms);
+        const progress = new Set(
+          (getPlanRun("1").stageRuns[1].messages ?? []).map((m) => m.content)
+        );
+        const { entries } = getAgentRunTranscript("run-1-migrate");
+        entries.forEach((entry, index) => {
+          const previous = entries[index - 1];
+          if (entry.kind !== "message" || !progress.has(entry.text)) return;
+          if (previous?.kind !== "message" || progress.has(previous.text))
+            return;
+          expect(previous.text.trim()).toMatch(/[.:!?]$/);
+        });
+      }
     });
 
     it("reports ACPReady once the sandbox listens", () => {
@@ -468,6 +507,71 @@ describe("observability mock", () => {
       // Reading on from the live offset gives exactly the rest.
       const rest = getAgentRunLog(name, "agent", String(live.nextOffset));
       expect(live.text + rest.text).toBe(saved.text);
+    });
+
+    it("answers 404 (none) until the sandbox is ready, then the recorded lines", () => {
+      seed("configured");
+      db.executionPolicy = { interactionMode: "unattended" };
+      const {
+        planRuns: [ref],
+      } = startApplicationMigrations({
+        applicationIds: [1],
+        planSelection: "single",
+        planId: "1",
+        targetBranch: "main",
+      });
+      const index = getPlanRun(ref.id).stageRuns.findIndex(
+        (stage) => !stage.requiresApproval
+      );
+      jest.advanceTimersByTime(PENDING_MS + index * STAGE_MS + 1000);
+      const { name, phase } = agentRunOf(
+        ref.id,
+        getPlanRun(ref.id).stageRuns[index].stageId
+      );
+      expect(phase).toBe("Running");
+      expect(readRecordedTranscript(name)).toEqual({
+        httpStatus: 404,
+        status: "none",
+        ndjson: "",
+      });
+      jest.advanceTimersByTime(2000);
+      const reply = readRecordedTranscript(name);
+      expect(reply).toMatchObject({ httpStatus: 200, status: "recording" });
+      expect(lineCount(reply.ndjson)).toBeGreaterThan(0);
+    });
+
+    it("keeps its transcript append-only: reading on from the lines read live gives exactly the rest", () => {
+      const { runId, name, stageId } = watchRecordedStage();
+      jest.advanceTimersByTime(900);
+      const live = readRecordedTranscript(name).ndjson;
+      expect(live).not.toBe("");
+
+      jest.advanceTimersByTime(STAGE_MS);
+      expect(agentRunOf(runId, stageId).phase).toBe("Succeeded");
+      const saved = readRecordedTranscript(name);
+      expect(saved.status).toBe("complete");
+      expect(saved.ndjson.startsWith(live)).toBe(true);
+      const rest = readRecordedTranscript(name, String(lineCount(live)));
+      expect(live + rest.ndjson).toBe(saved.ndjson);
+      // The final messages are recorded too.
+      const stage = getPlanRun(runId).stageRuns.find(
+        (candidate) => candidate.stageId === stageId
+      );
+      const shown = texts(getAgentRunTranscript(name).entries);
+      (stage?.messages ?? []).forEach((message) =>
+        expect(shown).toContain(message.content)
+      );
+    });
+
+    it("reads no line past the end, and a malformed offset is a 400", () => {
+      const { name } = watchRecordedStage();
+      const all = readRecordedTranscript(name).ndjson;
+      expect(
+        readRecordedTranscript(name, String(lineCount(all) + 5)).ndjson
+      ).toBe("");
+      expect(() => readRecordedTranscript(name, "-1")).toThrow(
+        expect.objectContaining({ status: 400 })
+      );
     });
 
     it("keeps the times of the frames shown, and ends with the outcome at the stage's end", () => {
@@ -923,9 +1027,25 @@ describe("observability handlers", () => {
     expect((await fetchAgentRunResource("run-1-validate")).kind).toBe(
       "AgentRun"
     );
-    expect((await fetchAgentRunTranscript("run-1-validate")).status).toBe(
-      "complete"
+    const transcript = await fetchAgentRunTranscript("run-1-validate");
+    expect(transcript.status).toBe("complete");
+    expect(transcript.nextOffset).toBe(transcript.lines.length);
+    expect(transcript.lines.length).toBeGreaterThan(2);
+    const tail = await fetchAgentRunTranscript(
+      "run-1-validate",
+      transcript.nextOffset - 2
     );
+    expect(tail).toEqual({
+      status: "complete",
+      lines: transcript.lines.slice(-2),
+      nextOffset: transcript.nextOffset,
+    });
+    expect(await fetchAgentRunTranscript("run-1-prepare-proposal")).toEqual({
+      status: "skipped",
+      skipReason: "approve mode",
+      lines: [],
+      nextOffset: 0,
+    });
     const chunk = await fetchAgentRunLog({
       name: "run-1-validate",
       container: "skill-loader",

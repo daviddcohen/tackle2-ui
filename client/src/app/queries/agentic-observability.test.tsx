@@ -1,14 +1,20 @@
-import { rest } from "msw";
+import { ResponseTransformer, rest } from "msw";
 
-import { AgentRunLogChunk, ControllerRunPhase } from "@app/agentic";
+import {
+  AgentRunLogChunk,
+  AgentRunRecordingStatus,
+  ControllerRunPhase,
+} from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { act, renderHook, waitFor } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import {
   AgentRunLogState,
+  AgentRunTranscriptState,
   agentRunPollInterval,
   appendLogChunk,
+  appendTranscriptChunk,
   useAgentRunLogs,
   useFetchAgentRunResource,
   useFetchAgentRunTranscript,
@@ -24,6 +30,42 @@ const useAgentRunLog = (
 ) => useAgentRunLogs(name, [container], phase)[0];
 
 const logsUrl = (name: string) => `${AGENTIC_ENDPOINTS.agentRuns}/${name}/logs`;
+
+/** A recorded transcript line: an ACP `session/update` at `t`. */
+const recorded = (
+  update: Record<string, unknown>,
+  t = "2026-11-17T09:00:00Z"
+) =>
+  JSON.stringify({
+    t,
+    frame: { jsonrpc: "2.0", method: "session/update", params: { update } },
+  });
+
+/** The hub's transcript answer: NDJSON and the recording status headers. */
+const ndjsonReply = (
+  ctx: Parameters<Parameters<typeof rest.get>[1]>[2],
+  status: AgentRunRecordingStatus,
+  ndjson = "",
+  skipReason?: string
+): ResponseTransformer[] => [
+  ctx.set({
+    "Content-Type": "application/x-ndjson",
+    "X-Transcript-Status": status,
+    ...(skipReason != null ? { "X-Transcript-Skip-Reason": skipReason } : {}),
+  }),
+  ctx.body(ndjson),
+];
+
+/** The text of `ndjson` from line `offset` on. */
+const fromLine = (ndjson: string, offset: number) => {
+  let start = 0;
+  for (let line = 0; line < offset; line++) {
+    const end = ndjson.indexOf("\n", start);
+    if (end === -1) return "";
+    start = end + 1;
+  }
+  return ndjson.slice(start);
+};
 
 /** A log server over `logs` (by container) that records the offsets asked for. */
 const serveLogs = (logs: Record<string, string>, complete = false) => {
@@ -103,6 +145,78 @@ describe("appendLogChunk", () => {
     const first = appendLogChunk(empty, chunk("one\n", 4));
     expect(appendLogChunk(first, chunk("tw", 6)).lines).toBe(first.lines);
     expect(appendLogChunk(first, chunk("", 4)).lines).toBe(first.lines);
+  });
+});
+
+describe("appendTranscriptChunk", () => {
+  const empty: AgentRunTranscriptState = {
+    lines: [],
+    nextOffset: 0,
+    transcript: { status: "none", entries: [] },
+  };
+  const notice = (message: string) =>
+    recorded({
+      sessionUpdate: "status_message",
+      status: { type: "notice", message },
+    });
+
+  it("adds the lines read and folds the whole list", () => {
+    const first = appendTranscriptChunk(empty, {
+      status: "recording",
+      lines: [notice("one")],
+      nextOffset: 1,
+    });
+    const second = appendTranscriptChunk(first, {
+      status: "recording",
+      lines: [notice("two")],
+      nextOffset: 2,
+    });
+    expect(second.lines).toEqual([notice("one"), notice("two")]);
+    expect(second.nextOffset).toBe(2);
+    expect(second.transcript.entries).toMatchObject([
+      { id: "0", text: "one" },
+      { id: "1", text: "two" },
+    ]);
+  });
+
+  it("keeps the entries held when no line came, with the new status", () => {
+    const first = appendTranscriptChunk(empty, {
+      status: "recording",
+      lines: [notice("one")],
+      nextOffset: 1,
+    });
+    const second = appendTranscriptChunk(first, {
+      status: "incomplete",
+      lines: [],
+      nextOffset: 1,
+    });
+    expect(second.lines).toBe(first.lines);
+    expect(second.transcript.entries).toBe(first.transcript.entries);
+    expect(second.transcript.status).toBe("incomplete");
+  });
+
+  it("drops the lines held once the run is skipped", () => {
+    const first = appendTranscriptChunk(empty, {
+      status: "recording",
+      lines: [notice("one")],
+      nextOffset: 1,
+    });
+    expect(
+      appendTranscriptChunk(first, {
+        status: "skipped",
+        skipReason: "approve mode",
+        lines: [],
+        nextOffset: 1,
+      })
+    ).toEqual({
+      lines: [],
+      nextOffset: 0,
+      transcript: {
+        status: "skipped",
+        skipReason: "approve mode",
+        entries: [],
+      },
+    });
   });
 });
 
@@ -274,17 +388,14 @@ describe("summary and transcript hooks", () => {
         `${AGENTIC_ENDPOINTS.agentRuns}/run-1-migrate/transcript`,
         (_req, res, ctx) =>
           res(
-            ctx.json({
-              status: "recording",
-              entries: [
-                {
-                  kind: "status",
-                  id: "0",
-                  at: "2026-11-17T09:00:00Z",
-                  text: "Hi",
-                },
-              ],
-            })
+            ...ndjsonReply(
+              ctx,
+              "recording",
+              `${recorded({
+                sessionUpdate: "status_message",
+                status: { type: "notice", message: "Hi" },
+              })}\n`
+            )
           )
       )
     );
@@ -397,7 +508,7 @@ describe("polling", () => {
             return res(ctx.status(403), ctx.json({ message: "Forbidden" }));
           }
           const status = statuses[Math.min(requests, statuses.length) - 1];
-          return res(ctx.json({ status, entries: [] }));
+          return res(...ndjsonReply(ctx, status as AgentRunRecordingStatus));
         }
       )
     );
@@ -670,12 +781,23 @@ describe("polling around a stage's start and end", () => {
   it("reads a 404 transcript as no recording, polled while the stage runs", async () => {
     let recording = false;
     let requests = 0;
+    const offsets: number[] = [];
     server.use(
-      rest.get(transcriptUrl, (_req, res, ctx) => {
+      rest.get(transcriptUrl, (req, res, ctx) => {
         requests += 1;
+        offsets.push(Number(req.url.searchParams.get("offset")));
         return recording
-          ? res(ctx.json({ status: "recording", entries: [] }))
-          : res(ctx.status(404), ctx.json({}));
+          ? res(
+              ...ndjsonReply(
+                ctx,
+                "recording",
+                `${recorded({
+                  sessionUpdate: "status_message",
+                  status: { type: "notice", message: "Started" },
+                })}\n`
+              )
+            )
+          : res(ctx.status(404), ...ndjsonReply(ctx, "none"));
       })
     );
     const { result } = renderHook(() =>
@@ -688,6 +810,10 @@ describe("polling around a stage's start and end", () => {
     recording = true;
     await advance(3000);
     expect(result.current.transcript?.status).toBe("recording");
+    expect(result.current.transcript?.entries).toMatchObject([
+      { kind: "status", text: "Started" },
+    ]);
+    expect(offsets).toEqual([0, 0, 0]);
   });
 
   it("reads a 404 transcript of a finished stage once, as no recording", async () => {
@@ -729,7 +855,7 @@ describe("polling around a stage's start and end", () => {
     server.use(
       rest.get(transcriptUrl, (_req, res, ctx) => {
         requests += 1;
-        return res(ctx.json({ status: "recording", entries: [] }));
+        return res(...ndjsonReply(ctx, "recording"));
       })
     );
     const { rerender } = renderHook(
@@ -784,5 +910,152 @@ describe("polling around a stage's start and end", () => {
     await waitFor(() => expect(requests).toHaveLength(1));
     await advance(30000);
     expect(requests).toHaveLength(1);
+  });
+});
+
+describe("useFetchAgentRunTranscript reads incrementally", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const transcriptUrl = `${AGENTIC_ENDPOINTS.agentRuns}/run-1-migrate/transcript`;
+  const lines = [
+    recorded({
+      sessionUpdate: "status_message",
+      status: { type: "notice", message: "Hi" },
+    }),
+    recorded({
+      sessionUpdate: "tool_call",
+      toolCallId: "c1",
+      title: "Read pom.xml",
+      status: "pending",
+    }),
+    recorded({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "c1",
+      status: "completed",
+    }),
+    recorded({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "Done." },
+    }),
+  ];
+
+  /** A hub serving `text()` from the line offset asked for. */
+  const serve = (text: () => string) => {
+    const offsets: number[] = [];
+    server.use(
+      rest.get(transcriptUrl, (req, res, ctx) => {
+        const offset = Number(req.url.searchParams.get("offset"));
+        offsets.push(offset);
+        return res(...ndjsonReply(ctx, "recording", fromLine(text(), offset)));
+      })
+    );
+    return offsets;
+  };
+
+  it("reads on from the complete lines held, rereads a half line, and keeps unchanged entries", async () => {
+    // The last line is still being written.
+    let text = `${lines[0]}\n${lines[1]}\n${lines[2].slice(0, 20)}`;
+    const offsets = serve(() => text);
+    const { result } = renderHook(() =>
+      useFetchAgentRunTranscript("run-1-migrate", "Running")
+    );
+    await waitFor(() =>
+      expect(result.current.transcript?.entries).toHaveLength(2)
+    );
+    const first = result.current.transcript;
+    expect(first?.entries[1]).toMatchObject({
+      kind: "toolCall",
+      status: "pending",
+    });
+
+    // The half line is now whole: read again from line 2.
+    text = `${lines.slice(0, 3).join("\n")}\n`;
+    await advance(3000);
+    expect(offsets).toEqual([0, 2]);
+    const second = result.current.transcript;
+    expect(second?.entries[1]).toMatchObject({ status: "completed" });
+    // The lines held survived the refresh; the unchanged entry is the same
+    // object, the changed one is new.
+    expect(second?.entries[0]).toBe(first?.entries[0]);
+    expect(second?.entries[1]).not.toBe(first?.entries[1]);
+
+    // Nothing new: the same transcript.
+    await advance(3000);
+    expect(offsets).toEqual([0, 2, 3]);
+    expect(result.current.transcript).toBe(second);
+
+    text = `${lines.join("\n")}\n`;
+    await advance(3000);
+    expect(offsets).toEqual([0, 2, 3, 3]);
+    const third = result.current.transcript;
+    expect(third?.entries.map((entry) => entry.kind)).toEqual([
+      "status",
+      "toolCall",
+      "message",
+    ]);
+    expect(third?.entries[0]).toBe(first?.entries[0]);
+    expect(third?.entries[1]).toBe(second?.entries[1]);
+  });
+
+  it("starts over at line 0 after a 404, and reads the data that follows", async () => {
+    let found = false;
+    const offsets: number[] = [];
+    server.use(
+      rest.get(transcriptUrl, (req, res, ctx) => {
+        const offset = Number(req.url.searchParams.get("offset"));
+        offsets.push(offset);
+        if (!found) return res(ctx.status(404), ...ndjsonReply(ctx, "none"));
+        return res(
+          ...ndjsonReply(
+            ctx,
+            "recording",
+            fromLine(`${lines.slice(0, 2).join("\n")}\n`, offset)
+          )
+        );
+      })
+    );
+    const { result } = renderHook(() =>
+      useFetchAgentRunTranscript("run-1-migrate", "Running")
+    );
+    await waitFor(() => expect(result.current.transcript?.status).toBe("none"));
+    found = true;
+    await advance(3000);
+    expect(result.current.transcript?.entries).toHaveLength(2);
+    await advance(3000);
+    expect(offsets).toEqual([0, 0, 2]);
+    expect(result.current.transcript?.entries).toHaveLength(2);
+  });
+
+  it("reads another agent run from its own start", async () => {
+    const offsets = serve(() => `${lines[0]}\n`);
+    const { result, rerender } = renderHook(
+      ({ name }) => useFetchAgentRunTranscript(name, "Running"),
+      { initialProps: { name: "run-1-migrate" } }
+    );
+    await waitFor(() =>
+      expect(result.current.transcript?.entries).toHaveLength(1)
+    );
+    server.use(
+      rest.get(
+        `${AGENTIC_ENDPOINTS.agentRuns}/run-1-validate/transcript`,
+        (req, res, ctx) => {
+          offsets.push(Number(req.url.searchParams.get("offset")));
+          return res(...ndjsonReply(ctx, "complete", `${lines[3]}\n`));
+        }
+      )
+    );
+    rerender({ name: "run-1-validate" });
+    await waitFor(() =>
+      expect(result.current.transcript?.status).toBe("complete")
+    );
+    expect(offsets).toEqual([0, 0]);
+    expect(result.current.transcript?.entries).toMatchObject([
+      { kind: "message", text: "Done." },
+    ]);
   });
 });

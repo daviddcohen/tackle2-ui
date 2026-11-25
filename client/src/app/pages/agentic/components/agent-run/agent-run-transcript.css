@@ -1,12 +1,15 @@
 /*
  * Layout rules for the stage transcript over PatternFly Chatbot 6.9 and
  * PatternFly 6.7 internals (class names, the message grid, the code block's
- * pre). A minor bump can move them silently: the e2e truncation and narrow
- * width checks are the guard.
+ * pre). Each covers a case no prop or modifier reaches. A minor bump can
+ * move them silently: the e2e truncation and narrow width checks are the
+ * guard.
  *
  * A tool call or thought toggle stays on one line: the title gives way with
  * an ellipsis, the status label does not. PatternFly sizes a toggle button
  * to its text, so the button and its text may not grow past the card.
+ * ExpandableSection (inside ToolResponse and DeepThinking) takes no props
+ * for its toggle button.
  */
 .agent-run-transcript .pf-v6-c-expandable-section__toggle .pf-v6-c-button {
   max-width: 100%;
@@ -18,56 +21,40 @@
   min-width: 0;
 }
 
-.agent-run-transcript__toggle-title {
-  display: flex;
-  min-width: 0;
-}
-
 /*
- * PatternFly Chatbot lets a message grow with its widest line; in a page the
- * message must keep to the transcript's width, so its toggles truncate and
- * its code blocks scroll.
+ * PatternFly Chatbot's message grid has no column size, so a message grows
+ * with its widest toggle or line; in a page the message must keep to the
+ * transcript's width, so its toggles truncate and its code blocks scroll.
  */
-.agent-run-transcript .pf-chatbot__message-contents {
-  min-width: 0;
-}
-
 .agent-run-transcript .pf-chatbot__message-and-actions {
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* The agent's avatar: the chatbot icon on brand blue, in either theme. */
-.agent-run-transcript
-  .pf-chatbot__message--bot
-  .pf-chatbot__message-avatar.pf-v6-c-avatar {
-  --pf-v6-c-avatar--BackgroundColor: var(--pf-t--global--color--brand--default);
-  --pf-v6-c-avatar--BorderColor: var(--pf-t--global--color--brand--default);
-  --pf-v6-c-avatar--Color: var(--pf-t--global--icon--color--on-brand--default);
+/*
+ * The agent's name, the AI label and the time share one row: on a narrow
+ * screen the row wraps (the time goes under the name) instead of cutting
+ * the name, which the chatbot truncates and takes no props for.
+ */
+.agent-run-transcript .pf-chatbot__message-meta {
+  flex-wrap: wrap;
+  row-gap: var(--pf-t--global--spacer--xs);
 }
 
 /*
  * Tool output and diffs keep their lines, like a terminal: a long line
- * scrolls in its block instead of breaking mid-word. Prose still wraps.
+ * scrolls in its focusable block instead of breaking mid-word. PatternFly's
+ * code block wraps; code in the agent's Markdown keeps that.
  */
-.agent-run-transcript .pf-v6-c-code-block__pre {
+.agent-run-transcript__output {
   overflow-x: auto;
   overflow-wrap: normal;
   white-space: pre;
 }
 
 /*
- * On a narrow screen the avatar would take a third of the width; the name
- * above each message already says who speaks.
- */
-@media (max-width: 576px) {
-  .agent-run-transcript .pf-chatbot__message-avatar {
-    display: none;
-  }
-}
-
-/*
- * An entry without a valid time: PF's Timestamp would show the render time
- * (the chatbot passes it `new Date()`), so no time shows at all.
+ * An entry without a valid time: Message always renders PF's Timestamp and
+ * passes it `new Date()`, which would show the render time, so no time
+ * shows at all.
  */
 .agent-run-transcript
   .pf-chatbot__message[data-has-time="false"]

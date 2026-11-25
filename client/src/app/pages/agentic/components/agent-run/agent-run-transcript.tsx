@@ -37,9 +37,11 @@ import { SectionEmpty } from "../detail-section";
 import { LiveSentence } from "./live-status";
 import {
   TRANSCRIPT_CLASS,
-  TranscriptMessage,
+  TranscriptDivider,
+  TranscriptTurn,
   entryKey,
   entryTime,
+  groupTranscript,
   isExpandedByDefault,
 } from "./transcript-messages";
 import { useFollowLatest } from "./use-follow-latest";
@@ -50,16 +52,15 @@ import "./agent-run-transcript.css";
 const KEY = "agentic.agentRun.transcript";
 
 /**
- * One subtle sentence about the recording (above the transcript); while it
- * records, in the live sentence shape every stage view uses.
+ * One subtle sentence above the transcript when it has news: it records
+ * (in the live sentence shape every stage view uses), or parts of it were
+ * not recorded. A complete recording needs no sentence.
  */
 const RecordingSentence: React.FC<{
   status: AgentRunRecordingStatus;
   lastUpdatedAt?: number;
 }> = ({ status, lastUpdatedAt }) => {
   const { t } = useTranslation();
-  // A reader who scrolled up gets back to the latest entry with the chat's
-  // own Back to latest button.
   if (status === "recording") {
     return (
       <LiveSentence updatedAt={lastUpdatedAt}>
@@ -67,16 +68,10 @@ const RecordingSentence: React.FC<{
       </LiveSentence>
     );
   }
-  const sentence =
-    status === "complete"
-      ? t(`${KEY}.complete`)
-      : status === "incomplete"
-        ? t(`${KEY}.incomplete`)
-        : undefined;
-  if (sentence == null) return null;
+  if (status !== "incomplete") return null;
   return (
     <Content component="small" className={textStyles.textColorSubtle}>
-      {sentence}
+      {t(`${KEY}.incomplete`)}
     </Content>
   );
 };
@@ -84,20 +79,31 @@ const RecordingSentence: React.FC<{
 /**
  * The entries as a chat, in PatternFly Chatbot's message box: it scrolls on
  * its own, with jump buttons to the first and the latest entry. While the
- * stage is recorded it opens at the latest entry and follows new ones, as
- * long as the reader stays there (`useFollowLatest`).
+ * stage is followed it opens at the latest entry and follows new ones, as
+ * long as the reader stays there (`useFollowLatest`), and says how many
+ * entries arrived to screen readers.
  */
 const TranscriptChat: React.FC<{
   entries: readonly TranscriptEntry[];
   agentName: string;
   isStageRunning: boolean;
+  /** The agent is still working: loading dots end the chat. */
+  isWorking: boolean;
   boxRef: React.Ref<MessageBoxHandle>;
   /** The jump button scrolls to the latest entry: follow from there on. */
   onScrollToLatest: () => void;
-}> = ({ entries, agentName, isStageRunning, boxRef, onScrollToLatest }) => {
+}> = ({
+  entries,
+  agentName,
+  isStageRunning,
+  isWorking,
+  boxRef,
+  onScrollToLatest,
+}) => {
   const { t } = useTranslation();
-  // The reader's own expand and collapse, by entry key; other entries
-  // follow their default (`isExpandedByDefault`). Kept across refreshes.
+  // Expand and collapse by entry key, the reader's own and the defaults
+  // already shown (`isExpandedByDefault`): a running tool call opened on
+  // its own stays open once it completes. Kept across refreshes.
   const [toggled, setToggled] = React.useState<ReadonlyMap<string, boolean>>(
     () => new Map()
   );
@@ -106,37 +112,90 @@ const TranscriptChat: React.FC<{
       setToggled((previous) => new Map(previous).set(key, isExpanded)),
     []
   );
+  React.useEffect(() => {
+    const opened = entries.filter(
+      (entry) =>
+        !toggled.has(entryKey(entry)) &&
+        isExpandedByDefault(entry, isStageRunning)
+    );
+    if (opened.length === 0) return;
+    setToggled((previous) => {
+      const next = new Map(previous);
+      opened.forEach((entry) => next.set(entryKey(entry), true));
+      return next;
+    });
+  }, [entries, toggled, isStageRunning]);
+  const isExpanded = (entry: TranscriptEntry) =>
+    toggled.get(entryKey(entry)) ?? isExpandedByDefault(entry, isStageRunning);
+
+  const items = React.useMemo(() => groupTranscript(entries), [entries]);
+  const announcement = useNewEntriesAnnouncement(entries.length, isWorking);
   const backToTop = t(`${KEY}.backToTop`);
   const backToLatest = t(`${KEY}.backToLatest`);
+  const last = items[items.length - 1];
   return (
     <MessageBox
       ref={boxRef}
       className={TRANSCRIPT_CLASS}
       ariaLabel={t(`${KEY}.ariaLabel`)}
+      announcement={announcement}
       onScrollToBottomClick={onScrollToLatest}
       jumpButtonTopProps={{ "aria-label": backToTop }}
       jumpButtonTopTooltipProps={{ content: backToTop }}
       jumpButtonBottomProps={{ "aria-label": backToLatest }}
       jumpButtonBottomTooltipProps={{ content: backToLatest }}
     >
-      {entries.map((entry, index) => {
-        const key = entryKey(entry);
+      {items.map((item, index) => {
+        if (item.kind === "divider") {
+          return <TranscriptDivider key={item.key} entry={item.entry} />;
+        }
+        const previous = items[index - 1];
+        const previousAt =
+          previous == null
+            ? undefined
+            : previous.kind === "divider"
+              ? entryTime(previous.entry)
+              : entryTime(previous.entries[0]);
         return (
-          <TranscriptMessage
-            key={key}
-            entry={entry}
-            previousAt={index > 0 ? entryTime(entries[index - 1]) : undefined}
+          <TranscriptTurn
+            key={item.key}
+            entries={item.entries}
+            isUser={item.isUser}
+            previousAt={previousAt}
             agentName={agentName}
-            isExpanded={
-              toggled.get(key) ?? isExpandedByDefault(entry, isStageRunning)
-            }
+            expanded={item.entries.map(isExpanded)}
             onToggle={toggle}
             isStageRunning={isStageRunning}
+            isWorking={isWorking && item === last && !item.isUser}
           />
         );
       })}
     </MessageBox>
   );
+};
+
+/** How long an announcement stays, so the same words can be said again. */
+const ANNOUNCEMENT_MS = 1000;
+
+/**
+ * What the message box announces while the stage is followed: how many
+ * entries arrived since the last refresh. Nothing for the entries already
+ * there when the view opens. Each announcement is cleared after a moment,
+ * so two batches of the same size are both read.
+ */
+const useNewEntriesAnnouncement = (count: number, isFollowed: boolean) => {
+  const { t } = useTranslation();
+  const seen = React.useRef(count);
+  const [announcement, setAnnouncement] = React.useState("");
+  React.useEffect(() => {
+    const added = count - seen.current;
+    seen.current = count;
+    if (!isFollowed || added <= 0) return;
+    setAnnouncement(t(`${KEY}.newEntries`, { count: added }));
+    const clear = setTimeout(() => setAnnouncement(""), ANNOUNCEMENT_MS);
+    return () => clearTimeout(clear);
+  }, [count, isFollowed, t]);
+  return announcement;
 };
 
 /**
@@ -201,13 +260,18 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
   const { transcript, isLoading, fetchError, refetch, lastUpdatedAt } =
     useFetchAgentRunTranscript(agentRun.name, phase);
   const isRecording = transcript?.status === "recording";
-  const { ref: boxRef, resumeFollowing } = useFollowLatest(isRecording);
+  const isStageRunning = phase === "Running";
+  // A running stage that is not recorded shows its live session messages,
+  // which grow too: followed like a recording.
+  const isLive =
+    isRecording ||
+    (isStageRunning && transcript?.status === "skipped" && messages.length > 0);
+  const { ref: boxRef, resumeFollowing } = useFollowLatest(isLive);
   const messageEntries = React.useMemo(
     () => stageMessageEntries(messages),
     [messages]
   );
   const name = agentName ?? t(`${KEY}.agentName`);
-  const isStageRunning = phase === "Running";
 
   if (isLoading) {
     return (
@@ -261,6 +325,7 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
           entries={entries}
           agentName={name}
           isStageRunning={isStageRunning}
+          isWorking={isLive && isStageRunning}
           boxRef={boxRef}
           onScrollToLatest={resumeFollowing}
         />
