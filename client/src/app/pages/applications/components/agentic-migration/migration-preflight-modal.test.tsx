@@ -190,8 +190,9 @@ describe("MigrationPreflightModal", () => {
     await user.click(
       screen.getByRole("radio", { name: /agentic\.execution\.singlePlan/ })
     );
+    // Both the target profile and the plan depend on the plan picked.
     expect(screen.getAllByText("agentic.execution.notSelected")).toHaveLength(
-      3
+      6
     );
     expect(screen.queryByText("Java EE to Quarkus")).not.toBeInTheDocument();
     expect(

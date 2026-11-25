@@ -9,6 +9,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
+  addTargetProfile,
   agenticGet,
   agenticRequest,
   appPath,
@@ -132,18 +133,23 @@ const expandAllGroups = async (table: Locator) => {
   while ((await collapsed.count()) > 0) await collapsed.first().click();
 };
 
-/** Every row of the skill is marked: an exclusion is per plan. */
+/**
+ * Every row of the skill is marked: an exclusion is per plan. The Run
+ * dialog labels a plan's exclusion "Excluded by plan" (it cannot be undone
+ * there).
+ */
 const expectExcludedStageRows = async (
   scope: Locator,
   skillName: string,
-  name?: string | RegExp
+  name?: string | RegExp,
+  label = "Excluded"
 ) => {
   const table = stageSkillsTable(scope, name);
   const rows = table.getByRole("row").filter({ hasText: skillName });
   await expect(rows.first()).toBeVisible();
   for (const row of await rows.all())
     await expect(row).toContainText("Excluded");
-  await expect(table.getByText("Excluded", { exact: true })).toHaveCount(
+  await expect(table.getByText(label, { exact: true })).toHaveCount(
     await rows.count()
   );
 };
@@ -172,7 +178,12 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     // The collapsed summary of the stage that loses the skill says so.
     await expect(table.getByText(/, 1 excluded$/).first()).toBeVisible();
     await expandAllGroups(table);
-    await expectExcludedStageRows(preflight, skillName);
+    await expectExcludedStageRows(
+      preflight,
+      skillName,
+      undefined,
+      "Excluded by plan"
+    );
     // Plain names: a link would close the dialog and lose its choices.
     await expect(table.getByRole("link")).toHaveCount(0);
 
@@ -343,6 +354,190 @@ test.describe("Skills in the run dialog and on the run pages", () => {
       )
     ).toHaveCount(1);
     await expandAllGroups(run);
-    await expectExcludedStageRows(preflight, skillName);
+    await expectExcludedStageRows(
+      preflight,
+      skillName,
+      undefined,
+      "Excluded by plan"
+    );
+  });
+});
+
+// ── Run exclusions and the target profile pick ──────────────────────────────
+
+/** A plan run as the mock serves it: its snapshot and own exclusions. */
+interface RunWithExclusions {
+  name: string;
+  excludedSkills?: Ref[];
+  skills: { stages: SkillGroup[]; everyStage: SkillGroup[] };
+}
+
+/** The skill loader's resource name for a skill (lower case, dashes). */
+const resourceName = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+/** Opens the Run dialog from application 13's Migration tab. */
+const openRunDialog = async (page: Page, applicationId = APPLICATION_ID) => {
+  await spaNavigate(page, `/applications/${applicationId}?tab=migration`);
+  await main(page)
+    .getByRole("button", { name: "Run migration plan", exact: true })
+    .click();
+  const preflight = dialog(page, "Run migration plan");
+  await expect(preflight).toBeVisible();
+  return preflight;
+};
+
+/** Runs, lands on the new plan run and returns it as the server has it. */
+const runAndOpen = async (page: Page, preflight: Locator) => {
+  await preflight
+    .getByRole("button", { name: /^Run on 1 application/ })
+    .click();
+  await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
+  const runId = appPath(new URL(page.url()).pathname).split("/")[2];
+  return agenticGet<RunWithExclusions>(page, `/plan-runs/${runId}`);
+};
+
+test.describe("Excluding skills and picking the target profile for a run", () => {
+  test("a skill cleared in the dialog is left out of the run and its skill loader", async ({
+    page,
+  }) => {
+    await bootMockApi(page);
+    const preflight = await openRunDialog(page);
+    const toggle = preflight.getByRole("button", { name: /^Skills by stage/ });
+    await toggle.click();
+    const table = stageSkillsTable(preflight);
+    await expandAllGroups(table);
+    const first = table.getByRole("checkbox", { name: / in stage 1$/ }).first();
+    const label = (await first.getAttribute("aria-label"))!;
+    const skillName = label
+      .replace(/^Include /, "")
+      .replace(/ in stage 1$/, "");
+    await first.uncheck();
+    await expect(
+      preflight.getByText(
+        `${skillName} excluded from stage 1. 1 skill excluded for this run.`
+      )
+    ).toBeVisible();
+    await expect(toggle).toHaveText("Skills by stage (1 skill excluded)");
+
+    const run = await runAndOpen(page, preflight);
+    expect(run.excludedSkills?.map(({ name }) => name)).toEqual([skillName]);
+    await expect(
+      main(page).getByText(
+        // The plan excludes nothing here: the plain sentence.
+        `Excluded for this run only: ${skillName}.`
+      )
+    ).toBeVisible();
+    await expectExcludedStageRows(main(page), skillName);
+
+    // The first stage's skill loader does not stage it.
+    const firstStage = main(page)
+      .getByRole("grid", { name: /Stages/ })
+      .locator("tbody tr")
+      .first();
+    await expect(firstStage).toContainText(/\d+%/, { timeout: 30_000 });
+    await firstStage.getByRole("link").first().click();
+    await expect(page).toHaveURL(/\/stages\//);
+    await page.getByRole("tab", { name: "Logs", exact: true }).click();
+    const log = main(page).getByRole("region", { name: / log$/ });
+    await log.getByRole("button", { name: /^Container: / }).click();
+    await page.getByRole("option", { name: /^Skill loader/ }).click();
+    const loader = main(page).getByRole("region", { name: "Skill loader log" });
+    await expect(loader).toContainText(/sources: \d+ declared/);
+    const staged = (
+      await loader.locator(".pf-v6-c-log-viewer__text").allInnerTexts()
+    )
+      .filter((line) => / \((skill|rule)\) from /.test(line))
+      .map((line) => line.split(" ")[0]);
+    expect(staged.length).toBeGreaterThan(0);
+    expect(staged).not.toContain(resourceName(skillName));
+  });
+
+  test("a plan's exclusion is locked; the application's own skill can still be excluded", async ({
+    page,
+  }) => {
+    await bootMockApi(page);
+    // Skill 8 is the plan's exclusion and also attached to application 13.
+    const attached = await agenticRequest(
+      page,
+      "PUT",
+      `/applications/${APPLICATION_ID}/skills`,
+      { skills: [{ id: EXCLUDED_SKILL_ID }] }
+    );
+    expect(attached.status, "PUT application skills").toBeLessThan(300);
+    const { skillName } = await excludeSkillOnPlan(page);
+
+    const preflight = await openRunDialog(page);
+    await preflight.getByRole("button", { name: /^Skills by stage/ }).click();
+    const table = stageSkillsTable(preflight);
+    await expandAllGroups(table);
+    const locked = table.getByRole("checkbox", {
+      name: new RegExp(`^Include ${skillName} in stage \\d+$`),
+    });
+    await expect(locked.first()).toBeDisabled();
+    await expect(locked.first()).toHaveAccessibleDescription(
+      "Excluded by plan"
+    );
+    const own = table.getByRole("checkbox", {
+      name: `Include ${skillName} in every stage`,
+    });
+    await expect(own).toBeEnabled();
+    await expect(own).toBeChecked();
+    await own.uncheck();
+    await expect(locked.first()).toHaveAccessibleDescription(
+      "Excluded by plan"
+    );
+
+    const run = await runAndOpen(page, preflight);
+    expect(run.excludedSkills?.map(({ id }) => id)).toEqual([
+      EXCLUDED_SKILL_ID,
+    ]);
+    // Every row of the skill is excluded in the snapshot, the application's too.
+    const rows = [...run.skills.stages, ...run.skills.everyStage]
+      .flatMap((group) => group.skills)
+      .filter(({ skill }) => skill.id === EXCLUDED_SKILL_ID);
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows.every(({ excluded }) => excluded)).toBe(true);
+  });
+
+  test("an archetype with two target profiles: the pick decides the plan", async ({
+    page,
+  }) => {
+    await bootMockApi(page);
+    // A second profile on Java EE Application (Customer Management's), with
+    // Java EE lift and shift assigned to it: runtime data, not a fixture.
+    const profile = { id: 19, name: "OpenJDK 21 on OpenShift" };
+    await addTargetProfile(page, 1, profile);
+    const assigned = await agenticRequest(
+      page,
+      "PUT",
+      `/archetypes/1/target-profiles/${profile.id}/plan`,
+      { planId: "3" }
+    );
+    expect(assigned.status, "PUT target profile plan").toBeLessThan(300);
+
+    const preflight = await openRunDialog(page, 1);
+    const select = preflight.getByRole("button", {
+      name: /^Target profile for Customer Management/,
+    });
+    // The server's default is preselected.
+    await expect(select).toHaveAccessibleName(
+      "Target profile for Customer Management Quarkus 3.x"
+    );
+    await select.click();
+    await pickMenuOption(page, profile.name);
+    await expect(select).toHaveAccessibleName(
+      `Target profile for Customer Management ${profile.name}`
+    );
+    const row = preflight.getByRole("row", { name: /Customer Management/ });
+    await expect(
+      row.getByRole("link", { name: "Java EE lift and shift" })
+    ).toBeVisible();
+
+    const run = await runAndOpen(page, preflight);
+    expect(run.name).toMatch(/: Java EE lift and shift$/);
   });
 });

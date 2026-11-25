@@ -211,5 +211,21 @@ describe("useRunMigrationPlanLauncher", () => {
     expect((result.current.modal as React.ReactElement).key).not.toBe(
       loadingKey
     );
+    // The run excluded nothing on its own: nothing to start from.
+    expect(modalProps()?.initialExcludedSkills).toBeUndefined();
+  });
+
+  it("starts a rerun with the failed run's own exclusions, for its plan", () => {
+    const { result } = launch({
+      rerunOf: {
+        ...run,
+        excludedSkills: [
+          { id: "4", name: "Quarkus best practices" },
+          { id: "6", name: "Corporate coding standards" },
+        ],
+      },
+    });
+    act(() => result.current.open?.());
+    expect(modalProps()?.initialExcludedSkills).toEqual({ "3": ["4", "6"] });
   });
 });

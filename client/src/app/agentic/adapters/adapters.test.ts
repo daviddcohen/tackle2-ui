@@ -812,6 +812,7 @@ describe("AgentWorkflowRun -> Plan run", () => {
         },
       ],
       skills: undefined,
+      excludedSkills: undefined,
     });
   });
 
@@ -848,6 +849,23 @@ describe("AgentWorkflowRun -> Plan run", () => {
         applicationRef: "7",
         targetBranch: "konveyor/migration-1",
       },
+    ]);
+  });
+
+  it("drops a run's target profile picks and exclusions: the run has no field for them", () => {
+    expect(
+      toWorkflowRunInputs({
+        applicationIds: [12],
+        planSelection: "single",
+        planId: "migrate-app",
+        targetBranch: "b",
+        targetProfiles: [{ application: { id: 12 }, targetProfile: { id: 3 } }],
+        excludedSkills: [
+          { plan: { id: "migrate-app" }, skills: [{ id: "quarkus" }] },
+        ],
+      })
+    ).toEqual([
+      { workflowRef: "migrate-app", applicationRef: "12", targetBranch: "b" },
     ]);
   });
 

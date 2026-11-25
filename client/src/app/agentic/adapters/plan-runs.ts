@@ -61,9 +61,11 @@ const toStageRun = (
  * permission request on the running stage's AgentRun and has to be overlaid
  * from the ACP session. No backend source (documented defaults): stage
  * `approvedAt`, `messages` (ACP transcript) and `commits`, and the run's
- * `skills` snapshot, are undefined. Proposed sources: the exclusions from the
- * `status.stages[].skills` snapshot; what each stage mounted from
- * agentic-controller#172 (`status.skillSources`, `status.skills`).
+ * `skills` snapshot and own `excludedSkills`, are undefined. Proposed
+ * sources: the exclusions from the `status.stages[].skills` snapshot; what
+ * each stage mounted from agentic-controller#172 (`status.skillSources`,
+ * `status.skills`); the run's own exclusions from a run-level skills field
+ * (docs/agentic-handoff.md, "Run skill review").
  */
 export const toPlanRun = (
   run: Crd.AgentWorkflowRun,
@@ -92,6 +94,7 @@ export const toPlanRun = (
       toStageRun(stage, index, runsByName)
     ),
     skills: undefined,
+    excludedSkills: undefined,
   };
 };
 
@@ -102,7 +105,11 @@ export const toPlanRun = (
  * each is omitted when the request leaves it out. "Use recommended Plan"
  * needs the Hub's application-to-Plan resolution, which does not exist yet:
  * pass `recommendedPlanId` to supply it. Throws for an application with no
- * Plan.
+ * Plan. Not mapped, because the AgentWorkflowRun has no field for them
+ * (docs/agentic-handoff.md, "Run skill review"): `targetProfiles` (the
+ * target profile only decides Hub-scope skills, which the controller does
+ * not resolve) and `excludedSkills` (would be the run-level skills field's
+ * exclusions, stamped on each stage AgentRun's `spec.skills`).
  */
 export const toWorkflowRunInputs = (
   request: StartApplicationMigrationsRequest,

@@ -113,7 +113,7 @@ test("application skills tab lists the skills it inherits, by owner", async ({
   // not the application's, and neither are the agents' own.
   await expect(group(/^Target profile skills/)).toHaveCount(0);
   await expect(main(page)).toContainText(
-    "When a migration plan runs, each stage also gets its agent's skills and the skills of the target profile the run uses. Run migration plan lists them before the run starts."
+    "When a migration plan runs, each stage also gets its agent's skills and the skills of the target profile the run uses. Run migration plan lists them before the run starts, and you can exclude some for that run."
   );
   await expect(main(page).getByRole("grid")).toHaveCount(0);
 });

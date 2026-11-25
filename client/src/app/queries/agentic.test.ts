@@ -210,6 +210,27 @@ describe("plan skill resolution key", () => {
       excludedSkills: [],
       applications: [{ id: 3 }, { id: 1 }],
     });
+    // A target profile pick is part of the key: absent, none and a profile
+    // are three answers.
+    expect(
+      normalizeResolvePlanSkillsRequest({
+        stages: [],
+        applications: [
+          { id: 3, targetProfile: { id: 11 } },
+          { id: 1, targetProfile: null },
+          { id: 2 },
+          { id: 3, targetProfile: { id: 12 } },
+        ],
+      })
+    ).toEqual({
+      stages: [],
+      excludedSkills: [],
+      applications: [
+        { id: 3, targetProfile: { id: 11 } },
+        { id: 1, targetProfile: null },
+        { id: 2 },
+      ],
+    });
     expect(
       normalizeResolvePlanSkillsRequest({ stages: [], applications: [] })
     ).toEqual({ stages: [], excludedSkills: [] });

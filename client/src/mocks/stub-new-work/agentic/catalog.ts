@@ -75,6 +75,7 @@ import {
   resolveSkillsByStage,
   resolvedSkillIds,
   stagesOfPlan,
+  targetProfilePickOf,
 } from "./skill-resolution";
 
 const NAME_MAX = 120;
@@ -961,10 +962,12 @@ export const updatePlan = (id: EntityId, input: unknown) => {
  * (`resolveSkillsByStage`), for the plan wizard and plan pages. Without
  * `applications` it is the plan preview (context from the draft's
  * migration path); with them, one `everyStage` group per application from
- * its own context. Malformed bodies are a 400; ids that reference nothing
- * (an agent, archetype, target profile, application or Skill deleted
- * meanwhile, or a draft still being edited) add nothing, unlike a save,
- * which rejects unknown agents.
+ * its own context, with the target profile each application's entry picks
+ * (`targetProfile`: absent, its default; null, none). Malformed bodies are a
+ * 400, and so is a pick that is not a profile of the application's
+ * archetypes; ids that reference nothing (an agent, archetype, target
+ * profile, application or Skill deleted meanwhile, or a draft still being
+ * edited) add nothing, unlike a save, which rejects unknown agents.
  */
 export const resolvePlanSkills = (
   input: unknown
@@ -991,12 +994,28 @@ export const resolvePlanSkills = (
   // An empty list is the same as none: the plan preview.
   const applications = optionalArray(body, "applications");
   if (applications.length > 0) {
-    context = {
-      kind: "applications",
-      applicationIds: applications.map((application, index) =>
-        hubIdOf(application, `applications[${index}]`)
-      ),
-    };
+    const targetProfileIds = new Map<number, number | null>();
+    const applicationIdsSeen = new Set<number>();
+    const applicationIds = applications.map((value, index) => {
+      const applicationId = hubIdOf(value, `applications[${index}]`);
+      // An unknown application adds nothing, so its pick is not checked.
+      const application = findApplication(applicationId);
+      const pick =
+        application != null
+          ? targetProfilePickOf(
+              asBody(value).targetProfile,
+              application,
+              `applications[${index}].targetProfile`
+            )
+          : undefined;
+      // A repeated application keeps its first entry's pick.
+      if (pick !== undefined && !applicationIdsSeen.has(applicationId)) {
+        targetProfileIds.set(applicationId, pick);
+      }
+      applicationIdsSeen.add(applicationId);
+      return applicationId;
+    });
+    context = { kind: "applications", applicationIds, targetProfileIds };
   }
   const resolution = resolveSkillsByStage({
     stages,

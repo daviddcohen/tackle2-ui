@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
-import { PageSection } from "@patternfly/react-core";
+import { Content, PageSection } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
@@ -125,6 +125,27 @@ const PlanRunDetail: React.FC = () => {
     planRun?.name ?? t("agentic.entity.planRun"),
     [{ title: t("sidebar.planRuns"), path: DevPaths.planRuns }]
   );
+
+  // The run's own exclusions, said apart from the plan's: "in addition"
+  // only when the snapshot also excludes a skill the run did not.
+  const runExcluded = planRun?.excludedSkills ?? [];
+  const runExcludedIds = new Set(runExcluded.map((skill) => skill.id));
+  const isPlanExcluding =
+    planRun?.skills != null &&
+    [...planRun.skills.stages, ...planRun.skills.everyStage].some((group) =>
+      group.skills.some(
+        ({ skill, excluded }) => excluded && !runExcludedIds.has(skill.id)
+      )
+    );
+  const runExclusionsText =
+    planRun?.skills != null && runExcluded.length > 0
+      ? t(
+          isPlanExcluding
+            ? "agentic.runSkills.runExcluded"
+            : "agentic.runSkills.runExcludedOnly",
+          { skills: runExcluded.map((skill) => skill.name) }
+        )
+      : undefined;
 
   const runMigrationPlan = useRunMigrationPlanLauncher({
     rerunOf: planRun,
@@ -311,6 +332,11 @@ const PlanRunDetail: React.FC = () => {
                 : t("agentic.planRun.skillsByStageDescription")
           }
         >
+          {/* What the run left out on its own; its rows carry the Excluded
+              label like the plan's. */}
+          {runExclusionsText != null && (
+            <Content component="p">{runExclusionsText}</Content>
+          )}
           <StageSkillsTable
             skills={planRun.skills}
             context="run"

@@ -9,12 +9,14 @@
  *   that agent uses. Only that stage: nothing is pooled across stages.
  * - Every stage also gets the context skills, listed once in an `everyStage`
  *   group: for an application, the skills attached to each of its archetypes,
- *   to its own target profile (its archetype's) and to the application
+ *   to the target profile the run picks for it (by default its own: its
+ *   archetype's first; none when the pick is null) and to the application
  *   itself; for a plan preview without applications, the plan's archetype
  *   and the target profiles of its migration path.
  * - A plan exclusion applies to every origin except the application itself:
- *   a skill attached to the application is never excluded. Excluded skills
- *   stay listed with `excluded: true`.
+ *   a skill attached to the application is never excluded. A run exclusion
+ *   applies to every origin. Excluded skills stay listed with
+ *   `excluded: true`.
  * - Origins are deduplicated and ordered agent, collection, archetype, target
  *   profile, application; skills follow their first origin. Unknown agents,
  *   collections, archetypes, target profiles, applications and skills add
@@ -36,10 +38,12 @@ import { Application } from "@app/api/models";
 
 import {
   StoredSkill,
+  badRequest,
   db,
   findApplication,
   findArchetype,
   findTargetProfile,
+  hubIdOf,
   resolveAgentRef,
   resolveCollectionRef,
   resolveSkillRef,
@@ -65,12 +69,23 @@ export interface StageInput {
  */
 export type ResolutionContext =
   | { kind: "plan"; archetypeId?: number; targetProfileIds: number[] }
-  | { kind: "applications"; applicationIds: number[] };
+  | {
+      kind: "applications";
+      applicationIds: number[];
+      /**
+       * The target profile a run picks per application id (null: none). An
+       * application left out gets its default (`targetProfileFor`).
+       */
+      targetProfileIds?: ReadonlyMap<number, number | null>;
+    };
 
 export interface ResolutionInput {
   stages: StageInput[];
   context: ResolutionContext;
+  /** The plan's exclusions: never a skill attached to the application. */
   excludedSkillIds?: ReadonlySet<EntityId>;
+  /** A run's own exclusions: every origin, the application's included. */
+  runExcludedSkillIds?: ReadonlySet<EntityId>;
 }
 
 /** A saved (or fixture) plan as resolver stages, in stage order. */
@@ -119,12 +134,44 @@ export const excludedSkillIdsOf = (plan: {
  * several archetypes, the first one that has a profile. Undefined when none
  * of its archetypes has a profile.
  */
-export const targetProfileFor = (application: Application) => {
-  for (const ref of application.archetypes ?? []) {
-    const profile = findArchetype(ref.id)?.profiles?.[0];
-    if (profile) return { archetypeId: ref.id, profile };
+export const targetProfileFor = (application: Application) =>
+  targetProfilesOf(application)[0];
+
+/**
+ * Every target profile an application can migrate on: the profiles of each
+ * of its archetypes, in archetype order, then profile order.
+ */
+export const targetProfilesOf = (application: Application) =>
+  (application.archetypes ?? []).flatMap((ref) =>
+    (findArchetype(ref.id)?.profiles ?? []).map((profile) => ({
+      archetypeId: ref.id,
+      profile,
+    }))
+  );
+
+/**
+ * Reads a run's target profile pick for an application (`{ id }` or null;
+ * undefined when absent). 400 when the profile is not one of the
+ * application's (`targetProfilesOf`).
+ */
+export const targetProfilePickOf = (
+  value: unknown,
+  application: Application,
+  field: string
+): number | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const profileId = hubIdOf(value, field);
+  if (
+    !targetProfilesOf(application).some(
+      ({ profile }) => profile.id === profileId
+    )
+  ) {
+    throw badRequest(
+      `${field}: target profile "${profileId}" does not belong to an archetype of ${application.name}.`
+    );
   }
-  return undefined;
+  return profileId;
 };
 
 // ---------------------------------------------------------------------------
@@ -172,7 +219,8 @@ const loadPolicyOf = (skill: { loadPolicy?: SkillLoadPolicy }) =>
  */
 const toStageSkills = (
   reaches: Reach[],
-  excludedSkillIds: ReadonlySet<EntityId>
+  excludedSkillIds: ReadonlySet<EntityId>,
+  runExcludedSkillIds: ReadonlySet<EntityId>
 ): StageSkill[] => {
   const sorted = reaches
     .map((reach, index) => ({ reach, index }))
@@ -200,8 +248,9 @@ const toStageSkills = (
   });
   result.forEach((entry) => {
     entry.excluded =
-      excludedSkillIds.has(entry.skill.id) &&
-      !entry.from.some((origin) => origin.kind === "application");
+      runExcludedSkillIds.has(entry.skill.id) ||
+      (excludedSkillIds.has(entry.skill.id) &&
+        !entry.from.some((origin) => origin.kind === "application"));
   });
   return result;
 };
@@ -279,15 +328,24 @@ const targetProfileReaches = (targetProfileId: number): Reach[] => {
   }));
 };
 
-/** Context reaches of one application: its archetypes, profile and itself. */
-const applicationReaches = (application: Application): Reach[] => {
-  const profile = targetProfileFor(application);
+/**
+ * Context reaches of one application: its archetypes, the target profile the
+ * run picks (`undefined`: its default; null: none) and itself.
+ */
+const applicationReaches = (
+  application: Application,
+  targetProfileId: number | null | undefined
+): Reach[] => {
+  const profileId =
+    targetProfileId !== undefined
+      ? targetProfileId
+      : targetProfileFor(application)?.profile.id;
   const ref: HubRef = { id: application.id, name: application.name };
   return [
     ...(application.archetypes ?? []).flatMap((archetype) =>
       archetypeReaches(archetype.id)
     ),
-    ...(profile ? targetProfileReaches(profile.profile.id) : []),
+    ...(profileId != null ? targetProfileReaches(profileId) : []),
     ...attachedTo("application", application.id).map(
       (skill): Reach => ({
         skill,
@@ -306,7 +364,10 @@ export const resolveSkillsByStage = ({
   stages,
   context,
   excludedSkillIds = new Set(),
+  runExcludedSkillIds = new Set(),
 }: ResolutionInput): SkillsByStage => {
+  const skillsOf = (reaches: Reach[]) =>
+    toStageSkills(reaches, excludedSkillIds, runExcludedSkillIds);
   const stageGroups = stages.map(
     (stage, index): StageSkillsGroup => ({
       order: index + 1,
@@ -316,7 +377,7 @@ export const resolveSkillsByStage = ({
         name: stage.agentName || stage.agentId,
       }),
       ...(stage.stageId != null ? { stageId: stage.stageId } : {}),
-      skills: toStageSkills(agentReaches(stage.agentId), excludedSkillIds),
+      skills: skillsOf(agentReaches(stage.agentId)),
     })
   );
   if (context.kind === "plan") {
@@ -328,7 +389,7 @@ export const resolveSkillsByStage = ({
     ];
     return {
       stages: stageGroups,
-      everyStage: [{ skills: toStageSkills(reaches, excludedSkillIds) }],
+      everyStage: [{ skills: skillsOf(reaches) }],
     };
   }
   const applicationIds = [...new Set(context.applicationIds)];
@@ -340,9 +401,11 @@ export const resolveSkillsByStage = ({
       return [
         {
           application: { id: application.id, name: application.name },
-          skills: toStageSkills(
-            applicationReaches(application),
-            excludedSkillIds
+          skills: skillsOf(
+            applicationReaches(
+              application,
+              context.targetProfileIds?.get(application.id)
+            )
           ),
         },
       ];

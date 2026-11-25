@@ -7,6 +7,8 @@ import {
   placementsOf,
   resolveSkillsByStage,
   targetProfileFor,
+  targetProfilePickOf,
+  targetProfilesOf,
 } from "./skill-resolution";
 
 /**
@@ -349,6 +351,100 @@ describe("exclusions", () => {
     expect(excluded("t-archetype-and-application")).toBe(false);
     expect(excluded("t-archetype")).toBe(true);
   });
+
+  it("from a run apply to every origin, the application's own included, on top of the plan's", () => {
+    const resolution = resolveSkillsByStage({
+      stages,
+      context: { kind: "applications", applicationIds: [CLAIMS.id] },
+      excludedSkillIds: new Set(["t-archetype"]),
+      runExcludedSkillIds: new Set(["t-application", "t-own", "t-profile"]),
+    });
+    const excludedIds = [
+      ...resolution.stages.flatMap((group) => group.skills),
+      ...resolution.everyStage.flatMap((group) => group.skills),
+    ]
+      .filter((entry) => isTestSkill(entry) && entry.excluded)
+      .map(({ skill: ref }) => ref.id);
+    expect(new Set(excludedIds)).toEqual(
+      new Set(["t-own", "t-archetype", "t-profile", "t-application"])
+    );
+    // The plan's exclusion still spares the application's own attachment.
+    expect(
+      resolution.everyStage[0].skills.find(
+        (e) => e.skill.id === "t-archetype-and-application"
+      )?.excluded
+    ).toBe(false);
+  });
+});
+
+describe("a run's target profile pick", () => {
+  const SECOND = { id: 19, name: "Second profile" };
+  const withSecondProfile = (check: () => void) => {
+    const archetype = mockArchetypes[ARCHETYPE.id];
+    const profiles = archetype.profiles;
+    archetype.profiles = [...(profiles ?? []), { ...SECOND, generators: [] }];
+    db.skills
+      .find((s) => s.id === "t-other-profile")!
+      .associations.push({ scope: "targetProfile", resource: SECOND });
+    try {
+      check();
+    } finally {
+      archetype.profiles = profiles;
+    }
+  };
+  const everyStageIds = (targetProfileIds: Map<number, number | null>) =>
+    ids(
+      resolveSkillsByStage({
+        stages: [],
+        context: {
+          kind: "applications",
+          applicationIds: [CLAIMS.id, CUSTOMERS.id],
+          targetProfileIds,
+        },
+      }).everyStage[0].skills
+    );
+
+  it("replaces the application's default profile, or removes it with null", () =>
+    withSecondProfile(() => {
+      expect(everyStageIds(new Map([[CLAIMS.id, SECOND.id]]))).toEqual([
+        "t-archetype",
+        "t-archetype-and-application",
+        "t-other-profile",
+        "t-application",
+      ]);
+      expect(everyStageIds(new Map([[CLAIMS.id, null]]))).toEqual([
+        "t-archetype",
+        "t-archetype-and-application",
+        "t-application",
+      ]);
+      // Another application's pick changes nothing here: the default stays.
+      expect(everyStageIds(new Map([[CUSTOMERS.id, SECOND.id]]))).toContain(
+        "t-profile"
+      );
+    }));
+
+  it("lists every profile of the application's archetypes as a choice", () =>
+    withSecondProfile(() => {
+      const application = mockApplicationArray.find((a) => a.id === CLAIMS.id)!;
+      expect(
+        targetProfilesOf(application).map(({ archetypeId, profile }) => [
+          archetypeId,
+          profile.id,
+        ])
+      ).toEqual([
+        [ARCHETYPE.id, PROFILE.id],
+        [ARCHETYPE.id, SECOND.id],
+      ]);
+      expect(targetProfilePickOf({ id: SECOND.id }, application, "f")).toBe(
+        SECOND.id
+      );
+      expect(targetProfilePickOf(null, application, "f")).toBeNull();
+      expect(targetProfilePickOf(undefined, application, "f")).toBeUndefined();
+      // Quarkus 3.x of Spring Boot Application: not one of its archetypes.
+      expect(() => targetProfilePickOf({ id: 21 }, application, "f")).toThrow(
+        /does not belong to an archetype of Claims Processing/
+      );
+    }));
 });
 
 describe("a skill both on the stage agent and in the context", () => {

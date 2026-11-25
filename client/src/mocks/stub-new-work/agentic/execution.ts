@@ -50,15 +50,19 @@ import {
   badRequest,
   conflict,
   db,
+  entityIdOf,
   findApplication,
   findArchetype,
+  hubIdOf,
   isSeeded,
   listNames,
   notFound,
+  optionalArray,
   requiredArray,
   requiredString,
   resolveAgentRef,
   resolvePlanRef,
+  resolveSkillRef,
 } from "./db";
 import { PlanRunTemplate, mockMigrationPlans, mockPlanRuns } from "./fixtures";
 import { selectPortfolio } from "./portfolio";
@@ -70,8 +74,11 @@ import {
   excludedSkillIdsOf,
   presentSkillsByStage,
   resolveSkillsByStage,
+  resolvedSkillIds,
   stagesOfPlan,
   targetProfileFor,
+  targetProfilePickOf,
+  targetProfilesOf,
 } from "./skill-resolution";
 
 // ---------------------------------------------------------------------------
@@ -750,12 +757,22 @@ const records = (): RunRecord[] => {
 // ---------------------------------------------------------------------------
 
 /** The run's skills snapshot with current names. */
-const presentRunSkills = (run: PlanRun): Pick<PlanRun, "skills"> =>
-  run.skills ? { skills: presentSkillsByStage(run.skills) } : {};
+const presentRunSkills = (
+  run: PlanRun
+): Pick<PlanRun, "skills" | "excludedSkills"> => ({
+  ...(run.skills ? { skills: presentSkillsByStage(run.skills) } : {}),
+  ...(run.excludedSkills
+    ? {
+        excludedSkills: run.excludedSkills
+          .map(resolveSkillRef)
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      }
+    : {}),
+});
 
 const presentRun = (record: RunRecord, now = Date.now()): PlanRun => {
   const { run, live } = record;
-  const { skills: _skills, ...rest } = run;
+  const { skills: _skills, excludedSkills: _excludedSkills, ...rest } = run;
   return {
     ...rest,
     planName: resolvePlanRef({ id: run.planId, name: run.planName }).name,
@@ -881,15 +898,28 @@ export const resolvePlanFor = (
   application: Application
 ): StoredPlan | undefined => {
   const target = targetProfileFor(application);
-  if (!target) return undefined;
+  return target != null
+    ? assignedPlanFor(target.archetypeId, target.profile.id)
+    : undefined;
+};
+
+/**
+ * The Plan assigned to one target profile of an archetype: the default Plan
+ * whose migration path has it (`migrationPath.isDefault`), hidden in the
+ * `initial` scenario like every seeded Plan.
+ */
+export const assignedPlanFor = (
+  archetypeId: number,
+  targetProfileId: number
+): StoredPlan | undefined => {
   const hideSeeded = getPrototypeScenario() === "initial";
   return db.plans.find(
     (plan) =>
       !(hideSeeded && isSeeded("plans", plan.id)) &&
       plan.migrationPath?.isDefault === true &&
-      plan.migrationPath.archetype.id === target.archetypeId &&
+      plan.migrationPath.archetype.id === archetypeId &&
       plan.migrationPath.targetProfiles.some(
-        (profile) => profile.id === target.profile.id
+        (profile) => profile.id === targetProfileId
       )
   );
 };
@@ -982,15 +1012,25 @@ const stageExecution = (
   completedAt: stageRun.completedAt,
 });
 
+/** A run's own choices: target profile picks and exclusions. */
+export interface RunChoices {
+  /** By application id (null: none); an application left out gets its default. */
+  targetProfileIds?: ReadonlyMap<number, number | null>;
+  /** Added to the plan's exclusions, for every origin. */
+  excludedSkillIds?: ReadonlySet<EntityId>;
+}
+
 /** What each stage of `plan` gets for these applications (the resolver). */
 export const resolveRunSkills = (
   plan: Pick<StoredPlan, "stages" | "excludedSkills">,
-  applicationIds: number[]
+  applicationIds: number[],
+  { targetProfileIds, excludedSkillIds }: RunChoices = {}
 ) =>
   resolveSkillsByStage({
     stages: stagesOfPlan(plan),
-    context: { kind: "applications", applicationIds },
+    context: { kind: "applications", applicationIds, targetProfileIds },
     excludedSkillIds: excludedSkillIdsOf(plan),
+    runExcludedSkillIds: excludedSkillIds,
   });
 
 /**
@@ -1006,16 +1046,35 @@ const applicationSkillsFor = (
 
 /**
  * The application's migration chain: its own target profile (its
- * archetype's), that profile's archetype, and the plan they resolve to.
+ * archetype's), that profile's archetype, and the plan they resolve to;
+ * and every target profile of its archetypes with its assigned plan, the
+ * choices a run has.
  */
 const migrationChain = (
   application: Application,
   resolved: StoredPlan | undefined
-): Pick<ApplicationMigrationView, "targetProfile" | "archetype" | "plan"> => {
+): Pick<
+  ApplicationMigrationView,
+  "targetProfile" | "archetype" | "plan" | "migrationPaths"
+> => {
   const target = targetProfileFor(application);
   const archetype =
     target != null ? findArchetype(target.archetypeId) : undefined;
   return {
+    migrationPaths: targetProfilesOf(application).flatMap(
+      ({ archetypeId, profile }) => {
+        const owner = findArchetype(archetypeId);
+        if (owner == null) return [];
+        const plan = assignedPlanFor(archetypeId, profile.id);
+        return [
+          {
+            archetype: { id: owner.id, name: owner.name },
+            targetProfile: { id: profile.id, name: profile.name },
+            ...(plan != null ? { plan: { id: plan.id, name: plan.name } } : {}),
+          },
+        ];
+      }
+    ),
     ...(target != null
       ? {
           targetProfile: { id: target.profile.id, name: target.profile.name },
@@ -1159,9 +1218,24 @@ const createRun = (
   plan: StoredPlan,
   applications: Application[],
   targetBranch: string,
-  now: number
+  now: number,
+  choices: RunChoices = {}
 ): RunRecord => {
   const id = nextRunId();
+  const skills = resolveRunSkills(
+    plan,
+    applications.map((application) => application.id),
+    choices
+  );
+  // The run's own exclusions that its snapshot lists, in name order.
+  const listed = resolvedSkillIds(skills);
+  const excludedSkills = [...(choices.excludedSkillIds ?? [])]
+    .filter((skillId) => listed.has(skillId))
+    .flatMap((skillId) => {
+      const skill = db.skills.find((candidate) => candidate.id === skillId);
+      return skill != null ? [{ id: skill.id, name: skill.name }] : [];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
   return {
     run: {
       id,
@@ -1175,10 +1249,8 @@ const createRun = (
       status: "Pending",
       targetBranch,
       startedAt: new Date(now).toISOString(),
-      skills: resolveRunSkills(
-        plan,
-        applications.map((application) => application.id)
-      ),
+      skills,
+      ...(excludedSkills.length > 0 ? { excludedSkills } : {}),
       stageRuns: [...plan.stages]
         .sort((a, b) => a.order - b.order)
         .map((stage) =>
@@ -1192,6 +1264,17 @@ const createRun = (
 /**
  * POST /application-migrations. Validates the request completely, then
  * creates one run per resolved Plan and returns the created runs.
+ *
+ * Optional run choices (absent: the behaviour before them):
+ * - `targetProfiles`: one pick per listed application (an application of
+ *   the request, once), a profile of its archetypes or null (400 otherwise).
+ *   With "recommended" the pick decides the Plan: the one assigned to that
+ *   profile (409 when none is, 400 for null). The snapshot resolves each
+ *   application with its pick; one left out gets its default.
+ * - `excludedSkills`: per Plan the request runs (400 for another Plan), the
+ *   Skills that run excludes on top of the Plan's, for every origin. Ids
+ *   that are not Skills, or that the run's snapshot does not list, are
+ *   ignored; the others are the run's `excludedSkills`.
  */
 export const startApplicationMigrations = (
   input: unknown
@@ -1225,6 +1308,31 @@ export const startApplicationMigrations = (
     if (!singlePlan) throw badRequest(`Plan "${planId}" does not exist.`);
   }
 
+  const picks = new Map<number, number | null>();
+  optionalArray(body, "targetProfiles").forEach((value, index) => {
+    const entry = asBody(value);
+    const field = `targetProfiles[${index}]`;
+    const applicationId = hubIdOf(entry.application, `${field}.application`);
+    const application = applications.find(
+      (candidate) => candidate.id === applicationId
+    );
+    if (!application) {
+      throw badRequest(`${field}.application must be one of applicationIds.`);
+    }
+    if (picks.has(applicationId)) {
+      throw badRequest(`${field}: ${application.name} is listed twice.`);
+    }
+    const pick = targetProfilePickOf(
+      entry.targetProfile,
+      application,
+      `${field}.targetProfile`
+    );
+    if (pick === undefined) {
+      throw badRequest(`${field}.targetProfile is required (null for none).`);
+    }
+    picks.set(applicationId, pick);
+  });
+
   const notReady = applications.filter(
     (application) => getApplicationMigration(application).preflight !== "ready"
   );
@@ -1238,7 +1346,7 @@ export const startApplicationMigrations = (
   // own archetype and target profile, never the plan of its last run.
   const groups = new Map<EntityId, { plan: StoredPlan; apps: Application[] }>();
   applications.forEach((application) => {
-    const plan = singlePlan ?? resolvePlanFor(application);
+    const plan = singlePlan ?? pickedPlanFor(application, picks);
     if (!plan) {
       throw conflict(`No Plan resolves for ${application.name}.`);
     }
@@ -1247,15 +1355,61 @@ export const startApplicationMigrations = (
     groups.set(plan.id, group);
   });
 
+  const runExclusions = new Map<EntityId, Set<EntityId>>();
+  optionalArray(body, "excludedSkills").forEach((value, index) => {
+    const entry = asBody(value);
+    const field = `excludedSkills[${index}]`;
+    const planId = entityIdOf(entry.plan, `${field}.plan`);
+    if (!groups.has(planId)) {
+      throw badRequest(`${field}.plan: Plan "${planId}" is not started here.`);
+    }
+    const skillIds = runExclusions.get(planId) ?? new Set<EntityId>();
+    requiredArray(entry, "skills").forEach((skill, skillIndex) =>
+      skillIds.add(entityIdOf(skill, `${field}.skills[${skillIndex}]`))
+    );
+    runExclusions.set(planId, skillIds);
+  });
+
   const now = Date.now();
   const current = ensureWorld();
   const created: EntityRef[] = [];
   groups.forEach(({ plan, apps }) => {
-    const record = createRun(plan, apps, targetBranch, now);
+    const record = createRun(plan, apps, targetBranch, now, {
+      targetProfileIds: picks,
+      excludedSkillIds: runExclusions.get(plan.id),
+    });
     current.records.unshift(record);
     created.push({ id: record.run.id, name: record.run.name });
   });
   return { planRuns: created };
+};
+
+/**
+ * "Use each application's migration plan" for one application: the Plan
+ * assigned to its picked target profile, else its own (`resolvePlanFor`).
+ */
+const pickedPlanFor = (
+  application: Application,
+  picks: ReadonlyMap<number, number | null>
+): StoredPlan | undefined => {
+  const pick = picks.get(application.id);
+  if (pick === undefined) return resolvePlanFor(application);
+  if (pick === null) {
+    throw badRequest(
+      `${application.name} needs a target profile when planSelection is "recommended".`
+    );
+  }
+  const target = targetProfilesOf(application).find(
+    ({ profile }) => profile.id === pick
+  );
+  const plan =
+    target != null ? assignedPlanFor(target.archetypeId, pick) : undefined;
+  if (!plan) {
+    throw conflict(
+      `No migration plan is assigned to ${target?.profile.name ?? pick}, the target profile picked for ${application.name}.`
+    );
+  }
+  return plan;
 };
 
 /** POST /application-migrations/:id/requests/current */

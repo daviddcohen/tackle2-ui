@@ -344,7 +344,7 @@ test.describe("Manage skills: application", () => {
 
     // No run yet: what each stage gets is listed when a plan runs.
     await expect(main(page)).toContainText(
-      "Run migration plan lists them before the run starts."
+      "Run migration plan lists them before the run starts, and you can exclude some for that run."
     );
     await expect(
       main(page).getByRole("link", { name: /latest run/ })

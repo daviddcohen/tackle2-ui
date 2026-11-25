@@ -209,7 +209,7 @@ describe("PlanWizard Skills step", () => {
   // The plan page's Every stage note sits in the intro, after its first
   // sentence.
   const intro =
-    "Each stage gets its agent's skills and the skills in Every stage. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application are always included: a plan cannot exclude them.";
+    "Each stage gets its agent's skills and the skills in Every stage. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its archetype's skills instead, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can.";
   const user = () => userEvent.setup();
   const nextButton = () => screen.getByRole("button", { name: "Next" });
   const stepButton = (name: string) => screen.getByRole("button", { name });
@@ -898,7 +898,7 @@ describe("PlanWizard Skills step", () => {
     await screen.findByRole("grid", { name: "Skills by stage" });
     expect(
       screen.getByText(
-        "Each stage gets its agent's skills and the skills in Every stage. This plan has no archetype or target profile. When it runs, each application gets its own archetype, target profile and application skills in every stage. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application are always included: a plan cannot exclude them."
+        "Each stage gets its agent's skills and the skills in Every stage. This plan has no archetype or target profile. When it runs, each application gets its archetype's skills and its own skills in every stage, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can."
       )
     ).toBeVisible();
   });

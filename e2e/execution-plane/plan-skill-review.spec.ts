@@ -100,7 +100,7 @@ test.describe("Plan skill review", () => {
     // Skills step: what each stage gets, and where each skill comes from.
     await expect(
       dialog.getByText(
-        "Each stage gets its agent's skills and the skills in Every stage. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application are always included: a plan cannot exclude them."
+        "Each stage gets its agent's skills and the skills in Every stage. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its archetype's skills instead, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can."
       )
     ).toBeVisible();
     await expect(dialog.getByText("No skills excluded.")).toBeVisible();
@@ -233,7 +233,7 @@ test.describe("Plan skill review", () => {
     ).toBeVisible();
     await expect(
       main(page).getByText(
-        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its own archetype and target profile skills instead."
+        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its archetype's skills instead, and no target profile skills."
       )
     ).toBeVisible();
     const table = skillsTable(main(page));

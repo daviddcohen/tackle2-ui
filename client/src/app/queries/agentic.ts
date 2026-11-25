@@ -15,10 +15,10 @@
  * - `isLoading` means "first load in flight" (TanStack v4 `isInitialLoading`),
  *   so a disabled query never reports loading forever.
  */
-import { useMemo } from "react";
 import {
   QueryClient,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -34,6 +34,7 @@ import {
   PlanRun,
   Provider,
   ResolvePlanSkillsRequest,
+  ResolvePlanSkillsResponse,
   Skill,
   SkillCollection,
   SkillsByStage,
@@ -996,8 +997,9 @@ export const useAssignPlanToTargetProfileMutation = (
  * so editing a draft's description or instructions refetches nothing. Every
  * stage keeps its position, agent and name (the response is keyed by stage);
  * target profile and excluded skill ids are sorted and deduplicated;
- * application ids are deduplicated in order (an empty list is none). The request itself is sent as given, with its stages in
- * stage order.
+ * applications are deduplicated in order, each with its target profile pick
+ * (an empty list is none). The request itself is sent as given, with its
+ * stages in stage order.
  */
 export const normalizeResolvePlanSkillsRequest = (
   request: ResolvePlanSkillsRequest
@@ -1023,14 +1025,24 @@ export const normalizeResolvePlanSkillsRequest = (
       (request.excludedSkills ?? []).map((skill) => skill.id)
     ).map((skillId) => ({ id: skillId })),
     // Applications keep their order: the server answers one every-stage
-    // group per application, in request order (repeats dropped).
+    // group per application, in request order (repeats dropped, the first
+    // one's target profile kept). A target profile pick changes the answer.
     ...(request.applications && request.applications.length > 0
       ? {
-          applications: [
-            ...new Set(
-              request.applications.map((application) => application.id)
-            ),
-          ].map((applicationId) => ({ id: applicationId })),
+          applications: request.applications
+            .filter(
+              (application, index, all) =>
+                all.findIndex((other) => other.id === application.id) === index
+            )
+            .map(({ id, targetProfile }) => ({
+              id,
+              ...(targetProfile !== undefined
+                ? {
+                    targetProfile:
+                      targetProfile === null ? null : { id: targetProfile.id },
+                  }
+                : {}),
+            })),
         }
       : {}),
   };
@@ -1048,30 +1060,10 @@ export const useResolvePlanSkills = (
   request: ResolvePlanSkillsRequest | undefined,
   { enabled = true }: AgenticListQueryOptions = {}
 ) => {
-  const normalized =
-    request != null ? normalizeResolvePlanSkillsRequest(request) : undefined;
-  // The key is the normalized request, so drafts that resolve the same way
-  // share one entry; the body is the request as given, in stage order.
-  const { data, isFetching, isInitialLoading, error, refetch } =
-    // eslint-disable-next-line @tanstack/query/exhaustive-deps
-    useQuery({
-      queryKey: agenticKeys.list("planSkills", normalized),
-      queryFn: () =>
-        request != null
-          ? resolvePlanSkills(request)
-          : Promise.reject(new Error("No plan to resolve skills for.")),
-      enabled: enabled && request != null,
-      retry: agenticRetry,
-    });
-  // Only an answer with both groups counts. One object per response, so
-  // callers can tell a new resolution apart.
-  const skillsByStage = useMemo(
-    () =>
-      data?.stages != null && data.everyStage != null
-        ? { stages: data.stages, everyStage: data.everyStage }
-        : undefined,
-    [data]
+  const { data, isFetching, isInitialLoading, error, refetch } = useQuery(
+    resolvePlanSkillsQuery(request, enabled)
   );
+  const skillsByStage = skillsByStageOf(data);
   return {
     skillsByStage,
     isAnswered: data != null,
@@ -1080,6 +1072,66 @@ export const useResolvePlanSkills = (
     fetchError: error,
     refetch,
   };
+};
+
+/**
+ * The resolve query of one request. The key is the normalized request, so
+ * drafts that resolve the same way share one entry; the body is the
+ * request as given, in stage order.
+ */
+const resolvePlanSkillsQuery = (
+  request: ResolvePlanSkillsRequest | undefined,
+  enabled: boolean
+) => ({
+  queryKey: agenticKeys.list(
+    "planSkills",
+    request != null ? normalizeResolvePlanSkillsRequest(request) : undefined
+  ),
+  queryFn: () =>
+    request != null
+      ? resolvePlanSkills(request)
+      : Promise.reject(new Error("No plan to resolve skills for.")),
+  enabled: enabled && request != null,
+  retry: agenticRetry,
+});
+
+/**
+ * Only an answer with both groups counts. One object per response (cached
+ * by response), so callers can tell a new resolution apart.
+ */
+const skillsByStageCache = new WeakMap<object, SkillsByStage>();
+const skillsByStageOf = (
+  data: ResolvePlanSkillsResponse | undefined
+): SkillsByStage | undefined => {
+  if (data?.stages == null || data.everyStage == null) return undefined;
+  const cached = skillsByStageCache.get(data);
+  if (cached != null) return cached;
+  const skillsByStage = { stages: data.stages, everyStage: data.everyStage };
+  skillsByStageCache.set(data, skillsByStage);
+  return skillsByStage;
+};
+
+/**
+ * `useResolvePlanSkills` for several requests at once (one per plan run the
+ * Run migration plan dialog starts), in request order. Each result's
+ * `skillsByStage` is one object per response.
+ */
+export const useResolvePlanSkillsList = (
+  requests: (ResolvePlanSkillsRequest | undefined)[],
+  { enabled = true }: AgenticListQueryOptions = {}
+): PlanSkillsQuery[] => {
+  const results = useQueries({
+    queries: requests.map((request) =>
+      resolvePlanSkillsQuery(request, enabled)
+    ),
+  });
+  return results.map((result) => ({
+    skillsByStage: skillsByStageOf(result.data),
+    isAnswered: result.data != null,
+    isFetching: result.isFetching,
+    fetchError: result.error,
+    refetch: result.refetch,
+  }));
 };
 
 /** What the plan skill surfaces read from `useResolvePlanSkills`. */

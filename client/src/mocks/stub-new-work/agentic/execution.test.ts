@@ -663,3 +663,180 @@ describe("skill exclusions", () => {
     expect([...new Set(excludedIds)]).toEqual(["16"]);
   });
 });
+
+describe("run choices: target profile picks and run exclusions", () => {
+  /** Java EE Application (archetype 1) gets a second target profile. */
+  const SECOND = { id: 19, name: "OpenJDK 21 on OpenShift" };
+  const JAVA_EE = mockArchetypes[1];
+  let profiles: typeof JAVA_EE.profiles;
+  beforeEach(() => {
+    profiles = JAVA_EE.profiles;
+    JAVA_EE.profiles = [...(profiles ?? []), { ...SECOND, generators: [] }];
+    db.skills.push({
+      id: "t-second",
+      name: "Second profile skill",
+      description: "",
+      sourceType: "inline",
+      associations: [{ scope: "targetProfile", resource: SECOND }],
+    });
+  });
+  afterEach(() => {
+    JAVA_EE.profiles = profiles;
+  });
+
+  /** A plan assigned to the second profile. */
+  const assignSecondPlan = () =>
+    createPlan({
+      name: "Java EE to OpenJDK 21",
+      description: "",
+      migrationPath: {
+        archetype: { id: 1 },
+        targetProfiles: [{ id: SECOND.id }],
+        isDefault: true,
+      },
+      stages: [{ name: "Only", agent: { id: db.agents[0].id } }],
+    });
+
+  const start = (overrides: Record<string, unknown>) =>
+    startApplicationMigrations({
+      applicationIds: [1],
+      planSelection: "recommended",
+      targetBranch: "main",
+      ...overrides,
+    });
+  const statusOf = (run: () => unknown) => {
+    try {
+      run();
+    } catch (error) {
+      return (error as { status?: number }).status;
+    }
+    return undefined;
+  };
+  const profileSkillIds = (runId: string) =>
+    getPlanRun(runId)
+      .skills!.everyStage[0].skills.filter((entry) =>
+        entry.from.some((origin) => origin.kind === "targetProfile")
+      )
+      .map((entry) => entry.skill.id);
+
+  it("lists every target profile of the application's archetypes with its assigned plan", () => {
+    const own = getApplicationMigrations([1])[1];
+    expect(own.migrationPaths).toEqual([
+      {
+        archetype: { id: 1, name: JAVA_EE.name },
+        targetProfile: { id: 11, name: "Quarkus 3.x" },
+        plan: own.plan,
+      },
+      {
+        archetype: { id: 1, name: JAVA_EE.name },
+        targetProfile: SECOND,
+      },
+    ]);
+    const plan = assignSecondPlan();
+    expect(getApplicationMigrations([1])[1].migrationPaths?.[1].plan).toEqual({
+      id: plan.id,
+      name: plan.name,
+    });
+    // The default stays the archetype's first profile.
+    expect(getApplicationMigrations([1])[1].targetProfile?.id).toBe(11);
+  });
+
+  it("runs the plan assigned to the picked profile, resolved with that profile", () => {
+    const plan = assignSecondPlan();
+    const {
+      planRuns: [ref],
+    } = start({
+      targetProfiles: [
+        { application: { id: 1 }, targetProfile: { id: SECOND.id } },
+      ],
+    });
+    expect(getPlanRun(ref.id).planId).toBe(plan.id);
+    expect(profileSkillIds(ref.id)).toEqual(["t-second"]);
+  });
+
+  it("resolves no target profile skills for a null pick with one plan for all", () => {
+    const {
+      planRuns: [ref],
+    } = start({
+      planSelection: "single",
+      planId: "3",
+      targetProfiles: [{ application: { id: 1 }, targetProfile: null }],
+    });
+    expect(profileSkillIds(ref.id)).toEqual([]);
+    // Without a pick, the default profile as before.
+    const {
+      planRuns: [again],
+    } = start({ applicationIds: [2], planSelection: "single", planId: "3" });
+    expect(profileSkillIds(again.id)).toContain("4");
+  });
+
+  it("refuses picks the application cannot run on", () => {
+    const pick = (targetProfile: unknown, application = { id: 1 }) => ({
+      targetProfiles: [{ application, targetProfile }],
+    });
+    // No plan is assigned to the second profile yet.
+    expect(statusOf(() => start(pick({ id: SECOND.id })))).toBe(409);
+    // Quarkus 3.x of Spring Boot Application: not one of its archetypes.
+    expect(statusOf(() => start(pick({ id: 21 })))).toBe(400);
+    expect(statusOf(() => start(pick(null)))).toBe(400);
+    expect(statusOf(() => start(pick({ id: 11 }, { id: 2 })))).toBe(400);
+    expect(
+      statusOf(() =>
+        start({
+          targetProfiles: [
+            { application: { id: 1 }, targetProfile: { id: 11 } },
+            { application: { id: 1 }, targetProfile: { id: 11 } },
+          ],
+        })
+      )
+    ).toBe(400);
+    expect(
+      statusOf(() => start({ targetProfiles: [{ application: { id: 1 } }] }))
+    ).toBe(400);
+    expect(listPlanRuns()).toHaveLength(7);
+  });
+
+  it("excludes a run's skills for every origin and records the ones its snapshot lists", () => {
+    db.skills
+      .find((skill) => skill.id === "6")!
+      .associations.push({
+        scope: "application",
+        resource: { id: 1, name: "Customer Management" },
+      });
+    const planId = getApplicationMigrations([1])[1].plan!.id;
+    // An exclusion for a plan the request does not run.
+    expect(
+      statusOf(() =>
+        start({ excludedSkills: [{ plan: { id: "6" }, skills: [] }] })
+      )
+    ).toBe(400);
+    const {
+      planRuns: [ref],
+    } = start({
+      excludedSkills: [
+        // An application's own skill, a profile skill, an unknown id and a
+        // skill the run does not resolve.
+        { plan: { id: planId }, skills: [{ id: "6" }, { id: "4" }] },
+        { plan: { id: planId }, skills: [{ id: "missing" }, { id: "16" }] },
+      ],
+    });
+    const run = getPlanRun(ref.id);
+    expect(run.excludedSkills).toEqual(
+      [
+        { id: "6", name: db.skills.find((skill) => skill.id === "6")!.name },
+        { id: "4", name: "Quarkus best practices" },
+      ].sort((a, b) => a.name.localeCompare(b.name))
+    );
+    expect(entriesOf(run.skills, "6").every((entry) => entry.excluded)).toBe(
+      true
+    );
+    expect(entriesOf(run.skills, "4").every((entry) => entry.excluded)).toBe(
+      true
+    );
+    // A run without exclusions reports none, as before.
+    const {
+      planRuns: [plain],
+    } = start({ applicationIds: [2] });
+    expect(getPlanRun(plain.id)).not.toHaveProperty("excludedSkills");
+  });
+});

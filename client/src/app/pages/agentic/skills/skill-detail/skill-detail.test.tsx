@@ -583,7 +583,7 @@ describe("SkillDetail, Usage tab", () => {
     });
     expect(
       within(sectionOf(heading)).getByText(
-        "The stages of each migration plan that get this skill, and where it comes from. Application skills are added when a plan runs. For a plan without a migration path, archetype and target profile skills are added the same way, for each application."
+        "The stages of each migration plan that get this skill, and where it comes from. Application skills are added when a plan runs. For a plan without a migration path, archetype skills are added the same way, for each application, and no target profile skills."
       )
     ).toBeInTheDocument();
     const grid = screen.getByRole("grid", { name: "Used in migration plans" });
@@ -804,7 +804,7 @@ describe("SkillDetail, Usage tab", () => {
     // The section sentence says when application skills are added.
     expect(
       within(section).getByText(
-        "The stages of each migration plan that get this skill, and where it comes from. Application skills are added when a plan runs. For a plan without a migration path, archetype and target profile skills are added the same way, for each application."
+        "The stages of each migration plan that get this skill, and where it comes from. Application skills are added when a plan runs. For a plan without a migration path, archetype skills are added the same way, for each application, and no target profile skills."
       )
     ).toBeInTheDocument();
     expect(within(section).queryByText(/uses this skill/)).toBeNull();

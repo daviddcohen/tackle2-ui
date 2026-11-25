@@ -208,7 +208,7 @@ describe("SkillsTab", () => {
     renderTab();
     expect(
       screen.getByText(
-        `${intro} Run migration plan lists them before the run starts.`
+        `${intro} Run migration plan lists them before the run starts, and you can exclude some for that run.`
       )
     ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /latest run/ })).toBeNull();
@@ -218,7 +218,9 @@ describe("SkillsTab", () => {
     mockState.migration = view({ plan: undefined, configured: false });
     renderTab();
     expect(
-      screen.getByText(/Run migration plan lists them before the run starts./)
+      screen.getByText(
+        /Run migration plan lists them before the run starts, and you can exclude some for that run./
+      )
     ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /latest run/ })).toBeNull();
   });
