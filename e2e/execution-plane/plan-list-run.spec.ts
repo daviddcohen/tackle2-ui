@@ -62,7 +62,7 @@ const profileHref = (archetype: Ref, profile: Ref) =>
 /** Why Run is off for the Enterprise Architect (who can edit plans), as the UI says it. */
 const runBlocker = (plan: Plan) => {
   if (pathsOf(plan).length === 0)
-    return "This migration plan is not assigned to a target profile, so it has no applications. To run it, select applications in the application inventory.";
+    return "No target profile uses this migration plan, so it has no applications. Assign it to a target profile on an archetype's Target profiles page.";
   if (plan.stages.length === 0)
     return plan.operatorManaged
       ? "This migration plan has no stages yet."

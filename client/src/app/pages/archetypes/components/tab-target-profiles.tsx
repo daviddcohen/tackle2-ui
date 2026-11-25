@@ -54,9 +54,8 @@ export const TabTargetProfiles: React.FC<TabTargetProfilesProps> = ({
     { title: t("sidebar.archetypes"), path: DevPaths.archetypes },
   ]);
   const ManageLink = useLinkComponent(to(targetProfilesPath(archetype.id)));
-  const { getAssignedPlan, isLoading, isError } = useTargetProfilePlans(
-    isAgenticEnabled ? archetype.id : undefined
-  );
+  const { getAssignedPlan, isLoading, isError, isUnknown } =
+    useTargetProfilePlans(isAgenticEnabled ? archetype.id : undefined);
   const profiles = archetype.profiles ?? [];
 
   const manageButton = canManage ? (
@@ -154,6 +153,7 @@ export const TabTargetProfiles: React.FC<TabTargetProfilesProps> = ({
                         plan={getAssignedPlan(profile.id)}
                         isLoading={isLoading}
                         isError={isError}
+                        isUnknown={isUnknown}
                         linkTo={(pathname) => to(pathname)}
                       />
                     </Td>

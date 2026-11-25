@@ -156,6 +156,13 @@ This table records the skills work as it was. Superseded for plan 3 and profiles
 shift", used by target profiles 12 and 32, which are new profiles (OpenJDK 21 on OpenShift, Java 8 on OpenShift), not the
 removed ones.
 
+Target-specific skills sit on target profiles, not archetypes (24 Nov): an archetype's skills reach every run
+of its applications, whichever target profile the run picks, so they must fit any target. EJB to CDI conversion patterns
+(2) and Jakarta EE namespace migration (3) moved to Quarkus 3.x (11) only; Spring Boot to Quarkus migration (1) is on
+Quarkus 3.x (21) only; Java runtime modernization (9) is on Java 17 on OpenShift (31) only. Java EE Application gets a skill
+that fits any target, Platform security baseline (11). Corporate coding standards (5) stays an application skill, so
+the application tier still shows in runs; Claims Processing keeps its own EJB to CDI attachment.
+
 ### Multi-application run observability
 
 A prototype data change that changes existing mock data (its own commit). Before it, a plan run on several applications had one agent run per stage, labelled with the run's first application only, and its skill loader staged that application's every-stage skills for everyone. The real backend runs one AgentWorkflowRun per application, so a stage has one AgentRun per application. The observability mock (`observability.ts`) now matches:
@@ -710,8 +717,9 @@ the client refetches).
 
 What the real Hub would need:
 
-- A `migrationPlan` Ref on Hub `TargetProfile` (the AgentWorkflow name), like `analysisProfile`, written by the target
-  profiles page. The client derives `migrationPaths` from `GET /hub/archetypes` (profiles are inline) with no new query,
+- A plan reference on Hub `TargetProfile`, written by the target profiles page. An AgentWorkflow is a resource named
+  by its name with no Hub id, so this is a name field, not a Ref like `analysisProfile`, and the UI must cope with a
+  name that matches no workflow. The client derives `migrationPaths` from `GET /hub/archetypes` (profiles are inline) with no new query,
   or the Hub returns them on the workflow. Until then the adapter maps `migrationPaths: undefined`.
 - Deleting a workflow that profiles reference: refused (as the mock does) or the references cleared. Deleting a target
   profile drops its reference with it (the UI allows it and says so in the confirm).

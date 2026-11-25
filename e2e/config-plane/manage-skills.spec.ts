@@ -143,8 +143,7 @@ test.describe("Manage skills: archetype", () => {
       "Select the skills to attach to this archetype. Agents can use them whichever target profile a run uses, so attach a skill that fits only one target to that target profile instead."
     );
     // Direct skills only: preselected and Save waits for a change.
-    await expect(chip(page, "EJB to CDI conversion patterns")).toBeVisible();
-    await expect(chip(page, "Jakarta EE namespace migration")).toBeVisible();
+    await expect(chip(page, "Platform security baseline")).toBeVisible();
     await expect(
       manageDialog(page).getByRole("button", { name: "Save" })
     ).toBeDisabled();
@@ -168,27 +167,29 @@ test.describe("Manage skills: archetype", () => {
 
   test("remove a skill from the drawer's Skills fact", async ({ page }) => {
     await gotoProto(page, "/archetypes");
-    const drawer = await openArchetypeDrawer(page, "Java EE Application");
+    const drawer = await openArchetypeDrawer(page, "Legacy Java Application");
     const own = skillsFact(drawer);
     const link = own.getByRole("link", {
-      name: "EJB to CDI conversion patterns",
+      name: "Containerization standards",
     });
     await expect(link).toBeVisible();
 
     await own
-      .getByRole("button", { name: "Manage skills for Java EE Application" })
+      .getByRole("button", {
+        name: "Manage skills for Legacy Java Application",
+      })
       .click();
-    await chip(page, "EJB to CDI conversion patterns").click();
-    await save(page, "Skills for Java EE Application updated");
+    await chip(page, "Containerization standards").click();
+    await save(page, "Skills for Legacy Java Application updated");
 
     await expect(link).toHaveCount(0);
-    // The other attached skill stays.
+    // The other attached skills stay.
     await expect(
-      own.getByRole("link", { name: "Jakarta EE namespace migration" })
+      own.getByRole("link", { name: "Build validation standards" })
     ).toBeVisible();
     await expect(
-      (await attachedTo(page, "2")).getByRole("link", {
-        name: "Java EE Application",
+      (await attachedTo(page, "8")).getByRole("link", {
+        name: "Legacy Java Application",
       })
     ).toHaveCount(0);
   });
@@ -239,7 +240,7 @@ test.describe("Manage skills: archetype", () => {
     ).toHaveCount(0);
     await expect(
       skillsFact(drawer).getByRole("link", {
-        name: "EJB to CDI conversion patterns",
+        name: "Platform security baseline",
       })
     ).toBeVisible();
     // A target profile is a migration path: its skills come with a run on
@@ -442,7 +443,7 @@ const expectNoManageSkills = async (page: Page, persona: Persona) => {
   const drawer = await openArchetypeDrawer(page, "Java EE Application");
   await expect(
     skillsFact(drawer).getByRole("link", {
-      name: "EJB to CDI conversion patterns",
+      name: "Platform security baseline",
     })
   ).toBeVisible();
   await expect(
@@ -486,5 +487,5 @@ test("platform engineer can manage skills", async ({ page }) => {
   await gotoProto(page, "/archetypes", { persona: "platformEngineer" });
   await openRowActions(page, "Java EE Application");
   await menuItem(page, MANAGE).click();
-  await expect(chip(page, "EJB to CDI conversion patterns")).toBeVisible();
+  await expect(chip(page, "Platform security baseline")).toBeVisible();
 });

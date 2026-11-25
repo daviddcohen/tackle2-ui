@@ -749,11 +749,11 @@ describe("skill exclusions", () => {
     const others = entriesOf(run.skills, "14");
     expect(others.length).toBeGreaterThan(0);
     expect(others.some(({ excluded }) => excluded)).toBe(false);
-    // Java runtime modernization reaches plan 5 through the archetype and
-    // the target profile, no longer through a general agent.
+    // Java runtime modernization reaches plan 5 through its target profile
+    // only: it fits that target, not every Legacy Java path.
     expect(
       entries.flatMap(({ from }) => from.map((origin) => origin.kind))
-    ).toEqual(["archetype", "targetProfile"]);
+    ).toEqual(["targetProfile"]);
 
     // The run keeps its snapshot when the Plan's exclusions change later.
     excludeOnPlan([]);

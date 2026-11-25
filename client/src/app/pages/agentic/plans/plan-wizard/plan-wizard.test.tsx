@@ -185,6 +185,20 @@ describe("PlanWizard", () => {
     expect(screen.queryByRole("textbox", { name: /stageName/ })).toBeNull();
   });
 
+  it("warns in edit mode that changes apply to the target profiles using the plan", async () => {
+    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
+    expect(
+      screen.getByText("agentic.plan.usedByTargetProfiles")
+    ).toBeInTheDocument();
+  });
+
+  it("has no usage warning when creating a plan", async () => {
+    render(<PlanWizard isOpen plan={null} onClose={jest.fn()} />);
+    await screen.findByRole("textbox", { name: /terms\.name/ });
+    expect(screen.queryByText("agentic.plan.usedByTargetProfiles")).toBeNull();
+  });
+
   it("describes each agent option and warns about an unverified model", async () => {
     const user = userEvent.setup();
     render(<PlanWizard isOpen plan={null} onClose={jest.fn()} />);

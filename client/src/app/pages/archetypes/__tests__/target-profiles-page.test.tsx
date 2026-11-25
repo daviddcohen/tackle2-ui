@@ -414,6 +414,39 @@ describe("TargetProfilesPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("says Unavailable and disables the plan action when plans do not report their paths", async () => {
+    // The real Hub today: plans come without `migrationPaths`.
+    serve({
+      plansResolver: (_req, res, ctx) =>
+        res(
+          ctx.json([
+            {
+              id: "1",
+              name: "Java EE to Quarkus",
+              description: "",
+              stages: [],
+            },
+          ])
+        ),
+    });
+    renderPage();
+
+    const profileRow = await row("OpenShift lift and shift");
+    expect(
+      await within(profileRow).findByText("Unavailable")
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(profileRow).getByRole("button", { name: "Kebab toggle" })
+    );
+    const assign = await screen.findByRole("menuitem", {
+      name: "Assign migration plan",
+    });
+    expect(assign).toHaveAttribute("aria-disabled", "true");
+    expect(assign).toHaveAccessibleDescription(
+      "This server does not report which target profile uses each migration plan."
+    );
+  });
+
   it("disables Delete when skills fail, even without a plan", async () => {
     serve({ skillsResolver: (_req, res, ctx) => res(ctx.status(403)) });
     renderPage();
@@ -779,6 +812,28 @@ describe("TargetProfilesPage", () => {
         },
       ],
     };
+
+    it("lists the plans by name", async () => {
+      serve({
+        // Served in id order reversed: the select sorts by name.
+        plansResolver: (_req, res, ctx) => res(ctx.json([otherPlan, ...plans])),
+      });
+      renderPage();
+
+      const dialog = await openRowAction(
+        "Quarkus 3.x",
+        "Change migration plan"
+      );
+      expect(
+        within(dialog)
+          .getAllByRole("option")
+          .map((option) => option.textContent)
+      ).toEqual([
+        "Select a migration plan",
+        "Java EE to Quarkus",
+        "Java lift and shift",
+      ]);
+    });
 
     it("changes the plan with Save, and says so", async () => {
       const notifications = createMockNotifications();

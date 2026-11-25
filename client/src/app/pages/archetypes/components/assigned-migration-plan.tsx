@@ -13,6 +13,8 @@ export interface AssignedMigrationPlanProps {
   /** The plans query has not answered yet: never read that as "Not assigned". */
   isLoading?: boolean;
   isError: boolean;
+  /** The server does not report which profile uses a plan. */
+  isUnknown?: boolean;
   linkTo: (pathname: string) => LocationDescriptor;
 }
 
@@ -21,11 +23,12 @@ export const AssignedMigrationPlan: React.FC<AssignedMigrationPlanProps> = ({
   plan,
   isLoading,
   isError,
+  isUnknown,
   linkTo,
 }) => {
   const { t } = useTranslation();
   if (isLoading) return <Skeleton screenreaderText={t("terms.loading")} />;
-  if (isError)
+  if (isError || isUnknown)
     return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
   if (!plan)
     return <EmptyTextMessage message={t("agentic.archetype.notAssigned")} />;

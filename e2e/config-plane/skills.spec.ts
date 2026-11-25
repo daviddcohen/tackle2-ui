@@ -382,7 +382,7 @@ test.describe("Skill detail", () => {
     // The Usage fact opens the Usage tab.
     await main(page)
       .getByRole("link", {
-        name: "1 collection, 1 archetype, 1 target profile",
+        name: "1 collection, 1 target profile",
       })
       .click();
     await expect(page).toHaveURL(/tab=usage/);
@@ -392,12 +392,6 @@ test.describe("Skill detail", () => {
     const attachedTo = main(page).getByRole("region", {
       name: /^Attached to/,
     });
-    await expect(
-      attachedTo.getByRole("link", {
-        name: "Spring Boot Application",
-        exact: true,
-      })
-    ).toBeVisible();
     await expect(
       attachedTo.getByRole("link", {
         name: "Quarkus 3.x (Spring Boot Application)",

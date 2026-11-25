@@ -85,7 +85,11 @@ test("an eight-level cross-entity journey keeps a coherent trail and every crumb
       `a[href^="${withBase("/skills/")}"]:not([href^="${withBase("/skills/collections")}"])`
     )
     .first();
-  const skillName = (await skillLink.innerText()).trim();
+  // An always-followed skill's label adds "(Always followed)" for screen
+  // readers; the skill's name is the text before it.
+  const skillName = (await skillLink.innerText())
+    .replace(/\s*\(Always followed\)$/, "")
+    .trim();
   await skillLink.click();
   await expect(mainHeading(page)).toHaveText(skillName);
   await page.getByRole("tab", { name: /Usage/ }).click();
