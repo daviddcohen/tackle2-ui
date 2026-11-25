@@ -10,7 +10,9 @@ import {
   errorBoundary,
   expect,
   expectCanonicalProto,
+  main,
   mainHeading,
+  openBulkRunMigration,
   personaSelect,
   perspectiveToggle,
   protoUrl,
@@ -20,6 +22,7 @@ import {
   stageSelect,
   switcher,
   test,
+  waitForInventory,
 } from "../support";
 
 const personas = PERSONAS;
@@ -346,6 +349,79 @@ test.describe("switcher controls", () => {
       await expect(mainHeading(page)).toBeVisible();
       if (visible) await expect(stageSelect(page)).toBeVisible();
       else await expect(stageSelect(page)).toHaveCount(0);
+    });
+  }
+});
+
+test.describe("switcher placement", () => {
+  // At 600px the switcher wraps onto several rows.
+  for (const width of [1280, 600]) {
+    test(`stays at the top while a long page scrolls (${width}px wide)`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(protoUrl("/plan-runs/1", { scenario: "actionRequired" }));
+      await expect(mainHeading(page)).toBeVisible();
+      const headingTop = (await mainHeading(page).boundingBox())!.y;
+
+      // Wheel well past the end of the content: once the content stops, any
+      // extra scrolling would move the window if the window could scroll.
+      const area = (await main(page).boundingBox())!;
+      await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+      for (let i = 0; i < 10; i++) await page.mouse.wheel(0, 1000);
+      await expect
+        .poll(async () => (await mainHeading(page).boundingBox())!.y)
+        .toBeLessThan(headingTop - 500);
+
+      await expect(switcher(page)).toBeInViewport({ ratio: 1 });
+      expect((await switcher(page).boundingBox())!.y).toBe(0);
+      expect(
+        await page.evaluate(() => ({
+          scrollY: window.scrollY,
+          overflow: document.documentElement.scrollHeight - window.innerHeight,
+        }))
+      ).toEqual({ scrollY: 0, overflow: 0 });
+    });
+  }
+
+  // At 600px the switcher wraps onto two or three rows, lower than the top
+  // of a dialog's title; at 1280px it is one row.
+  for (const width of [1280, 600]) {
+    test(`a dialog and its backdrop open above it (${width}px wide)`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(protoUrl("/applications"));
+      await waitForInventory(page);
+      const dialog = await openBulkRunMigration(page, [
+        "Customer Management",
+        "Order Service",
+      ]);
+      const title = dialog.getByRole("heading", {
+        name: "Run migration plan",
+      });
+      await expect(title).toBeInViewport({ ratio: 1 });
+      // A click at the switcher's centre does not reach it, and a click at
+      // the start of the dialog's title reaches the title. (Behind the modal
+      // the switcher is aria-hidden, so it is found by its class.)
+      const topmost = (locator: typeof title, atStart: boolean) =>
+        locator.evaluate((element, start) => {
+          const box = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            start ? box.left + 10 : box.left + box.width / 2,
+            box.top + box.height / 2
+          );
+          return element.contains(hit);
+        }, atStart);
+      await expect
+        .poll(async () => ({
+          switcher: await topmost(
+            page.locator(".prototype-scope-switcher"),
+            false
+          ),
+          title: await topmost(title, true),
+        }))
+        .toEqual({ switcher: false, title: true });
     });
   }
 });

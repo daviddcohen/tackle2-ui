@@ -15,6 +15,8 @@ import {
   PrototypeScopeSwitcher,
 } from "@app/prototype/agentic";
 
+import "./PrototypeShell.css";
+
 export { initializePrototypeMasquerade } from "@app/prototype/agentic";
 
 export const PrototypeShell: React.FC<React.PropsWithChildren> = ({
@@ -22,8 +24,10 @@ export const PrototypeShell: React.FC<React.PropsWithChildren> = ({
 }) => (
   <AgenticPrototypeProvider>
     <PrototypeAnnotationContext.Provider value>
-      <PrototypeScopeSwitcher />
-      {children}
+      <div className="prototype-shell">
+        <PrototypeScopeSwitcher />
+        <div className="prototype-shell__app">{children}</div>
+      </div>
     </PrototypeAnnotationContext.Provider>
   </AgenticPrototypeProvider>
 );

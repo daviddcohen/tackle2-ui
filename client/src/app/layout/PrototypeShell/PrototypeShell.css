@@ -1,0 +1,16 @@
+/*
+ * The switcher takes its own row above the app and the app fills the rest of
+ * the viewport, so the PatternFly page keeps its own scrolling and the
+ * switcher stays at the top. Without this the switcher and the full-height
+ * page together overflow the window, and the window scrolls them both.
+ */
+.prototype-shell {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.prototype-shell__app {
+  min-height: 0;
+  flex: 1 1 auto;
+}
