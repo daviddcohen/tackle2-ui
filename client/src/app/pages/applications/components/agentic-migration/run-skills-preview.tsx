@@ -7,7 +7,7 @@ import {
   StackItem,
   Title,
 } from "@patternfly/react-core";
-import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
+import a11yStyles from "@patternfly/react-styles/css/utilities/Accessibility/accessibility";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import {
@@ -17,10 +17,7 @@ import {
   ResolvePlanSkillsRequest,
   SkillsByStage,
 } from "@app/agentic";
-import {
-  EVERY_STAGE_COLLAPSE_AFTER,
-  StageSkillsTable,
-} from "@app/pages/agentic/components/stage-skills-table";
+import { StageSkillsTable } from "@app/pages/agentic/components/stage-skills-table";
 import { skillStagesText } from "@app/pages/agentic/plans/plan-wizard/plan-skills-step";
 import {
   isResolveEndpointMissing,
@@ -187,11 +184,11 @@ export interface RunSkillsPreviewProps {
  * from the same groups as the start request, with an Include checkbox per
  * row. Clearing a skill excludes it from that plan run only, in every stage
  * and for every application; the plan's own exclusions stay. Collapsed
- * until asked for (its toggle counts the run's exclusions), and every
- * group in it starts collapsed. Names are plain text: a link would close
- * the dialog and lose its choices. Loading and errors never block Run.
- * The toggle reads as an action ("Review skills by stage") and counts the
- * run's exclusions.
+ * until asked for; the toggle reads as an action ("Review skills by stage")
+ * and counts the run's exclusions. Opening it scrolls it to the top of the
+ * modal body, so the table is what the user sees. Names are plain text: a
+ * link would close the dialog and lose its choices. Loading and errors
+ * never block Run.
  */
 export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
   groups,
@@ -207,80 +204,112 @@ export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
   onExpandedChange,
 }) => {
   const { t } = useTranslation();
-  const applicationCount = groups.reduce(
-    (count, group) => count + group.applications.length,
-    0
-  );
   const isSeveral = groups.length > 1;
 
-  // One paragraph, like the wizard's Skills step.
+  // Opened by the user (not by default): once the content is there, bring
+  // the section to the top of the modal body. Below the run options it
+  // would otherwise open under the footer, as if nothing happened. While
+  // a table loads the body may be too short to bring it all the way, so
+  // it scrolls again when the tables are in, unless the user has moved on
+  // meanwhile (scrolled, touched, typed or clicked). Focus stays on the
+  // toggle.
+  const sectionRef = React.useRef<HTMLDivElement>(null);
+  const isScrollPending = React.useRef(false);
+  const isAnyLoading = skills.some((group) => group.isLoading);
+  React.useEffect(() => {
+    if (!isExpanded || !isScrollPending.current) return;
+    if (!isAnyLoading) isScrollPending.current = false;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    sectionRef.current?.scrollIntoView?.({
+      block: "start",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+    if (!isScrollPending.current) return;
+    const cancel = () => {
+      isScrollPending.current = false;
+    };
+    const events = ["wheel", "touchstart", "keydown", "pointerdown"];
+    events.forEach((event) =>
+      document.addEventListener(event, cancel, { capture: true, passive: true })
+    );
+    return () =>
+      events.forEach((event) =>
+        document.removeEventListener(event, cancel, { capture: true })
+      );
+  }, [isExpanded, isAnyLoading]);
+
+  // One paragraph, like the wizard's Skills step. The "Every stage:
+  // {application}" titles say which skills go to one application only.
   const intro = [
     t("agentic.runSkills.intro"),
     isRerun ? t("agentic.execution.previewRerun") : null,
     isRerun && hasRerunExclusions ? t("agentic.runSkills.rerunExcluded") : null,
-    // Said once, whenever more than one application is covered.
-    applicationCount > 1
-      ? t("agentic.stageSkills.everyStagePerApplication")
-      : null,
   ]
     .filter((sentence): sentence is string => sentence != null)
     .join(" ");
 
   return (
-    <ExpandableSection
-      toggleId="migration-preflight-skills-toggle"
-      contentId="migration-preflight-skills"
-      toggleText={
-        excludedCount > 0
-          ? t("agentic.runSkills.toggleExcluded", { count: excludedCount })
-          : t("agentic.runSkills.toggle")
-      }
-      isExpanded={isExpanded}
-      onToggle={(_event, expanded) => onExpandedChange(expanded)}
-      isIndented
-    >
-      {isExpanded && (
-        <Stack hasGutter>
-          {isPlanMissing || isTargetProfileMissing ? (
-            <StackItem>
-              <Content component="p">
-                {isPlanMissing
-                  ? t("agentic.execution.previewSelectPlan")
-                  : t("agentic.runSkills.previewSelectProfile")}
-              </Content>
-            </StackItem>
-          ) : (
-            <>
+    <div ref={sectionRef}>
+      <ExpandableSection
+        toggleId="migration-preflight-skills-toggle"
+        contentId="migration-preflight-skills"
+        toggleText={
+          excludedCount > 0
+            ? t("agentic.runSkills.toggleExcluded", { count: excludedCount })
+            : t("agentic.runSkills.toggle")
+        }
+        isExpanded={isExpanded}
+        onToggle={(_event, expanded) => {
+          isScrollPending.current = expanded;
+          onExpandedChange(expanded);
+        }}
+      >
+        {isExpanded && (
+          <Stack hasGutter>
+            {isPlanMissing || isTargetProfileMissing ? (
               <StackItem>
-                <Content component="p" className={textStyles.textColorSubtle}>
-                  {intro}
+                <Content component="p">
+                  {isPlanMissing
+                    ? t("agentic.execution.previewSelectPlan")
+                    : t("agentic.runSkills.previewSelectProfile")}
                 </Content>
               </StackItem>
-              {groups.map((group, index) => (
-                <StackItem key={group.plan.id}>
-                  <RunGroupPreview
-                    group={group}
-                    resolution={skills[index]}
-                    excludedIds={excludedSkills[group.plan.id] ?? []}
-                    onIncludeChange={(skill, included) =>
-                      onIncludeChange(group.plan.id, skill, included)
-                    }
-                    isSeveral={isSeveral}
-                    rowIndexOffset={ROW_INDEX_OFFSET + index * ROW_INDEX_STEP}
-                  />
+            ) : (
+              <>
+                <StackItem>
+                  <Content component="p" className={textStyles.textColorSubtle}>
+                    {intro}
+                  </Content>
                 </StackItem>
-              ))}
-            </>
-          )}
-        </Stack>
-      )}
-    </ExpandableSection>
+                {groups.map((group, index) => (
+                  <StackItem key={group.plan.id}>
+                    <RunGroupPreview
+                      group={group}
+                      resolution={skills[index]}
+                      excludedIds={excludedSkills[group.plan.id] ?? []}
+                      onIncludeChange={(skill, included) =>
+                        onIncludeChange(group.plan.id, skill, included)
+                      }
+                      isSeveral={isSeveral}
+                      rowIndexOffset={ROW_INDEX_OFFSET + index * ROW_INDEX_STEP}
+                    />
+                  </StackItem>
+                ))}
+              </>
+            )}
+          </Stack>
+        )}
+      </ExpandableSection>
+    </div>
   );
 };
 
 /**
  * One plan run's table, with the run's exclusions marked on the plan's and
- * a polite live line above it: the last change and the run's total.
+ * a polite live line for screen readers: after a change, that change and
+ * the run's total. Sighted users see the toggle's count and the row labels.
  */
 const RunGroupPreview: React.FC<{
   group: StartGroup;
@@ -334,50 +363,30 @@ const RunGroupPreview: React.FC<{
   const totalText = t("agentic.runSkills.excludedTotal", {
     count: excludedTotal,
   });
-  // With several plan runs, "No skills excluded" under each heading says
-  // nothing the toggle does not: the line waits for a change. It stays
-  // mounted, so the change is announced.
-  const liveText =
-    changeText != null
-      ? `${changeText} ${totalText}`
-      : isSeveral && excludedTotal === 0
-        ? ""
-        : totalText;
-  const liveLine =
-    canInclude && shown != null && shown.stages.length > 0 ? (
-      <Content
-        component="p"
-        aria-live="polite"
-        className={isSeveral && liveText !== "" ? spacing.mtSm : undefined}
-      >
-        {liveText}
-      </Content>
-    ) : null;
+  // Empty until a change, and always mounted, so the change is announced.
+  const liveText = changeText != null ? `${changeText} ${totalText}` : "";
 
   return (
     <Stack hasGutter>
-      {isSeveral ? (
+      {isSeveral && (
         <StackItem>
           <Title headingLevel="h2" size="md">
             {title}
           </Title>
-          {liveLine}
         </StackItem>
-      ) : (
-        liveLine != null && <StackItem>{liveLine}</StackItem>
       )}
       <StackItem>
+        <div aria-live="polite" className={a11yStyles.screenReader}>
+          {liveText}
+        </div>
         <StageSkillsTable
           skills={shown}
           context="run"
-          // As on the plan run page: the review is already the "show me"
-          // gesture, so the groups are open; many applications' Every stage
-          // groups start collapsed.
-          defaultExpanded={
-            group.applications.length > EVERY_STAGE_COLLAPSE_AFTER
-              ? "stages"
-              : "all"
-          }
+          // The review is already the "show me" gesture, so the stage
+          // groups are open. With 2 or more applications each one's Every
+          // stage group starts collapsed and shows its skill count: the
+          // dialog is a small box, unlike the plan run page.
+          defaultExpanded={group.applications.length > 1 ? "stages" : "all"}
           groupHeadingLevel={isSeveral ? "h3" : "h2"}
           rowIndexOffset={rowIndexOffset}
           include={

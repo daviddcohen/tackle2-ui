@@ -214,9 +214,15 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     });
     // Measured from the table's bottom: the row's Target profile cell
     // changes height with the choice (a select, or the plan's profile).
+    // Both in one read: the review's scroll into view may still be moving.
     const offset = async () => {
-      const table = (await readiness.boundingBox())!;
-      return (await onePlan.boundingBox())!.y - (table.y + table.height);
+      const radio = await onePlan.elementHandle();
+      return readiness.evaluate(
+        (table, radio) =>
+          radio!.getBoundingClientRect().top -
+          table.getBoundingClientRect().bottom,
+        radio
+      );
     };
     const before = await offset();
     await onePlan.check();
@@ -337,7 +343,7 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     await expect(row).toContainText(/Stage \d+: /);
   });
 
-  test("several applications: one preview per run, ready applications only, the attribution once", async ({
+  test("several applications: one preview per run, ready applications only, each application collapsed", async ({
     page,
   }) => {
     await bootMockApi(page);
@@ -371,7 +377,8 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     ).toHaveCount(0);
 
     // One plan for all: one run of both ready applications, resolved with
-    // the plan's exclusion, the attribution said once.
+    // the plan's exclusion. Each application's Every stage group starts
+    // collapsed; its toggle opens it.
     await preflight
       .getByLabel("Use one migration plan for all applications")
       .check();
@@ -382,13 +389,22 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     const run = stageSkillsTable(preflight);
     for (const application of ["Advisor Workbench API", "Branch Operations"])
       await expect(
-        run.getByRole("heading", { name: `Every stage: ${application}` })
-      ).toBeVisible();
+        run.getByRole("button", { name: `Every stage: ${application} Details` })
+      ).toHaveAttribute("aria-expanded", "false");
     await expect(
       preflight.getByText(
-        "An application's archetype, target profile and own skills go to that application only."
+        "Clear a skill to leave it out of every stage and every application in the plan run.",
+        { exact: true }
       )
-    ).toHaveCount(1);
+    ).toBeVisible();
+    await run
+      .getByRole("button", { name: "Every stage: Branch Operations Details" })
+      .click();
+    await expect(
+      groupBody(run, /^Every stage: Branch Operations/)
+        .getByRole("checkbox")
+        .first()
+    ).toBeVisible();
     await expandAllGroups(run);
     await expectExcludedStageRows(
       preflight,
@@ -461,11 +477,12 @@ test.describe("Excluding skills and picking the target profile for a run", () =>
       .replace(/^Include /, "")
       .replace(/ in this plan run$/, "");
     await first.uncheck();
+    // Said to screen readers; the toggle and the row show it.
     await expect(
       preflight.getByText(
         `${skillName} excluded from stage 1. 1 skill excluded for this run.`
       )
-    ).toBeVisible();
+    ).toHaveAttribute("aria-live", "polite");
     await expect(toggle).toHaveText(
       "Review skills by stage (1 skill excluded)"
     );

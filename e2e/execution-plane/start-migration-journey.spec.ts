@@ -65,11 +65,13 @@ test.describe("Start migration journey", () => {
     });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
+    // Several plan runs: an exclusion covers the run it is made in.
     await expect(
       dialog.getByText(
-        "An application's archetype, target profile and own skills go to that application only."
+        "Clear a skill to leave it out of every stage and every application in the plan run.",
+        { exact: true }
       )
-    ).toHaveCount(1);
+    ).toBeVisible();
     const runTitles = dialog.getByRole("heading", { level: 2 });
     await expect(runTitles).toHaveText([
       ".NET Framework to .NET 8: 1 application",
@@ -83,8 +85,8 @@ test.describe("Start migration journey", () => {
       name: "Every stage: Customer Management",
     });
     await expect(everyStage).toBeVisible();
-    // Groups start open, as on the plan run page; names are plain text in
-    // the dialog.
+    // One application per run: its groups start open; names are plain text
+    // in the dialog.
     const row = quarkus.getByRole("row", {
       name: /Corporate coding standards/,
     });
