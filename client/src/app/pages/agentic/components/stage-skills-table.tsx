@@ -145,7 +145,9 @@ const sortedSkills = (skills: StageSkill[]) =>
  * while collapsed, how many skills it has. Its skill rows line up with the
  * header: [Include] · Skill · From · How agents use it. An excluded skill
  * shows the outline "Excluded" label (or `excludedLabel`) in the last
- * column.
+ * column. Below PF's md breakpoint it stacks like the app's other tables
+ * (PF grid mode): each skill row's cells under their column names, the
+ * toggle under the group title.
  */
 export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
   skills,
@@ -339,7 +341,7 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
       ? { thisApplicationId: group.group.application.id }
       : undefined;
 
-  const skillRow = (group: Group, entry: StageSkill, isExpanded: boolean) => {
+  const skillRow = (group: Group, entry: StageSkill) => {
     const { skill, loadPolicy, excluded, from } = entry;
     const isLocked = (include?.isLocked ?? isAttachedToApplication)(entry);
     const excludedLabelId = `${id}-excluded-${group.key}-${skill.id}`;
@@ -347,8 +349,12 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
     const label = excluded ? excludedLabel?.(entry) : undefined;
     const labelText = label?.text ?? t("agentic.skillsTable.excluded");
     return (
-      <Tr key={`${group.key}-${skill.id}`} isExpanded={isExpanded}>
-        <Td />
+      // Plain rows, not PF expandable rows (`isExpanded`), which grid mode
+      // lays out as one block of content; `isContentExpanded` keeps them
+      // without a border, like the rows of an open group.
+      <Tr key={`${group.key}-${skill.id}`} isContentExpanded>
+        {/* The toggle column; grid mode has no columns to line up. */}
+        <Td visibility={["hidden", "visibleOnMd"]} />
         {include != null && (
           <Td dataLabel={columns.include} modifier="fitContent">
             <Checkbox
@@ -382,7 +388,8 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
         </Td>
         <Td dataLabel={columns.loadPolicy} modifier="nowrap">
           {excluded && label?.tooltip != null ? (
-            <>
+            // One grid item, so the label keeps its width when the row stacks.
+            <div>
               {/* Focusable so keyboard users reach the tooltip; the hidden
                   copy describes a locked checkbox. */}
               <Tooltip content={label.tooltip}>
@@ -398,11 +405,13 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
               <span id={tooltipId} className={a11yStyles.screenReader}>
                 {label.tooltip}
               </span>
-            </>
+            </div>
           ) : excluded ? (
-            <Label variant="outline" isCompact id={excludedLabelId}>
-              {labelText}
-            </Label>
+            <div>
+              <Label variant="outline" isCompact id={excludedLabelId}>
+                {labelText}
+              </Label>
+            </div>
           ) : (
             t(`agentic.skill.loadPolicy.${loadPolicy}`)
           )}
@@ -412,14 +421,7 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
   };
 
   return (
-    <Table
-      id={id}
-      aria-label={ariaLabel}
-      variant="compact"
-      isExpandable
-      // Grid mode does not lay out expandable child rows.
-      gridBreakPoint=""
-    >
+    <Table id={id} aria-label={ariaLabel} variant="compact" isExpandable>
       <Thead>
         <Tr>
           <Th screenReaderText={t("agentic.plan.stageExpansion")} />
@@ -535,12 +537,15 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
                   </Flex>
                 </Td>
               </Tr>
-              {groupSkills.length > 0 ? (
-                groupSkills.map((entry) => skillRow(group, entry, isExpanded))
+              {/* Rendered only while open: grid mode shows hidden rows. */}
+              {!isExpanded ? null : groupSkills.length > 0 ? (
+                groupSkills.map((entry) => skillRow(group, entry))
               ) : (
-                <Tr isExpanded={isExpanded}>
-                  <Td />
-                  {include != null && <Td />}
+                <Tr isContentExpanded>
+                  <Td visibility={["hidden", "visibleOnMd"]} />
+                  {include != null && (
+                    <Td visibility={["hidden", "visibleOnMd"]} />
+                  )}
                   <Td colSpan={3}>
                     <EmptyTextMessage
                       message={t("agentic.stageSkills.noSkills")}
