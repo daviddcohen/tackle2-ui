@@ -24,6 +24,9 @@ const mockState: {
   planRun?: PlanRun;
   runError?: unknown;
   runLoading?: boolean;
+  planRuns?: PlanRun[];
+  planRunsLoading?: boolean;
+  planRunsError?: unknown;
   canRun: boolean;
   open: jest.Mock;
   decide: jest.Mock;
@@ -44,6 +47,12 @@ jest.mock("@app/queries/agentic", () => ({
     planRun: mockState.planRun,
     isLoading: mockState.runLoading ?? false,
     fetchError: mockState.runError ?? null,
+  }),
+  useFetchPlanRuns: () => ({
+    // Like the real hook: no runs until the list is read.
+    planRuns: mockState.planRunsLoading ? [] : (mockState.planRuns ?? []),
+    isLoading: mockState.planRunsLoading ?? false,
+    fetchError: mockState.planRunsError ?? null,
   }),
   useResolveApplicationMigrationRequestMutation: () => ({
     mutateAsync: mockState.decide,
@@ -168,9 +177,12 @@ const renderTab = (
     </NotificationsContext.Provider>
   );
 
-const fact = (term: string) =>
-  screen.getByText(term).closest(".pf-v6-c-description-list__group")
+const fact = (term: string, scope: HTMLElement = document.body) =>
+  within(scope).getByText(term).closest(".pf-v6-c-description-list__group")
     ?.lastElementChild as HTMLElement;
+
+const LATEST_RUN = "agentic.execution.latestPlanRun";
+const latestRun = () => screen.getByRole("region", { name: LATEST_RUN });
 
 describe("MigrationTab", () => {
   beforeEach(() => {
@@ -180,6 +192,9 @@ describe("MigrationTab", () => {
     mockState.planRun = undefined;
     mockState.runError = undefined;
     mockState.runLoading = undefined;
+    mockState.planRuns = undefined;
+    mockState.planRunsLoading = undefined;
+    mockState.planRunsError = undefined;
     mockState.canRun = true;
     mockState.open = jest.fn();
     mockState.decide = jest.fn().mockResolvedValue({});
@@ -215,9 +230,8 @@ describe("MigrationTab", () => {
       expect(fact("agentic.entity.migrationPlan")).toHaveTextContent(
         "agentic.execution.notAssigned"
       );
-      expect(
-        screen.queryByRole("heading", { name: "agentic.stageSkills.title" })
-      ).toBeNull();
+      // No run: no Latest plan run section.
+      expect(screen.queryByRole("region", { name: LATEST_RUN })).toBeNull();
     });
 
     it("says the archetype has no target profile", () => {
@@ -352,7 +366,7 @@ describe("MigrationTab", () => {
         stageRun(2, "Migrate", "Pending"),
       ]);
 
-    it("leads with the decision, then the facts and the stages", () => {
+    it("leads with the decision, then the facts and the latest plan run", () => {
       mockState.migration = view({
         planRun: runRef,
         runPhase: "Running",
@@ -374,9 +388,6 @@ describe("MigrationTab", () => {
       expect(
         screen.getByRole("button", { name: "agentic.stageAttention.reject" })
       ).toBeInTheDocument();
-      expect(
-        within(fact("agentic.entity.planRun")).getByRole("link")
-      ).toHaveAttribute("href", "/plan-runs/1");
       // The chain: archetype, its target profile, the plan they resolve to.
       expect(
         within(fact("agentic.execution.archetype")).getByRole("link", {
@@ -389,20 +400,32 @@ describe("MigrationTab", () => {
         "href",
         "/archetypes/4/target-profiles#target-profile-11"
       );
-      expect(fact("agentic.execution.targetBranch")).toHaveTextContent(
-        "konveyor/agentic-migration"
-      );
       expect(
         within(fact("agentic.entity.migrationPlan")).getByRole("link")
       ).toHaveAttribute("href", "/migration-plans/1");
-      // No pooled skills count: Skills by stage says what each stage gets.
+      // The run's facts and its stages are the Latest plan run section's.
+      const section = latestRun();
+      expect(
+        within(fact("agentic.entity.planRun", section)).getByRole("link")
+      ).toHaveAttribute("href", "/plan-runs/1");
+      expect(fact("agentic.execution.targetBranch", section)).toHaveTextContent(
+        "konveyor/agentic-migration"
+      );
+      expect(
+        within(section).getByRole("grid", {
+          name: "agentic.stageRunsTable.label",
+        })
+      ).toHaveTextContent("Prepare proposal");
+      // No skills: the plan run page lists what each stage got.
       expect(
         screen.queryByText("agentic.applicationDetail.tabSkills")
       ).toBeNull();
+      expect(screen.queryByText("agentic.stageSkills.title")).toBeNull();
       expect(
-        screen.getByRole("heading", { name: "agentic.stageRunsTable.label" })
-      ).toBeInTheDocument();
-      expect(screen.getByText("Prepare proposal")).toBeInTheDocument();
+        screen
+          .getAllByRole("heading", { level: 2 })
+          .map((heading) => heading.textContent)
+      ).toEqual([LATEST_RUN]);
     });
 
     it("without the run write scope waits for approval and offers no decision", () => {
@@ -626,7 +649,7 @@ describe("MigrationTab", () => {
         ],
       };
       renderTab();
-      const ranOn = fact("agentic.execution.runTargetProfile");
+      const ranOn = fact("agentic.execution.targetProfile", latestRun());
       expect(ranOn).toHaveTextContent("OpenJDK 21 on OpenShift");
       expect(
         within(ranOn).getByRole("link", { name: "OpenJDK 21 on OpenShift" })
@@ -648,9 +671,9 @@ describe("MigrationTab", () => {
         ],
       };
       const { unmount } = renderTab();
-      expect(fact("agentic.execution.runTargetProfile")).toHaveTextContent(
-        "agentic.execution.none"
-      );
+      expect(
+        fact("agentic.execution.targetProfile", latestRun())
+      ).toHaveTextContent("agentic.execution.none");
       unmount();
       mockState.planRun = {
         ...run("Running", []),
@@ -662,7 +685,7 @@ describe("MigrationTab", () => {
         ],
       };
       renderTab();
-      const ranOn = fact("agentic.execution.runTargetProfile");
+      const ranOn = fact("agentic.execution.targetProfile", latestRun());
       expect(ranOn).toHaveTextContent("OpenJDK 21 on OpenShift");
       expect(within(ranOn).queryByRole("link")).toBeNull();
     });
@@ -672,7 +695,7 @@ describe("MigrationTab", () => {
       mockState.planRun = run("Running", []);
       const { unmount } = renderTab();
       expect(
-        screen.queryByText("agentic.execution.runTargetProfile")
+        within(latestRun()).queryByText("agentic.execution.targetProfile")
       ).toBeNull();
       unmount();
       mockState.planRun = {
@@ -687,7 +710,7 @@ describe("MigrationTab", () => {
       };
       renderTab();
       expect(
-        screen.queryByText("agentic.execution.runTargetProfile")
+        within(latestRun()).queryByText("agentic.execution.targetProfile")
       ).toBeNull();
     });
 
@@ -756,248 +779,167 @@ describe("MigrationTab", () => {
     });
   });
 
-  describe("skills by stage", () => {
-    // The run's snapshot: one Every stage group per application of the run.
-    const snapshot: SkillsByStage = {
-      stages: skillsByStage.stages,
-      everyStage: [
-        ...skillsByStage.everyStage,
-        {
-          application: { id: 2, name: "Policy Administration" },
-          skills: [
-            {
-              skill: { id: "9", name: "Other application's skill" },
-              loadPolicy: "skill",
-              from: [
-                {
-                  kind: "application",
-                  application: { id: 2, name: "Policy Administration" },
-                },
-              ],
-              excluded: false,
-            },
-          ],
-        },
-      ],
-    };
-    const withRun = (skills: SkillsByStage | undefined) => {
-      mockState.migration = view({
-        planRun: runRef,
-        runPhase: "Succeeded",
-        // The next run's preview is not this section's: never read.
-        skills: { stages: [], everyStage: [] },
-      });
-      mockState.planRun = { ...run("Succeeded", []), skills };
-    };
-
-    it("comes last and lists what each stage got in the latest run, for this application", () => {
-      withRun(snapshot);
-      renderTab();
-      const headings = screen
-        .getAllByRole("heading", { level: 2 })
-        .map((heading) => heading.textContent);
-      expect(headings[headings.length - 1]).toBe("agentic.stageSkills.title");
-      expect(
-        screen.getByText("agentic.execution.skillsByStageLatestRun")
-      ).toBeInTheDocument();
-      const table = screen.getByRole("grid", {
-        name: "agentic.stageSkills.title",
-      });
-      expect(
-        within(table).getByText("API compatibility checklist")
-      ).toBeInTheDocument();
-      // The application's own skill reads "This application".
-      expect(
-        within(table).getByText("agentic.stageSkills.origin.thisApplication")
-      ).toBeInTheDocument();
-      expect(
-        within(table).getByText("agentic.stageSkills.everyStageSubtitle")
-      ).toBeInTheDocument();
-      // Another application of the same run keeps its own group.
-      expect(within(table).queryByText("Other application's skill")).toBeNull();
-    });
-
-    it("names a target profile's archetype only when it is not the application's", () => {
-      const profileSkill = (archetypeId: number): SkillsByStage => ({
-        stages: skillsByStage.stages,
-        everyStage: [
-          {
-            application: { id: 1, name: "Customer Management" },
-            skills: [
-              {
-                skill: { id: "7", name: "OpenShift deployment conventions" },
-                loadPolicy: "skill",
-                from: [
-                  {
-                    kind: "targetProfile",
-                    targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
-                    archetype: { id: archetypeId, name: "Some archetype" },
-                  },
-                ],
-                excluded: false,
-              },
-            ],
-          },
-        ],
-      });
-      // No default path, one archetype: it is the context.
-      mockState.migration = view({
-        archetype: undefined,
-        targetProfile: undefined,
-        planRun: runRef,
-        runPhase: "Succeeded",
-      });
-      mockState.planRun = { ...run("Succeeded", []), skills: profileSkill(4) };
-      const { unmount } = renderTab(
-        application([{ id: 4, name: "Java EE Application" }])
-      );
-      const table = () =>
-        screen.getByRole("grid", { name: "agentic.stageSkills.title" });
-      expect(
-        within(table()).getByText("agentic.stageSkills.origin.targetProfile")
-      ).toBeInTheDocument();
-      unmount();
-
-      mockState.planRun = { ...run("Succeeded", []), skills: profileSkill(9) };
-      renderTab(application([{ id: 4, name: "Java EE Application" }]));
-      expect(
-        within(table()).getByText(
-          "agentic.stageSkills.origin.targetProfileWithArchetype"
-        )
-      ).toBeInTheDocument();
-    });
-
-    it("before any run, says skills are resolved when a plan runs, with no second Run button", () => {
-      mockState.migration = view();
-      renderTab();
-      const section = screen.getByRole("region", {
-        name: "agentic.stageSkills.title",
-      });
-      expect(
-        within(section).getByText("agentic.execution.skillsByStageNoRun")
-      ).toBeInTheDocument();
-      expect(within(section).queryByRole("grid")).toBeNull();
-      expect(within(section).queryByRole("button")).toBeNull();
-      // The Stages section keeps the one way to start.
-      expect(
-        screen.getAllByRole("button", {
-          name: "agentic.execution.startMigration",
-        })
-      ).toHaveLength(1);
-      // Not the next run's preview from the migration view.
-      expect(screen.queryByText("API compatibility checklist")).toBeNull();
-    });
-
-    it("says Unavailable, never none, when the run has no snapshot", () => {
-      withRun(undefined);
-      renderTab();
-      const section = screen.getByRole("region", {
-        name: "agentic.stageSkills.title",
-      });
-      expect(
-        within(section).getByText("agentic.common.unavailable")
-      ).toBeInTheDocument();
-      expect(
-        within(section).getByText("agentic.execution.skillsByStageUnavailable")
-      ).toBeInTheDocument();
-      expect(
-        within(section).queryByText("agentic.execution.skillsByStageLatestRun")
-      ).toBeNull();
-      expect(
-        within(section).queryByText("agentic.execution.skillsByStageNoRun")
-      ).toBeNull();
-    });
-
-    it("says Unavailable with the reason when the run cannot be read", () => {
+  describe("latest plan run", () => {
+    const succeeded = () => {
       mockState.migration = view({ planRun: runRef, runPhase: "Succeeded" });
-      mockState.runError = new Error("503");
+      mockState.planRun = run("Succeeded", [
+        stageRun(1, "Prepare proposal", "Succeeded"),
+      ]);
+    };
+    const otherRun = { ...run("Succeeded", []), id: "2", name: "Run #2" };
+
+    it("holds the run's facts, the top facts only the application's", () => {
+      succeeded();
       renderTab();
-      const section = screen.getByRole("region", {
-        name: "agentic.stageSkills.title",
-      });
+      const section = latestRun();
+      expect(fact("terms.started", section)).toHaveTextContent(
+        "2026-11-10 10:06"
+      );
+      // The top facts: the application's migration, not its run.
+      const top = screen
+        .getByText("agentic.execution.statusLabel")
+        .closest("dl") as HTMLElement;
+      expect(within(top).queryByText("agentic.entity.planRun")).toBeNull();
       expect(
-        within(section).getByText("agentic.common.unavailable")
-      ).toBeInTheDocument();
+        within(top).queryByText("agentic.execution.targetBranch")
+      ).toBeNull();
       expect(
-        within(section).getByText("agentic.execution.skillsByStageRunError")
-      ).toBeInTheDocument();
+        within(section).queryByText("agentic.stageSkills.title")
+      ).toBeNull();
     });
 
-    it("keeps the latest run's skills when no plan resolves for the next run", () => {
+    it("says Not started for a pending run", () => {
+      mockState.migration = view({ planRun: runRef, runPhase: "Pending" });
+      mockState.planRun = run("Pending", []);
+      const { unmount } = renderTab();
+      expect(fact("terms.started", latestRun())).toHaveTextContent(
+        "terms.notStarted"
+      );
+      unmount();
+      // A pending run may report no start at all.
+      mockState.planRun = { ...run("Pending", []), startedAt: "" };
+      renderTab();
+      expect(fact("terms.started", latestRun())).toHaveTextContent(
+        "terms.notStarted"
+      );
+    });
+
+    it("with several plan runs, says it is the latest and links to the Plan runs tab", () => {
+      succeeded();
+      mockState.planRuns = [
+        mockState.planRun as PlanRun,
+        otherRun,
+        // Another application's run is not counted.
+        {
+          ...otherRun,
+          id: "3",
+          applications: [{ id: 2, name: "Policy Administration" }],
+        },
+      ];
+      renderTab(
+        application(),
+        createMockNotifications(),
+        "/applications/1?tab=migration&protoStage=1"
+      );
+      const section = latestRun();
+      expect(
+        within(section).getByText("agentic.execution.latestOfPlanRuns", {
+          exact: false,
+        })
+      ).toBeInTheDocument();
+      expect(
+        within(section).getByRole("link", {
+          name: "agentic.execution.viewPlanRuns",
+        })
+      ).toHaveAttribute("href", "/applications/1?tab=plan-runs&protoStage=1");
+    });
+
+    it("says nothing about other runs when there is one", () => {
+      succeeded();
+      mockState.planRuns = [mockState.planRun as PlanRun];
+      renderTab();
+      expect(
+        screen.queryByText("agentic.execution.latestOfPlanRuns", {
+          exact: false,
+        })
+      ).toBeNull();
+      expect(
+        screen.queryByRole("link", { name: "agentic.execution.viewPlanRuns" })
+      ).toBeNull();
+    });
+
+    it("does not wait for the plan runs, and says nothing until they are read", () => {
+      succeeded();
+      mockState.planRuns = [mockState.planRun as PlanRun, otherRun];
+      mockState.planRunsLoading = true;
+      renderTab();
+      expect(screen.queryByText("Loading...")).toBeNull();
+      expect(
+        within(fact("agentic.entity.planRun", latestRun())).getByRole("link")
+      ).toHaveAttribute("href", "/plan-runs/1");
+      expect(
+        screen.queryByText("agentic.execution.latestOfPlanRuns", {
+          exact: false,
+        })
+      ).toBeNull();
+    });
+
+    it("says nothing about other runs when the plan runs were never read", () => {
+      succeeded();
+      // A failed first read leaves no runs, like the real hook.
+      mockState.planRuns = [];
+      mockState.planRunsError = new Error("503");
+      renderTab();
+      expect(
+        within(fact("agentic.entity.planRun", latestRun())).getByRole("link")
+      ).toHaveAttribute("href", "/plan-runs/1");
+      expect(
+        screen.queryByText("agentic.execution.latestOfPlanRuns", {
+          exact: false,
+        })
+      ).toBeNull();
+      expect(
+        screen.queryByRole("link", { name: "agentic.execution.viewPlanRuns" })
+      ).toBeNull();
+    });
+
+    it("keeps the count from the last read when a refresh fails", () => {
+      succeeded();
+      mockState.planRuns = [mockState.planRun as PlanRun, otherRun];
+      mockState.planRunsError = new Error("503");
+      renderTab();
+      expect(
+        screen.getByRole("link", { name: "agentic.execution.viewPlanRuns" })
+      ).toBeVisible();
+    });
+
+    it("keeps the latest run when no plan resolves for the next run", () => {
       mockState.migration = view({
         configured: false,
         plan: undefined,
         planRun: runRef,
         runPhase: "Succeeded",
+        stages: [{ stageName: "Prepare proposal", phase: "Succeeded" }],
       });
-      mockState.planRun = { ...run("Succeeded", []), skills: snapshot };
+      mockState.planRun = run("Succeeded", []);
       renderTab(application([{ id: 4, name: "Java EE Application" }]));
       expect(
         screen.getByRole("heading", {
           name: "agentic.execution.noMigrationPathTitle",
         })
       ).toBeInTheDocument();
+      const section = latestRun();
       expect(
-        within(
-          screen.getByRole("grid", { name: "agentic.stageSkills.title" })
-        ).getByText("API compatibility checklist")
-      ).toBeInTheDocument();
-      expect(fact("agentic.execution.targetBranch")).toHaveTextContent(
+        within(fact("agentic.entity.planRun", section)).getByRole("link")
+      ).toHaveAttribute("href", "/plan-runs/1");
+      expect(fact("agentic.execution.targetBranch", section)).toHaveTextContent(
         "konveyor/agentic-migration"
       );
-    });
-
-    it("takes focus when the tab opens at its section", async () => {
-      mockState.migration = view();
-      renderTab(
-        application(),
-        createMockNotifications(),
-        "/applications/1?tab=migration#skills-by-stage"
-      );
-      const heading = screen.getByRole("heading", {
-        name: "agentic.stageSkills.title",
-      });
-      expect(heading).toHaveAttribute("id", "skills-by-stage-heading");
-      await waitFor(() => expect(heading).toHaveFocus());
-    });
-
-    it("takes focus once per navigation, not again after a refetch", async () => {
-      mockState.migration = view();
-      const history = createMemoryHistory({
-        initialEntries: ["/applications/1?tab=migration#skills-by-stage"],
-      });
-      const tree = () => (
-        <NotificationsContext.Provider value={createMockNotifications()}>
-          <Router history={history}>
-            <MigrationTab
-              application={application()}
-              applicationId={1}
-              linkCrumbs={[]}
-            />
-          </Router>
-        </NotificationsContext.Provider>
-      );
-      const { rerender } = render(tree());
-      const heading = () =>
-        screen.getByRole("heading", { name: "agentic.stageSkills.title" });
-      await waitFor(() => expect(heading()).toHaveFocus());
-      heading().blur();
-      // A refetch shows the placeholder, then the content again.
-      mockState.migrationsLoading = true;
-      rerender(tree());
-      expect(screen.getByText("Loading...")).toBeInTheDocument();
-      mockState.migrationsLoading = undefined;
-      rerender(tree());
-      await waitFor(() => expect(heading()).toBeInTheDocument());
-      expect(heading()).not.toHaveFocus();
-    });
-
-    it("leaves focus alone without the hash", () => {
-      mockState.migration = view();
-      renderTab();
       expect(
-        screen.getByRole("heading", { name: "agentic.stageSkills.title" })
-      ).not.toHaveFocus();
+        within(section).getByRole("grid", {
+          name: "agentic.stageRunsTable.label",
+        })
+      ).toHaveTextContent("Prepare proposal");
     });
   });
 

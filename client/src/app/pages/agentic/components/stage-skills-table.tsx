@@ -55,10 +55,9 @@ export interface StageSkillsTableProps {
   /**
    * Picks the group titles: "run" names each Every stage group's
    * application ("Every stage: {application}") and, with links, reads its
-   * own skills as "This application"; "plan" and "application" say "Every
-   * stage".
+   * own skills as "This application"; "plan" says "Every stage".
    */
-  context: "plan" | "run" | "application";
+  context: "plan" | "run";
   /**
    * Stage page: only this stage's group (by `StageSkillsGroup.stageId`) and
    * this application's Every stage group. A key left out does not filter.
@@ -101,8 +100,6 @@ export interface StageSkillsTableProps {
   defaultExpanded?: "all" | "none" | "stages";
   /** "h3" under an h2 section (default); "h2" in the wizard and the dialog. */
   groupHeadingLevel?: "h2" | "h3";
-  /** For the From values (`formatSkillOrigin`). */
-  originOptions?: SkillOriginOptions;
   /**
    * Added to the row indexes PF names the toggles by (`simple-node{n}`):
    * each `Td expand` table on one page needs its own range.
@@ -159,7 +156,6 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
   excludedLabel,
   defaultExpanded = "all",
   groupHeadingLevel = "h3",
-  originOptions,
   rowIndexOffset = 0,
   unavailableText,
   errorBody,
@@ -333,16 +329,15 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
         : t("agentic.stageSkills.includeInEveryStage", { skill: skill.name });
 
   // A run page's Every stage group names its application in its title, so
-  // its own skills read "This application", as on the Migration tab.
-  // Without links (Run dialog) the name stays: it helps
-  // there.
+  // its own skills read "This application". Without links (Run dialog) the
+  // name stays: it helps there.
   const rowOriginOptions = (group: Group): SkillOriginOptions | undefined =>
     context === "run" &&
     linkTo != null &&
     group.kind === "everyStage" &&
     group.group.application != null
-      ? { ...originOptions, thisApplicationId: group.group.application.id }
-      : originOptions;
+      ? { thisApplicationId: group.group.application.id }
+      : undefined;
 
   const skillRow = (group: Group, entry: StageSkill, isExpanded: boolean) => {
     const { skill, loadPolicy, excluded, from } = entry;

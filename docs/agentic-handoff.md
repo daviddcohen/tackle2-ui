@@ -464,7 +464,7 @@ Agents are the Agents whose `skillCollections` contain it (the reverse lookups o
   Archetype and target profile attachments made here show in the wizard's Skills step, on the plan page and in the
   skill page's "Used in migration plans", and can be excluded there. Collection memberships and collection Agents
   change the collection origins of the stages whose Agents use the collection. Application attachments reach only
-  runs, the application Skills and Migration tabs and the Run migration plan dialog (source 5). There a plan's
+  runs, the application Skills tab and the Run migration plan dialog (source 5). There a plan's
   exclusion applies while the plan still resolves the skill (section 7 item 7). All five PUTs invalidate
   `planSkills`, `skillPlans` and `applicationMigrations` through `MUTATION_EFFECTS`.
 - **Prototype scenarios.** The three Hub-scope PUTs only see the Skills that `GET /skills` returns in the current
@@ -640,7 +640,7 @@ Mock rules (`execution.ts`):
 - Running a failed run again starts a new run through the Run migration plan dialog, which takes its plan, branch and own exclusions but not its picks, so the new run records whatever the dialog settles.
 - The real-backend adapter leaves it unmapped: `toPlanRun` sets `targetProfiles` undefined.
 
-UI: the plan run page's Applications fact lists each application with its profile ("Claims Processing (Quarkus 3.x)", the profile linked to its archetype's target profiles page; "(no target profile)" for null); the Migration tab adds a "Run's target profile" fact after Plan run ("None" for null). Absent, both show what they did before.
+UI: the plan run page's Applications fact lists each application with its profile ("Claims Processing (Quarkus 3.x)", the profile linked to its archetype's target profiles page; "(no target profile)" for null); the Migration tab's Latest plan run section adds a "Target profile" fact after Plan run ("None" for null). Absent, both show what they did before.
 
 Related, when wiring the backend:
 
@@ -793,7 +793,9 @@ Types: `client/src/app/agentic/observability.ts`. Adapters: `agentic/adapters/ag
 
 ### Application migration view (`ApplicationMigrationView`)
 
-No backend source. `planRun`, `planRunPlan` (the plan that run used), `runPhase`, `currentStage` and `stages` could be composed client-side from the application's latest workflow run (label `konveyor.io/application`). `configured`, `targetProfile` (the target profile of the default path: the only path whose profile uses a plan, absent with none or several; the Hub stores none on an application, and a run picks the profile it uses), `archetype` (the profile's archetype), `plan` (the plan of the default path, which the next run uses without a pick; never the latest run's plan; `configured` is true when any path has a plan), `preflight`, `preflightReason`, `skills` (`SkillsByStage` for `plan` and this application: what each stage gets, and one `everyStage` group; without a plan only the context skills) (read by the Run migration plan dialog only; the Migration tab shows the latest run's `PlanRun.skills`), `action` and `result` need Hub logic.
+No backend source. `planRun`, `planRunPlan` (the plan that run used), `runPhase`, `currentStage` and `stages` could be composed client-side from the application's latest workflow run (label `konveyor.io/application`). `configured`, `targetProfile` (the target profile of the default path: the only path whose profile uses a plan, absent with none or several; the Hub stores none on an application, and a run picks the profile it uses), `archetype` (the profile's archetype), `plan` (the plan of the default path, which the next run uses without a pick; never the latest run's plan; `configured` is true when any path has a plan), `preflight`, `preflightReason`, `skills` (`SkillsByStage` for `plan` and this application: what each stage gets, and one `everyStage` group; without a plan only the context skills) (read by the Run migration plan dialog only), `action` and `result` need Hub logic.
+
+The Migration tab also reads the plan runs list (`GET /plan-runs`, unfiltered) to count this application's runs ("The latest of N plan runs on this application."), without waiting for it. A per-application filter (label `konveyor.io/application`) would serve it.
 
 ---
 

@@ -1,22 +1,21 @@
 import * as React from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
 import { Button } from "@patternfly/react-core";
 
 import { DevPaths } from "@app/Paths";
 import { Ref } from "@app/api/models";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
-import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
+import i18n from "@app/i18n";
 import {
   AttachedSkill,
   attachedSkillsFor,
   useLoadPolicyMarker,
 } from "@app/pages/agentic/components/attached-skills-list";
 import {
-  DetailFacts,
   DetailSection,
   DetailSections,
   LinkLabels,
@@ -47,12 +46,40 @@ const byName = (a: AttachedSkill, b: AttachedSkill) =>
   universalComparator(a.skill.name, b.skill.name);
 
 /**
+ * Archetypes as a list of the current language ("A, B and C"), each name a
+ * link: every element part of `Intl.ListFormat` is the next archetype.
+ */
+const ArchetypeLinks: React.FC<{
+  archetypes: Ref[];
+  to: (archetype: Ref) => ReturnType<typeof linkToPath>;
+}> = ({ archetypes, to }) => {
+  let next = 0;
+  return (
+    <>
+      {new Intl.ListFormat(i18n.language ?? "en", { type: "conjunction" })
+        .formatToParts(archetypes.map((archetype) => archetype.name))
+        .map((part, index) => {
+          if (part.type !== "element") {
+            return <React.Fragment key={index}>{part.value}</React.Fragment>;
+          }
+          const archetype = archetypes[next++];
+          return (
+            <Link key={index} to={to(archetype)}>
+              {archetype.name}
+            </Link>
+          );
+        })}
+    </>
+  );
+};
+
+/**
  * The skills this application has before any run: its own, editable with
  * Manage skills, then the ones it inherits from its archetypes, read-only,
- * one term per archetype (by name) that links where they are edited. Each
- * section states its scope once. A target profile is not listed: it is
- * picked when a migration plan runs, so its skills belong to the run (the
- * Migration tab's Skills by stage).
+ * one label group like the section above, whose sentence links each
+ * archetype where they are edited. Each section states its scope once. A
+ * target profile is not listed: it is picked when a migration plan runs, so
+ * its skills belong to the run (the plan run page's Skills by stage).
  */
 export const SkillsTab: React.FC<SkillsTabProps> = ({
   applicationId,
@@ -77,9 +104,9 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
   if (isLoadingSkills) return <AppPlaceholder />;
   if (skillsError != null) return <StateError />;
 
-  const skillLabels = (attached: AttachedSkill[], ownerName: string) => (
+  const skillLabels = (attached: AttachedSkill[], groupName: string) => (
     <LinkLabels
-      aria-label={t("agentic.skill.skillsOf", { name: ownerName })}
+      aria-label={groupName}
       items={[...attached].sort(byName).map(({ skill, loadPolicy }) => ({
         id: skill.id,
         name: skill.name,
@@ -98,14 +125,22 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
   const sortedArchetypes = [...archetypes].sort((a, b) =>
     universalComparator(a.name, b.name)
   );
-  const archetypeSkills = sortedArchetypes.map((archetype) => ({
-    archetype,
-    skills: attachedSkillsFor(skills, "archetype", archetype.id),
-  }));
-  // A skill on two archetypes counts once.
-  const inheritedCount = new Set(
-    archetypeSkills.flatMap((entry) => entry.skills.map((s) => s.skill.id))
-  ).size;
+  const archetypeLinks = (
+    <ArchetypeLinks
+      archetypes={sortedArchetypes}
+      to={(archetype) => linkToPath(linkTo, archetypePath(archetype.id))}
+    />
+  );
+  // A skill on two archetypes is listed and counted once. Its load policy is
+  // the skill's own, the same on every archetype.
+  const inheritedSkills = sortedArchetypes
+    .flatMap((archetype) =>
+      attachedSkillsFor(skills, "archetype", archetype.id)
+    )
+    .filter(
+      (attached, index, all) =>
+        all.findIndex((other) => other.skill.id === attached.skill.id) === index
+    );
 
   return (
     <DetailSections>
@@ -139,7 +174,10 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
         }
       >
         {applicationSkills.length > 0 ? (
-          skillLabels(applicationSkills, applicationName)
+          skillLabels(
+            applicationSkills,
+            t("agentic.skill.skillsOf", { name: applicationName })
+          )
         ) : (
           <SectionEmpty>
             {t("agentic.attachedSkills.applicationEmpty")}
@@ -150,36 +188,23 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
       <DetailSection
         headingId={archetypeSkillsHeadingId}
         title={
-          inheritedCount > 0
+          inheritedSkills.length > 0
             ? t("agentic.attachedSkills.archetypesWithCount", {
-                count: inheritedCount,
+                count: inheritedSkills.length,
               })
             : t("agentic.attachedSkills.archetypes")
         }
         description={
-          archetypes.length > 0
-            ? t("agentic.attachedSkills.inherited")
-            : undefined
+          // Without inherited skills the content names the archetypes.
+          inheritedSkills.length > 0 ? (
+            <Trans
+              i18nKey="agentic.attachedSkills.inherited"
+              components={{ archetypes: archetypeLinks }}
+            />
+          ) : undefined
         }
       >
-        {archetypes.length > 0 ? (
-          <DetailFacts
-            facts={archetypeSkills.map(({ archetype, skills: attached }) => [
-              <Link
-                key={archetype.id}
-                to={linkToPath(linkTo, archetypePath(archetype.id))}
-              >
-                {archetype.name}
-              </Link>,
-              attached.length > 0 ? (
-                skillLabels(attached, archetype.name)
-              ) : (
-                <EmptyTextMessage message={t("terms.none")} />
-              ),
-              { key: archetype.id },
-            ])}
-          />
-        ) : (
+        {archetypes.length === 0 ? (
           <SectionEmpty
             action={
               <Button variant="link" isInline component={GoToArchetypesLink}>
@@ -188,6 +213,18 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
             }
           >
             {t("agentic.attachedSkills.noArchetype")}
+          </SectionEmpty>
+        ) : inheritedSkills.length > 0 ? (
+          skillLabels(
+            inheritedSkills,
+            t("agentic.attachedSkills.inheritedLabel")
+          )
+        ) : (
+          <SectionEmpty>
+            <Trans
+              i18nKey="agentic.attachedSkills.archetypesEmpty"
+              components={{ archetypes: archetypeLinks }}
+            />
           </SectionEmpty>
         )}
       </DetailSection>

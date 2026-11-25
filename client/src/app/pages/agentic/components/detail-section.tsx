@@ -148,7 +148,8 @@ export const DetailSection: React.FC<DetailSectionProps> = ({
  * empty page or table), no "(0)" heading.
  */
 export const SectionEmpty: React.FC<{
-  children: string;
+  /** The sentence; a node when it carries links. */
+  children: React.ReactNode;
   /** An inline link button after the sentence. */
   action?: React.ReactNode;
 }> = ({ children, action }) => (
@@ -161,17 +162,12 @@ export const SectionEmpty: React.FC<{
 export interface DetailFactOptions {
   /** Field help after the term text: a `Popover` on a plain help `Button`. */
   termHelp?: React.ReactNode;
-  /** The pair's key when its term is not a string (a link). */
-  key?: React.Key;
 }
 
 export interface DetailFactsProps {
-  /**
-   * Term and value pairs, in order, each with optional term options. A term
-   * is text, or a link to the object the value belongs to (with a `key`).
-   */
+  /** Term and value pairs, in order, each with optional term options. */
   facts: [
-    term: React.ReactNode,
+    term: string,
     description: React.ReactNode,
     options?: DetailFactOptions,
   ][];
@@ -190,10 +186,8 @@ export const DetailFacts: React.FC<DetailFactsProps> = ({
     horizontalTermWidthModifier={{ default: "18ch" }}
     columnModifier={isTwoColumn ? { lg: "2Col" } : undefined}
   >
-    {facts.map(([term, description, options], index) => (
-      <DescriptionListGroup
-        key={options?.key ?? (typeof term === "string" ? term : index)}
-      >
+    {facts.map(([term, description, options]) => (
+      <DescriptionListGroup key={term}>
         <DescriptionListTerm>
           {term}
           {options?.termHelp != null && <> {options.termHelp}</>}

@@ -92,7 +92,7 @@ test("agent detail lists the plans that use it", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("application skills tab lists its own skills, then each archetype's", async ({
+test("application skills tab lists its own skills, then its archetypes'", async ({
   page,
 }) => {
   await page.goto(protoUrl("/applications/1?tab=skills"));
@@ -102,15 +102,19 @@ test("application skills tab lists its own skills, then each archetype's", async
       name: "Corporate coding standards",
     })
   ).toBeVisible();
-  // One section for every archetype: a term per archetype, its skills beside it.
+  // One section for every archetype: its sentence names them, then one
+  // label group, as the section above reads.
   const archetypes = group(/^Archetype skills/);
   await expect(
-    archetypes.getByRole("link", { name: "Platform security baseline" })
+    archetypes
+      .getByRole("list", { name: "Skills inherited from archetypes" })
+      .getByRole("link", { name: "Platform security baseline" })
   ).toBeVisible();
+  await expect(archetypes.getByRole("term")).toHaveCount(0);
   // The archetype's name links where its skills are edited.
   await expect(
     archetypes
-      .getByRole("term")
+      .getByText(/^Inherited from/)
       .getByRole("link", { name: "Java EE Application" })
   ).toHaveAttribute("href", /\/archetypes\?.*activeItem=1/);
   // A target profile is picked when a migration plan runs: its skills are

@@ -50,7 +50,6 @@ import {
   getStageAttention,
 } from "@app/pages/agentic/components/stage-attention-alert";
 import { StageRunsTable } from "@app/pages/agentic/components/stage-runs-table";
-import { StageSkillsTable } from "@app/pages/agentic/components/stage-skills-table";
 import {
   archetypePath,
   targetProfilePath,
@@ -59,19 +58,18 @@ import {
 import {
   useFetchApplicationMigrations,
   useFetchPlanRun,
+  useFetchPlanRuns,
   useResolveApplicationMigrationRequestMutation,
 } from "@app/queries/agentic";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
-import { getAxiosErrorMessage, universalComparator } from "@app/utils/utils";
+import {
+  formatTableDate,
+  getAxiosErrorMessage,
+  universalComparator,
+} from "@app/utils/utils";
 
 import { planRunPath } from "../../components/agentic-migration/paths";
 import { DecoratedApplication } from "../../useDecoratedApplications";
-
-import {
-  SKILLS_BY_STAGE_HASH,
-  SKILLS_BY_STAGE_HEADING_ID,
-  SKILLS_BY_STAGE_ID,
-} from "./skills-by-stage-anchor";
 
 interface MigrationTabProps {
   application: DecoratedApplication;
@@ -82,8 +80,8 @@ interface MigrationTabProps {
 
 /**
  * The application's agentic migration:
- * the one attention alert when something needs a person, the facts, the
- * stages of its latest run and, once it succeeded, the commits.
+ * the one attention alert when something needs a person, the facts, its
+ * latest plan run (facts and stages) and, once it succeeded, the commits.
  */
 export const MigrationTab: React.FC<MigrationTabProps> = ({
   application,
@@ -103,7 +101,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   // An application the aggregate omits has no Plan: not configured.
   const migration = migrations[applicationId] ?? UNCONFIGURED_MIGRATION;
 
-  // The attention alert, the target branch and Skills by stage read the run
+  // The attention alert and the latest plan run's facts read the run
   // itself, like the run page. A decision belongs to the run, which can
   // cover several applications: deciding here decides for all of them.
   const {
@@ -111,6 +109,21 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
     isLoading: isLoadingRun,
     fetchError: runError,
   } = useFetchPlanRun(migration.planRun?.id);
+  // How many plan runs include the application: the Plan runs tab's query.
+  // The tab does not wait for it: until it is read, or when it never was,
+  // the count is not said. A failed refresh keeps the last read, like the
+  // Plan runs tab.
+  const { planRuns } = useFetchPlanRuns();
+  const runCount = planRuns.filter((run) =>
+    run.applications.some((app) => app.id === applicationId)
+  ).length;
+  const planRunsTabSearch = new URLSearchParams(location.search);
+  planRunsTabSearch.set("tab", "plan-runs");
+  const planRunsTabTo: LocationDescriptor = {
+    pathname: location.pathname,
+    search: `?${planRunsTabSearch}`,
+    state: location.state,
+  };
 
   const resolveRequest = useResolveApplicationMigrationRequestMutation(
     // The toast names what was decided, which only the caller knows.
@@ -144,27 +157,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   });
 
   const isReady = !isLoading && !isLoadingRun;
-  // The Skills tab's latest-run link opens this tab at that section: move
-  // focus to its heading once it is there, so the reader starts on it. Once
-  // per navigation (location key): a refetch that shows the placeholder and
-  // the content again must not pull focus back.
-  const focusedFor = React.useRef<string | null>(null);
-  React.useEffect(() => {
-    if (!isReady || location.hash !== SKILLS_BY_STAGE_HASH) return;
-    const navigation = location.key ?? location.pathname + location.search;
-    if (focusedFor.current === navigation) return;
-    const heading = document.getElementById(SKILLS_BY_STAGE_HEADING_ID);
-    if (heading == null) return;
-    focusedFor.current = navigation;
-    heading.scrollIntoView?.();
-    heading.focus();
-  }, [
-    isReady,
-    location.hash,
-    location.key,
-    location.pathname,
-    location.search,
-  ]);
 
   if (!isReady) {
     return <AppPlaceholder />;
@@ -182,8 +174,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         <MigrationFacts
           migration={migration}
           archetypes={archetypes}
-          planRun={planRun}
-          applicationId={applicationId}
           linkTo={linkTo}
         />
         <NoMigrationPlan
@@ -191,16 +181,20 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           archetype={shownPath(migration)?.archetype ?? archetypes[0]}
           linkTo={linkTo}
         />
-        {/* A run that used a plan chosen at launch still has its skills. */}
+        {/* A run that used a plan chosen at launch is still shown. */}
         {migration.planRun != null && (
-          <LatestRunSkills
+          <LatestPlanRun
             migration={migration}
-            archetypes={archetypes}
             planRun={planRun}
-            isRunError={runError != null}
             applicationId={applicationId}
+            runCount={runCount}
+            planRunsTabTo={planRunsTabTo}
             linkTo={linkTo}
-          />
+          >
+            {migration.stages.length > 0 && (
+              <StageRunsTable stages={migration.stages} />
+            )}
+          </LatestPlanRun>
         )}
       </DetailSections>
     );
@@ -295,33 +289,26 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         <MigrationFacts
           migration={migration}
           archetypes={archetypes}
-          planRun={planRun}
-          applicationId={applicationId}
           linkTo={linkTo}
         />
-        <DetailSection
-          // A named region, like Skills by stage below it.
-          headingId="migration-stages-heading"
-          title={t("agentic.stageRunsTable.label")}
+        <LatestPlanRun
+          migration={migration}
+          planRun={planRun}
+          applicationId={applicationId}
+          runCount={runCount}
+          planRunsTabTo={planRunsTabTo}
+          linkTo={linkTo}
           description={
             ranUnusedPlan ? (
               <Trans
                 i18nKey="agentic.execution.latestRunUnusedPlan"
                 values={{ plan: migration.planRunPlan?.name }}
-                components={{
-                  runLink: migration.planRun ? (
-                    <Link to={linkTo(planRunPath(migration.planRun.id))} />
-                  ) : (
-                    <span />
-                  ),
-                  planLink: planLink(migration.planRunPlan),
-                }}
+                components={{ planLink: planLink(migration.planRunPlan) }}
               />
             ) : ranOtherPlan ? (
-              // Names both plans, so the Stages (the run's plan) and the
+              // Names both plans, so the stages (the run's plan) and the
               // Migration plan fact (the plan the next run uses) do not read
-              // as one plan. The run's own name often holds its plan's
-              // name, so the link says "latest run".
+              // as one plan. The Plan run fact below links the run.
               <Trans
                 i18nKey="agentic.execution.latestRunOtherPlan"
                 values={{
@@ -329,11 +316,6 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
                   ownPlan: migration.plan?.name,
                 }}
                 components={{
-                  runLink: migration.planRun ? (
-                    <Link to={linkTo(planRunPath(migration.planRun.id))} />
-                  ) : (
-                    <span />
-                  ),
                   planLink: planLink(migration.planRunPlan),
                   ownPlanLink: planLink(migration.plan),
                 }}
@@ -362,16 +344,8 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
               {t("agentic.execution.stagesAppearHere")}
             </SectionEmpty>
           )}
-        </DetailSection>
+        </LatestPlanRun>
         {migration.result && <CommitsSection result={migration.result} />}
-        <LatestRunSkills
-          migration={migration}
-          archetypes={archetypes}
-          planRun={planRun}
-          isRunError={runError != null}
-          applicationId={applicationId}
-          linkTo={linkTo}
-        />
       </DetailSections>
 
       {runMigrationPlan.modal}
@@ -469,35 +443,22 @@ const MigrationPathsFact: React.FC<{
 };
 
 /**
- * The facts: Status, then the chain that decides the plan
+ * The application's facts: Status, then the chain that decides the plan
  * (Archetype, Target profile, Migration plan; or, for several target
- * profiles and no default, Target profiles with the plan each uses), then
- * Plan run, the target profile this application ran on in it (when the run
- * reports it) and Target branch once there is a run. Each name links where
- * it is edited.
+ * profiles and no default, Target profiles with the plan each uses). Each
+ * name links where it is edited. The latest run's facts are its section's.
  */
 const MigrationFacts: React.FC<{
   migration: ApplicationMigrationView;
   /** The application's archetypes; the target profile's comes first. */
   archetypes: Ref[];
-  planRun?: PlanRun;
-  applicationId: number;
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
-}> = ({ migration, archetypes, planRun, applicationId, linkTo }) => {
+}> = ({ migration, archetypes, linkTo }) => {
   const { t } = useTranslation();
-  const unavailable = (
-    <EmptyTextMessage message={t("agentic.common.unavailable")} />
-  );
   const none = <EmptyTextMessage message={t("agentic.execution.none")} />;
-  const targetBranch = migration.result?.targetBranch ?? planRun?.targetBranch;
   const to = (path: string) => linkToPath(linkTo, path);
 
   const chainPath = shownPath(migration);
-  // The target profile this application ran on in its latest run; absent
-  // when the run does not report it.
-  const ranOn = planRun?.targetProfiles?.find(
-    (entry) => entry.application.id === applicationId
-  );
   const paths = migration.migrationPaths ?? [];
   // The target profile's archetype first, then the others by name.
   const chainArchetype = chainPath?.archetype;
@@ -508,9 +469,6 @@ const MigrationFacts: React.FC<{
       .sort((a, b) => universalComparator(a.name, b.name)),
   ];
 
-  const monospace = (value: string) => (
-    <span className={textStyles.fontFamilyMonospace}>{value}</span>
-  );
   const facts: [string, React.ReactNode][] = [
     [
       t("agentic.execution.statusLabel"),
@@ -589,138 +547,155 @@ const MigrationFacts: React.FC<{
             ),
           ],
         ] as [string, React.ReactNode][])),
-    ...(migration.planRun
-      ? ([
-          [
-            t("agentic.entity.planRun"),
-            <Link key="run" to={linkTo(planRunPath(migration.planRun.id))}>
-              {migration.planRun.name}
-            </Link>,
-          ],
-          ...(ranOn != null
-            ? ([
-                [
-                  t("agentic.execution.runTargetProfile"),
-                  ranOn.targetProfile == null ? (
-                    none
-                  ) : ranOn.archetype != null ? (
-                    <Link
-                      key="ran-on"
-                      to={to(
-                        targetProfilePath(
-                          ranOn.archetype.id,
-                          ranOn.targetProfile.id
-                        )
-                      )}
-                    >
-                      {ranOn.targetProfile.name}
-                    </Link>
-                  ) : (
-                    ranOn.targetProfile.name
-                  ),
-                ],
-              ] as [string, React.ReactNode][])
-            : []),
-          [
-            t("agentic.execution.targetBranch"),
-            // The tab waits for the run, so no branch here means the run
-            // could not be read: unknown.
-            targetBranch == null ? (
-              unavailable
-            ) : migration.result?.branchUrl ? (
-              <ExternalLink
-                key="branch"
-                href={migration.result.branchUrl}
-                isInline
-              >
-                {monospace(targetBranch)}
-              </ExternalLink>
-            ) : (
-              monospace(targetBranch)
-            ),
-          ],
-        ] as [string, React.ReactNode][])
-      : []),
   ];
 
   return <DetailFacts facts={facts} isTwoColumn />;
 };
 
 /**
- * Skills by stage: what each stage got in the application's latest plan
- * run, from the run's snapshot, filtered to this application. The run is
- * where the target profile is picked and the full resolution happens, so
- * nothing is shown before one: the next run's skills are reviewed in the
- * Run migration plan dialog. A run that cannot be read, or a snapshot the
- * server does not report, is "Unavailable", never "none".
+ * Latest plan run: the application's latest run (its name, the target
+ * profile this application ran on when the run reports it, the target
+ * branch and the start), then its stages. With several runs, a sentence
+ * says so and links to the Plan runs tab. Before a run, only the content
+ * (the empty sentence).
  */
-const LatestRunSkills: React.FC<{
+const LatestPlanRun: React.FC<{
   migration: ApplicationMigrationView;
-  /** The application's archetypes. */
-  archetypes: Ref[];
   planRun?: PlanRun;
-  isRunError: boolean;
   applicationId: number;
+  /** The plan runs that include the application. */
+  runCount: number;
+  planRunsTabTo: LocationDescriptor;
   linkTo: (pathname: string, search?: string) => LocationDescriptor;
+  /** Which plan the run ran, when it is not the application's. */
+  description?: React.ReactNode;
+  children: React.ReactNode;
 }> = ({
   migration,
-  archetypes,
   planRun,
-  isRunError,
   applicationId,
+  runCount,
+  planRunsTabTo,
   linkTo,
+  description,
+  children,
 }) => {
   const { t } = useTranslation();
   const runRef = migration.planRun;
-  const hasSnapshot = planRun?.skills != null;
-  // The archetype in context, so a target profile origin names its
-  // archetype only when it is another one: the run's, else the default
-  // path's, else the application's only archetype.
-  const contextArchetypeId =
-    planRun?.targetProfiles?.find(
-      (entry) => entry.application.id === applicationId
-    )?.archetype?.id ??
-    migration.archetype?.id ??
-    (archetypes.length === 1 ? archetypes[0].id : undefined);
+  const severalRuns =
+    runRef != null && runCount > 1 ? (
+      <>
+        {t("agentic.execution.latestOfPlanRuns", { count: runCount })}{" "}
+        <Link to={planRunsTabTo}>{t("agentic.execution.viewPlanRuns")}</Link>
+      </>
+    ) : null;
   return (
     <DetailSection
-      id={SKILLS_BY_STAGE_ID}
-      headingId={SKILLS_BY_STAGE_HEADING_ID}
-      title={t("agentic.stageSkills.title")}
+      headingId="latest-plan-run-heading"
+      title={t("agentic.execution.latestPlanRun")}
       description={
-        runRef != null && hasSnapshot ? (
-          <Trans
-            i18nKey="agentic.execution.skillsByStageLatestRun"
-            values={{ run: runRef.name }}
-            components={{
-              runLink: <Link to={linkTo(planRunPath(runRef.id))} />,
-            }}
-          />
-        ) : undefined
+        description != null && severalRuns != null ? (
+          <>
+            {description} {severalRuns}
+          </>
+        ) : (
+          (description ?? severalRuns ?? undefined)
+        )
       }
     >
-      {runRef == null ? (
-        <SectionEmpty>{t("agentic.execution.skillsByStageNoRun")}</SectionEmpty>
-      ) : (
-        <StageSkillsTable
-          skills={hasSnapshot ? planRun?.skills : undefined}
-          context="application"
-          filter={{ applicationId }}
+      {runRef != null && (
+        <LatestRunFacts
+          runRef={runRef}
+          migration={migration}
+          planRun={planRun}
+          applicationId={applicationId}
           linkTo={linkTo}
-          originOptions={{
-            archetypeId: contextArchetypeId,
-            thisApplicationId: applicationId,
-          }}
-          unavailableText={
-            isRunError || planRun == null
-              ? t("agentic.execution.skillsByStageRunError")
-              : t("agentic.execution.skillsByStageUnavailable")
-          }
-          aria-label={t("agentic.stageSkills.title")}
         />
       )}
+      {children}
     </DetailSection>
   );
+};
+
+/**
+ * The latest run's facts: Plan run, the target profile this application
+ * ran on (when the run reports it), Target branch and Started.
+ */
+const LatestRunFacts: React.FC<{
+  runRef: EntityRef;
+  migration: ApplicationMigrationView;
+  planRun?: PlanRun;
+  applicationId: number;
+  linkTo: (pathname: string, search?: string) => LocationDescriptor;
+}> = ({ runRef, migration, planRun, applicationId, linkTo }) => {
+  const { t } = useTranslation();
+  // The tab waits for the run, so a value missing here means the run could
+  // not be read: unknown.
+  const unavailable = (
+    <EmptyTextMessage message={t("agentic.common.unavailable")} />
+  );
+  const to = (path: string) => linkToPath(linkTo, path);
+  const targetBranch = migration.result?.targetBranch ?? planRun?.targetBranch;
+  // Absent when the run does not report it.
+  const ranOn = planRun?.targetProfiles?.find(
+    (entry) => entry.application.id === applicationId
+  );
+  const monospace = (value: string) => (
+    <span className={textStyles.fontFamilyMonospace}>{value}</span>
+  );
+  const facts: [string, React.ReactNode][] = [
+    [
+      t("agentic.entity.planRun"),
+      <Link key="run" to={linkTo(planRunPath(runRef.id))}>
+        {runRef.name}
+      </Link>,
+    ],
+    ...(ranOn != null
+      ? ([
+          [
+            t("agentic.execution.targetProfile"),
+            ranOn.targetProfile == null ? (
+              <EmptyTextMessage message={t("agentic.execution.none")} />
+            ) : ranOn.archetype != null ? (
+              <Link
+                key="ran-on"
+                to={to(
+                  targetProfilePath(ranOn.archetype.id, ranOn.targetProfile.id)
+                )}
+              >
+                {ranOn.targetProfile.name}
+              </Link>
+            ) : (
+              ranOn.targetProfile.name
+            ),
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
+    [
+      t("agentic.execution.targetBranch"),
+      targetBranch == null ? (
+        unavailable
+      ) : migration.result?.branchUrl ? (
+        <ExternalLink key="branch" href={migration.result.branchUrl} isInline>
+          {monospace(targetBranch)}
+        </ExternalLink>
+      ) : (
+        monospace(targetBranch)
+      ),
+    ],
+    [
+      t("terms.started"),
+      // A pending run's start is not a start, as in the plan runs list.
+      planRun?.status === "Pending" ? (
+        <EmptyTextMessage message={t("terms.notStarted")} />
+      ) : planRun == null || !planRun.startedAt ? (
+        unavailable
+      ) : (
+        formatTableDate(new Date(planRun.startedAt))
+      ),
+    ],
+  ];
+  return <DetailFacts facts={facts} isTwoColumn />;
 };
 
 /** The run could not be read, so its alert cannot say what it needs. */

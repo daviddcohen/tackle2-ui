@@ -47,6 +47,11 @@ jest.mock("@app/queries/agentic", () => ({
     isLoading: false,
     fetchError: null,
   }),
+  useFetchPlanRuns: () => ({
+    planRuns: [],
+    isLoading: false,
+    fetchError: null,
+  }),
   useResolveApplicationMigrationRequestMutation: () => ({
     mutateAsync: jest.fn(),
     isPending: false,

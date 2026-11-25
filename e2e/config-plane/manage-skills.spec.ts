@@ -64,7 +64,10 @@ const openArchetypeDrawer = async (page: Page, archetype: string) => {
   return drawer;
 };
 
-/** The Skills fact of the drawer's Details tab: link labels, "None" when empty. */
+/**
+ * The Skills fact of the drawer's Details tab: Manage skills on the term's
+ * line, link labels ("None" when empty) in the value.
+ */
 const skillsFact = (drawer: Locator) =>
   drawer.locator(".pf-v6-c-description-list__group").filter({
     has: drawer.page().getByRole("term").getByText("Skills", { exact: true }),
@@ -200,9 +203,9 @@ test.describe("Manage skills: archetype", () => {
     // Empty the fact first: the archetype's one skill.
     await gotoProto(page, "/archetypes");
     const drawer = await openArchetypeDrawer(page, "Node.js Service");
-    const button = skillsFact(drawer).getByRole("button", {
-      name: "Manage skills for Node.js Service",
-    });
+    const button = skillsFact(drawer)
+      .getByRole("term")
+      .getByRole("button", { name: "Manage skills for Node.js Service" });
     await expect(button).toHaveId(/^manage-skills-archetype-\d+$/);
     await button.click();
     await chip(page, "Node.js runtime modernization").click();
