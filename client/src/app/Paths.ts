@@ -63,6 +63,7 @@ export const DevPaths = {
   stageRunDetails: "/plan-runs/:runId/stages/:stageId",
   agents: "/agents",
   agentDetails: "/agents/:agentId",
+  agentTestRunDetails: "/agents/:agentId/test-runs/:runId",
   applicationDetails: "/applications/:applicationId",
   skills: "/skills",
   skillDetails: "/skills/:skillId",
@@ -170,6 +171,11 @@ export interface StageRunDetailsRoute {
 
 export interface AgentDetailsRoute {
   agentId: string;
+}
+
+export interface AgentTestRunDetailsRoute {
+  agentId: string;
+  runId: string;
 }
 
 export interface SkillDetailsRoute {

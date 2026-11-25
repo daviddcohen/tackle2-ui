@@ -25,7 +25,7 @@ import {
 } from "@app/api/rest/agentic";
 import { server } from "@mocks/server";
 
-import { updatePlan } from "./catalog";
+import { listAgentTestRuns, startAgentTestRun, updatePlan } from "./catalog";
 import { db, findApplication, resetAgenticDb } from "./db";
 import {
   PENDING_MS,
@@ -602,6 +602,75 @@ describe("observability mock", () => {
   });
 });
 
+describe("observability mock: agent test runs", () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ now: START });
+    seed("configured");
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  // What the agent said and thought, in order.
+  const said = (name: string) =>
+    getAgentRunTranscript(name)
+      .entries.flatMap((entry) =>
+        entry.kind === "message" || entry.kind === "thought" ? [entry.text] : []
+      )
+      .join("\n");
+
+  it("serves a seeded test run by its id: the task, no push, complete", () => {
+    const transcript = getAgentRunTranscript("9001");
+    expect(transcript.status).toBe("complete");
+    expect(said("9001")).toContain(
+      "The task asks me to analyze the application"
+    );
+    expect(said("9001")).toContain("Nothing is pushed.");
+    expect(said("9001")).not.toContain("Pushing the branch");
+    const resource = getAgentRunResource("9001");
+    expect(resource.metadata.labels).not.toHaveProperty(
+      "konveyor.io/agentworkflowrun"
+    );
+    expect(resource.spec.instructions).toMatch(/^Analyze the application/);
+  });
+
+  it("tells a run with added skills from the same task without them", () => {
+    const without = said("9002");
+    const withSkills = said("9003");
+    expect(without).toContain("I could not finish the task.");
+    expect(without).not.toContain("adds the skills");
+    expect(withSkills).toContain(
+      "This test run adds the skills spring-boot-3-upgrade, quarkus-best-practices"
+    );
+    expect(withSkills).toContain("Followed the added skills");
+    expect(getAgentRunLog("9003", "skill-loader", null).text).toContain(
+      "quarkus-best-practices"
+    );
+    expect(getAgentRunLog("9002", "skill-loader", null).text).not.toContain(
+      "quarkus-best-practices"
+    );
+  });
+
+  it("serves a test run started in the prototype, live, then finished", () => {
+    const [run] = listAgentTestRuns("2");
+    const started = startAgentTestRun({
+      agentId: run.agent.id,
+      applicationId: run.application.id,
+      task: "Upgrade the service layer.",
+    });
+    // Numbered after the three seeded test runs.
+    expect(started.name).toBe("Test run #4");
+    // As on the hub, a running agent run has no transcript until its
+    // sandbox is ready.
+    expect(getAgentRunTranscript(started.id).status).toBe("none");
+    expect(getAgentRunLog(started.id, "agent", null).complete).toBe(false);
+    jest.advanceTimersByTime(5000);
+    const transcript = getAgentRunTranscript(started.id);
+    expect(transcript.status).toBe("complete");
+    expect(texts(transcript.entries).join("\n")).toContain("Test run finished");
+  });
+});
+
 describe("observability mock: runs on several applications", () => {
   beforeEach(() => {
     jest.useFakeTimers({ now: START });
@@ -1061,7 +1130,7 @@ describe("observability handlers", () => {
 
   it("answers 404 for unknown runs, names and containers, 400 for malformed offsets", async () => {
     expect(await statusOf(getPlanRunAgentRuns("9999"))).toBe(404);
-    expect(await statusOf(fetchAgentRunResource("9001"))).toBe(404);
+    expect(await statusOf(fetchAgentRunResource("9999"))).toBe(404);
     expect(await statusOf(fetchAgentRunTranscript("nope"))).toBe(404);
     expect(
       await statusOf(

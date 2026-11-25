@@ -104,8 +104,21 @@ const serve = ({
     rest.get(AGENTIC_ENDPOINTS.skillCollections, collectionsResolver),
     rest.get(AGENTIC_ENDPOINTS.agents, agentsResolver),
     rest.post(AGENTIC_ENDPOINTS.agentRuns, async (req, res, ctx) => {
-      requests.push(await req.json());
-      return res(ctx.status(201), ctx.json({ id: "1" }));
+      const body = await req.json();
+      requests.push(body);
+      // The created run, as the API answers it.
+      return res(
+        ctx.status(201),
+        ctx.json({
+          id: "9004",
+          name: "Test run #4",
+          agent: { id: body.agentId, name: "" },
+          application: { id: body.applicationId, name: "" },
+          task: body.task,
+          phase: "Running",
+          startedAt: "2026-11-24T10:00:00Z",
+        })
+      );
     })
   );
   return requests;
@@ -136,9 +149,7 @@ const waitForSkills = () =>
 
 const pickApplication = async () => {
   await userEvent.type(
-    document.getElementById(
-      "agent-test-application-select-input"
-    ) as HTMLElement,
+    screen.getByRole("combobox", { name: "Application" }),
     "Customer"
   );
   await userEvent.click(
@@ -174,7 +185,22 @@ describe("AgentTestModal", () => {
     expect(startButton()).toBeDisabled();
   });
 
-  it("names the agent in the description and links the toast to its runs", async () => {
+  it("names each typeahead input after its field, not the default Type to filter", async () => {
+    serve();
+    renderModal({ skill: springBoot });
+    for (const name of ["Agent", "Application"]) {
+      const input = screen.getByRole("combobox", { name });
+      // The field label points at the input, so clicking it focuses it.
+      expect(
+        document.querySelector(`label[for="${input.id}"]`)
+      ).toHaveTextContent(name);
+    }
+    expect(
+      screen.queryByRole("combobox", { name: "Type to filter" })
+    ).toBeNull();
+  });
+
+  it("names the agent in the description and links the toast to the new run", async () => {
     const requests = serve();
     const { notifications } = renderModal({ agent: codeMigrator });
     expect(
@@ -197,8 +223,30 @@ describe("AgentTestModal", () => {
     ]);
     const { title, message, variant } =
       notifications.pushNotification.mock.calls[0][0];
-    expect(title).toBe("Test run for Code Migrator queued");
+    expect(title).toBe("Test run #4 queued");
     expect(variant).toBe("success");
+    renderPlain(<MemoryRouter>{message}</MemoryRouter>);
+    expect(screen.getByRole("link", { name: "View test run" })).toHaveAttribute(
+      "href",
+      "/agents/2/test-runs/9004"
+    );
+  });
+
+  it("links the toast to the agent's runs when the run comes back without a name", async () => {
+    serve();
+    server.use(
+      rest.post(AGENTIC_ENDPOINTS.agentRuns, (_req, res, ctx) =>
+        res(ctx.status(201), ctx.json({ id: "1" }))
+      )
+    );
+    const { notifications } = renderModal({ agent: codeMigrator });
+    await fillRequired();
+    await userEvent.click(startButton());
+    await waitFor(() =>
+      expect(notifications.pushNotification).toHaveBeenCalled()
+    );
+    const { title, message } = notifications.pushNotification.mock.calls[0][0];
+    expect(title).toBe("Test run for Code Migrator queued");
     renderPlain(<MemoryRouter>{message}</MemoryRouter>);
     expect(screen.getByRole("link", { name: "View runs" })).toHaveAttribute(
       "href",
@@ -374,12 +422,11 @@ describe("AgentTestModal", () => {
       ]);
       const { title, message } =
         notifications.pushNotification.mock.calls[0][0];
-      expect(title).toBe("Test run for Test Runner queued");
+      expect(title).toBe("Test run #4 queued");
       renderPlain(<MemoryRouter>{message}</MemoryRouter>);
-      expect(screen.getByRole("link", { name: "View runs" })).toHaveAttribute(
-        "href",
-        "/agents/4?tab=runs"
-      );
+      expect(
+        screen.getByRole("link", { name: "View test run" })
+      ).toHaveAttribute("href", "/agents/4/test-runs/9004");
     });
 
     it("hides the skill while the chosen agent has it, and keeps it for another agent", async () => {

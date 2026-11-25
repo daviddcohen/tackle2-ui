@@ -51,6 +51,7 @@ const planRuns = [
 
 const testRun: AgentTestRun = {
   id: "9002",
+  name: "Test run #2",
   agent: { id: "2", name: "Agent 2" },
   application: { id: 5, name: "Inventory Service" },
   task: "Apply the conversion patterns.",
@@ -70,6 +71,7 @@ const renderTab = (props: Partial<AgentRunsTabProps> = {}) =>
         isLoadingTestRuns={false}
         testRunsError={null}
         canTestAgent
+        onStartTest={jest.fn()}
         linkCrumbs={[]}
         {...props}
       />
@@ -112,7 +114,14 @@ describe("AgentRunsTab", () => {
       within(row).getByRole("link", { name: "Inventory Service" })
     ).toHaveAttribute("href", "/applications/5");
     expect(row).toHaveTextContent("Failed");
+    // The run's name opens it; its start is plain text.
+    expect(
+      within(row).getByRole("link", { name: "Test run #2" })
+    ).toHaveAttribute("href", "/agents/2/test-runs/9002");
     expect(row).toHaveTextContent("2026-09-19 09:30");
+    expect(
+      within(row).queryByRole("link", { name: "2026-09-19 09:30" })
+    ).toBeNull();
     expect(screen.queryByText("Type")).toBeNull();
   });
 
@@ -121,6 +130,7 @@ describe("AgentRunsTab", () => {
     const withSkills: AgentTestRun = {
       ...testRun,
       id: "9003",
+      name: "Test run #3",
       startedAt: "2026-09-19T11:00:00Z",
       addedSkills: [
         { id: "16", name: "Spring Boot 3 upgrade" },
@@ -134,7 +144,14 @@ describe("AgentRunsTab", () => {
       within(grid)
         .getAllByRole("columnheader")
         .map((header) => header.textContent)
-    ).toEqual(["Application", "Task", "Added skills", "Status", "Started"]);
+    ).toEqual([
+      "Run",
+      "Application",
+      "Task",
+      "Added skills",
+      "Status",
+      "Started",
+    ]);
 
     const [latest, plain] = rowsOf("Test runs");
     expect(plain).toHaveTextContent("None");
@@ -179,22 +196,26 @@ describe("AgentRunsTab", () => {
     expect(rowsOf("Migration plan stages")).toHaveLength(1);
   });
 
-  it("says how to start a test run only with the agent run scope", () => {
-    const { unmount } = renderTab({ planRuns: [], testRuns: [] });
+  it("offers to start a test run only with the agent run scope", async () => {
+    const onStartTest = jest.fn();
+    const { unmount } = renderTab({ planRuns: [], testRuns: [], onStartTest });
     expect(
       screen.getByRole("heading", { name: "Migration plan stages" })
     ).toBeInTheDocument();
     expect(
       screen.getByText("This agent has not run in a plan run yet.")
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "No test runs yet. Use Test agent in the Actions menu to start one."
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByText(/^No test runs yet\./)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Start a test run" })
+    );
+    expect(onStartTest).toHaveBeenCalledTimes(1);
     unmount();
     renderTab({ planRuns: [], testRuns: [], canTestAgent: false });
     expect(screen.getByText("No test runs yet.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start a test run" })
+    ).toBeNull();
   });
 
   it("never shows an empty section while the runs load or after they fail", () => {

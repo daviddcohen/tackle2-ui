@@ -387,7 +387,9 @@ export const AgentRunTranscript: React.FC<AgentRunTranscriptProps> = ({
         titleText={t(`${KEY}.noTranscriptTitle`)}
       >
         <EmptyStateBody>
-          {body} {t(`${KEY}.logsShowWhatAgentDid`)}
+          {body}
+          {/* Points to the logs only where the page has them. */}
+          {onViewLogs != null && <> {t(`${KEY}.logsShowWhatAgentDid`)}</>}
         </EmptyStateBody>
         {onViewLogs != null && (
           <EmptyStateFooter>

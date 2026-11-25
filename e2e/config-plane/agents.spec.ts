@@ -260,9 +260,7 @@ test.describe("Agent test modal", () => {
     await expect(dataRows(page)).toHaveCount(9);
   });
 
-  test("start a test run and see it on the agent runs tab", async ({
-    page,
-  }) => {
+  test("start a test run and open it from the toast", async ({ page }) => {
     await openRowActions(page, "Test Runner");
     await page.getByRole("menuitem", { name: "Test agent" }).click();
     await expect(dialog(page)).toContainText("Test agent");
@@ -289,28 +287,24 @@ test.describe("Agent test modal", () => {
     // Close the menu by clicking outside it (Escape would close the modal).
     await dialog(page).getByRole("heading", { name: "Test agent" }).click();
     await start.click();
-    await expect(toast(page, "Test run for Test Runner queued")).toBeVisible();
+    // Numbered after the three seeded test runs.
+    await expect(toast(page, "Test run #4 queued")).toBeVisible();
     await page
       .locator(".pf-v6-c-alert-group")
-      .getByRole("link", { name: "View runs" })
+      .getByRole("link", { name: "View test run" })
       .click();
-    // The prototype bar may reorder the query, so check the parts.
-    await expect(page).toHaveURL(
-      (url) =>
-        appPath(url.pathname) === "/agents/4" &&
-        url.searchParams.get("tab") === "runs"
+    await expect(page).toHaveURL((url) =>
+      /^\/agents\/4\/test-runs\/[^/]+$/.test(appPath(url.pathname))
     );
-    await expect(page.getByRole("tab", { name: "Runs" })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
-    // Test runs are their own section, so the row needs no type label.
-    const runRow = page
-      .getByRole("grid", { name: "Test runs" })
-      .getByRole("row", { name: /Run the unit tests/ });
-    await expect(runRow).toContainText("Customer Management");
     await expect(
-      runRow.getByRole("link", { name: "Spring Boot 3 upgrade" })
+      page.getByRole("heading", { level: 1, name: "Test run #4" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Customer Management" })
+    ).toBeVisible();
+    await expect(page.getByText("Run the unit tests")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Spring Boot 3 upgrade" })
     ).toBeVisible();
   });
 
@@ -374,6 +368,27 @@ test.describe("Agent detail", () => {
       await expect(
         stages.getByRole("columnheader", { name: column, exact: true })
       ).toBeVisible();
+  });
+
+  test("a test run opens from the runs tab and shows its transcript", async ({
+    page,
+  }) => {
+    await gotoProto(page, "/agents/2?tab=runs", { persona: ARCHITECT });
+    const withSkills = page
+      .getByRole("grid", { name: "Test runs" })
+      .getByRole("row")
+      .filter({
+        has: page.getByRole("link", { name: "Quarkus best practices" }),
+      });
+    await withSkills.getByRole("link", { name: "Test run #3" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Test run #3" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Breadcrumb" })
+    ).toContainText("Code Migrator");
+    // The transcript is on the page, with no tab to open.
+    await expect(page.getByText(/Followed the added skills/)).toBeVisible();
   });
 
   test("edit from detail updates the title and breadcrumb", async ({

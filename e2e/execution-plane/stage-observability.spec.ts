@@ -303,7 +303,7 @@ test.describe("Auto-refresh while the stage runs", () => {
     );
     await expect(transcript(page)).toBeVisible();
     await expect(tabPanel(page)).toContainText(
-      "Recording while the stage runs."
+      "Recording while the agent runs."
     );
     await expect(tabPanel(page)).toContainText(UPDATED_AGO);
     const before = await transcriptEntries(page).count();
@@ -344,7 +344,7 @@ test.describe("Auto-refresh while the stage runs", () => {
     const [runId, stageId, scenario, options] = RUNNING_STAGE;
     await page.goto(stageUrl(runId, stageId, scenario, options));
     await expect(tabPanel(page)).toContainText(
-      "Refreshes while the stage runs."
+      "Refreshes while the agent runs."
     );
     await expect(tabPanel(page)).toContainText(UPDATED_AGO);
   });

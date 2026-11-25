@@ -36,7 +36,7 @@ export const UpdatedAgo: React.FC<{ updatedAt: number }> = ({ updatedAt }) => {
 
 /**
  * A view's live status as one subtle sentence: what keeps it current
- * ("Refreshes while the stage runs."), then "Updated n seconds ago." once
+ * ("Refreshes while the agent runs."), then "Updated n seconds ago." once
  * it has read something. The logs build their own, with the pod and the
  * follow state, in the same shape.
  */

@@ -56,11 +56,17 @@
  *   transcript with a gap;
  * - approve mode stages (`requiresApproval`) are never recorded: transcript
  *   `skipped`, reason "approve mode".
+ *
+ * Agent test runs are AgentRuns too, named by the test run id: each plays
+ * the same script as a run of one stage whose instructions are its task,
+ * staging the agent's skills and then the skills added to the run, and ends
+ * without a push (a test run changes no repository).
  */
 import {
   AgentRunLogChunk,
   AgentRunRecordingStatus,
   AgentRunTranscript,
+  AgentTestRun,
   ControllerRunPhase,
   EntityId,
   HubRef,
@@ -71,6 +77,7 @@ import {
   StageAgentRun,
   StageMessage,
   StageRun,
+  StageSkill,
   isCommitOf,
   isTerminalRunPhase,
 } from "@app/agentic";
@@ -90,9 +97,16 @@ import {
   RUN_ENV,
 } from "@app/api/agentic/contract";
 
+import { getAgentTestRun } from "./catalog";
 import { badRequest, db, findApplication, notFound } from "./db";
 import * as execution from "./execution";
-import { mockAgents, mockGateways, mockProviders } from "./fixtures";
+import {
+  mockAgentTestRuns,
+  mockAgents,
+  mockGateways,
+  mockProviders,
+} from "./fixtures";
+import { resolveSkillsByStage } from "./skill-resolution";
 
 // ---------------------------------------------------------------------------
 // Timing and demo knobs
@@ -210,6 +224,8 @@ interface StageContext {
   live: boolean;
   terminal: boolean;
   timeline: Timeline;
+  /** Set for an agent test run: the run this context plays. */
+  testRun?: AgentTestRun;
 }
 
 /**
@@ -455,6 +471,81 @@ const startedStages = (run: PlanRun, now: number): StageContext[] => {
   );
 };
 
+/** The stage a test run's script plays: a test run is in no plan. */
+const TEST_RUN_STAGE_ID = "test-run";
+/** How long a test run started in the prototype runs (catalog: 3 s). */
+const STARTED_TEST_RUN_MS = 3_000;
+/** Why a test run fails: what the skills added to run 9003 cover. */
+const TEST_RUN_FAILURE =
+  "The build still fails: the service layer uses Spring annotations that none of this agent's skills convert.";
+
+/**
+ * A test run as a run of one stage on its application, whose instructions
+ * are the task. It stages the agent's own skills and its collections', then
+ * the added ones (the proposed run-level skills field). A seeded test run
+ * ran the whole script; one started in the prototype stopped after 3 s.
+ */
+const testRunContext = (testRun: AgentTestRun, now: number): StageContext => {
+  const isSeeded = mockAgentTestRuns.some(({ id }) => id === testRun.id);
+  const completedAt = isTerminalRunPhase(testRun.phase)
+    ? new Date(
+        Date.parse(testRun.startedAt) +
+          (isSeeded ? OBSERVABILITY_SCRIPT_MS : STARTED_TEST_RUN_MS)
+      ).toISOString()
+    : undefined;
+  const name = "Test run";
+  const [agentGroup] = resolveSkillsByStage({
+    stages: [
+      {
+        agentId: testRun.agent.id,
+        agentName: testRun.agent.name,
+        name,
+        stageId: TEST_RUN_STAGE_ID,
+      },
+    ],
+    context: { kind: "applications", applicationIds: [] },
+  }).stages;
+  const added = (testRun.addedSkills ?? []).map(
+    (skill): StageSkill => ({
+      skill,
+      loadPolicy:
+        db.skills.find((candidate) => candidate.id === skill.id)?.loadPolicy ??
+        "skill",
+      from: [],
+      excluded: false,
+    })
+  );
+  const stage: StageRun = {
+    stageId: TEST_RUN_STAGE_ID,
+    name,
+    agent: testRun.agent,
+    instructions: testRun.task,
+    requiresApproval: false,
+    order: 1,
+    status: testRun.phase,
+    startedAt: testRun.startedAt,
+    completedAt,
+    ...(testRun.phase === "Failed" ? { output: TEST_RUN_FAILURE } : {}),
+  };
+  const run: PlanRun = {
+    id: `test-${testRun.id}`,
+    name,
+    planId: "",
+    planName: "",
+    applications: testRun.application.id !== 0 ? [testRun.application] : [],
+    status: testRun.phase,
+    targetBranch: "main",
+    startedAt: testRun.startedAt,
+    completedAt,
+    stageRuns: [stage],
+    skills: {
+      stages: [{ ...agentGroup, skills: [...agentGroup.skills, ...added] }],
+      everyStage: [],
+    },
+  };
+  return { ...contextFor(run, 0, 0, testRun.id, now), testRun };
+};
+
 const findAgentRun = (name: string, now = Date.now()): StageContext => {
   for (const run of execution.listPlanRuns()) {
     const names = agentRunNames(run);
@@ -464,6 +555,10 @@ const findAgentRun = (name: string, now = Date.now()): StageContext => {
         return contextFor(run, index, applicationIndex, name, now);
       }
     }
+  }
+  const testRun = getAgentTestRun(name);
+  if (testRun != null && testRun.phase !== "Pending") {
+    return testRunContext(testRun, now);
   }
   throw notFound(`Agent run "${name}" not found.`);
 };
@@ -721,6 +816,9 @@ const buildScript = (ctx: StageContext): Script => {
   const skills = stagedSkills(run, stage, ctx.application?.id).map(({ name }) =>
     toResourceName(name)
   );
+  const addedSkills = (ctx.testRun?.addedSkills ?? []).map(({ name }) =>
+    toResourceName(name)
+  );
   const stageCount = run.stageRuns.length;
   const window = gateway.contextWindow;
   const curve = occupancy(
@@ -749,7 +847,9 @@ const buildScript = (ctx: StageContext): Script => {
     prep: string,
     task: string,
     push: string,
-    pushContent = `Push the results to ${branch}`,
+    pushContent = ctx.testRun != null
+      ? "Report the results (a test run pushes nothing)"
+      : `Push the results to ${branch}`,
     pushMeta: Record<string, unknown> = {}
   ) => ({
     sessionUpdate: "plan",
@@ -915,7 +1015,7 @@ const buildScript = (ctx: StageContext): Script => {
       say(
         at + 400,
         "agent_thought_chunk",
-        `${scope}The stage asks me to ${instructions.charAt(0).toLowerCase()}${instructions.slice(1, 160)}`
+        `${scope}${ctx.testRun != null ? "The task" : "The stage"} asks me to ${instructions.charAt(0).toLowerCase()}${instructions.slice(1, 160)}${addedSkills.length > 0 ? ` This test run adds the skills ${addedSkills.join(", ")} to mine, so I follow them too.` : ""}`
       );
       usage(at + 1500, step);
       continue;
@@ -997,7 +1097,53 @@ const buildScript = (ctx: StageContext): Script => {
       acp(at + 3400, ladder("completed", "in_progress", "pending"));
   }
 
-  if (ctx.terminal || ctx.phase === "AwaitingApproval") {
+  if (ctx.testRun != null) {
+    // A test run reports its results and pushes nothing.
+    const at = FINISH_MS;
+    if (ctx.phase === "Failed") {
+      const output = ctx.output ?? TEST_RUN_FAILURE;
+      say(at, "agent_message_chunk", `I could not finish the task. ${output}`);
+      acp(at + 800, ladder("completed", "in_progress", "pending"));
+      const notice = `Test run failed: ${output}`;
+      gooseFrame(at + 900, {
+        sessionUpdate: "status_message",
+        status: { type: "notice", message: notice },
+      });
+      log.push({ rel: at + 900, level: "ERROR", text: notice });
+    } else if (ctx.phase === "Succeeded") {
+      const [changedA, changedB] = eco.files;
+      say(
+        at,
+        "agent_message_chunk",
+        [
+          "*Test run finished:*",
+          "",
+          `- \`${eco.build}\`: build OK`,
+          `- Changed \`${changedA}\` and \`${changedB}\``,
+          ...(addedSkills.length > 0
+            ? [`- Followed the added skills: ${addedSkills.join(", ")}`]
+            : []),
+          "",
+          "The changes stay in the sandbox for review. Nothing is pushed.",
+        ].join("\n")
+      );
+      acp(
+        at + 800,
+        ladder(
+          "completed",
+          "completed",
+          "completed",
+          "Results reported, nothing pushed"
+        )
+      );
+      const notice = "Test run succeeded. Nothing was pushed.";
+      gooseFrame(at + 900, {
+        sessionUpdate: "status_message",
+        status: { type: "notice", message: notice },
+      });
+      info(at + 900, "[ok] test run succeeded");
+    }
+  } else if (ctx.terminal || ctx.phase === "AwaitingApproval") {
     const at = FINISH_MS;
     if (ctx.phase === "Failed") {
       const output =
@@ -1391,8 +1537,13 @@ const agentRunResource = (ctx: StageContext, script: Script): Crd.AgentRun => {
       creationTimestamp: new Date(startMs - SANDBOX_STARTUP_MS).toISOString(),
       labels: {
         [MANAGED_BY_LABEL]: "agentic-controller",
-        "konveyor.io/agentworkflowrun": workflowRun,
-        "konveyor.io/stage": toResourceName(stage.name),
+        // A test run is started directly, not by a workflow run.
+        ...(ctx.testRun == null
+          ? {
+              "konveyor.io/agentworkflowrun": workflowRun,
+              "konveyor.io/stage": toResourceName(stage.name),
+            }
+          : {}),
         ...(applicationId != null
           ? { [APPLICATION_LABEL]: String(applicationId) }
           : {}),

@@ -387,6 +387,7 @@ describe("Hub-backed agentic REST reference", () => {
     expect(await hubApi.getAgentTestRuns("migrate")).toEqual([
       expect.objectContaining({
         id: "ui-test",
+        name: "ui-test",
         application: { id: 7, name: "#7" },
       }),
     ]);

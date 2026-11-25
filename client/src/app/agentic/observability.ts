@@ -15,7 +15,7 @@
  * hub branch endpoint. docs/agentic-handoff.md (section 4) maps every field to its
  * source and says which sources are merged, proposed or hub branch only.
  */
-import { ControllerRunPhase, EntityId, HubRef } from "./types";
+import { AgentTestRun, ControllerRunPhase, EntityId, HubRef } from "./types";
 
 /**
  * State of an agent run's transcript recording (the hub branch recorder's
@@ -99,6 +99,31 @@ export interface StageAgentRun {
   usage?: AgentRunUsage;
   logSource?: AgentRunLogSource;
 }
+
+/**
+ * Containers of an AgentRun pod with a log, in start order: the init
+ * container that assembles the skills, then the harness with goose
+ * (agentic-controller `internal/controller/agentrun_controller.go`).
+ */
+export const AGENT_RUN_CONTAINERS = ["skill-loader", "agent"] as const;
+
+/**
+ * The AgentRun behind an agent test run, for the agent run views (transcript,
+ * logs). A test run is an AgentRun started directly: its id is the AgentRun
+ * `metadata.name` (`toAgentTestRun`), so the name-based reads serve it as
+ * they serve a stage's. It belongs to no plan run, so `runId` and `stageId`
+ * are empty; the pod name, usage and log source are not known from the test
+ * run (the views read the log source from the log itself).
+ */
+export const testRunAgentRun = (run: AgentTestRun): StageAgentRun => ({
+  name: run.id,
+  runId: "",
+  stageId: "",
+  ...(run.application.id !== 0 ? { application: run.application } : {}),
+  phase: run.phase,
+  containers: [...AGENT_RUN_CONTAINERS],
+  ...(run.startedAt !== "" ? { startedAt: run.startedAt } : {}),
+});
 
 /**
  * The agent runs of one stage, in the order given (the list endpoint answers

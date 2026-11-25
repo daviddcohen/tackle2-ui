@@ -8,6 +8,7 @@ import {
   stageAgentRunFor,
   stageAgentRunsOf,
   stageAttentionApplications,
+  testRunAgentRun,
 } from "./observability";
 import { ControllerRunPhase, HubRef } from "./types";
 
@@ -140,5 +141,43 @@ describe("stageAttentionApplications", () => {
     ]);
     expect(stageAttentionApplications(list, "Running", order)).toEqual([]);
     expect(stageAttentionApplications(list, undefined, order)).toEqual([]);
+  });
+});
+
+describe("testRunAgentRun", () => {
+  it("reads a test run as the AgentRun named by its id", () => {
+    expect(
+      testRunAgentRun({
+        id: "code-migrator-test-x7k2p",
+        name: "code-migrator-test-x7k2p",
+        agent: { id: "code-migrator", name: "Code Migrator" },
+        application: claims,
+        task: "Upgrade the service layer.",
+        phase: "Running",
+        startedAt: "2026-09-19T11:00:00Z",
+      })
+    ).toEqual({
+      name: "code-migrator-test-x7k2p",
+      runId: "",
+      stageId: "",
+      application: claims,
+      phase: "Running",
+      containers: ["skill-loader", "agent"],
+      startedAt: "2026-09-19T11:00:00Z",
+    });
+  });
+
+  it("leaves out the application and start a run does not name", () => {
+    const shown = testRunAgentRun({
+      id: "9001",
+      name: "Test run #1",
+      agent: { id: "1", name: "Migration Proposal Agent" },
+      application: { id: 0, name: "" },
+      task: "Analyze the application.",
+      phase: "Pending",
+      startedAt: "",
+    });
+    expect(shown.application).toBeUndefined();
+    expect(shown.startedAt).toBeUndefined();
   });
 });

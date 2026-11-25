@@ -442,6 +442,7 @@ describe("AgentRun -> Agent test run", () => {
   it("maps a test run and resolves the application name", () => {
     expect(toAgentTestRun(testRun, new Map([[7, "Partner Portal"]]))).toEqual({
       id: "ui-abc12",
+      name: "ui-abc12",
       agent: { id: "migrate", name: "migrate" },
       application: { id: 7, name: "Partner Portal" },
       task: "Upgrade to Jakarta EE 10",

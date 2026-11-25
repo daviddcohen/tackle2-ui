@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
-import { Label, LabelGroup } from "@patternfly/react-core";
+import { Button, Label, LabelGroup } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
@@ -295,8 +295,16 @@ const TestRunsSection: React.FC<{
   isLoading: boolean;
   fetchError: unknown;
   canTestAgent: boolean;
+  onStartTest: () => void;
   linkCrumbs: BreadcrumbEntry[];
-}> = ({ testRuns, isLoading, fetchError, canTestAgent, linkCrumbs }) => {
+}> = ({
+  testRuns,
+  isLoading,
+  fetchError,
+  canTestAgent,
+  onStartTest,
+  linkCrumbs,
+}) => {
   const { t } = useTranslation();
   const { notStarted } = useEmptyValues();
 
@@ -305,6 +313,7 @@ const TestRunsSection: React.FC<{
     idProperty: "id",
     items: testRuns,
     columnNames: {
+      run: t("agentic.agentDetail.planRun"),
       application: t("terms.application"),
       task: t("terms.task"),
       addedSkills: t("agentic.agentDetail.addedSkills"),
@@ -346,10 +355,16 @@ const TestRunsSection: React.FC<{
       description={t("agentic.agentDetail.testRunsDescription")}
     >
       {isKnown && testRuns.length === 0 ? (
-        <SectionEmpty>
-          {canTestAgent
-            ? t("agentic.agentDetail.testRunsEmpty")
-            : t("agentic.agentDetail.testRunsEmptyReadOnly")}
+        <SectionEmpty
+          action={
+            canTestAgent ? (
+              <Button variant="link" isInline onClick={onStartTest}>
+                {t("agentic.agentDetail.testRunsStart")}
+              </Button>
+            ) : undefined
+          }
+        >
+          {t("agentic.agentDetail.testRunsEmpty")}
         </SectionEmpty>
       ) : (
         <>
@@ -361,6 +376,10 @@ const TestRunsSection: React.FC<{
             <Thead>
               <Tr>
                 <TableHeaderContentWithControls {...tableControls}>
+                  <Th
+                    {...getThProps({ columnKey: "run" })}
+                    modifier="fitContent"
+                  />
                   <Th
                     {...getThProps({ columnKey: "application" })}
                     width={20}
@@ -394,6 +413,23 @@ const TestRunsSection: React.FC<{
                       item={run}
                       rowIndex={rowIndex}
                     >
+                      <Td
+                        modifier="nowrap"
+                        {...getTdProps({ columnKey: "run" })}
+                      >
+                        <Link
+                          to={breadcrumbTo(
+                            generatePath(DevPaths.agentTestRunDetails, {
+                              agentId: run.agent.id,
+                              runId: run.id,
+                            }),
+                            "",
+                            linkCrumbs
+                          )}
+                        >
+                          {run.name}
+                        </Link>
+                      </Td>
                       <Td {...getTdProps({ columnKey: "application" })}>
                         <Link
                           to={breadcrumbTo(
@@ -460,6 +496,8 @@ export interface AgentRunsTabProps {
   testRunsError: unknown;
   /** With the agent run scope: the empty test runs say how to start one. */
   canTestAgent: boolean;
+  /** Opens Test agent for a new test run. */
+  onStartTest: () => void;
   linkCrumbs: BreadcrumbEntry[];
 }
 
@@ -477,6 +515,7 @@ export const AgentRunsTab: React.FC<AgentRunsTabProps> = ({
   isLoadingTestRuns,
   testRunsError,
   canTestAgent,
+  onStartTest,
   linkCrumbs,
 }) => (
   <DetailSections>
@@ -492,6 +531,7 @@ export const AgentRunsTab: React.FC<AgentRunsTabProps> = ({
       isLoading={isLoadingTestRuns}
       fetchError={testRunsError}
       canTestAgent={canTestAgent}
+      onStartTest={onStartTest}
       linkCrumbs={linkCrumbs}
     />
   </DetailSections>

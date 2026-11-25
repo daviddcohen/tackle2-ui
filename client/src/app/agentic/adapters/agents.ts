@@ -144,6 +144,7 @@ export const toAgentTestRun = (
   applicationNames?: ApplicationNameIndex
 ): AgentTestRun => ({
   id: toEntityId(run.metadata),
+  name: toEntityId(run.metadata),
   agent: toEntityRef(run.spec.agentRef),
   application: toRunApplication(
     run.metadata,

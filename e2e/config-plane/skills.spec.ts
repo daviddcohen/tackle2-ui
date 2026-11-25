@@ -349,18 +349,18 @@ test.describe("Skill detail", () => {
     );
     await field(dialog(page), "Task").fill("Upgrade the web layer");
     await dialog(page).getByRole("button", { name: "Start test run" }).click();
-    await expect(
-      toast(page, "Test run for Code Migrator queued")
-    ).toBeVisible();
+    await expect(toast(page, "Test run #4 queued")).toBeVisible();
     await page
       .locator(".pf-v6-c-alert-group")
-      .getByRole("link", { name: "View runs" })
+      .getByRole("link", { name: "View test run" })
       .click();
-    const runRow = page
-      .getByRole("grid", { name: "Test runs" })
-      .getByRole("row", { name: /Upgrade the web layer/ });
     await expect(
-      runRow.getByRole("link", { name: "Spring Boot 3 upgrade" })
+      page.getByRole("heading", { level: 1, name: "Test run #4" })
+    ).toBeVisible();
+    await expect(page.getByText("Upgrade the web layer")).toBeVisible();
+    // The added skill.
+    await expect(
+      page.getByRole("link", { name: "Spring Boot 3 upgrade", exact: true })
     ).toBeVisible();
   });
 
