@@ -3,12 +3,15 @@ import { Trans, useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
 import {
   Button,
-  Flex,
-  FlexItem,
+  DescriptionListTermHelpText,
   Popover,
   Skeleton,
+  Split,
+  SplitItem,
 } from "@patternfly/react-core";
 import { RhUiQuestionMarkCircleIcon } from "@patternfly/react-icons";
+import flex from "@patternfly/react-styles/css/utilities/Flex/flex";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
@@ -40,7 +43,7 @@ const useArchetypeLinks = (archetype: Archetype) => {
  * and each target profile adds its own skills only when a run uses it, so
  * the drawer does not list them.
  */
-export const ArchetypeSkillsHelp: React.FC<{ archetype: Archetype }> = ({
+const ArchetypeSkillsHelp: React.FC<{ archetype: Archetype }> = ({
   archetype,
 }) => {
   const { t } = useTranslation();
@@ -70,25 +73,71 @@ export const ArchetypeSkillsHelp: React.FC<{ archetype: Archetype }> = ({
   );
 };
 
-export interface ArchetypeSkillsProps {
+export interface ArchetypeSkillsTermProps {
   archetype: Archetype;
   /** Opens the page's Manage skills modal for the archetype. */
   onManageSkills: (target: ManageSkillsTarget) => void;
 }
 
 /**
- * The Skills fact of the archetype drawer's Details tab: the skills attached
- * to the archetype, which every application in it inherits, as link labels
- * like the tags above it, with Manage skills for those who can edit them.
- * Target profile skills are not listed: they belong to one migration path
- * each (`ArchetypeSkillsHelp`).
+ * The Skills term of the archetype drawer's Details tab: "Skills" with its
+ * help, and Manage skills at the end of the line for those who can edit
+ * them, as a section heading carries its actions (`DetailSection`).
+ * PatternFly's term has no actions slot, and `DescriptionListTerm` wraps its
+ * children in an inline text span, so a Split in it cannot stretch.
+ * `DescriptionListTermHelpText` (the term with help, as this one has)
+ * renders its children straight in the `dt`, so the Split grows to the
+ * term's full width. A unit test pins that structure.
  */
-export const ArchetypeSkills: React.FC<ArchetypeSkillsProps> = ({
+export const ArchetypeSkillsTerm: React.FC<ArchetypeSkillsTermProps> = ({
   archetype,
   onManageSkills,
 }) => {
   const { t } = useTranslation();
   const canManageSkills = useCanManageSkills();
+  const target: ManageSkillsTarget = {
+    scope: "archetype",
+    id: archetype.id,
+    name: archetype.name,
+  };
+  return (
+    <DescriptionListTermHelpText>
+      <Split hasGutter className={flex.flexGrow_1}>
+        <SplitItem isFilled>
+          {t("agentic.archetype.skills")}{" "}
+          <ArchetypeSkillsHelp archetype={archetype} />
+        </SplitItem>
+        {canManageSkills && (
+          // The term is bold; the action reads as a link, as elsewhere.
+          <SplitItem className={textStyles.fontWeightNormal}>
+            <Button
+              id={manageSkillsButtonId(target)}
+              variant="link"
+              isInline
+              aria-label={t("agentic.skill.manageSkills.titleFor", {
+                name: archetype.name,
+              })}
+              onClick={() => onManageSkills(target)}
+            >
+              {t("agentic.skill.manageSkills.title")}
+            </Button>
+          </SplitItem>
+        )}
+      </Split>
+    </DescriptionListTermHelpText>
+  );
+};
+
+/**
+ * The Skills value of the archetype drawer's Details tab: the skills attached
+ * to the archetype, which every application in it inherits, as link labels
+ * like the tags below it. Target profile skills are not listed: they belong
+ * to one migration path each (`ArchetypeSkillsHelp`).
+ */
+export const ArchetypeSkills: React.FC<{ archetype: Archetype }> = ({
+  archetype,
+}) => {
+  const { t } = useTranslation();
   const to = useArchetypeLinks(archetype);
   const markerOf = useLoadPolicyMarker();
   const { skills, isLoading, fetchError } = useFetchSkills();
@@ -106,52 +155,21 @@ export const ArchetypeSkills: React.FC<ArchetypeSkillsProps> = ({
     return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
   }
 
-  const target: ManageSkillsTarget = {
-    scope: "archetype",
-    id: archetype.id,
-    name: archetype.name,
-  };
   const attached = attachedSkillsFor(skills, "archetype", archetype.id).sort(
     (a, b) => universalComparator(a.skill.name, b.skill.name)
   );
 
-  return (
-    <Flex
-      spaceItems={{ default: "spaceItemsMd" }}
-      alignItems={{ default: "alignItemsCenter" }}
-    >
-      <FlexItem>
-        {attached.length > 0 ? (
-          <LinkLabels
-            aria-label={t("agentic.skill.skillsOf", { name: archetype.name })}
-            items={attached.map(({ skill, loadPolicy }) => ({
-              id: skill.id,
-              name: skill.name,
-              marker: markerOf(loadPolicy),
-              to: to(
-                generatePath(DevPaths.skillDetails, { skillId: skill.id })
-              ),
-            }))}
-          />
-        ) : (
-          <EmptyTextMessage message={t("terms.none")} />
-        )}
-      </FlexItem>
-      {canManageSkills && (
-        <FlexItem>
-          <Button
-            id={manageSkillsButtonId(target)}
-            variant="link"
-            isInline
-            aria-label={t("agentic.skill.manageSkills.titleFor", {
-              name: archetype.name,
-            })}
-            onClick={() => onManageSkills(target)}
-          >
-            {t("agentic.skill.manageSkills.title")}
-          </Button>
-        </FlexItem>
-      )}
-    </Flex>
+  return attached.length > 0 ? (
+    <LinkLabels
+      aria-label={t("agentic.skill.skillsOf", { name: archetype.name })}
+      items={attached.map(({ skill, loadPolicy }) => ({
+        id: skill.id,
+        name: skill.name,
+        marker: markerOf(loadPolicy),
+        to: to(generatePath(DevPaths.skillDetails, { skillId: skill.id })),
+      }))}
+    />
+  ) : (
+    <EmptyTextMessage message={t("terms.none")} />
   );
 };

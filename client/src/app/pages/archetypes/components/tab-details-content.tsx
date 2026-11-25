@@ -22,7 +22,7 @@ import { LabelsFromTags } from "@app/components/labels/labels-from-tags/labels-f
 import { ManageSkillsTarget } from "@app/pages/agentic/components/manage-skills-modal";
 import { dedupeArrayOfObjects } from "@app/utils/utils";
 
-import { ArchetypeSkills, ArchetypeSkillsHelp } from "./archetype-skills";
+import { ArchetypeSkills, ArchetypeSkillsTerm } from "./archetype-skills";
 import LinkToArchetypeApplications from "./link-to-archetype-applications";
 
 const TagLabels: React.FC<{ tags?: Tag[] }> = ({ tags }) => (
@@ -82,15 +82,12 @@ export const TabDetailsContent: React.FC<{
 
         {isAgenticEnabled && (
           <DescriptionListGroup>
-            <DescriptionListTerm>
-              {t("agentic.archetype.skills")}{" "}
-              <ArchetypeSkillsHelp archetype={archetype} />
-            </DescriptionListTerm>
+            <ArchetypeSkillsTerm
+              archetype={archetype}
+              onManageSkills={onManageSkills}
+            />
             <DescriptionListDescription>
-              <ArchetypeSkills
-                archetype={archetype}
-                onManageSkills={onManageSkills}
-              />
+              <ArchetypeSkills archetype={archetype} />
             </DescriptionListDescription>
           </DescriptionListGroup>
         )}

@@ -1,14 +1,19 @@
 import userEvent from "@testing-library/user-event";
 import { rest } from "msw";
 import { MemoryRouter } from "react-router-dom";
+import {
+  DescriptionList,
+  DescriptionListDescription,
+  DescriptionListGroup,
+} from "@patternfly/react-core";
 
 import { Skill } from "@app/agentic";
 import { Archetype } from "@app/api/models";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
-import { render, screen } from "@app/test-config/test-utils";
+import { render, screen, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
-import { ArchetypeSkills, ArchetypeSkillsHelp } from "../archetype-skills";
+import { ArchetypeSkills, ArchetypeSkillsTerm } from "../archetype-skills";
 
 jest.mock("react-i18next", () =>
   jest.requireActual("@app/test-config/english-i18n")
@@ -68,8 +73,17 @@ const onManageSkills = jest.fn();
 const renderFact = (value: Archetype = archetype) =>
   render(
     <MemoryRouter>
-      <ArchetypeSkillsHelp archetype={value} />
-      <ArchetypeSkills archetype={value} onManageSkills={onManageSkills} />
+      <DescriptionList>
+        <DescriptionListGroup>
+          <ArchetypeSkillsTerm
+            archetype={value}
+            onManageSkills={onManageSkills}
+          />
+          <DescriptionListDescription>
+            <ArchetypeSkills archetype={value} />
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      </DescriptionList>
     </MemoryRouter>
   );
 
@@ -132,7 +146,7 @@ describe("ArchetypeSkills", () => {
     expect(screen.queryByText("OpenShift deployment conventions")).toBeNull();
   });
 
-  it("opens Manage skills for the archetype", async () => {
+  it("opens Manage skills for the archetype from the term's line", async () => {
     serveSkillList([
       skill("3", "Jakarta EE namespace migration", [onArchetype]),
     ]);
@@ -143,6 +157,18 @@ describe("ArchetypeSkills", () => {
     });
     expect(manage).toHaveAttribute("id", "manage-skills-archetype-1");
     expect(manage).toHaveTextContent("Manage skills");
+    // On the term's line, with the help; the value holds the labels only.
+    expect(within(screen.getByRole("term")).getAllByRole("button")).toEqual([
+      screen.getByRole("button", { name: "More about archetype skills" }),
+      manage,
+    ]);
+    expect(
+      within(screen.getByRole("definition")).queryByRole("button")
+    ).toBeNull();
+    // The Split is the dt's own child, so it spans the term's line: a
+    // PatternFly wrapper around the children would keep it to its text.
+    const line = manage.closest(".pf-v6-l-split");
+    expect(line?.parentElement).toBe(screen.getByRole("term"));
 
     await userEvent.click(manage);
     expect(onManageSkills).toHaveBeenLastCalledWith({
@@ -192,7 +218,7 @@ describe("ArchetypeSkills", () => {
   });
 });
 
-describe("ArchetypeSkillsHelp", () => {
+describe("ArchetypeSkillsTerm help", () => {
   it("says archetype skills reach every target profile, and links to the profiles", async () => {
     serveSkillList([]);
     renderFact();

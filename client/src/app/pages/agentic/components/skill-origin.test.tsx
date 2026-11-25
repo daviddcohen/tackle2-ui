@@ -64,21 +64,10 @@ describe("formatSkillOrigin", () => {
     });
   });
 
-  it("names a target profile's archetype unless it is the one in context", () => {
-    const withArchetype = {
+  it("names a target profile with its archetype", () => {
+    expect(formatSkillOrigin(targetProfile)).toEqual({
       i18nKey: "agentic.stageSkills.origin.targetProfileWithArchetype",
       values: { name: "Quarkus 3.x", archetype: "Java EE Application" },
-      path: "/archetypes/1/target-profiles#target-profile-11",
-    };
-    // No archetype in context (the skill page): always named.
-    expect(formatSkillOrigin(targetProfile)).toEqual(withArchetype);
-    // An application from another archetype that ran this plan.
-    expect(formatSkillOrigin(targetProfile, { archetypeId: 2 })).toEqual(
-      withArchetype
-    );
-    expect(formatSkillOrigin(targetProfile, { archetypeId: 1 })).toEqual({
-      i18nKey: "agentic.stageSkills.origin.targetProfile",
-      values: { name: "Quarkus 3.x" },
       path: "/archetypes/1/target-profiles#target-profile-11",
     });
   });

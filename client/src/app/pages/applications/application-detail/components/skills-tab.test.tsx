@@ -104,15 +104,17 @@ const linkNames = (element: HTMLElement) =>
     .queryAllByRole("link")
     .map((link) => link.textContent);
 
-/** Each archetype term's name and the skills listed beside it. */
-const archetypeRows = () =>
-  within(section(/^Archetype skills/))
-    .queryAllByRole("term")
-    .map((term) => [
-      term.textContent,
-      // The term and its value share a DescriptionListGroup.
-      linkNames(term.nextElementSibling as HTMLElement),
-    ]);
+/** The archetype section's one label group: the inherited skills. */
+const inheritedSkillNames = () =>
+  linkNames(
+    within(section(/^Archetype skills/)).getByRole("list", {
+      name: "Skills inherited from archetypes",
+    })
+  );
+
+/** The archetype section's sentence. */
+const inheritedSentence = () =>
+  within(section(/^Archetype skills/)).getByText(/^Inherited from/);
 
 describe("SkillsTab", () => {
   beforeEach(() => {
@@ -132,23 +134,21 @@ describe("SkillsTab", () => {
       "EJB to CDI conversion patterns",
     ]);
     // A skill on both the application and its archetype shows in both.
-    expect(archetypeRows()).toEqual([
-      [
-        "Java EE Application",
-        ["EJB to CDI conversion patterns", "Jakarta EE namespace migration"],
-      ],
+    expect(inheritedSkillNames()).toEqual([
+      "EJB to CDI conversion patterns",
+      "Jakarta EE namespace migration",
     ]);
+    // No term per archetype: the sentence names it.
+    expect(within(section(/^Archetype skills/)).queryByRole("term")).toBeNull();
     // Each section states its scope once.
     expect(
       within(section(/^Application skills/)).getByText(
         "Agents can use these skills in every stage when they migrate this application."
       )
     ).toBeInTheDocument();
-    expect(
-      within(section(/^Archetype skills/)).getByText(
-        "This application inherits these skills from its archetypes, where they are edited. Agents can use them in every stage."
-      )
-    ).toBeInTheDocument();
+    expect(inheritedSentence()).toHaveTextContent(
+      "Inherited from Java EE Application, where they are edited. Agents can use them in every stage."
+    );
     // A target profile is picked by a run: not an application's own.
     expect(screen.queryByText(/Target profile/)).toBeNull();
     expect(screen.queryByRole("link", { name: "Quarkus 3.x" })).toBeNull();
@@ -157,7 +157,9 @@ describe("SkillsTab", () => {
   it("links skills to their pages and each archetype where its skills are edited", () => {
     renderTab();
     expect(
-      screen.getByRole("link", { name: "Java EE Application" })
+      within(inheritedSentence()).getByRole("link", {
+        name: "Java EE Application",
+      })
     ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1");
     expect(
       within(section(/^Application skills/)).getByRole("link", {
@@ -166,7 +168,7 @@ describe("SkillsTab", () => {
     ).toHaveAttribute("href", "/skills/8");
   });
 
-  it("gives each of two archetypes a term, by name, and counts a skill once", () => {
+  it("names two archetypes by name and lists their skills once, by name", () => {
     mockState.skills = [
       ...skills,
       skill("3b", "Shared standards", [
@@ -178,22 +180,20 @@ describe("SkillsTab", () => {
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)
     ).toEqual(["Application skills (1)", "Archetype skills (4)"]);
-    expect(archetypeRows()).toEqual([
-      [
-        "Java EE Application",
-        [
-          "EJB to CDI conversion patterns",
-          "Jakarta EE namespace migration",
-          "Shared standards",
-        ],
-      ],
-      [
-        "Legacy Java Application",
-        ["Corporate coding standards (Always followed)", "Shared standards"],
-      ],
+    expect(inheritedSentence()).toHaveTextContent(
+      /^Inherited from Java EE Application and Legacy Java Application, where/
+    );
+    expect(linkNames(inheritedSentence())).toEqual([
+      "Java EE Application",
+      "Legacy Java Application",
     ]);
-    // One sentence for all archetypes, not one per archetype.
-    expect(screen.getAllByText(/inherits these skills/)).toHaveLength(1);
+    // One label group, by name, a shared skill once, the pin kept.
+    expect(inheritedSkillNames()).toEqual([
+      "Corporate coding standards (Always followed)",
+      "EJB to CDI conversion patterns",
+      "Jakarta EE namespace migration",
+      "Shared standards",
+    ]);
   });
 
   it("says when the application is in no archetype, with a way there", () => {
@@ -207,22 +207,31 @@ describe("SkillsTab", () => {
     expect(
       within(group).getByRole("link", { name: "Go to archetypes" })
     ).toHaveAttribute("href", "/archetypes");
-    expect(within(group).queryByText(/inherits these skills/)).toBeNull();
+    expect(within(group).queryByText(/^Inherited from/)).toBeNull();
     expect(screen.getAllByRole("region")).toHaveLength(2);
   });
 
-  it("says None beside an archetype without skills, and drops empty counts", () => {
+  it("names the archetypes without skills in one sentence, and drops empty counts", () => {
     mockState.skills = [];
-    renderTab();
+    renderTab([legacyJava, javaEe]);
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)
     ).toEqual(["Application skills", "Archetype skills"]);
     expect(
       screen.getByText("No skills are attached to this application.")
     ).toBeInTheDocument();
+    const group = section("Archetype skills");
+    // No "Inherited from" sentence: the content names the archetypes.
+    expect(within(group).queryByText(/^Inherited from/)).toBeNull();
+    const sentence = within(group).getByText(/^No skills are attached to/);
+    expect(sentence).toHaveTextContent(
+      "No skills are attached to Java EE Application and Legacy Java Application."
+    );
     expect(
-      within(section("Archetype skills")).getByRole("definition")
-    ).toHaveTextContent("None");
+      within(sentence).getByRole("link", { name: "Legacy Java Application" })
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=3");
+    expect(within(group).queryByRole("list")).toBeNull();
+    expect(within(group).queryByText("None")).toBeNull();
   });
 
   it("offers Manage skills to a writer, only on the application section", async () => {

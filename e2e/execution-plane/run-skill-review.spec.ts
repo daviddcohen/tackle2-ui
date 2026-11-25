@@ -112,9 +112,9 @@ const pickTargetProfile = (page: Page, preflight: Locator) =>
   pickRunTargetProfile(page, preflight, APPLICATION, TARGET_PROFILE);
 
 /**
- * Skills by stage on the plan run page, the Migration tab and the Run
- * dialog: "Skills by stage", or "Skills by stage with {plan}" when the
- * dialog starts several runs.
+ * Skills by stage on the plan run page and in the Run dialog: "Skills by
+ * stage", or "Skills by stage with {plan}" when the dialog starts several
+ * runs.
  */
 const stageSkillsTable = (
   scope: Locator,
@@ -255,14 +255,16 @@ test.describe("Skills in the run dialog and on the run pages", () => {
       "Excluded by plan"
     );
 
-    // The Migration tab shows that run's snapshot: the same exclusion.
+    // The Migration tab names that run; its skills stay on the run page.
     await spaNavigate(page, `/applications/${APPLICATION_ID}?tab=migration`);
     await expect(
+      main(page)
+        .getByRole("region", { name: "Latest plan run" })
+        .getByRole("link", { name: /^Run #\d+/ })
+    ).toHaveAttribute("href", new RegExp(`${runPath}(\\?|$)`));
+    await expect(
       main(page).getByRole("region", { name: "Skills by stage" })
-    ).toContainText(
-      /What each stage got for this application in .+, its latest plan run\./
-    );
-    await expectExcludedStageRows(main(page), skillName);
+    ).toHaveCount(0);
 
     // Without the write scopes the run page shows the same rows, read-only.
     await spaNavigate(page, `${runPath}?protoPersona=hubMigrator`);

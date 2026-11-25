@@ -60,20 +60,15 @@ const applicationSkills = (page: Page) =>
   main(page).getByRole("region", { name: /^Application skills/ });
 
 /**
- * From the application page, before any run: the Migration tab says skills
- * are resolved when a plan runs, so open the Run migration plan dialog from
- * its Stages section, pick the target profile it runs on and expand Skills
- * by stage and the application's Every stage group.
+ * From the application page, before any run: open the Run migration plan
+ * dialog from the Migration tab's Latest plan run section, pick the target
+ * profile it runs on and expand Skills by stage and the application's
+ * Every stage group.
  */
 const openRunSkillsPreview = async (page: Page) => {
   await page.getByRole("tab", { name: "Migration", exact: true }).click();
-  await expect(
-    main(page).getByRole("region", { name: "Skills by stage" })
-  ).toContainText(
-    "Skills are resolved for each stage when a migration plan runs on this application."
-  );
   await main(page)
-    .getByRole("region", { name: "Stages" })
+    .getByRole("region", { name: "Latest plan run" })
     .getByRole("button", { name: "Run migration plan", exact: true })
     .click();
   const preflight = dialog(page, "Run migration plan");

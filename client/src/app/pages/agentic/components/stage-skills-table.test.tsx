@@ -318,7 +318,6 @@ describe("StageSkillsTable", () => {
         stages: runSkills.stages,
         everyStage: [{ skills: runSkills.everyStage[0].skills }],
       },
-      originOptions: { archetypeId: 1 },
     });
     expect(groupTitles()).toEqual([
       "Stage 1: Prepare proposal",
@@ -329,24 +328,9 @@ describe("StageSkillsTable", () => {
     expect(
       screen.getByText("Archetype and target profile skills")
     ).toBeVisible();
-    // The plan's own archetype: no suffix.
     expect(screen.getByText(/^Target profile:/).textContent).toBe(
-      "Target profile: Quarkus 3.x"
+      "Target profile: Quarkus 3.x (Java EE Application)"
     );
-  });
-
-  it("says This application on that application's page", () => {
-    renderTable({
-      context: "application",
-      originOptions: { archetypeId: 1, thisApplicationId: 3 },
-      filter: { applicationId: 3 },
-    });
-    expect(groupTitles()).toEqual([
-      "Stage 1: Prepare proposal",
-      "Stage 2: Migrate",
-      "Every stage",
-    ]);
-    expect(screen.getByText("This application")).toBeVisible();
   });
 
   it("filters to one stage and one application's Every stage group", () => {

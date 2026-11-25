@@ -14,14 +14,6 @@ import {
 
 /** What the page already says, so the From values need not repeat it. */
 export interface SkillOriginOptions {
-  /**
-   * The archetype in context: on an application's page, the archetype of its
-   * default migration path. A target profile of another archetype is named
-   * with its archetype ("Quarkus 3.x (Java EE Application)"); without it the
-   * archetype always shows. Plan and run pages pass none: a plan's target
-   * profiles can belong to several archetypes.
-   */
-  archetypeId?: number;
   /** The application whose page this is: its origin reads "This application". */
   thisApplicationId?: number;
 }
@@ -40,9 +32,9 @@ export interface FormattedSkillOrigin {
 
 /**
  * The one From formatter: "Agent: {name}", "Collection:
- * {name}", "Archetype: {name}", "Target profile: {name}" (plus "
- * ({archetype})" outside the link when the profile's archetype is not the
- * one in context), "Application: {name}" or "This application". Each name
+ * {name}", "Archetype: {name}", "Target profile: {name} ({archetype})"
+ * (the archetype outside the link: a plan's target profiles can belong to
+ * several archetypes), "Application: {name}" or "This application". Each name
  * links to where it is edited: the agent and collection pages, the
  * archetype drawer (its Details tab lists the skills), the target profile
  * on its archetype's target profiles page, the application's Skills tab.
@@ -80,20 +72,14 @@ export const formatSkillOrigin = (
         origin.archetype.id,
         origin.targetProfile.id
       );
-      return origin.archetype.id === options.archetypeId
-        ? {
-            i18nKey: `${key}.targetProfile`,
-            values: { name: origin.targetProfile.name },
-            path,
-          }
-        : {
-            i18nKey: `${key}.targetProfileWithArchetype`,
-            values: {
-              name: origin.targetProfile.name,
-              archetype: origin.archetype.name,
-            },
-            path,
-          };
+      return {
+        i18nKey: `${key}.targetProfileWithArchetype`,
+        values: {
+          name: origin.targetProfile.name,
+          archetype: origin.archetype.name,
+        },
+        path,
+      };
     }
     case "application":
       return origin.application.id === options.thisApplicationId
