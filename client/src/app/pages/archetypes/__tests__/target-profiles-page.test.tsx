@@ -195,7 +195,8 @@ describe("TargetProfilesPage", () => {
     ).toBeTruthy();
 
     const liftAndShift = await row("OpenShift lift and shift");
-    expect(within(liftAndShift).getByText("Not assigned")).toBeInTheDocument();
+    // Neither an analysis profile nor a plan.
+    expect(within(liftAndShift).getAllByText("Not assigned")).toHaveLength(2);
     // One skill is its name, not "1 skill".
     expect(
       within(liftAndShift).getByRole("link", {
@@ -250,7 +251,10 @@ describe("TargetProfilesPage", () => {
     const quarkus = await row("Quarkus 3.x");
     expect(within(quarkus).getAllByText("Unavailable")).toHaveLength(2);
     expect(within(quarkus).getByText("Java EE to Quarkus")).toBeInTheDocument();
-    expect(screen.queryByText("Not assigned")).toBeNull();
+    // Only the analysis profile column, which does not depend on plans.
+    expect(
+      within(await row("OpenShift lift and shift")).getAllByText("Not assigned")
+    ).toHaveLength(1);
   });
 
   it("keeps the rows when a background poll fails", async () => {
@@ -302,12 +306,14 @@ describe("TargetProfilesPage", () => {
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "Edit",
+      "Manage generators",
+      "Change analysis profile",
       "Change migration plan",
       "Manage skills",
       "Delete",
     ]);
     expect(screen.getByRole("separator")).toBeInTheDocument();
-    expect(items[3]).toHaveAttribute("aria-disabled", "true");
+    expect(items[5]).toHaveAttribute("aria-disabled", "true");
   });
 
   it("opens Manage skills for the profile, named with its archetype", async () => {
@@ -364,6 +370,8 @@ describe("TargetProfilesPage", () => {
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "Edit",
+      "Manage generators",
+      "Change analysis profile",
       "Change migration plan",
       "Delete",
     ]);
@@ -463,12 +471,39 @@ describe("TargetProfilesPage", () => {
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "Edit",
+      "Manage generators",
+      "Change analysis profile",
       "Manage skills",
       "Delete",
     ]);
     expect(
       screen.getByRole("button", { name: "Create target profile" })
     ).toBeInTheDocument();
+  });
+
+  it("offers Assign analysis profile for a profile without one, which reads Not assigned", async () => {
+    serve();
+    renderPage();
+
+    const liftAndShift = await row("OpenShift lift and shift");
+    expect(
+      within(liftAndShift).getByRole("cell", { name: "None" })
+    ).toBeInTheDocument();
+    expect(
+      within(liftAndShift).getAllByRole("cell", { name: "Not assigned" })
+    ).toHaveLength(2);
+    await userEvent.click(
+      within(liftAndShift).getByRole("button", { name: "Kebab toggle" })
+    );
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Edit",
+      "Manage generators",
+      "Assign analysis profile",
+      "Assign migration plan",
+      "Manage skills",
+      "Delete",
+    ]);
   });
 
   it("offers only the plan action without the archetype write scope", async () => {
@@ -514,9 +549,12 @@ describe("TargetProfilesPage", () => {
     expect(
       await screen.findByRole("heading", { name: "No target profiles yet" })
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "Create target profile" })
-    ).toHaveLength(2);
+    const buttons = screen.getAllByRole("button", {
+      name: "Create target profile",
+    });
+    expect(buttons).toHaveLength(2);
+    // One in the toolbar, one in the empty state, each with its own id.
+    expect(new Set(buttons.map(({ id }) => id)).size).toBe(2);
   });
 
   it("says profiles appear once created, with no action, for read-only users", async () => {
@@ -592,6 +630,159 @@ describe("TargetProfilesPage", () => {
       screen.getByRole("button", { name: "Back to archetypes" })
     ).toBeInTheDocument();
   }, 20000);
+
+  describe("row modals", () => {
+    const kebab = async (profile: string) =>
+      within(await row(profile)).getByRole("button", { name: "Kebab toggle" });
+
+    it.each([
+      ["Edit", "Edit target profile"],
+      ["Manage generators", "Manage generators for OpenShift lift and shift"],
+      ["Assign analysis profile", "Assign analysis profile"],
+      ["Assign migration plan", "Assign migration plan"],
+      // The shared confirm dialog has a generic name.
+      ["Delete", "Confirm dialog"],
+    ])(
+      "%s returns focus to the row's kebab on Cancel and Escape",
+      async (action, title) => {
+        serve();
+        server.use(
+          rest.get("/hub/generators", (_req, res, ctx) => res(ctx.json([]))),
+          rest.get("/hub/analysis/profiles", (_req, res, ctx) =>
+            res(ctx.json([]))
+          )
+        );
+        renderPage();
+
+        const toggle = await kebab("OpenShift lift and shift");
+        const dialog = await openRowAction("OpenShift lift and shift", action);
+        expect(dialog).toHaveAccessibleName(title);
+        // The footer's Cancel, or its Close when nothing can be saved.
+        await userEvent.click(
+          within(dialog).getByText(/^(Cancel|Close)$/, { selector: "button *" })
+        );
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        await waitFor(() => expect(toggle).toHaveFocus());
+
+        await openRowAction("OpenShift lift and shift", action);
+        await userEvent.keyboard("{Escape}");
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        await waitFor(() => expect(toggle).toHaveFocus());
+      }
+    );
+
+    it("updates the row after Manage generators saves, and returns focus", async () => {
+      let current = archetype;
+      serve({
+        archetypeResolver: (_req, res, ctx) => res(ctx.json(current)),
+      });
+      server.use(
+        rest.get("/hub/generators", (_req, res, ctx) =>
+          res(
+            ctx.json([
+              { id: 1, name: "Container build assets" },
+              { id: 2, name: "OpenShift manifests" },
+            ])
+          )
+        ),
+        rest.put("/hub/archetypes/1", async (req, res, ctx) => {
+          current = await req.json();
+          return res(ctx.status(204));
+        })
+      );
+      const notifications = createMockNotifications();
+      renderPage(undefined, notifications);
+
+      const toggle = await kebab("OpenShift lift and shift");
+      const dialog = await openRowAction(
+        "OpenShift lift and shift",
+        "Manage generators"
+      );
+      await userEvent.click(
+        await within(dialog).findByText("Container build assets")
+      );
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Add selected" })
+      );
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Save" })
+      );
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(notifications.pushNotification).toHaveBeenCalledWith({
+        title: "Generators for OpenShift lift and shift updated",
+        variant: "success",
+      });
+      expect(
+        await within(await row("OpenShift lift and shift")).findByText(
+          "Container build assets"
+        )
+      ).toBeInTheDocument();
+      await waitFor(() => expect(toggle).toHaveFocus());
+    });
+
+    it("closes a row modal whose profile was deleted meanwhile, without saving", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      let current = archetype;
+      serve({
+        archetypeResolver: (_req, res, ctx) => res(ctx.json(current)),
+      });
+      const saved = jest.fn();
+      server.use(
+        rest.put("/hub/archetypes/1", async (req, res, ctx) => {
+          saved(await req.json());
+          return res(ctx.status(204));
+        })
+      );
+      const notifications = createMockNotifications();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <NotificationsContext.Provider value={notifications}>
+            <MemoryRouter initialEntries={["/archetypes/1/target-profiles"]}>
+              <Route path={DevPaths.archetypeTargetProfiles}>
+                <TargetProfilesPage />
+              </Route>
+            </MemoryRouter>
+          </NotificationsContext.Provider>
+        </QueryClientProvider>
+      );
+
+      const dialog = await openRowAction("OpenShift lift and shift", "Edit");
+      const name = within(dialog).getByRole("textbox", { name: /Name/ });
+      await userEvent.clear(name);
+      await userEvent.type(name, "OpenShift lift and shift 2");
+
+      // Deleted elsewhere; the next poll no longer has it.
+      current = { ...archetype, profiles: [archetype.profiles![0]] };
+      await act(async () => {
+        await queryClient.refetchQueries({
+          queryKey: [ARCHETYPE_QUERY_KEY, "1"],
+        });
+      });
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("cell", { name: "OpenShift lift and shift" })
+        ).toBeNull()
+      );
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Save" })
+      );
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(notifications.pushNotification).toHaveBeenCalledWith({
+        title: "Target profile OpenShift lift and shift no longer exists",
+        variant: "danger",
+      });
+      expect(saved).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Create target profile" })
+        ).toHaveFocus()
+      );
+    });
+  });
 
   describe("assign migration plan", () => {
     const otherPlan: MigrationPlan = {
@@ -711,6 +902,35 @@ describe("TargetProfilesPage", () => {
           expect.objectContaining({ title: "Target profile deleted" })
         )
       );
+    });
+
+    it("moves focus to Create target profile once the row is gone", async () => {
+      let current = archetype;
+      serve({
+        archetypeResolver: (_req, res, ctx) => res(ctx.json(current)),
+      });
+      server.use(
+        rest.put("/hub/archetypes/1", async (req, res, ctx) => {
+          current = await req.json();
+          return res(ctx.status(204));
+        })
+      );
+      renderPage();
+
+      const dialog = await openRowAction("OpenShift lift and shift", "Delete");
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: "Delete" })
+      );
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("cell", { name: "OpenShift lift and shift" })
+        ).toBeNull()
+      );
+      expect(
+        screen.getByRole("button", { name: "Create target profile" })
+      ).toHaveFocus();
     });
 
     it("omits the skills sentence when the profile has no skills", async () => {

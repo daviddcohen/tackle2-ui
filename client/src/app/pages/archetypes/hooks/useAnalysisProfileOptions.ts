@@ -8,12 +8,13 @@ export interface UseAnalysisProfileOptionsResult {
   analysisProfiles: AnalysisProfile[];
   analysisProfileOptions: FilterSelectOptionProps[];
   isFetching: boolean;
+  fetchError: unknown;
   findProfileById: (id: number | undefined) => AnalysisProfile | undefined;
 }
 
 export const useAnalysisProfileOptions =
   (): UseAnalysisProfileOptionsResult => {
-    const { analysisProfiles, isFetching } = useFetchAnalysisProfiles();
+    const { analysisProfiles, isFetching, error } = useFetchAnalysisProfiles();
 
     const analysisProfileOptions: FilterSelectOptionProps[] = useMemo(
       () =>
@@ -36,6 +37,7 @@ export const useAnalysisProfileOptions =
       analysisProfiles,
       analysisProfileOptions,
       isFetching,
+      fetchError: error,
       findProfileById,
     };
   };

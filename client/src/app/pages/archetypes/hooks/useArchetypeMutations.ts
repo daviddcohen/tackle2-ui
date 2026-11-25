@@ -162,23 +162,7 @@ export const useArchetypeMutations = ({
       });
   };
 
-  // Target profile success handlers
-  const onAddTargetProfileSuccess = (_updatedArchetype: Archetype) => {
-    pushNotification({
-      title: t("toastr.success.targetProfileCreated"),
-      variant: "success",
-    });
-    onActionSuccess();
-  };
-
-  const onUpdateTargetProfileSuccess = (_updatedArchetype: Archetype) => {
-    pushNotification({
-      title: t("toastr.success.targetProfileUpdated"),
-      variant: "success",
-    });
-    onActionSuccess();
-  };
-
+  // Delete target profile success handler
   const onDeleteTargetProfileSuccess = (_updatedArchetype: Archetype) => {
     pushNotification({
       title: t("toastr.success.targetProfileDeleted"),
@@ -187,40 +171,13 @@ export const useArchetypeMutations = ({
     onActionSuccess();
   };
 
-  // Target profile mutations with custom success handlers
-  const { mutate: addTargetProfileMutation } = useUpdateArchetypeMutation(
-    onAddTargetProfileSuccess,
-    onError
-  );
-
-  const { mutate: updateTargetProfileMutation } = useUpdateArchetypeMutation(
-    onUpdateTargetProfileSuccess,
-    onError
-  );
-
+  // Delete target profile mutation with its own success handler
   const { mutate: deleteTargetProfileMutation } = useUpdateArchetypeMutation(
     onDeleteTargetProfileSuccess,
     onError
   );
 
-  // Target profile function
-  const addTargetProfile = (archetype: Archetype, profile: TargetProfile) => {
-    const updatedProfiles = archetype.profiles
-      ? [...archetype.profiles, profile]
-      : [profile];
-    addTargetProfileMutation({ ...archetype, profiles: updatedProfiles });
-  };
-
-  const updateTargetProfile = (
-    archetype: Archetype,
-    profile: TargetProfile
-  ) => {
-    const updatedProfiles = archetype.profiles?.map((p) =>
-      p.id === profile.id ? profile : p
-    );
-    updateTargetProfileMutation({ ...archetype, profiles: updatedProfiles });
-  };
-
+  // Delete target profile function
   const deleteTargetProfile = (
     archetype: Archetype,
     profile: TargetProfile
@@ -237,8 +194,89 @@ export const useArchetypeMutations = ({
     deleteArchetype,
     discardAssessment,
     discardReview,
-    addTargetProfile,
-    updateTargetProfile,
     deleteTargetProfile,
   };
+};
+
+/** The fields of a target profile one save changes; the others are kept. */
+export type TargetProfileChanges = Partial<Omit<TargetProfile, "id">>;
+
+/**
+ * Creates or changes one target profile of an archetype, for a modal that
+ * stays open while it saves. Target profiles are part of the archetype, so
+ * every save is a PUT of the archetype with its profiles (as upstream does).
+ * Pass the archetype as last read: a change is patched onto that copy of the
+ * profile, so saving one field cannot revert another changed meanwhile.
+ * After a change is saved, the archetype as sent is written to its query
+ * cache, so a second save made before the refetch arrives starts from the
+ * saved state, not from the copy read before the first save. A new profile
+ * is not written there: the hub assigns its id, so the refetch brings it.
+ * Each save takes what its success means (a toast, closing the modal); a
+ * failure is a toast and the modal stays open with its input.
+ */
+export const useTargetProfileMutation = () => {
+  const { t } = useTranslation();
+  const { pushNotification } = useContext(NotificationsContext);
+  const queryClient = useQueryClient();
+  const { mutate, isPending } = useUpdateArchetypeMutation(
+    // Every save passes its own success handler.
+    () => {},
+    (error: AxiosError) =>
+      pushNotification({
+        title: getAxiosErrorMessage(error),
+        variant: "danger",
+      })
+  );
+
+  const createTargetProfile = (
+    archetype: Archetype,
+    profile: Omit<TargetProfile, "id">,
+    onSuccess: () => void
+  ) =>
+    mutate(
+      {
+        ...archetype,
+        // The hub assigns the id.
+        profiles: [...(archetype.profiles ?? []), { ...profile, id: 0 }],
+      },
+      { onSuccess }
+    );
+
+  /**
+   * Saves `changes` onto `profile` as `archetype` has it. When `archetype`
+   * no longer has the profile (deleted since the modal opened), nothing is
+   * saved: a toast says so and `onGone` runs.
+   */
+  const updateTargetProfile = (
+    archetype: Archetype,
+    profile: TargetProfile,
+    changes: TargetProfileChanges,
+    { onSuccess, onGone }: { onSuccess: () => void; onGone: () => void }
+  ) => {
+    if (!archetype.profiles?.some(({ id }) => id === profile.id)) {
+      pushNotification({
+        title: t("agentic.archetype.profileGone", { profile: profile.name }),
+        variant: "danger",
+      });
+      onGone();
+      return;
+    }
+    const updated: Archetype = {
+      ...archetype,
+      profiles: archetype.profiles.map((current) =>
+        current.id === profile.id ? { ...current, ...changes } : current
+      ),
+    };
+    mutate(updated, {
+      onSuccess: () => {
+        queryClient.setQueryData(
+          [ARCHETYPE_QUERY_KEY, String(updated.id)],
+          updated
+        );
+        onSuccess();
+      },
+    });
+  };
+
+  return { createTargetProfile, updateTargetProfile, isPending };
 };
