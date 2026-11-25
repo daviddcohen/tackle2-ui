@@ -91,7 +91,7 @@ test("agent detail lists the plans that use it", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("application skills tab lists the skills attached to it and its context, by owner", async ({
+test("application skills tab lists the skills it inherits, by owner", async ({
   page,
 }) => {
   await page.goto(protoUrl("/applications/1?tab=skills"));
@@ -109,15 +109,12 @@ test("application skills tab lists the skills attached to it and its context, by
   await expect(
     archetype.getByRole("link", { name: "Java EE Application" })
   ).toHaveAttribute("href", /\/archetypes\?.*activeItem=1/);
-  await expect(
-    group(/^Target profile skills: Quarkus 3\.x/).getByRole("link", {
-      name: "Quarkus 3.x",
-    })
-  ).toHaveAttribute(
-    "href",
-    /\/archetypes\/1\/target-profiles#target-profile-11/
+  // A target profile is picked when a migration plan runs: its skills are
+  // not the application's, and neither are the agents' own.
+  await expect(group(/^Target profile skills/)).toHaveCount(0);
+  await expect(main(page)).toContainText(
+    "When a migration plan runs, each stage also gets its agent's skills and the skills of the target profile the run uses. Run migration plan lists them before the run starts."
   );
-  // Agents' own skills are on the Migration tab, per stage, not here.
   await expect(main(page).getByRole("grid")).toHaveCount(0);
 });
 

@@ -359,13 +359,7 @@ const ManageSkillsDialog: React.FC<{
       <ModalHeader
         title={t("agentic.skill.manageSkills.titleFor", { name })}
         // The scope sentence the attached lists show for this owner.
-        description={
-          target.scope === "targetProfile"
-            ? t("agentic.skill.scopeSentence.targetProfile", {
-                archetype: target.archetype.name,
-              })
-            : t(`agentic.skill.scopeSentence.${target.scope}`)
-        }
+        description={t(`agentic.skill.scopeSentence.${target.scope}`)}
         labelId={TITLE_ID}
         descriptorId={DESCRIPTION_ID}
       />

@@ -24,13 +24,6 @@ import { universalComparator } from "@app/utils/utils";
 
 export interface TargetProfileSkillsProps {
   profile: TargetProfile;
-  /** The archetype that owns the profile, named in the scope sentence. */
-  archetypeName: string;
-  /**
-   * The archetype's first profile, the one its applications use, when this
-   * profile is not it (legacy data): its skills then reach no agent.
-   */
-  usedProfileName?: string;
   /** Skills attached to this profile. */
   skills: Skill[];
   isError: boolean;
@@ -45,8 +38,6 @@ export interface TargetProfileSkillsProps {
  */
 export const TargetProfileSkills: React.FC<TargetProfileSkillsProps> = ({
   profile,
-  archetypeName,
-  usedProfileName,
   skills,
   isError,
   linkTo,
@@ -103,14 +94,7 @@ export const TargetProfileSkills: React.FC<TargetProfileSkillsProps> = ({
               the Skills tab. */}
           <StackItem>
             <Content component="small" className={textStyles.textColorSubtle}>
-              {usedProfileName != null
-                ? t("agentic.archetype.profileNotUsed", {
-                    archetype: archetypeName,
-                    first: usedProfileName,
-                  })
-                : t("agentic.skill.scopeSentence.targetProfileStandalone", {
-                    archetype: archetypeName,
-                  })}
+              {t("agentic.skill.scopeSentence.targetProfileStandalone")}
             </Content>
           </StackItem>
           <StackItem>

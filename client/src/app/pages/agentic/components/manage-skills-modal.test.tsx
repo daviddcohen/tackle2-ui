@@ -269,7 +269,7 @@ describe("ManageSkillsModal", () => {
         name: "Manage skills for Quarkus 3.x (Java EE Application)",
       })
     ).toHaveAccessibleDescription(
-      "Agents also use these skills in every stage when they migrate applications in Java EE Application that target this profile, unless a migration plan excludes them."
+      "Agents also use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
     );
     expect(
       await screen.findByRole("combobox", { name: "Skills" })

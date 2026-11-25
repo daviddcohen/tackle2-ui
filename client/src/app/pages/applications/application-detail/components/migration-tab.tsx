@@ -104,9 +104,9 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   // An application the aggregate omits has no Plan: not configured.
   const migration = migrations[applicationId] ?? UNCONFIGURED_MIGRATION;
 
-  // The attention alert and the target branch read the run itself, like the
-  // run page. A decision belongs to the run, which can cover several
-  // applications: deciding here decides for all of them.
+  // The attention alert, the target branch and Skills by stage read the run
+  // itself, like the run page. A decision belongs to the run, which can
+  // cover several applications: deciding here decides for all of them.
   const {
     planRun,
     isLoading: isLoadingRun,
@@ -145,7 +145,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   });
 
   const isReady = !isLoading && !isLoadingRun;
-  // "See skills by stage" (Skills tab) opens this tab at that section: move
+  // The Skills tab's latest-run link opens this tab at that section: move
   // focus to its heading once it is there, so the reader starts on it. Once
   // per navigation (location key): a refetch that shows the placeholder and
   // the content again must not pull focus back.
@@ -190,6 +190,16 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           archetype={migration.archetype ?? archetypes[0]}
           linkTo={linkTo}
         />
+        {/* A run that used a plan chosen at launch still has its skills. */}
+        {migration.planRun != null && (
+          <LatestRunSkills
+            migration={migration}
+            planRun={planRun}
+            isRunError={runError != null}
+            applicationId={applicationId}
+            linkTo={linkTo}
+          />
+        )}
       </DetailSections>
     );
   }
@@ -284,10 +294,10 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           title={t("agentic.stageRunsTable.label")}
           description={
             ranOtherPlan ? (
-              // Names both plans, so the Stages above (the run's plan) and
-              // Skills by stage below (this application's plan) do not read
-              // as one plan. The run's own name often
-              // holds its plan's name, so the link says "latest run".
+              // Names both plans, so the Stages (the run's plan) and the
+              // Migration plan fact (the plan the next run uses) do not read
+              // as one plan. The run's own name often holds its plan's
+              // name, so the link says "latest run".
               <Trans
                 i18nKey="agentic.execution.latestRunOtherPlan"
                 values={{
@@ -330,30 +340,13 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           )}
         </DetailSection>
         {migration.result && <CommitsSection result={migration.result} />}
-        <DetailSection
-          id={SKILLS_BY_STAGE_ID}
-          headingId={SKILLS_BY_STAGE_HEADING_ID}
-          title={t("agentic.stageSkills.title")}
-          description={
-            migration.plan != null && migration.skills != null
-              ? t("agentic.execution.skillsByStageNext", {
-                  plan: migration.plan.name,
-                })
-              : undefined
-          }
-        >
-          <StageSkillsTable
-            skills={migration.skills}
-            context="application"
-            linkTo={linkTo}
-            originOptions={{
-              archetypeId: migration.archetype?.id,
-              thisApplicationId: applicationId,
-            }}
-            unavailableText={t("agentic.execution.skillsByStageUnavailable")}
-            aria-label={t("agentic.stageSkills.title")}
-          />
-        </DetailSection>
+        <LatestRunSkills
+          migration={migration}
+          planRun={planRun}
+          isRunError={runError != null}
+          applicationId={applicationId}
+          linkTo={linkTo}
+        />
       </DetailSections>
 
       {runMigrationPlan.modal}
@@ -487,6 +480,65 @@ const MigrationFacts: React.FC<{
   ];
 
   return <DetailFacts facts={facts} isTwoColumn />;
+};
+
+/**
+ * Skills by stage: what each stage got in the application's latest plan
+ * run, from the run's snapshot, filtered to this application. The run is
+ * where the target profile is picked and the full resolution happens, so
+ * nothing is shown before one: the next run's skills are reviewed in the
+ * Run migration plan dialog. A run that cannot be read, or a snapshot the
+ * server does not report, is "Unavailable", never "none".
+ */
+const LatestRunSkills: React.FC<{
+  migration: ApplicationMigrationView;
+  planRun?: PlanRun;
+  isRunError: boolean;
+  applicationId: number;
+  linkTo: (pathname: string, search?: string) => LocationDescriptor;
+}> = ({ migration, planRun, isRunError, applicationId, linkTo }) => {
+  const { t } = useTranslation();
+  const runRef = migration.planRun;
+  const hasSnapshot = planRun?.skills != null;
+  return (
+    <DetailSection
+      id={SKILLS_BY_STAGE_ID}
+      headingId={SKILLS_BY_STAGE_HEADING_ID}
+      title={t("agentic.stageSkills.title")}
+      description={
+        runRef != null && hasSnapshot ? (
+          <Trans
+            i18nKey="agentic.execution.skillsByStageLatestRun"
+            values={{ run: runRef.name }}
+            components={{
+              runLink: <Link to={linkTo(planRunPath(runRef.id))} />,
+            }}
+          />
+        ) : undefined
+      }
+    >
+      {runRef == null ? (
+        <SectionEmpty>{t("agentic.execution.skillsByStageNoRun")}</SectionEmpty>
+      ) : (
+        <StageSkillsTable
+          skills={hasSnapshot ? planRun?.skills : undefined}
+          context="application"
+          filter={{ applicationId }}
+          linkTo={linkTo}
+          originOptions={{
+            archetypeId: migration.archetype?.id,
+            thisApplicationId: applicationId,
+          }}
+          unavailableText={
+            isRunError || planRun == null
+              ? t("agentic.execution.skillsByStageRunError")
+              : t("agentic.execution.skillsByStageUnavailable")
+          }
+          aria-label={t("agentic.stageSkills.title")}
+        />
+      )}
+    </DetailSection>
+  );
 };
 
 /** The run could not be read, so its alert cannot say what it needs. */

@@ -22,6 +22,8 @@ The prototype is published at https://daviddcohen.github.io/tackle2-ui/ (visitor
 5. Create or edit a blank Plan and verify that the wizard distinguishes reusable Plan configuration from application-specific migration proposals.
 6. Open Agents and Skills to show how reusable objects connect without exposing controller resource names. Agent creation is hidden because the current Hub architect role grants Agent read access only.
 7. Open a skill's Usage tab and confirm what it is attached to (agent, archetype, target profile, application), the plan stages that get it, and the prototype contract boundary.
+8. Open Archetypes, select Java EE Application and open its Skills tab: it lists only the archetype's own skills, which its applications inherit. A target profile is one of the archetype's migration paths, so its skills are on the target profiles page ("View target profiles") and reach agents only when a migration plan runs on it.
+9. Open Claims Processing (`/applications/3?tab=skills`): its Skills tab lists the application's and its archetype's skills, and says that each stage's agent skills and the target profile skills are added when a migration plan runs. Its link opens the Migration tab at Skills by stage: what each stage got in the latest plan run. An application without a run says that Run migration plan lists them before the run starts.
 
 ## Enterprise Architect portfolio execution
 

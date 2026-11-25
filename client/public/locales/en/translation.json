@@ -1661,9 +1661,9 @@
       "scopeSentence": {
         "application": "Agents also use these skills in every stage when they migrate this application.",
         "archetype": "Agents also use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them.",
-        "targetProfile": "Agents also use these skills in every stage when they migrate applications in {{archetype}} that target this profile, unless a migration plan excludes them.",
+        "targetProfile": "Agents also use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them.",
         "archetypeStandalone": "Agents use these skills in every stage when they migrate applications in this archetype, unless a migration plan excludes them.",
-        "targetProfileStandalone": "Agents use these skills in every stage when they migrate applications in {{archetype}} that target this profile, unless a migration plan excludes them."
+        "targetProfileStandalone": "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
       }
     },
     "skills": {
@@ -1760,8 +1760,8 @@
       "viewPlanRuns": "View plan runs",
       "noPlanRunStarted": "No plan run was started",
       "noMigrationPathTitle": "No migration plan",
-      "noArchetypeBody": "This application is not in any archetype. Applications get their migration plan from their archetype's target profile.",
-      "noTargetProfileBody": "{{archetype}} has no target profile. Applications get their migration plan from their archetype's target profile.",
+      "noArchetypeBody": "This application is not in any archetype. A migration plan runs on one of an archetype's target profiles.",
+      "noTargetProfileBody": "{{archetype}} has no target profile. A migration plan runs on one of an archetype's target profiles.",
       "noPlanForProfileBody": "{{profile}} has no migration plan assigned. Assign one on the target profiles page of {{archetype}}.",
       "viewTargetProfiles": "View target profiles",
       "goToArchetypes": "Go to archetypes",
@@ -1782,10 +1782,12 @@
       "selectedCaption_other": "{{selected}} of {{count}} ready applications selected.",
       "noneReadyPlanTitle": "None of the applications of this migration plan can start",
       "noneReadyPlanDescription": "Each application below says why. Resolve the reasons and try again.",
-      "skillsByStageUnavailable": "This server does not report skills by stage for this application yet.",
+      "skillsByStageUnavailable": "This server does not report the skills of this plan run yet.",
+      "skillsByStageRunError": "The latest plan run could not be loaded, so its skills cannot be shown.",
       "archetype": "Archetype",
       "archetypes": "Archetypes",
-      "skillsByStageNext": "The next time {{plan}} runs on this application, each stage's agent gets these skills.",
+      "skillsByStageLatestRun": "What each stage got for this application in <runLink>{{run}}</runLink>, its latest plan run.",
+      "skillsByStageNoRun": "Skills are resolved for each stage when a migration plan runs on this application. Run migration plan lists them before the run starts.",
       "latestRunOtherPlan": "The <runLink>latest run</runLink> ran <planLink>{{plan}}</planLink>. This application's migration plan is <ownPlanLink>{{ownPlan}}</ownPlanLink>.",
       "previewOneDescription": "The skills each stage's agent gets when {{plan}} runs on {{application}}.",
       "previewRunTitle_one": "{{plan}}: {{count}} application",
@@ -1890,12 +1892,11 @@
       "archetypeOwn": "Archetype skills",
       "archetype": "Archetype skills: <nameLink>{{name}}</nameLink>",
       "targetProfile": "Target profile skills: <nameLink>{{name}}</nameLink>",
-      "targetProfileNone": "Target profile skills",
       "applicationEmpty": "No skills are attached to this application.",
       "archetypeEmpty": "No skills are attached to this archetype.",
-      "targetProfileEmpty": "No skills are attached to this target profile.",
-      "noArchetype": "This application is not in any archetype, so it gets no archetype or target profile skills.",
-      "noTargetProfile": "{{archetype}} has no target profile yet.",
+      "noArchetype": "This application is not in any archetype, so it inherits no archetype skills.",
+      "targetProfilesPointer": "Each target profile of this archetype has its own skills, which agents get only when a migration plan runs on that target profile. <targetProfilesLink>View target profiles</targetProfilesLink>",
+      "targetProfilesPointerNone": "This archetype has no target profile yet. A target profile's skills reach agents only when a migration plan runs on it. <targetProfilesLink>View target profiles</targetProfilesLink>",
       "headingWithCount": "<heading/> ({{count}})"
     },
     "stageSkills": {
@@ -2223,8 +2224,9 @@
       "planRunsTitle": "Plan runs ({{count}})",
       "planRunsDescription": "Plan runs that include this application.",
       "planRunsEmpty": "This application has not been in a plan run yet.",
-      "skillsIntro": "Each stage also gets the skills of its own agent.",
-      "seeSkillsByStage": "See skills by stage"
+      "skillsIntro": "When a migration plan runs, each stage also gets its agent's skills and the skills of the target profile the run uses.",
+      "skillsIntroNoRun": "Run migration plan lists them before the run starts.",
+      "seeSkillsByStage": "See what each stage got in the latest run"
     },
     "archetype": {
       "skills": "Skills",
@@ -2270,9 +2272,7 @@
       "targetProfileFormDescription": "A target profile is where applications in this archetype are going. After you create it, assign a migration plan to it.",
       "targetProfilesDescription": "A target profile is where applications in this archetype are going. Assign a migration plan to each profile.",
       "targetProfilesDescriptionWithoutPlans": "A target profile is where applications in this archetype are going.",
-      "targetProfilesTabDescription": "Applications in this archetype are migrated with the plan assigned to their target profile.",
-      "noTargetProfileForSkills": "This archetype has no target profile yet.",
-      "profileNotUsed": "Applications in {{archetype}} use {{first}}, so agents do not get these skills."
+      "targetProfilesTabDescription": "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it."
     },
     "provider": {
       "title": "Model providers",

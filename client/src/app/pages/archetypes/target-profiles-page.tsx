@@ -419,12 +419,6 @@ const TargetProfilesPage: React.FC = () => {
                         >
                           <TargetProfileSkills
                             profile={profile}
-                            archetypeName={archetype?.name ?? ""}
-                            usedProfileName={
-                              profile.id === profiles[0]?.id
-                                ? undefined
-                                : profiles[0]?.name
-                            }
                             skills={profileSkills(profile)}
                             isError={isSkillsError}
                             linkTo={(pathname) => to(pathname)}

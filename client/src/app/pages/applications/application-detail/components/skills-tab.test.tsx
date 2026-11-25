@@ -97,6 +97,11 @@ const view = (
   ...overrides,
 });
 
+const runRef = { id: "1", name: "Run #1: Java EE to Quarkus" };
+
+const intro =
+  "When a migration plan runs, each stage also gets its agent's skills and the skills of the target profile the run uses.";
+
 const onManageSkills = jest.fn();
 
 const renderTab = (archetypes: Ref[] = [javaEe]) => {
@@ -136,14 +141,13 @@ describe("SkillsTab", () => {
     onManageSkills.mockClear();
   });
 
-  it("groups the attached skills by owner: application, archetype, target profile", () => {
+  it("groups the inherited skills by owner: application, then archetype", () => {
     renderTab();
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)
     ).toEqual([
       "Application skills (1)",
       "Archetype skills: Java EE Application (2)",
-      "Target profile skills: Quarkus 3.x (1)",
     ]);
     expect(listedSkills(/^Application skills/)).toEqual([
       "EJB to CDI conversion patterns",
@@ -152,31 +156,22 @@ describe("SkillsTab", () => {
       "EJB to CDI conversion patterns",
       "Jakarta EE namespace migration",
     ]);
-    expect(listedSkills(/^Target profile skills/)).toEqual([
-      "Jakarta EE namespace migration",
-    ]);
     // Each group says how far its skills reach.
     expect(
       within(section(/^Application skills/)).getByText(
         "Agents also use these skills in every stage when they migrate this application."
       )
     ).toBeInTheDocument();
-    expect(
-      within(section(/^Target profile skills/)).getByText(
-        "Agents also use these skills in every stage when they migrate applications in Java EE Application that target this profile, unless a migration plan excludes them."
-      )
-    ).toBeInTheDocument();
+    // A target profile is picked by a run: not an application's own.
+    expect(screen.queryByText(/Target profile skills/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Quarkus 3.x" })).toBeNull();
   });
 
-  it("links each owner where its skills are attached", () => {
+  it("links each archetype where its skills are attached", () => {
     renderTab();
     expect(
       screen.getByRole("link", { name: "Java EE Application" })
     ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1&ar%3Atab=2");
-    expect(screen.getByRole("link", { name: "Quarkus 3.x" })).toHaveAttribute(
-      "href",
-      "/archetypes/1/target-profiles#target-profile-11"
-    );
   });
 
   it("gives an application in two archetypes one group per archetype, by name", () => {
@@ -188,7 +183,6 @@ describe("SkillsTab", () => {
       "Application skills (1)",
       "Archetype skills: Java EE Application (2)",
       "Archetype skills: Legacy Java Application (1)",
-      "Target profile skills: Quarkus 3.x (1)",
     ]);
     // A rule carries the "Always followed" marker after its name.
     expect(listedSkills(/Legacy Java Application/)).toEqual([
@@ -196,24 +190,37 @@ describe("SkillsTab", () => {
     ]);
   });
 
-  it("links to Skills by stage on the Migration tab only when a plan exists", async () => {
+  it("says what a run adds and links to the latest run's skills", async () => {
+    mockState.migration = view({ planRun: runRef });
     const history = renderTab();
-    expect(
-      screen.getByText(/Each stage also gets the skills of its own agent./)
-    ).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(intro))).toBeInTheDocument();
+    expect(screen.queryByText(/lists them before the run starts/)).toBeNull();
     await userEvent.click(
-      screen.getByRole("link", { name: "See skills by stage" })
+      screen.getByRole("link", {
+        name: "See what each stage got in the latest run",
+      })
     );
     expect(history.location.search).toBe("?tab=migration");
     expect(history.location.hash).toBe("#skills-by-stage");
   });
 
-  it("has no intro link without a plan", () => {
+  it("before any run, says Run migration plan lists them, with no link", () => {
+    renderTab();
+    expect(
+      screen.getByText(
+        `${intro} Run migration plan lists them before the run starts.`
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /latest run/ })).toBeNull();
+  });
+
+  it("says the same for an application without a plan or a run", () => {
     mockState.migration = view({ plan: undefined, configured: false });
     renderTab();
     expect(
-      screen.queryByRole("link", { name: "See skills by stage" })
-    ).toBeNull();
+      screen.getByText(/Run migration plan lists them before the run starts./)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /latest run/ })).toBeNull();
   });
 
   it("says when the application is in no archetype, with a way there", () => {
@@ -227,33 +234,13 @@ describe("SkillsTab", () => {
     const group = section("Archetype skills");
     expect(
       within(group).getByText(
-        /This application is not in any archetype, so it gets no archetype or target profile skills./
+        /This application is not in any archetype, so it inherits no archetype skills./
       )
     ).toBeInTheDocument();
     expect(
       within(group).getByRole("link", { name: "Go to archetypes" })
     ).toHaveAttribute("href", "/archetypes");
-    expect(screen.queryByRole("region", { name: /Target profile/ })).toBeNull();
-    expect(
-      screen.queryByRole("link", { name: "See skills by stage" })
-    ).toBeNull();
-  });
-
-  it("says when the archetype has no target profile, with a way there", () => {
-    mockState.migration = view({
-      archetype: undefined,
-      targetProfile: undefined,
-      plan: undefined,
-      configured: false,
-    });
-    renderTab();
-    const group = section("Target profile skills");
-    expect(
-      within(group).getByText(/Java EE Application has no target profile yet./)
-    ).toBeInTheDocument();
-    expect(
-      within(group).getByRole("link", { name: "View target profiles" })
-    ).toHaveAttribute("href", "/archetypes/1/target-profiles");
+    expect(screen.getAllByRole("region")).toHaveLength(2);
   });
 
   it("keeps an empty group with one sentence and no count", () => {
@@ -267,9 +254,6 @@ describe("SkillsTab", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText("No skills are attached to this archetype.")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("No skills are attached to this target profile.")
     ).toBeInTheDocument();
   });
 
@@ -311,28 +295,23 @@ describe("SkillsTab", () => {
     expect(screen.queryByRole("list")).toBeNull();
   });
 
-  it("keeps the attached groups while the migration view loads", () => {
+  it("keeps the groups and says only what a run adds while the migration view loads", () => {
     mockState.migrationsLoading = true;
     mockState.migration = undefined;
     renderTab();
     expect(listedSkills(/^Application skills/)).toEqual([
       "EJB to CDI conversion patterns",
     ]);
-    expect(
-      within(section("Target profile skills")).queryByRole("list")
-    ).toBeNull();
-    expect(
-      screen.queryByRole("link", { name: "See skills by stage" })
-    ).toBeNull();
+    expect(screen.getByText(intro)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /latest run/ })).toBeNull();
   });
 
-  it("says Unavailable on the target profile group when the migration view fails", () => {
+  it("keeps the groups and says only what a run adds when the migration view fails", () => {
     mockState.migrationsError = new Error("boom");
     mockState.migration = undefined;
     renderTab();
-    expect(
-      within(section("Target profile skills")).getByText("Unavailable")
-    ).toBeInTheDocument();
     expect(listedSkills(/^Archetype skills/)).toHaveLength(2);
+    expect(screen.getByText(intro)).toBeInTheDocument();
+    expect(screen.queryByText("Unavailable")).toBeNull();
   });
 });

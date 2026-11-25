@@ -17,11 +17,7 @@ import {
   useCanManageSkills,
 } from "@app/pages/agentic/components/manage-skills-modal";
 import { linkToPath } from "@app/pages/agentic/components/skill-origin";
-import {
-  archetypePath,
-  targetProfilePath,
-  targetProfilesPath,
-} from "@app/pages/agentic/entity-paths";
+import { archetypePath } from "@app/pages/agentic/entity-paths";
 import {
   useFetchApplicationMigrations,
   useFetchSkills,
@@ -40,13 +36,13 @@ interface SkillsTabProps {
 }
 
 /**
- * The skills attached to this application and to its context,
- * laid out like the Tags tab: the application's
- * own group first, editable with Manage skills; then one read-only group
- * per archetype, by name; then its target profile's group. Each group says
- * how far its skills reach. What each stage gets, with the agents' own
- * skills and the plan's exclusions, is the Migration tab's Skills by stage
- * section, which the intro links to once a plan exists.
+ * The skills this application has before any run, laid out like the Tags
+ * tab: its own group first, editable with Manage skills; then one read-only
+ * group per archetype, by name, whose skills it inherits. Each group says
+ * how far its skills reach. A target profile is not listed: it is one of
+ * its archetype's migration paths, picked when a migration plan runs, so
+ * its skills belong to the run with the agents' own skills and the plan's
+ * exclusions. The intro says where those are shown.
  */
 export const SkillsTab: React.FC<SkillsTabProps> = ({
   applicationId,
@@ -134,94 +130,41 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
           },
         ];
 
-  // An application gets only its own target profile's skills: its
-  // archetype's. Without an archetype there is none to show.
-  const profile = migration?.targetProfile;
-  const profileArchetype = migration?.archetype;
-  const targetProfileNone = t("agentic.attachedSkills.targetProfileNone");
-  let targetProfileGroup: AttachedSkillsGroup | undefined;
-  if (sortedArchetypes.length === 0) {
-    targetProfileGroup = undefined;
-  } else if (isLoadingMigration) {
-    targetProfileGroup = {
-      key: "targetProfile-loading",
-      heading: targetProfileNone,
-      skills: [],
-      emptyText: "",
-      isLoading: true,
-    };
-  } else if (migrationError != null) {
-    targetProfileGroup = {
-      key: "targetProfile-unavailable",
-      heading: targetProfileNone,
-      skills: [],
-      emptyText: "",
-      isUnavailable: true,
-    };
-  } else if (profile != null && profileArchetype != null) {
-    targetProfileGroup = {
-      key: `targetProfile-${profile.id}`,
-      heading: (
-        <Trans
-          i18nKey="agentic.attachedSkills.targetProfile"
-          values={{ name: profile.name }}
-          components={{
-            nameLink: ownerLink(
-              targetProfilePath(profileArchetype.id, profile.id)
-            ),
-          }}
-        />
-      ),
-      description: t("agentic.skill.scopeSentence.targetProfile", {
-        archetype: profileArchetype.name,
-      }),
-      skills: attachedSkillsFor(skills, "targetProfile", profile.id),
-      emptyText: t("agentic.attachedSkills.targetProfileEmpty"),
-    };
-  } else {
-    const archetype = profileArchetype ?? sortedArchetypes[0];
-    targetProfileGroup = {
-      key: "targetProfile-none",
-      heading: targetProfileNone,
-      skills: [],
-      emptyText: t("agentic.attachedSkills.noTargetProfile", {
-        archetype: archetype.name,
-      }),
-      emptyAction: {
-        label: t("agentic.execution.viewTargetProfiles"),
-        to: linkTo(targetProfilesPath(archetype.id)),
-      },
-    };
-  }
-
-  // The Migration tab of this same page, at its Skills by stage section,
-  // keeping the breadcrumb trail. Only a plan has stages to show.
+  // What is added when a migration plan runs (each stage's agent skills,
+  // the skills of the target profile the run uses) is not attached here.
+  // The intro says so and points where it is shown: the latest run's
+  // snapshot on the Migration tab, or, before any run, the Run migration
+  // plan dialog. While the view loads or fails, only the first sentence.
   const migrationTab = new URLSearchParams(location.search);
   migrationTab.set("tab", "migration");
-  const intro =
-    migration?.plan != null ? (
-      <>
-        {t("agentic.applicationDetail.skillsIntro")}{" "}
-        <Link
-          to={{
-            pathname: location.pathname,
-            search: `?${migrationTab.toString()}`,
-            hash: SKILLS_BY_STAGE_HASH,
-            state: location.state,
-          }}
-        >
-          {t("agentic.applicationDetail.seeSkillsByStage")}
-        </Link>
-      </>
-    ) : undefined;
+  const hasRun = migration?.planRun != null;
+  const hasNoRun =
+    !isLoadingMigration && migrationError == null && migration?.planRun == null;
+  const intro = (
+    <>
+      {t("agentic.applicationDetail.skillsIntro")}
+      {hasRun && (
+        <>
+          {" "}
+          <Link
+            to={{
+              pathname: location.pathname,
+              search: `?${migrationTab.toString()}`,
+              hash: SKILLS_BY_STAGE_HASH,
+              state: location.state,
+            }}
+          >
+            {t("agentic.applicationDetail.seeSkillsByStage")}
+          </Link>
+        </>
+      )}
+      {hasNoRun && <> {t("agentic.applicationDetail.skillsIntroNoRun")}</>}
+    </>
+  );
 
   return (
     <AttachedSkillsList
-      groups={[
-        applicationGroup,
-        ...archetypeGroups,
-        ...(targetProfileGroup != null ? [targetProfileGroup] : []),
-      ]}
+      groups={[applicationGroup, ...archetypeGroups]}
       headingLevel="h2"
       intro={intro}
       linkTo={(pathname) => linkTo(pathname)}

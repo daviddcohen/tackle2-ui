@@ -85,7 +85,7 @@ describe("TabTargetProfiles", () => {
 
     expect(
       screen.getByText(
-        "Applications in this archetype are migrated with the plan assigned to their target profile."
+        "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it."
       )
     ).toBeInTheDocument();
     expect(

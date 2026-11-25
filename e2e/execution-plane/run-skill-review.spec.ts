@@ -218,8 +218,13 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     ).toBeVisible();
     await expectExcludedStageRows(main(page), skillName);
 
-    // The application's next run still gets it excluded.
+    // The Migration tab shows that run's snapshot: the same exclusion.
     await spaNavigate(page, `/applications/${APPLICATION_ID}?tab=migration`);
+    await expect(
+      main(page).getByRole("region", { name: "Skills by stage" })
+    ).toContainText(
+      /What each stage got for this application in .+, its latest plan run\./
+    );
     await expectExcludedStageRows(main(page), skillName);
 
     // Without the write scopes the run page shows the same rows, read-only.

@@ -192,17 +192,8 @@ test.describe("Manage skills: archetype", () => {
   test("a save that fills an empty Skills tab leaves focus on Manage skills", async ({
     page,
   }) => {
-    // Empty the tab first: one skill comes from the archetype's only target
-    // profile, one from the archetype.
-    await gotoProto(page, "/archetypes/5/target-profiles");
-    await openRowActions(page, "Node.js 22 on OpenShift");
-    await menuItem(page, MANAGE).click();
-    await chip(page, "OpenShift deployment conventions").click();
-    await save(
-      page,
-      "Skills for Node.js 22 on OpenShift (Node.js Service) updated"
-    );
-    await spaNavigate(page, "/archetypes");
+    // Empty the tab first: the archetype's one skill.
+    await gotoProto(page, "/archetypes");
     const drawer = await openArchetypeDrawerSkills(page, "Node.js Service");
     const button = drawer.getByRole("button", {
       name: "Manage skills for Node.js Service",
@@ -212,9 +203,6 @@ test.describe("Manage skills: archetype", () => {
     await save(page, "Skills for Node.js Service updated");
     await expect(
       drawer.getByText("No skills are attached to this archetype.")
-    ).toBeVisible();
-    await expect(
-      drawer.getByText("No skills are attached to this target profile.")
     ).toBeVisible();
 
     // The mock answers at once; a real server does not. Hold the skills
@@ -236,33 +224,38 @@ test.describe("Manage skills: archetype", () => {
     await expect(button).toBeFocused();
   });
 
-  test("the drawer edits the target profile's skills in their own group", async ({
+  test("the drawer lists no target profile skills and points to the target profiles page", async ({
     page,
   }) => {
     await gotoProto(page, "/archetypes");
     const drawer = await openArchetypeDrawerSkills(page, "Java EE Application");
-    const profile = drawerGroup(drawer, /^Target profile skills: Quarkus 3\.x/);
+    await expect(drawerGroup(drawer, /^Archetype skills/)).toBeVisible();
+    // A target profile is a migration path: its skills come with a run on
+    // it, so the archetype does not list them.
+    await expect(drawerGroup(drawer, /^Target profile skills/)).toHaveCount(0);
     await expect(
-      profile.getByRole("link", { name: "Quarkus best practices" })
-    ).toBeVisible();
-    const button = profile.getByRole("button", {
-      name: "Manage skills for Quarkus 3.x",
-    });
-    await button.click();
-    await expect(manageDialog(page)).toHaveAccessibleName(
-      "Manage skills for Quarkus 3.x (Java EE Application)"
-    );
-    await pickSkill(page, NEW_SKILL);
-    await save(page, "Skills for Quarkus 3.x (Java EE Application) updated");
-
-    await expect(profile.getByRole("link", { name: NEW_SKILL })).toBeVisible();
-    // Only that group changed.
-    await expect(
-      drawerGroup(drawer, /^Archetype skills/).getByRole("link", {
-        name: NEW_SKILL,
-      })
+      drawer.getByRole("link", { name: "Quarkus best practices" })
     ).toHaveCount(0);
-    await expect(button).toBeFocused();
+    await expect(
+      drawer.getByRole("button", { name: "Manage skills for Quarkus 3.x" })
+    ).toHaveCount(0);
+    await expect(drawer).toContainText(
+      "Each target profile of this archetype has its own skills, which agents get only when a migration plan runs on that target profile."
+    );
+    await drawer.getByRole("link", { name: "View target profiles" }).click();
+    await expect(page).toHaveURL(/\/archetypes\/1\/target-profiles(\?|$)/);
+
+    // Each profile's own skills are there, with its own Manage skills.
+    await rowByText(page, "Quarkus 3.x")
+      .getByRole("button", { name: "2 skills for Quarkus 3.x", exact: true })
+      .click();
+    const popover = dialog(page, "Target profile skills: Quarkus 3.x");
+    await expect(popover).toContainText(
+      "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
+    );
+    await expect(
+      popover.getByRole("link", { name: "Quarkus best practices" })
+    ).toBeVisible();
   });
 
   test("Cancel and Escape close without saving and return focus to the kebab", async ({
@@ -349,12 +342,13 @@ test.describe("Manage skills: application", () => {
       applicationSkills(page).getByRole("link", { name: NEW_SKILL })
     ).toBeVisible();
 
-    // Every stage of its plan gets it, from this application.
-    await main(page).getByRole("link", { name: "See skills by stage" }).click();
-    const everyStage = main(page)
-      .getByRole("grid", { name: "Skills by stage" })
-      .getByRole("row", { name: new RegExp(NEW_SKILL) });
-    await expect(everyStage).toContainText("This application");
+    // No run yet: what each stage gets is listed when a plan runs.
+    await expect(main(page)).toContainText(
+      "Run migration plan lists them before the run starts."
+    );
+    await expect(
+      main(page).getByRole("link", { name: /latest run/ })
+    ).toHaveCount(0);
 
     await expect(
       (await attachedTo(page, "16")).getByRole("link", {

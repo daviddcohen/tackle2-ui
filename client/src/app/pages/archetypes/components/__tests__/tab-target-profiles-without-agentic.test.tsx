@@ -58,7 +58,7 @@ describe("TabTargetProfiles without the agentic API", () => {
     expect(within(table).getByText("Java EE to Quarkus")).toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Applications in this archetype are migrated with the plan assigned to their target profile."
+        "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it."
       )
     ).toBeNull();
     expect(plansRequested).not.toHaveBeenCalled();
