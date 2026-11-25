@@ -3,7 +3,7 @@
  * Manage skills on an archetype, a target profile or an application, and the
  * collection pickers of the skill and skill collection forms, change what the
  * plan wizard's Skills step, the plan page, the skill page, the application
- * tabs and the Run migration plan dialog list. Each test reads a view first,
+ * Skills tab and the Run migration plan dialog list. Each test reads a view first,
  * so the later check also proves the write refreshed it. MSW state lives in
  * the page, so every step after the first navigates inside the app.
  */
@@ -56,12 +56,29 @@ const addSkillInModal = async (page: Page, skill: string, saved: string) => {
 const applicationSkills = (page: Page) =>
   main(page).getByRole("region", { name: /^Application skills/ });
 
-/** Opens the Migration tab of the application page at Skills by stage. */
-const openSkillsByStage = async (page: Page) => {
-  await main(page).getByRole("link", { name: "See skills by stage" }).click();
+/**
+ * From the application page, before any run: the Migration tab says skills
+ * are resolved when a plan runs, so open the Run migration plan dialog from
+ * its Stages section and expand Skills by stage and the application's
+ * Every stage group.
+ */
+const openRunSkillsPreview = async (page: Page) => {
+  await page.getByRole("tab", { name: "Migration", exact: true }).click();
   await expect(
-    main(page).getByRole("heading", { name: "Skills by stage", level: 2 })
-  ).toBeVisible();
+    main(page).getByRole("region", { name: "Skills by stage" })
+  ).toContainText(
+    "Skills are resolved for each stage when a migration plan runs on this application."
+  );
+  await main(page)
+    .getByRole("region", { name: "Stages" })
+    .getByRole("button", { name: "Run migration plan", exact: true })
+    .click();
+  const preflight = dialog(page, "Run migration plan");
+  await preflight.getByRole("button", { name: "Skills by stage" }).click();
+  await preflight
+    .getByRole("button", { name: new RegExp(`Every stage: ${APPLICATION}`) })
+    .click();
+  return preflight;
 };
 
 /** Skills by stage on the plan page and in the wizard's Skills step. */
@@ -187,7 +204,7 @@ test.describe("Skill associations in the plan skill review", () => {
     await expect(includeBox(wizard, SKILL)).toBeChecked();
   });
 
-  test("an application skill from Manage skills reaches the Skills tab, the Migration tab and the run dialog", async ({
+  test("an application skill from Manage skills reaches the Skills tab and the run dialog", async ({
     page,
     diagnostics,
   }) => {
@@ -210,25 +227,16 @@ test.describe("Skill associations in the plan skill review", () => {
       applicationSkills(page).getByRole("link", { name: OTHER_SKILL })
     ).toBeVisible();
 
-    // Every stage gets it, from this application.
-    await openSkillsByStage(page);
-    const rows = stageSkillRows(main(page), OTHER_SKILL);
-    await expect(rows).toHaveCount(1);
-    await expect(rows).toContainText("This application");
-
-    // The Stages section's empty state offers the run (no run yet).
-    await main(page)
-      .getByRole("region", { name: "Stages" })
-      .getByRole("button", { name: "Run migration plan", exact: true })
-      .click();
-    const preflight = dialog(page, "Run migration plan");
-    await preflight.getByRole("button", { name: "Skills by stage" }).click();
-    await preflight
-      .getByRole("button", { name: new RegExp(`Every stage: ${APPLICATION}`) })
-      .click();
-    await expect(stageSkillRows(preflight, OTHER_SKILL)).toContainText(
-      `Application: ${APPLICATION}`
+    // No run yet: the tab says where every stage's skills are listed.
+    await expect(main(page)).toContainText(
+      "Run migration plan lists them before the run starts."
     );
+
+    // Every stage of the run gets it, from this application.
+    const preflight = await openRunSkillsPreview(page);
+    const rows = stageSkillRows(preflight, OTHER_SKILL);
+    await expect(rows).toHaveCount(1);
+    await expect(rows).toContainText(`Application: ${APPLICATION}`);
     expectHealthy(diagnostics);
   });
 
@@ -342,11 +350,13 @@ test.describe("Skill associations in the plan skill review", () => {
     await addSkillInModal(page, SKILL, `Skills for ${APPLICATION} updated`);
     // Both the archetype and the application give it; the plan excludes it,
     // but the application's own attachment wins.
-    await openSkillsByStage(page);
-    const everyStage = stageSkillRows(main(page), SKILL);
-    await expect(everyStage).toContainText("This application");
+    let preflight = await openRunSkillsPreview(page);
+    const everyStage = stageSkillRows(preflight, SKILL);
+    await expect(everyStage).toContainText(`Application: ${APPLICATION}`);
     await expect(everyStage).toContainText(`Archetype: ${ARCHETYPE}`);
     await expect(everyStage).not.toContainText("Excluded");
+    await preflight.getByRole("button", { name: "Cancel" }).click();
+    await expect(preflight).toBeHidden();
     // The plan page still shows it excluded (it has no application).
     await spaNavigate(page, PLAN_PATH);
     await expect(stageSkillRows(main(page), SKILL)).toHaveCount(1);
@@ -382,9 +392,9 @@ test.describe("Skill associations in the plan skill review", () => {
     await expect(
       applicationSkills(page).getByRole("link", { name: SKILL })
     ).toBeVisible();
-    await openSkillsByStage(page);
-    const row = stageSkillRows(main(page), SKILL);
-    await expect(row).toContainText("This application");
+    preflight = await openRunSkillsPreview(page);
+    const row = stageSkillRows(preflight, SKILL);
+    await expect(row).toContainText(`Application: ${APPLICATION}`);
     await expect(row).not.toContainText("Excluded");
   });
 
@@ -397,7 +407,8 @@ test.describe("Skill associations in the plan skill review", () => {
       .click();
     await page.getByRole("tab", { name: "Skills", exact: true }).click();
     const drawer = page.locator("#page-drawer-content");
-    // The archetype's own group; each target profile group has its own.
+    // The archetype's own group, the only one: target profiles have theirs
+    // on the target profiles page.
     await drawer
       .getByRole("button", { name: `${MANAGE} for ${ARCHETYPE}` })
       .click();

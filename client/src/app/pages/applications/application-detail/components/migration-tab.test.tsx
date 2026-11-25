@@ -537,15 +537,48 @@ describe("MigrationTab", () => {
   });
 
   describe("skills by stage", () => {
-    it("comes last, says when it applies and lists each stage, then every stage", () => {
-      mockState.migration = view();
+    // The run's snapshot: one Every stage group per application of the run.
+    const snapshot: SkillsByStage = {
+      stages: skillsByStage.stages,
+      everyStage: [
+        ...skillsByStage.everyStage,
+        {
+          application: { id: 2, name: "Policy Administration" },
+          skills: [
+            {
+              skill: { id: "9", name: "Other application's skill" },
+              loadPolicy: "skill",
+              from: [
+                {
+                  kind: "application",
+                  application: { id: 2, name: "Policy Administration" },
+                },
+              ],
+              excluded: false,
+            },
+          ],
+        },
+      ],
+    };
+    const withRun = (skills: SkillsByStage | undefined) => {
+      mockState.migration = view({
+        planRun: runRef,
+        runPhase: "Succeeded",
+        // The next run's preview is not this section's: never read.
+        skills: { stages: [], everyStage: [] },
+      });
+      mockState.planRun = { ...run("Succeeded", []), skills };
+    };
+
+    it("comes last and lists what each stage got in the latest run, for this application", () => {
+      withRun(snapshot);
       renderTab();
       const headings = screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent);
       expect(headings[headings.length - 1]).toBe("agentic.stageSkills.title");
       expect(
-        screen.getByText("agentic.execution.skillsByStageNext")
+        screen.getByText("agentic.execution.skillsByStageLatestRun")
       ).toBeInTheDocument();
       const table = screen.getByRole("grid", {
         name: "agentic.stageSkills.title",
@@ -560,23 +593,85 @@ describe("MigrationTab", () => {
       expect(
         within(table).getByText("agentic.stageSkills.everyStageSubtitle")
       ).toBeInTheDocument();
+      // Another application of the same run keeps its own group.
+      expect(within(table).queryByText("Other application's skill")).toBeNull();
     });
 
-    it("says Unavailable, never none, when the server does not report it", () => {
-      mockState.migration = view({ skills: undefined });
+    it("before any run, says skills are resolved when a plan runs, with no second Run button", () => {
+      mockState.migration = view();
       renderTab();
+      const section = screen.getByRole("region", {
+        name: "agentic.stageSkills.title",
+      });
       expect(
-        screen.getByRole("heading", { name: "agentic.stageSkills.title" })
+        within(section).getByText("agentic.execution.skillsByStageNoRun")
+      ).toBeInTheDocument();
+      expect(within(section).queryByRole("grid")).toBeNull();
+      expect(within(section).queryByRole("button")).toBeNull();
+      // The Stages section keeps the one way to start.
+      expect(
+        screen.getAllByRole("button", {
+          name: "agentic.execution.startMigration",
+        })
+      ).toHaveLength(1);
+      // Not the next run's preview from the migration view.
+      expect(screen.queryByText("API compatibility checklist")).toBeNull();
+    });
+
+    it("says Unavailable, never none, when the run has no snapshot", () => {
+      withRun(undefined);
+      renderTab();
+      const section = screen.getByRole("region", {
+        name: "agentic.stageSkills.title",
+      });
+      expect(
+        within(section).getByText("agentic.common.unavailable")
       ).toBeInTheDocument();
       expect(
-        screen.getByText("agentic.common.unavailable")
+        within(section).getByText("agentic.execution.skillsByStageUnavailable")
       ).toBeInTheDocument();
       expect(
-        screen.getByText("agentic.execution.skillsByStageUnavailable")
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText("agentic.execution.skillsByStageNext")
+        within(section).queryByText("agentic.execution.skillsByStageLatestRun")
       ).toBeNull();
+      expect(
+        within(section).queryByText("agentic.execution.skillsByStageNoRun")
+      ).toBeNull();
+    });
+
+    it("says Unavailable with the reason when the run cannot be read", () => {
+      mockState.migration = view({ planRun: runRef, runPhase: "Succeeded" });
+      mockState.runError = new Error("503");
+      renderTab();
+      const section = screen.getByRole("region", {
+        name: "agentic.stageSkills.title",
+      });
+      expect(
+        within(section).getByText("agentic.common.unavailable")
+      ).toBeInTheDocument();
+      expect(
+        within(section).getByText("agentic.execution.skillsByStageRunError")
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the latest run's skills when no plan resolves for the next run", () => {
+      mockState.migration = view({
+        configured: false,
+        plan: undefined,
+        planRun: runRef,
+        runPhase: "Succeeded",
+      });
+      mockState.planRun = { ...run("Succeeded", []), skills: snapshot };
+      renderTab(application([{ id: 4, name: "Java EE Application" }]));
+      expect(
+        screen.getByRole("heading", {
+          name: "agentic.execution.noMigrationPathTitle",
+        })
+      ).toBeInTheDocument();
+      expect(
+        within(
+          screen.getByRole("grid", { name: "agentic.stageSkills.title" })
+        ).getByText("API compatibility checklist")
+      ).toBeInTheDocument();
     });
 
     it("takes focus when the tab opens at its section", async () => {

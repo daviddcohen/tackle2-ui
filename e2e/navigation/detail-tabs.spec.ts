@@ -86,11 +86,14 @@ for (const [path, name] of [
   });
 }
 
-test("See skills by stage opens the Migration tab on its section, focused", async ({
+test("the Skills tab link opens the Migration tab on its section, focused", async ({
   page,
 }) => {
   await page.goto(protoUrl("/applications/3?tab=skills"));
-  await main(page).getByRole("link", { name: "See skills by stage" }).click();
+  // Claims Processing was in Run #1: the link opens that run's skills.
+  await main(page)
+    .getByRole("link", { name: "See what each stage got in the latest run" })
+    .click();
   await expect(page).toHaveURL(/tab=migration.*#skills-by-stage$/);
   await expect(
     page.getByRole("tab", { name: "Migration", selected: true })
@@ -128,9 +131,12 @@ test("the Migration tab names both plans when the latest run ran another one", a
   await expect(
     stages.getByRole("link", { name: "Java EE to Quarkus", exact: true })
   ).toHaveAttribute("href", /\/migration-plans\/1(\?|$)/);
-  await expect(
-    main(page).getByRole("region", { name: "Skills by stage" })
-  ).toContainText(
-    "The next time Java EE to Quarkus runs on this application, each stage's agent gets these skills."
+  // Skills by stage is the latest run's snapshot, not the next run's plan.
+  const skills = main(page).getByRole("region", { name: "Skills by stage" });
+  await expect(skills).toContainText(
+    "What each stage got for this application in Run #4: Java EE lift and shift, its latest plan run."
   );
+  await expect(
+    skills.getByRole("link", { name: "Run #4: Java EE lift and shift" })
+  ).toHaveAttribute("href", /\/plan-runs\/4(\?|$)/);
 });

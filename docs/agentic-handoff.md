@@ -632,7 +632,7 @@ Types: `client/src/app/agentic/observability.ts`. Adapters: `agentic/adapters/ag
 
 ### Application migration view (`ApplicationMigrationView`)
 
-No backend source. `planRun`, `planRunPlan` (the plan that run used), `runPhase`, `currentStage` and `stages` could be composed client-side from the application's latest workflow run (label `konveyor.io/application`). `configured`, `targetProfile` (the application's own: its archetype's), `archetype` (the profile's archetype), `plan` (the default plan of that archetype and profile, which the next run uses; never the latest run's plan), `preflight`, `preflightReason`, `skills` (`SkillsByStage` for `plan` and this application: what each stage gets, and one `everyStage` group; without a plan only the context skills), `action` and `result` need Hub logic.
+No backend source. `planRun`, `planRunPlan` (the plan that run used), `runPhase`, `currentStage` and `stages` could be composed client-side from the application's latest workflow run (label `konveyor.io/application`). `configured`, `targetProfile` (the target profile of the default path: its archetype's first; the Hub stores none on an application, and a run picks the profile it uses), `archetype` (the profile's archetype), `plan` (the default plan of that archetype and profile, which the next run uses; never the latest run's plan), `preflight`, `preflightReason`, `skills` (`SkillsByStage` for `plan` and this application: what each stage gets, and one `everyStage` group; without a plan only the context skills) (read by the Run migration plan dialog only; the Migration tab shows the latest run's `PlanRun.skills`), `action` and `result` need Hub logic.
 
 ---
 

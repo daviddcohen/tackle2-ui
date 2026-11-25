@@ -72,15 +72,16 @@ const renderTab = (value: Archetype = archetype) =>
     </MemoryRouter>
   );
 
-const group = (name: string | RegExp) => screen.getByRole("region", { name });
-
 beforeEach(() => {
   mockGrantedScopes.all = true;
   onManageSkills.mockClear();
 });
 
+const pointer =
+  "Each target profile of this archetype has its own skills, which agents get only when a migration plan runs on that target profile.";
+
 describe("TabSkills", () => {
-  it("shows the archetype group, then the target profile group, each with its own skills", async () => {
+  it("shows only the archetype's own skills, then where the target profile skills are", async () => {
     serveSkillList([
       skill("3", "Jakarta EE namespace migration", [onArchetype, onProfile]),
       skill("5", "Build validation standards", [onArchetype], "rule"),
@@ -113,25 +114,44 @@ describe("TabSkills", () => {
     // Only the rule carries the marker.
     expect(within(ownList).getAllByText("Always followed")).toHaveLength(1);
 
-    const profile = group("Target profile skills: Quarkus 3.x (2)");
-    expect(
-      within(profile).getByRole("link", { name: "Quarkus 3.x" })
-    ).toHaveAttribute(
-      "href",
-      "/archetypes/1/target-profiles#target-profile-11"
-    );
-    expect(
-      within(profile).getByText(
-        "Agents use these skills in every stage when they migrate applications in Java EE Application that target this profile, unless a migration plan excludes them."
-      )
-    ).toBeInTheDocument();
-    expect(
-      within(profile).getByRole("link", { name: "Quarkus best practices" })
-    ).toHaveAttribute("href", "/skills/7");
+    // A target profile's skills are not the archetype's: no group, no skill.
+    expect(screen.getAllByRole("region")).toHaveLength(1);
+    expect(screen.queryByText(/Target profile skills/)).toBeNull();
+    expect(screen.queryByText("Quarkus best practices")).toBeNull();
     expect(screen.queryByText("Elsewhere")).toBeNull();
+    expect(screen.getByText(new RegExp(pointer))).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View target profiles" })
+    ).toHaveAttribute("href", "/archetypes/1/target-profiles");
   });
 
-  it("gives each group its own Manage skills, named after its owner", async () => {
+  it("lists no target profile group for an archetype with several", async () => {
+    serveSkillList([
+      skill("3", "Jakarta EE namespace migration", [onArchetype]),
+      skill("7", "Quarkus best practices", [onProfile]),
+      skill("8", "OpenShift deployment conventions", [
+        { scope: "targetProfile", resource: { id: 12, name: "OpenJDK 21" } },
+      ]),
+    ]);
+    renderTab({
+      ...archetype,
+      profiles: [
+        { id: 11, name: "Quarkus 3.x", generators: [] },
+        { id: 12, name: "OpenJDK 21", generators: [] },
+      ],
+    });
+
+    expect(
+      await screen.findByRole("region", { name: "Archetype skills (1)" })
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("region")).toHaveLength(1);
+    expect(screen.queryByText("Quarkus best practices")).toBeNull();
+    expect(screen.queryByText("OpenShift deployment conventions")).toBeNull();
+    expect(screen.queryByText(/Quarkus 3\.x|OpenJDK 21/)).toBeNull();
+    expect(screen.getByText(new RegExp(pointer))).toBeInTheDocument();
+  });
+
+  it("gives the archetype group its Manage skills, and only that one", async () => {
     serveSkillList([
       skill("3", "Jakarta EE namespace migration", [onArchetype]),
     ]);
@@ -141,23 +161,13 @@ describe("TabSkills", () => {
       name: "Manage skills for Java EE Application",
     });
     expect(own).toHaveAttribute("id", "manage-skills-archetype-1");
-    const profile = screen.getByRole("button", {
-      name: "Manage skills for Quarkus 3.x",
-    });
-    expect(profile).toHaveAttribute("id", "manage-skills-targetProfile-11");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
 
     await userEvent.click(own);
     expect(onManageSkills).toHaveBeenLastCalledWith({
       scope: "archetype",
       id: 1,
       name: "Java EE Application",
-    });
-    await userEvent.click(profile);
-    expect(onManageSkills).toHaveBeenLastCalledWith({
-      scope: "targetProfile",
-      id: 11,
-      name: "Quarkus 3.x",
-      archetype: { id: 1, name: "Java EE Application" },
     });
   });
 
@@ -174,53 +184,21 @@ describe("TabSkills", () => {
         name: "Manage skills for Java EE Application",
       })
     ).toBeInTheDocument();
-    expect(
-      within(group("Target profile skills: Quarkus 3.x")).getByText(
-        "No skills are attached to this target profile."
-      )
-    ).toBeInTheDocument();
   });
 
-  it("says a second target profile's skills do not reach the agents", async () => {
-    serveSkillList([]);
-    renderTab({
-      ...archetype,
-      profiles: [
-        { id: 11, name: "Quarkus 3.x", generators: [] },
-        { id: 12, name: "Quarkus 2.x", generators: [] },
-      ],
-    });
-
-    const second = await screen.findByRole("region", {
-      name: "Target profile skills: Quarkus 2.x",
-    });
-    expect(
-      within(second).getByText(
-        "Applications in Java EE Application use Quarkus 3.x, so agents do not get these skills."
-      )
-    ).toBeInTheDocument();
-    // Kept so the legacy data can be cleaned up.
-    expect(
-      within(second).getByRole("button", {
-        name: "Manage skills for Quarkus 2.x",
-      })
-    ).toBeInTheDocument();
-  });
-
-  it("points to the target profiles page when the archetype has none", async () => {
+  it("says when the archetype has no target profile, with the way there", async () => {
     serveSkillList([]);
     renderTab({ ...archetype, profiles: [] });
 
-    const none = await screen.findByRole("region", {
-      name: "Target profile skills",
-    });
     expect(
-      within(none).getByText("This archetype has no target profile yet.")
+      await screen.findByText(
+        /This archetype has no target profile yet. A target profile's skills reach agents only when a migration plan runs on it./
+      )
     ).toBeInTheDocument();
     expect(
-      within(none).getByRole("link", { name: "Manage target profiles" })
+      screen.getByRole("link", { name: "View target profiles" })
     ).toHaveAttribute("href", "/archetypes/1/target-profiles");
-    expect(within(none).queryByRole("button")).toBeNull();
+    expect(screen.getAllByRole("region")).toHaveLength(1);
   });
 
   it("shows an error, not empty groups, when skills cannot be loaded", async () => {
@@ -231,6 +209,7 @@ describe("TabSkills", () => {
     expect(
       screen.queryByText("No skills are attached to this archetype.")
     ).toBeNull();
+    expect(screen.queryByText(new RegExp(pointer))).toBeNull();
   });
 
   it("offers no action without write scopes, and keeps the links", async () => {
@@ -246,8 +225,9 @@ describe("TabSkills", () => {
       })
     ).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
+    // Anyone who can read the archetype can read its target profiles.
     expect(
-      screen.queryByRole("link", { name: "Manage target profiles" })
-    ).toBeNull();
+      screen.getByRole("link", { name: "View target profiles" })
+    ).toBeInTheDocument();
   });
 });

@@ -187,7 +187,7 @@ describe("TargetProfilesPage", () => {
     expect(within(popover).getAllByText("Always followed")).toHaveLength(1);
     // The sentence first, then the list.
     const sentence = within(popover).getByText(
-      "Agents use these skills in every stage when they migrate applications in Java EE Application that target this profile, unless a migration plan excludes them."
+      "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
     );
     expect(
       sentence.compareDocumentPosition(within(popover).getByRole("list")) &
@@ -204,7 +204,7 @@ describe("TargetProfilesPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("says a later profile's skills reach no agent in its popover", async () => {
+  it("gives a second profile's popover the same sentence as the first", async () => {
     serve({
       skillsResolver: (_req, res, ctx) =>
         res(
@@ -222,11 +222,19 @@ describe("TargetProfilesPage", () => {
     const popover = await screen.findByRole("dialog", {
       name: "Target profile skills: OpenShift lift and shift",
     });
+    // Both profiles are migration paths of the archetype: neither is
+    // "the one its applications use".
     expect(
       within(popover).getByText(
-        "Applications in Java EE Application use Quarkus 3.x, so agents do not get these skills."
+        "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
       )
     ).toBeInTheDocument();
+    expect(within(popover).queryByText(/do not get these skills/)).toBeNull();
+    expect(
+      within(popover)
+        .getAllByRole("link")
+        .map((link) => link.textContent)
+    ).toEqual(["Containerization standards", "Database migration patterns"]);
   });
 
   it("keeps the Hub columns and says Unavailable when plans and skills fail", async () => {
