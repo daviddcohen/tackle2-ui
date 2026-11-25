@@ -141,7 +141,8 @@ const ATTRIBUTION =
   "An application's archetype, target profile and own skills go to that application only.";
 const RERUN =
   "The new run uses the migration plan as it is now, so its skills can differ from the failed run's.";
-const RERUN_EXCLUDED = "Skills the failed run excluded are excluded again.";
+const RERUN_EXCLUDED =
+  "Skills the failed run excluded on its own are excluded again.";
 
 /** Whether a table group's toggle is open, by the group's title. */
 const expanded = (table: HTMLElement, title: string) =>
@@ -858,6 +859,25 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
           name: /^Target profile for Branch Operations/,
         })
       ).toBeNull();
+    });
+
+    it("does not scroll to a review that only asks for a target profile", async () => {
+      const { scrollIntoView: original } = Element.prototype;
+      const scrollIntoView = jest.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      try {
+        const user = userEvent.setup();
+        renderModal({ 13: noDefault() });
+        await openPreview(user);
+        expect(
+          screen.getByText(
+            "Select a target profile for each application to see skills by stage."
+          )
+        ).toBeInTheDocument();
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
     });
 
     it("requires a pick without a default, then runs that profile's plan", async () => {

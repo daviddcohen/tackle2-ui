@@ -1957,7 +1957,7 @@
       "excludedTotal_one": "1 skill excluded for this run.",
       "excludedTotal_other": "{{count}} skills excluded for this run.",
       "excludedByPlan": "Excluded by plan",
-      "rerunExcluded": "Skills the failed run excluded are excluded again.",
+      "rerunExcluded": "Skills the failed run excluded on its own are excluded again.",
       "previewSelectProfile": "Select a target profile for each application to see skills by stage.",
       "archetypeTargetProfile": "Target profile for all applications of {{archetype}}",
       "targetProfileFor": "Target profile for {{application}}",

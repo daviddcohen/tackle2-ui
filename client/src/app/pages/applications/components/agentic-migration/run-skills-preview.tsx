@@ -211,8 +211,9 @@ export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
   // would otherwise open under the footer, as if nothing happened. While
   // a table loads the body may be too short to bring it all the way, so
   // it scrolls again when the tables are in, unless the user has moved on
-  // meanwhile (scrolled, touched, typed or clicked). Focus stays on the
-  // toggle.
+  // meanwhile (scrolled, touched, typed or clicked). Not when it only asks
+  // for a plan or a target profile: the selects it points to are above.
+  // Focus stays on the toggle.
   const sectionRef = React.useRef<HTMLDivElement>(null);
   const isScrollPending = React.useRef(false);
   const isAnyLoading = skills.some((group) => group.isLoading);
@@ -262,7 +263,8 @@ export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
         }
         isExpanded={isExpanded}
         onToggle={(_event, expanded) => {
-          isScrollPending.current = expanded;
+          isScrollPending.current =
+            expanded && !isPlanMissing && !isTargetProfileMissing;
           onExpandedChange(expanded);
         }}
       >
