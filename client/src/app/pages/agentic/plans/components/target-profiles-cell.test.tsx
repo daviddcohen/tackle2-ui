@@ -1,7 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
-import { PlanTargetProfile } from "@app/agentic";
+import { MigrationPath } from "@app/agentic";
 import { render, screen, within } from "@app/test-config/test-utils";
 
 import { TargetProfilesCell } from "./target-profiles-cell";
@@ -13,31 +13,37 @@ jest.mock("react-i18next", () =>
 const javaEe = { id: 1, name: "Java EE Application" };
 const springBoot = { id: 2, name: "Spring Boot Application" };
 
-const quarkus: PlanTargetProfile = {
+const quarkus: MigrationPath = {
   archetype: javaEe,
   targetProfile: { id: 11, name: "Quarkus 3.x" },
 };
-const openLiberty: PlanTargetProfile = {
+const openLiberty: MigrationPath = {
   archetype: javaEe,
   targetProfile: { id: 12, name: "Open Liberty" },
 };
-const springBoot3: PlanTargetProfile = {
+const springBoot3: MigrationPath = {
   archetype: springBoot,
   targetProfile: { id: 21, name: "Spring Boot 3" },
 };
 
-const renderCell = (targetProfiles: PlanTargetProfile[]) =>
+const renderCell = (migrationPaths: MigrationPath[] | undefined) =>
   render(
     <MemoryRouter>
       <TargetProfilesCell
         planName="Java to Quarkus"
-        targetProfiles={targetProfiles}
+        migrationPaths={migrationPaths}
         linkTo={(pathname) => pathname}
       />
     </MemoryRouter>
   );
 
 describe("TargetProfilesCell", () => {
+  it("says Unavailable when the server does not report the target profiles", () => {
+    renderCell(undefined);
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Not assigned")).toBeNull();
+  });
+
   it("says Not assigned without target profiles", () => {
     renderCell([]);
     expect(screen.getByText("Not assigned")).toBeInTheDocument();

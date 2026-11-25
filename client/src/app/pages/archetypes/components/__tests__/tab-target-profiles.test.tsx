@@ -13,9 +13,12 @@ jest.mock("react-i18next", () =>
   jest.requireActual("@app/test-config/english-i18n")
 );
 jest.mock("react-router-dom", () => jest.requireActual("react-router-dom"));
+const mockAgentic = { enabled: true };
 jest.mock("@app/Constants", () => ({
   ...jest.requireActual("@app/Constants"),
-  isAgenticEnabled: true,
+  get isAgenticEnabled() {
+    return mockAgentic.enabled;
+  },
 }));
 
 const mockGrantedScopes = { all: true };
@@ -40,21 +43,16 @@ const archetype: Archetype = {
 const plan = (
   id: string,
   name: string,
-  profileIds: number[],
-  isDefault = true
+  paths: { archetypeId: number; profileId: number }[]
 ): MigrationPlan => ({
   id,
   name,
   description: "",
   stages: [],
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: profileIds.map((profileId) => ({
-      id: profileId,
-      name: String(profileId),
-    })),
-    isDefault,
-  },
+  migrationPaths: paths.map(({ archetypeId, profileId }) => ({
+    archetype: { id: archetypeId, name: String(archetypeId) },
+    targetProfile: { id: profileId, name: String(profileId) },
+  })),
 });
 
 const servePlans = (resolver: Parameters<typeof rest.get>[1]) =>
@@ -69,15 +67,17 @@ const renderTab = (value: Archetype = archetype) =>
 
 beforeEach(() => {
   mockGrantedScopes.all = true;
+  mockAgentic.enabled = true;
 });
 
 describe("TabTargetProfiles", () => {
-  it("lists each profile with only its assigned (default) plan", async () => {
+  it("lists each profile with the plan it uses", async () => {
     servePlans((_req, res, ctx) =>
       res(
         ctx.json([
-          plan("1", "Java EE to Quarkus", [11]),
-          plan("2", "Not the default", [12], false),
+          plan("1", "Java EE to Quarkus", [{ archetypeId: 1, profileId: 11 }]),
+          // Another archetype's profile uses it, not this archetype's.
+          plan("2", "Java lift and shift", [{ archetypeId: 3, profileId: 32 }]),
         ])
       )
     );
@@ -108,7 +108,29 @@ describe("TabTargetProfiles", () => {
       "/archetypes/1/target-profiles#target-profile-11"
     );
     expect(within(table).getByText("Not assigned")).toBeInTheDocument();
-    expect(within(table).queryByText("Not the default")).toBeNull();
+    expect(within(table).queryByText("Java lift and shift")).toBeNull();
+  });
+
+  it("names a plan shared with another archetype's profile", async () => {
+    servePlans((_req, res, ctx) =>
+      res(
+        ctx.json([
+          plan("3", "Java lift and shift", [
+            { archetypeId: 1, profileId: 12 },
+            { archetypeId: 3, profileId: 32 },
+          ]),
+        ])
+      )
+    );
+    renderTab();
+
+    const table = screen.getByRole("grid", { name: "Target profiles" });
+    expect(
+      await within(table).findByRole("link", { name: "Java lift and shift" })
+    ).toHaveAttribute("href", "/migration-plans/3");
+    expect(
+      within(table).getByRole("row", { name: /OpenShift lift and shift/ })
+    ).toHaveTextContent("Java lift and shift");
   });
 
   it("never reads a failed plans query as not assigned", async () => {
@@ -167,5 +189,29 @@ describe("TabTargetProfiles", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/^Create a target profile/)).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("says Not assigned for an analysis profile it lacks, without the agentic API", () => {
+    mockAgentic.enabled = false;
+    renderTab({
+      ...archetype,
+      profiles: [
+        {
+          id: 11,
+          name: "Quarkus 3.x",
+          generators: [],
+          analysisProfile: { id: 1, name: "Java EE to Quarkus" },
+        },
+        { id: 12, name: "OpenShift lift and shift", generators: [] },
+      ],
+    });
+
+    const table = screen.getByRole("grid", { name: "Target profiles" });
+    expect(
+      within(table).getByRole("row", { name: /Quarkus 3.x/ })
+    ).toHaveTextContent("Java EE to Quarkus");
+    expect(
+      within(table).getByRole("row", { name: /OpenShift lift and shift/ })
+    ).toHaveTextContent("Not assigned");
   });
 });

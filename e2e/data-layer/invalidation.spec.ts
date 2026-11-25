@@ -92,7 +92,7 @@ test("editing a plan keeps its stage ids, so its runs keep their stage runs", as
   await page.getByRole("button", { name: "Actions" }).click();
   await page.getByRole("menuitem", { name: "Edit" }).click();
   const wizard = dialog(page);
-  await wizard.getByRole("button", { name: "Next" }).click();
+  // Plan details, then Stages.
   await wizard.getByRole("button", { name: "Next" }).click();
   await wizard.getByRole("button", { name: "Next" }).click();
   // Skills step.

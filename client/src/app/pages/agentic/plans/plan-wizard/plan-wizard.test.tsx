@@ -1,9 +1,17 @@
 import userEvent from "@testing-library/user-event";
 import { rest } from "msw";
+import { MemoryRouter } from "react-router-dom";
 
 import { Agent, MigrationPlan, MigrationPlanRequest } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
-import { render, screen, waitFor } from "@app/test-config/test-utils";
+import { NotificationsContext } from "@app/components/NotificationsContext";
+import {
+  createMockNotifications,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import { PlanWizard } from "./plan-wizard";
@@ -24,23 +32,16 @@ const agents = [
   },
 ] as unknown as Agent[];
 
-const archetypes = [
-  {
-    id: 1,
-    name: "Java EE Application",
-    profiles: [{ id: 11, name: "Quarkus 3.x" }],
-  },
-];
-
 const plan = {
   id: "2",
   name: "Spring Boot to Quarkus",
   description: "  Moves Spring Boot services.  ",
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
-    isDefault: true,
-  },
+  migrationPaths: [
+    {
+      archetype: { id: 1, name: "Java EE Application" },
+      targetProfile: { id: 11, name: "Quarkus 3.x" },
+    },
+  ],
   stages: [
     {
       id: "4",
@@ -69,18 +70,17 @@ const otherPlan = {
 
 describe("PlanWizard", () => {
   let updates: MigrationPlanRequest[];
+  let creates: MigrationPlanRequest[];
 
   beforeEach(() => {
     updates = [];
+    creates = [];
     server.use(
       rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
         res(ctx.json(agents))
       ),
       rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
         res(ctx.json([otherPlan, plan]))
-      ),
-      rest.get("/hub/archetypes", (_req, res, ctx) =>
-        res(ctx.json(archetypes))
       ),
       rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
         res(
@@ -100,6 +100,10 @@ describe("PlanWizard", () => {
       rest.put(`${AGENTIC_ENDPOINTS.plans}/:id`, async (req, res, ctx) => {
         updates.push(await req.json());
         return res(ctx.status(204));
+      }),
+      rest.post(AGENTIC_ENDPOINTS.plans, async (req, res, ctx) => {
+        creates.push(await req.json());
+        return res(ctx.status(201), ctx.json({ ...plan, id: "9" }));
       })
     );
   });
@@ -137,8 +141,6 @@ describe("PlanWizard", () => {
     await user.click(nextButton());
     await waitFor(() => expect(nextButton()).toBeEnabled());
     await user.click(nextButton());
-    await waitFor(() => expect(nextButton()).toBeEnabled());
-    await user.click(nextButton());
     // The Skills step never blocks Next.
     await user.click(nextButton());
     await user.click(
@@ -148,12 +150,8 @@ describe("PlanWizard", () => {
     await waitFor(() => expect(updates).toHaveLength(1));
     expect(updates[0]).toEqual({
       name: "Spring Boot to Quarkus",
+      // No target profiles: they are assigned on the target profile side.
       description: "Moves Spring Boot services.",
-      migrationPath: {
-        archetype: { id: 1 },
-        targetProfiles: [{ id: 11 }],
-        isDefault: true,
-      },
       stages: [
         {
           id: "4",
@@ -191,21 +189,6 @@ describe("PlanWizard", () => {
     const user = userEvent.setup();
     render(<PlanWizard isOpen plan={null} onClose={jest.fn()} />);
     await user.type(nameInput(), "New plan");
-    await waitFor(() => expect(nextButton()).toBeEnabled());
-    await user.click(nextButton());
-    // Target profiles wait for an archetype.
-    expect(
-      screen.getByText("agentic.plan.selectArchetypeFirst")
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /terms\.archetype/ }));
-    await user.click(
-      await screen.findByRole("option", { name: "Java EE Application" })
-    );
-    expect(
-      screen.getByText("agentic.plan.targetProfilesHelper")
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("combobox"));
-    await user.click(await screen.findByText("Quarkus 3.x"));
     await waitFor(() => expect(nextButton()).toBeEnabled());
     await user.click(nextButton());
 
@@ -300,35 +283,6 @@ describe("PlanWizard", () => {
     await waitFor(() => expect(nameInput()).toHaveValue(plan.name));
   });
 
-  it("says when the path applies, by whether the edited plan is assigned", async () => {
-    const user = userEvent.setup();
-    const { unmount } = render(
-      <PlanWizard isOpen plan={plan} onClose={jest.fn()} />
-    );
-    await user.click(
-      screen.getByRole("button", { name: "agentic.plan.pathStep" })
-    );
-    expect(
-      screen.getByText("agentic.plan.pathIntroAssigned")
-    ).toBeInTheDocument();
-    unmount();
-
-    render(
-      <PlanWizard
-        isOpen
-        plan={{
-          ...plan,
-          migrationPath: { ...plan.migrationPath!, isDefault: false },
-        }}
-        onClose={jest.fn()}
-      />
-    );
-    await user.click(
-      screen.getByRole("button", { name: "agentic.plan.pathStep" })
-    );
-    expect(screen.getByText("agentic.plan.pathIntro")).toBeInTheDocument();
-  });
-
   it("keeps Next and Save disabled in edit mode while agents fail to load", async () => {
     server.use(
       rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
@@ -353,29 +307,6 @@ describe("PlanWizard", () => {
     expect(screen.getByRole("button", { name: "actions.save" })).toBeDisabled();
   }, 10000);
 
-  it("keeps Next and Save disabled in edit mode while archetypes fail to load", async () => {
-    server.use(
-      rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.status(500)))
-    );
-    const user = userEvent.setup();
-    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
-    await user.click(
-      screen.getByRole("button", { name: "agentic.plan.pathStep" })
-    );
-    expect(
-      await screen.findByText("agentic.plan.archetypesLoadFailed", undefined, {
-        timeout: 5000,
-      })
-    ).toBeInTheDocument();
-    expect(nextButton()).toBeDisabled();
-    // Review cannot name the saved archetype and profiles it did not load.
-    await user.click(
-      screen.getByRole("button", { name: "agentic.plan.reviewStep" })
-    );
-    expect(screen.getAllByText("agentic.common.unavailable")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "actions.save" })).toBeDisabled();
-  });
-
   it("keeps Next disabled until migration plans load, to check the name", async () => {
     server.use(
       rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
@@ -391,5 +322,64 @@ describe("PlanWizard", () => {
       })
     ).toBeInTheDocument();
     expect(nextButton()).toBeDisabled();
+  });
+
+  it("has no migration path step: details, stages, skills and review", () => {
+    render(<PlanWizard isOpen plan={plan} onClose={jest.fn()} />);
+    const nav = screen.getByRole("navigation");
+    expect(
+      within(nav)
+        .getAllByRole("button")
+        .map((step) => step.textContent)
+    ).toEqual([
+      "agentic.plan.detailsStep",
+      "agentic.plan.stages",
+      "agentic.plan.skillsStep",
+      "agentic.plan.reviewStep",
+    ]);
+  });
+
+  it("creates a plan without target profiles and says where to assign it", async () => {
+    const user = userEvent.setup();
+    const notifications = createMockNotifications();
+    const onClose = jest.fn();
+    render(
+      <NotificationsContext.Provider value={notifications}>
+        <PlanWizard isOpen plan={null} onClose={onClose} />
+      </NotificationsContext.Provider>
+    );
+    await user.type(nameInput(), "New plan");
+    await waitFor(() => expect(nextButton()).toBeEnabled());
+    await user.click(nextButton());
+    await user.type(
+      screen.getByRole("textbox", { name: /stageName/ }),
+      "Migrate"
+    );
+    await user.click(
+      screen.getByRole("button", { name: /agentic\.entity\.agent/ })
+    );
+    await user.click(
+      await screen.findByRole("option", { name: /Code Migrator/ })
+    );
+    await waitFor(() => expect(nextButton()).toBeEnabled());
+    await user.click(nextButton());
+    await user.click(nextButton());
+    await user.click(
+      await screen.findByRole("button", { name: "actions.create" })
+    );
+
+    await waitFor(() => expect(creates).toHaveLength(1));
+    expect(creates[0]).not.toHaveProperty("migrationPath");
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const [{ title, message }] = (notifications.pushNotification as jest.Mock)
+      .mock.calls[0];
+    expect(title).toBe("agentic.plan.created");
+    render(<MemoryRouter>{message}</MemoryRouter>);
+    expect(
+      screen.getByText("agentic.plan.createdAssignHint", { exact: false })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "agentic.execution.goToArchetypes" })
+    ).toHaveAttribute("href", "/archetypes");
   });
 });

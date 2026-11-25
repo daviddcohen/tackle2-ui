@@ -276,6 +276,30 @@ export const openBulkRunMigration = async (
   return preflight;
 };
 
+const escapeRegExp = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Picks the target profile `application` runs on in the open Run migration
+ * plan dialog (required when several of its target profiles have a plan).
+ * Options start with the profile name and say the plan it runs.
+ */
+export const pickRunTargetProfile = async (
+  page: Page,
+  preflight: Locator,
+  application: string,
+  profile: string
+) => {
+  // The toggle's name is the label and its text (picked profile or placeholder).
+  await preflight
+    .getByRole("button", { name: `Target profile for ${application} ` })
+    .click();
+  await page
+    .getByRole("option")
+    .filter({ hasText: new RegExp(`^${escapeRegExp(profile)}`) })
+    .click();
+};
+
 // ── Plan runs ────────────────────────────────────────────────────────────────
 
 /** The Stages table of a plan run page. */

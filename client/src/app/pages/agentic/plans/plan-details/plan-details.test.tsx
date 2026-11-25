@@ -72,11 +72,12 @@ const plan: MigrationPlan = {
       order: 1,
     },
   ],
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
-    isDefault: true,
-  },
+  migrationPaths: [
+    {
+      archetype: { id: 1, name: "Java EE Application" },
+      targetProfile: { id: 11, name: "Quarkus 3.x" },
+    },
+  ],
   applicationImpact: { matching: 3 },
   runCount: 0,
 };
@@ -298,22 +299,22 @@ describe("PlanDetailsPage", () => {
     }
   });
 
-  it("says Not assigned for a missing path, Unavailable for usage and skills the server did not report", async () => {
+  it("says Unavailable for target profiles, usage and skills the server did not report", async () => {
     const user = userEvent.setup();
     useEndpoints(
       {
         ...plan,
-        migrationPath: undefined,
+        migrationPaths: undefined,
         applicationImpact: undefined,
       },
       { profileSkills: null }
     );
     renderAt();
     await screen.findByRole("heading", { level: 1 });
-    // No migration path is a plan that runs when someone picks it.
+    // Unknown, never "Not assigned".
     expect(
       within(fact("terms.targetProfiles")).getByText(
-        "agentic.execution.notAssigned"
+        "agentic.common.unavailable"
       )
     ).toBeInTheDocument();
     expect(
@@ -351,9 +352,9 @@ describe("PlanDetailsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("has no configuration issue for a plan without a migration path", async () => {
-    // A plan without a path is run when someone picks it (plans 3, 4, 7).
-    useEndpoints({ ...plan, migrationPath: undefined });
+  it("has no configuration issue for a plan no target profile uses", async () => {
+    // Such a plan is run when someone picks it (plans 4 and 7).
+    useEndpoints({ ...plan, migrationPaths: [] });
     renderAt();
     await waitFor(() =>
       expect(
@@ -371,7 +372,7 @@ describe("PlanDetailsPage", () => {
       ...plan,
       operatorManaged: true,
       applicationImpact: { matching: 0 },
-      migrationPath: { ...plan.migrationPath!, isDefault: false },
+      migrationPaths: [],
     });
     renderAt();
     await screen.findByRole("heading", { level: 1 });
@@ -402,32 +403,34 @@ describe("PlanDetailsPage", () => {
     ).toHaveLength(2);
   });
 
-  it("shows every target profile of the path", async () => {
+  it("shows every target profile that uses the plan, across archetypes", async () => {
     useEndpoints({
       ...plan,
-      migrationPath: {
-        ...plan.migrationPath!,
-        targetProfiles: [
-          { id: 12, name: "Spring Boot 3" },
-          { id: 11, name: "Quarkus 3.x" },
-        ],
-      },
+      migrationPaths: [
+        ...plan.migrationPaths!,
+        {
+          archetype: { id: 3, name: "Legacy Java Application" },
+          targetProfile: { id: 32, name: "Java 8 on OpenShift" },
+        },
+      ],
     });
     renderAt();
     await screen.findByRole("heading", { level: 1 });
     const links = within(fact("terms.targetProfiles")).getAllByRole("link");
-    // By profile name, each to its target profile.
+    // In the server's order, each named with its archetype and linked to
+    // its target profile.
+    expect(links.map((link) => link.textContent)).toEqual([
+      "agentic.skill.targetProfileOption",
+      "agentic.skill.targetProfileOption",
+    ]);
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/archetypes/1/target-profiles#target-profile-11",
-      "/archetypes/1/target-profiles#target-profile-12",
+      "/archetypes/3/target-profiles#target-profile-32",
     ]);
   });
 
-  it("says Not assigned for a path without target profiles", async () => {
-    useEndpoints({
-      ...plan,
-      migrationPath: { ...plan.migrationPath!, targetProfiles: [] },
-    });
+  it("says Not assigned when no target profile uses the plan", async () => {
+    useEndpoints({ ...plan, migrationPaths: [] });
     renderAt();
     await screen.findByRole("heading", { level: 1 });
     expect(
@@ -435,21 +438,6 @@ describe("PlanDetailsPage", () => {
         "agentic.execution.notAssigned"
       )
     ).toBeInTheDocument();
-    expect(screen.queryByText("agentic.plan.notAssignedCue")).toBeNull();
-  });
-
-  it("cues a plan that is not assigned to its target profiles", async () => {
-    useEndpoints({
-      ...plan,
-      migrationPath: { ...plan.migrationPath!, isDefault: false },
-    });
-    renderAt();
-    expect(
-      await screen.findByText("agentic.plan.notAssignedCue", { exact: false })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "agentic.plan.viewTargetProfiles" })
-    ).toHaveAttribute("href", "/archetypes/1/target-profiles");
   });
 
   it("deletes an unused plan and returns to the list", async () => {
@@ -459,7 +447,7 @@ describe("PlanDetailsPage", () => {
     const unused: MigrationPlan = {
       ...plan,
       applicationImpact: { matching: 0 },
-      migrationPath: { ...plan.migrationPath!, isDefault: false },
+      migrationPaths: [],
     };
     useEndpoints(unused);
     server.use(
@@ -566,7 +554,7 @@ describe("PlanDetailsPage", () => {
 
   it("disables Run migration plan with the reason", async () => {
     const user = userEvent.setup();
-    useEndpoints({ ...runnable, migrationPath: undefined });
+    useEndpoints({ ...runnable, migrationPaths: [] });
     renderAt();
     await openActions(user);
     const runItem = screen.getByRole("menuitem", { name: runItemName });

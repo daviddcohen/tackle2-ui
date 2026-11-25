@@ -6,7 +6,8 @@
  * gets (its own group and the application's every-stage group), each skill
  * once and never the excluded one. No fixture excludes a skill and a reload
  * resets the mock, so the test saves an exclusion on plan 5 (the plan of
- * application 13) through the API and then navigates inside the app.
+ * application 13's Java 17 on OpenShift target profile) through the API and
+ * then navigates inside the app.
  */
 import type { Locator, Page } from "@playwright/test";
 
@@ -18,6 +19,7 @@ import {
   dialog,
   expect,
   main,
+  pickRunTargetProfile,
   spaNavigate,
   test,
 } from "../support";
@@ -45,11 +47,6 @@ interface StoredPlan {
     instructions: string;
     requiresApproval: boolean;
   }[];
-  migrationPath: {
-    archetype: Ref;
-    targetProfiles: Ref[];
-    isDefault?: boolean;
-  };
 }
 interface StageSkillRow extends SkillEntry {
   excluded: boolean;
@@ -74,13 +71,6 @@ const excludeSkillOnPlan = async (page: Page) => {
       instructions: stage.instructions,
       requiresApproval: stage.requiresApproval,
     })),
-    migrationPath: {
-      archetype: { id: plan.migrationPath.archetype.id },
-      targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
-        id,
-      })),
-      isDefault: plan.migrationPath.isDefault,
-    },
     excludedSkills: [{ id: EXCLUDED_SKILL_ID }],
   });
   expect(saved.status, "PUT plan").toBeLessThan(300);
@@ -113,9 +103,15 @@ test("a run with an excluded skill: skills, context and the skill loader agree",
   await main(page)
     .getByRole("button", { name: "Run migration plan", exact: true })
     .click();
-  await dialog(page, "Run migration plan")
-    .getByRole("button", { name: "Run on 1 application" })
-    .click();
+  const preflight = dialog(page, "Run migration plan");
+  // Its other target profile runs another plan: pick the one on plan 5.
+  await pickRunTargetProfile(
+    page,
+    preflight,
+    "Branch Operations",
+    "Java 17 on OpenShift"
+  );
+  await preflight.getByRole("button", { name: "Run on 1 application" }).click();
   await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
   const runId = appPath(new URL(page.url()).pathname).split("/")[2];
   const run = await agenticGet<Run>(page, `/plan-runs/${runId}`);

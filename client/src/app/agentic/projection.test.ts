@@ -2,15 +2,13 @@ import {
   Agent,
   ApplicationMigrationDisplayStatus,
   ApplicationMigrationView,
-  HubRef,
   MigrationPlan,
   ModelProjection,
   PlanRun,
-  getAssignedTargetProfiles,
+  getApplicationPlans,
   getMigrationDisplayStatus,
   getOrderedStageRuns,
   getPlanConfigurationChecks,
-  getPlanTargetProfiles,
   getStageDefinition,
   getStagesWithUnverifiedModel,
   isActivePlanRun,
@@ -31,11 +29,12 @@ const plan: MigrationPlan = {
       order: 1,
     },
   ],
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE" },
-    targetProfiles: [{ id: 2, name: "Quarkus" }],
-    isDefault: true,
-  },
+  migrationPaths: [
+    {
+      archetype: { id: 1, name: "Java EE" },
+      targetProfile: { id: 2, name: "Quarkus" },
+    },
+  ],
 };
 
 const agent: Agent = {
@@ -94,11 +93,11 @@ describe("getPlanConfigurationChecks", () => {
     expect(checks.find((c) => c.id === "stages")?.status).toBe("issue");
   });
 
-  it("checks only stages and models: no path or skills check", () => {
-    // A plan without a migration path is run when someone picks it, so it is
+  it("checks only stages and models: no target profile or skills check", () => {
+    // A plan no target profile uses is run when someone picks it, so it is
     // not a configuration problem; "Skills found" could never warn.
     const checks = getPlanConfigurationChecks(
-      { ...plan, migrationPath: undefined },
+      { ...plan, migrationPaths: [] },
       [agent],
       [model]
     );
@@ -239,49 +238,50 @@ describe("run helpers", () => {
   });
 });
 
-describe("plan target profiles", () => {
-  const path = (targetProfiles: HubRef[], isDefault = true): MigrationPlan => ({
-    ...plan,
-    migrationPath: {
-      archetype: { id: 1, name: "Java EE" },
-      targetProfiles,
-      isDefault,
-    },
-  });
+describe("getApplicationPlans", () => {
+  const javaEE = { id: 1, name: "Java EE Application" };
+  const quarkusPlan = { id: "1", name: "Java EE to Quarkus" };
+  const liftPlan = { id: "3", name: "Java lift and shift" };
+  const base: ApplicationMigrationView = {
+    configured: true,
+    intervention: "none",
+    stages: [],
+  };
 
-  it("is empty without a migration path or target profiles", () => {
-    const noPath = { ...plan, migrationPath: undefined };
-    expect(getPlanTargetProfiles(noPath)).toEqual([]);
-    expect(getAssignedTargetProfiles(noPath)).toEqual([]);
-    expect(getPlanTargetProfiles(path([]))).toEqual([]);
-    expect(getAssignedTargetProfiles(path([]))).toEqual([]);
-  });
-
-  it("pairs each target profile with the archetype, by profile name", () => {
-    const pairs = getPlanTargetProfiles(
-      path([
-        { id: 3, name: "Spring Boot 3" },
-        { id: 2, name: "Quarkus" },
-      ])
-    );
-    expect(pairs).toEqual([
-      {
-        archetype: { id: 1, name: "Java EE" },
-        targetProfile: { id: 2, name: "Quarkus" },
-      },
-      {
-        archetype: { id: 1, name: "Java EE" },
-        targetProfile: { id: 3, name: "Spring Boot 3" },
-      },
-    ]);
+  it("lists the plan of each migration path once, in path order", () => {
     expect(
-      getAssignedTargetProfiles(path(pairs.map((p) => p.targetProfile)))
-    ).toEqual(pairs);
+      getApplicationPlans({
+        ...base,
+        migrationPaths: [
+          {
+            archetype: javaEE,
+            targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+            plan: liftPlan,
+          },
+          { archetype: javaEE, targetProfile: { id: 13, name: "Payara 6" } },
+          {
+            archetype: javaEE,
+            targetProfile: { id: 11, name: "Quarkus 3.x" },
+            plan: quarkusPlan,
+          },
+          {
+            archetype: { id: 3, name: "Legacy Java Application" },
+            targetProfile: { id: 32, name: "Java 8 on OpenShift" },
+            plan: liftPlan,
+          },
+        ],
+      })
+    ).toEqual([liftPlan, quarkusPlan]);
   });
 
-  it("assigns none while the path is not the default", () => {
-    const notDefault = path([{ id: 2, name: "Quarkus" }], false);
-    expect(getPlanTargetProfiles(notDefault)).toHaveLength(1);
-    expect(getAssignedTargetProfiles(notDefault)).toEqual([]);
+  it("falls back to the default plan when the paths are not reported", () => {
+    expect(getApplicationPlans({ ...base, plan: quarkusPlan })).toEqual([
+      quarkusPlan,
+    ]);
+    expect(getApplicationPlans(base)).toEqual([]);
+    // Reported paths win, even without a plan on any of them.
+    expect(
+      getApplicationPlans({ ...base, plan: quarkusPlan, migrationPaths: [] })
+    ).toEqual([]);
   });
 });

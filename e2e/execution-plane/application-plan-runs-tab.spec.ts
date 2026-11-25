@@ -88,12 +88,12 @@ test("a blocked application offers no run in the empty section", async ({
   ).toHaveCount(0);
 });
 
-test("an application without a migration path offers no run in the empty section", async ({
+test("an application without a migration plan offers no run in the empty section", async ({
   page,
 }) => {
-  // The initial scenario has no migration plans, so no application has a
-  // migration path; it also lists no applications, so pick one from the
-  // configured fixtures and open it there.
+  // The initial scenario has no migration plans, so no target profile has
+  // one; it also lists no applications, so pick one from the configured
+  // fixtures and open it there.
   await bootMockApi(page, "configured");
   const id = (await fixtureGraph(page)).applications[0].id;
   await page.goto(

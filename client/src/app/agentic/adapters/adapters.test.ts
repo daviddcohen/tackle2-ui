@@ -694,7 +694,7 @@ describe("AgentWorkflow -> Migration Plan", () => {
           order: 2,
         },
       ],
-      migrationPath: undefined,
+      migrationPaths: undefined,
       applicationImpact: undefined,
       runCount: 1,
       operatorManaged: false,

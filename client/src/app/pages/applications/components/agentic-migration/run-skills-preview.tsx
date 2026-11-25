@@ -346,10 +346,6 @@ const RunGroupPreview: React.FC<{
           defaultExpanded="none"
           groupHeadingLevel={isSeveral ? "h3" : "h2"}
           rowIndexOffset={rowIndexOffset}
-          // A target profile of the plan's own archetype needs no archetype name.
-          originOptions={{
-            archetypeId: group.migrationPlan?.migrationPath?.archetype.id,
-          }}
           include={
             canInclude
               ? {

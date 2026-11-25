@@ -617,15 +617,32 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       screen.getByRole("button", {
         name: /^Target profile for Branch Operations/,
       });
+    /** Two target profiles with a plan: no default path, no default plan. */
+    const noDefault = (overrides: Partial<ApplicationMigrationView> = {}) =>
+      view({ plan: undefined, migrationPaths, ...overrides });
 
-    it("preselects the server's default and sends the pick", async () => {
+    it("uses the only target profile with a plan, with no choice, and sends it", async () => {
       const user = userEvent.setup();
       const { onStartReady } = renderModal({
-        13: view({ archetype: javaEE, targetProfile: quarkus, migrationPaths }),
+        13: view({
+          archetype: javaEE,
+          targetProfile: quarkus,
+          migrationPaths: [
+            migrationPaths[0],
+            // A profile without a plan cannot run: it is not offered.
+            { archetype: javaEE, targetProfile: openJdk },
+          ],
+        }),
       });
-      expect(profileSelect()).toHaveAccessibleName(
-        "Target profile for Branch Operations Quarkus 3.x"
-      );
+      const row = (
+        await screen.findByRole("link", { name: "Branch Operations" })
+      ).closest("tr") as HTMLElement;
+      expect(row).toHaveTextContent("Quarkus 3.x");
+      expect(
+        screen.queryByRole("button", {
+          name: /^Target profile for Branch Operations/,
+        })
+      ).toBeNull();
       const request = await submitted(user, onStartReady);
       expect(request).toMatchObject({
         applicationIds: [13],
@@ -638,9 +655,7 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
 
     it("requires a pick without a default, then runs that profile's plan", async () => {
       const user = userEvent.setup();
-      const { onStartReady } = renderModal({
-        13: view({ archetype: javaEE, migrationPaths }),
-      });
+      const { onStartReady } = renderModal({ 13: noDefault() });
       expect(profileSelect()).toHaveAccessibleName(
         "Target profile for Branch Operations Select a target profile"
       );
@@ -683,9 +698,7 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       const legacy = { id: 3, name: "Legacy Java Application" };
       const java17 = { id: 31, name: "Java 17 on OpenShift" };
       renderModal({
-        13: view({
-          archetype: javaEE,
-          targetProfile: quarkus,
+        13: noDefault({
           migrationPaths: [
             migrationPaths[0],
             {
@@ -706,23 +719,15 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
 
     it("from a plan, offers the choice only on the rows that start", async () => {
       const user = userEvent.setup();
-      const twoProfilesPlan: MigrationPlan = {
-        ...plan5,
-        migrationPath: {
-          archetype: javaEE,
-          targetProfiles: [quarkus, openJdk],
-          isDefault: true,
-        },
-      };
-      server.use(
-        rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
-          res(ctx.json([twoProfilesPlan, plan6]))
-        )
-      );
-      // Neither application has a default among the plan's profiles.
-      const noDefault = view({ archetype: javaEE, migrationPaths });
+      // Both target profiles use plan 5: each application needs a pick.
+      const bothOnPlan5 = noDefault({
+        migrationPaths: migrationPaths.map((path) => ({
+          ...path,
+          plan: { id: "5", name: plan5.name },
+        })),
+      });
       const { onStartReady } = renderModal(
-        { 13: noDefault, 14: noDefault },
+        { 13: bothOnPlan5, 14: bothOnPlan5 },
         {
           applications: [branch, claims],
           plan: { id: "5", name: plan5.name },
@@ -754,26 +759,55 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       });
     });
 
-    it("picks none with one plan for all when the plan has no path on the archetype", async () => {
+    it("picks none with one plan for all when none of the application's profiles uses it", async () => {
       const user = userEvent.setup();
       const { onStartReady } = renderModal(
         {
           13: view({
             archetype: javaEE,
             targetProfile: quarkus,
-            migrationPaths,
+            migrationPaths: [migrationPaths[0]],
           }),
         },
         { initialValues: { planSelection: "single", planId: "6" } }
       );
       expect(
         await screen.findByText(
-          "The migration plan has no target profile for this application's archetype, so the run gets no target profile skills."
+          "None of this application's target profiles uses this migration plan, so the run gets no target profile skills."
         )
       ).toBeInTheDocument();
       const request = await submitted(user, onStartReady);
       expect(request.targetProfiles).toEqual([
         { application: { id: 13 }, targetProfile: null },
+      ]);
+    });
+
+    it("picks the one profile that uses the plan with one plan for all, without waiting for the plans list", async () => {
+      const user = userEvent.setup();
+      // The plans list answers late: candidates come from the view.
+      server.use(
+        rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
+          res(ctx.delay(5000), ctx.json([]))
+        )
+      );
+      const { onStartReady } = renderModal(
+        { 13: noDefault() },
+        { initialValues: { planSelection: "single", planId: "6" } }
+      );
+      const row = (
+        await screen.findByRole("link", { name: "Branch Operations" })
+      ).closest("tr") as HTMLElement;
+      expect(row).toHaveTextContent("OpenJDK 21 on OpenShift");
+      expect(
+        screen.queryByRole("button", {
+          name: /^Target profile for Branch Operations/,
+        })
+      ).toBeNull();
+      await waitFor(() => expect(runButton()).toBeEnabled());
+      await user.click(runButton());
+      await waitFor(() => expect(onStartReady).toHaveBeenCalled());
+      expect(onStartReady.mock.calls[0][0].targetProfiles).toEqual([
+        { application: { id: 13 }, targetProfile: { id: 19 } },
       ]);
     });
   });

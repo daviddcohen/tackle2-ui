@@ -29,7 +29,7 @@ describe("AssignMigrationPlanModal", () => {
           archetype={archetype}
           profile={profile}
           assignedPlan={undefined}
-          eligiblePlans={[]}
+          plans={[]}
           isPlansError
           linkTo={(pathname) => pathname}
           onClose={jest.fn()}

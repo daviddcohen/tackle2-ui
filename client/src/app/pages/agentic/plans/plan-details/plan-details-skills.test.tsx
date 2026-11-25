@@ -54,11 +54,7 @@ const plan: MigrationPlan = {
       order: 1,
     },
   ],
-  migrationPath: {
-    archetype: javaEE,
-    targetProfiles: [quarkus],
-    isDefault: true,
-  },
+  migrationPaths: [{ archetype: javaEE, targetProfile: quarkus }],
   applicationImpact: { matching: 0 },
   runCount: 0,
 };
@@ -181,7 +177,7 @@ const skillsSection = async () =>
 
 /** The section sentence, then the note on application skills. */
 const description =
-  "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its archetype's skills instead, and no target profile skills.";
+  "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills.";
 
 describe("PlanDetailsPage Skills by stage", () => {
   beforeEach(() => {
@@ -215,21 +211,19 @@ describe("PlanDetailsPage Skills by stage", () => {
       )
     ).toBeVisible();
     expect(
-      within(table).queryByText(/skills of this plan's archetype/)
+      within(table).queryByText(/target profiles that use this plan/)
     ).toBeNull();
-    // The plan's own archetype: the profile has no archetype suffix.
+    // A plan's target profiles can belong to several archetypes: each
+    // names its archetype.
     expect(
       within(table).getByRole("row", { name: /Quarkus best practices/ })
-    ).toHaveTextContent("Target profile: Quarkus 3.x");
-    expect(
-      within(table).queryByText(/\(Java EE Application\)/)
-    ).not.toBeInTheDocument();
+    ).toHaveTextContent("Target profile: Quarkus 3.x (Java EE Application)");
     // Read-only: no checkboxes, no Manage skills.
     expect(within(table).queryByRole("checkbox")).toBeNull();
     expect(within(section).queryByText("Manage skills")).toBeNull();
     expect(resolveRequests[0]).toEqual({
       stages: [{ agent: { id: "7" }, name: "Migrate" }],
-      migrationPath: { archetype: { id: 1 }, targetProfiles: [{ id: 11 }] },
+      targetProfiles: [{ id: 11 }],
       excludedSkills: [],
     });
   });
@@ -311,8 +305,8 @@ describe("PlanDetailsPage Skills by stage", () => {
     expect(resolveRequests[0].excludedSkills).toEqual([{ id: "1" }]);
   });
 
-  it("says what every stage gets for a plan without a migration path", async () => {
-    useEndpoints({ ...plan, migrationPath: undefined }, () => ({
+  it("says what every stage gets for a plan no target profile uses", async () => {
+    useEndpoints({ ...plan, migrationPaths: [] }, () => ({
       stages: preview().stages,
       everyStage: [{ skills: [] }],
     }));
@@ -323,10 +317,12 @@ describe("PlanDetailsPage Skills by stage", () => {
     });
     expect(
       within(section).getByText(
-        "What each stage's agent gets when this plan runs, and where each skill comes from. This plan has no archetype or target profile. When it runs, each application gets its archetype's skills and its own skills in every stage, and no target profile skills."
+        "What each stage's agent gets when this plan runs, and where each skill comes from. No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetype's skills and its own skills, and no target profile skills."
       )
     ).toBeVisible();
     expect(within(table).getByText("No skills")).toBeVisible();
+    // No target profiles: no archetype or target profile context.
+    expect(resolveRequests[0].targetProfiles).toEqual([]);
   });
 
   it("shows skeleton rows while the skills resolve", async () => {

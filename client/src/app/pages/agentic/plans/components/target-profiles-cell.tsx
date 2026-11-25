@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Button, List, ListItem, Popover } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
-import { PlanTargetProfile } from "@app/agentic";
+import { MigrationPath } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { targetProfilePath } from "@app/pages/agentic/entity-paths";
 
@@ -17,7 +17,7 @@ type LinkTo = (pathname: string) => LocationDescriptor;
  * plain text.
  */
 const TargetProfilePath: React.FC<{
-  path: PlanTargetProfile;
+  path: MigrationPath;
   linkTo: LinkTo;
 }> = ({ path: { archetype, targetProfile }, linkTo }) => (
   <Trans
@@ -32,21 +32,25 @@ const TargetProfilePath: React.FC<{
 );
 
 /**
- * The target profiles that use a plan: "Not assigned" for none, the one
- * path inline, or a "{n} target profiles" count that opens a popover
- * listing every path.
+ * The target profiles that use a plan: "Unavailable" when the server does
+ * not report them, "Not assigned" for none, the one path inline, or a "{n}
+ * target profiles" count that opens a popover listing every path.
  */
 export const TargetProfilesCell: React.FC<{
   planName: string;
-  targetProfiles: PlanTargetProfile[];
+  /** Undefined: the server does not report them (unknown, not none). */
+  migrationPaths: MigrationPath[] | undefined;
   linkTo: LinkTo;
-}> = ({ planName, targetProfiles, linkTo }) => {
+}> = ({ planName, migrationPaths, linkTo }) => {
   const { t } = useTranslation();
-  if (targetProfiles.length === 0) {
+  if (migrationPaths == null) {
+    return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+  }
+  if (migrationPaths.length === 0) {
     return <EmptyTextMessage message={t("agentic.execution.notAssigned")} />;
   }
-  if (targetProfiles.length === 1) {
-    return <TargetProfilePath path={targetProfiles[0]} linkTo={linkTo} />;
+  if (migrationPaths.length === 1) {
+    return <TargetProfilePath path={migrationPaths[0]} linkTo={linkTo} />;
   }
   return (
     <Popover
@@ -56,7 +60,7 @@ export const TargetProfilesCell: React.FC<{
       closeBtnAriaLabel={t("actions.close")}
       bodyContent={
         <List isPlain>
-          {targetProfiles.map((path) => (
+          {migrationPaths.map((path) => (
             <ListItem key={`${path.archetype.id}-${path.targetProfile.id}`}>
               <TargetProfilePath path={path} linkTo={linkTo} />
             </ListItem>
@@ -66,7 +70,7 @@ export const TargetProfilesCell: React.FC<{
     >
       <Button variant="link" isInline className={textStyles.textNowrap}>
         {t("agentic.plan.targetProfileCount", {
-          count: targetProfiles.length,
+          count: migrationPaths.length,
         })}
       </Button>
     </Popover>

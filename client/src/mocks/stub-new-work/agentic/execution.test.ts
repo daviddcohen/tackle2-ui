@@ -18,12 +18,16 @@ import {
   planImpact,
   portfolioApplications,
   resetExecutionWorld,
-  resolvePlanFor,
   resolveRunSkills,
   runPhases,
+  seedPicksFor,
   startApplicationMigrations,
 } from "./execution";
-import { SINGLE_PLAN_RUN_IDS, mockMigrationPlans } from "./fixtures";
+import { mockMigrationPlans } from "./fixtures";
+import { defaultPathOf, pathsUsingPlan } from "./skill-resolution";
+
+const portfolioApplication = (id: number) =>
+  portfolioApplications().find((application) => application.id === id)!;
 
 /** Every entry of `skillId` in a resolution, stage groups first. */
 const entriesOf = (skills: SkillsByStage | undefined, skillId: string) =>
@@ -80,24 +84,16 @@ describe("seeded worlds", () => {
   });
 
   it.each(["configured", "queued", "running", "actionRequired", "completed"])(
-    "puts every application of a seeded run (%s) on that run's plan, except the one single-plan run",
+    "gives every application of a seeded run (%s) exactly one target profile that uses that run's plan",
     (scenario) => {
       setScenario(scenario);
-      expect(SINGLE_PLAN_RUN_IDS.size).toBeLessThanOrEqual(1);
       listPlanRuns().forEach((run) => {
-        const resolved = run.applications.map(
-          (ref) =>
-            resolvePlanFor(
-              portfolioApplications().find((a) => a.id === ref.id)!
-            )?.id
-        );
-        expect(resolved).toEqual(
-          run.applications.map(() =>
-            SINGLE_PLAN_RUN_IDS.has(run.id)
-              ? expect.not.stringMatching(`^${run.planId}$`)
-              : run.planId
+        expect(
+          run.applications.map(
+            (ref) =>
+              pathsUsingPlan(portfolioApplication(ref.id), run.planId).length
           )
-        );
+        ).toEqual(run.applications.map(() => 1));
       });
     }
   );
@@ -111,7 +107,8 @@ describe("seeded worlds", () => {
         expect(run.skills).toEqual(
           resolveRunSkills(
             plan,
-            run.applications.map((a) => a.id)
+            run.applications.map((a) => a.id),
+            { targetProfileIds: seedPicksFor(plan.id, run.applications) }
           )
         );
         expect(run.skills?.everyStage.map((g) => g.application)).toEqual(
@@ -138,6 +135,47 @@ describe("seeded worlds", () => {
         .find((e) => e.skill.id === "2")
         ?.from.some((origin) => origin.kind === "application")
     ).toBe(false);
+  });
+
+  it.each(["configured", "running"])(
+    "snapshots Run #4 (Java lift and shift on Partner Portal) with OpenJDK 21 on OpenShift, not Quarkus 3.x (%s)",
+    (scenario) => {
+      setScenario(scenario);
+      const run = getPlanRun("4");
+      expect(run.name).toBe("Run #4: Java lift and shift");
+      const profileOrigins = run.skills!.everyStage[0].skills.flatMap(
+        ({ skill, from }) =>
+          from.flatMap((origin) =>
+            origin.kind === "targetProfile"
+              ? [[skill.name, origin.targetProfile.id]]
+              : []
+          )
+      );
+      expect(profileOrigins).toEqual([
+        ["OpenShift deployment conventions", 12],
+      ]);
+    }
+  );
+
+  it("asks for a target profile when a Java EE application starts on its own plan, then runs the picked path", () => {
+    expect(() =>
+      startApplicationMigrations({
+        applicationIds: [1],
+        planSelection: "recommended",
+        targetBranch: "main",
+      })
+    ).toThrow(
+      "Customer Management has several target profiles with a migration plan (Quarkus 3.x, OpenJDK 21 on OpenShift). Pick the target profile it runs on."
+    );
+    const {
+      planRuns: [ref],
+    } = startApplicationMigrations({
+      applicationIds: [1],
+      planSelection: "recommended",
+      targetBranch: "main",
+      targetProfiles: [{ application: { id: 1 }, targetProfile: { id: 12 } }],
+    });
+    expect(getPlanRun(ref.id).planName).toBe("Java lift and shift");
   });
 
   it("gives each application of a run its own commits, a run on one application none named", () => {
@@ -184,7 +222,8 @@ describe("seeded worlds", () => {
   it("re-seeds when the scenario changes", () => {
     startApplicationMigrations({
       applicationIds: [1],
-      planSelection: "recommended",
+      planSelection: "single",
+      planId: "1",
       targetBranch: "main",
     });
     expect(listPlanRuns()).toHaveLength(8);
@@ -193,6 +232,9 @@ describe("seeded worlds", () => {
   });
 });
 
+// Started with "Use one migration plan for all" (Java EE to Quarkus): Java
+// EE applications have two paths with a plan, so a recommended start would
+// need a pick.
 describe("timed progression of started runs", () => {
   it("goes Pending -> Running through every stage -> Succeeded (unattended)", () => {
     db.executionPolicy = { interactionMode: "unattended" };
@@ -200,7 +242,8 @@ describe("timed progression of started runs", () => {
       planRuns: [ref],
     } = startApplicationMigrations({
       applicationIds: [1],
-      planSelection: "recommended",
+      planSelection: "single",
+      planId: "1",
       targetBranch: "main",
     });
     expect(getPlanRun(ref.id).status).toBe("Pending");
@@ -232,7 +275,8 @@ describe("timed progression of started runs", () => {
       planRuns: [ref],
     } = startApplicationMigrations({
       applicationIds: [1],
-      planSelection: "recommended",
+      planSelection: "single",
+      planId: "1",
       targetBranch: "main",
     });
     advanceTime(PENDING_MS + STAGE_MS);
@@ -255,7 +299,8 @@ describe("timed progression of started runs", () => {
       planRuns: [ref],
     } = startApplicationMigrations({
       applicationIds: [1, 2],
-      planSelection: "recommended",
+      planSelection: "single",
+      planId: "1",
       targetBranch: "main",
     });
     expect(getPlanRun(ref.id).applications.map((a) => a.id)).toEqual([1, 2]);
@@ -312,7 +357,8 @@ describe("timed progression of started runs", () => {
       planRuns: [ref],
     } = startApplicationMigrations({
       applicationIds: [1, 2],
-      planSelection: "recommended",
+      planSelection: "single",
+      planId: "1",
       targetBranch: "main",
     });
     const run = getPlanRun(ref.id);
@@ -336,7 +382,8 @@ describe("timed progression of started runs", () => {
       planRuns: [ref],
     } = startApplicationMigrations({
       applicationIds: [1],
-      planSelection: "recommended",
+      planSelection: "single",
+      planId: "1",
       targetBranch: "main",
     });
     const run = getPlanRun(ref.id);
@@ -350,35 +397,73 @@ describe("Plan resolution", () => {
   const recommendedPlan = (applicationId: number) =>
     getApplicationMigrations([applicationId])[applicationId].plan;
 
-  it("resolves through the target profile to its default Plan", () => {
-    // Applications 1 (Java EE) and 4 (Spring Boot) are in different archetypes.
-    expect(recommendedPlan(1)?.id).not.toBe(recommendedPlan(4)?.id);
-    const plan = db.plans.find((p) => p.id === recommendedPlan(1)?.id)!;
-    expect(plan.migrationPath?.isDefault).toBe(true);
-    // Applications of one archetype share its target profile, so its plan.
-    expect(recommendedPlan(2)).toEqual(recommendedPlan(1));
+  it("resolves through the target profile to the Plan it uses", () => {
+    // Applications 4 (Spring Boot) and 15 (.NET) are in different archetypes.
+    expect(recommendedPlan(4)?.id).toBe(db.targetProfilePlans[21]);
+    expect(recommendedPlan(15)?.id).toBe(db.targetProfilePlans[41]);
+    // Applications of one archetype share its target profiles, so its plan.
+    expect(recommendedPlan(5)).toEqual(recommendedPlan(4));
+    // Java EE and Legacy Java applications have two paths with a plan (Java
+    // lift and shift on the second): no default.
+    expect(recommendedPlan(1)).toBeUndefined();
+    expect(recommendedPlan(13)).toBeUndefined();
   });
 
-  it("uses the archetype's target profile, whatever the latest run used", () => {
+  it("takes target profile, archetype and plan from the default path only, whatever the latest run used", () => {
     portfolioApplications().forEach((application) => {
       const view = getApplicationMigrations([application.id])[application.id];
-      const archetype = mockArchetypes[application.archetypes![0].id];
-      const profile = archetype.profiles![0];
+      const defaultPath = defaultPathOf(application);
+      if (defaultPath == null) {
+        expect(view.targetProfile).toBeUndefined();
+        expect(view.archetype).toBeUndefined();
+        expect(view.plan).toBeUndefined();
+        return;
+      }
+      const archetype = mockArchetypes[defaultPath.archetypeId];
       expect(view.targetProfile).toEqual({
-        id: profile.id,
-        name: profile.name,
+        id: defaultPath.profile.id,
+        name: defaultPath.profile.name,
       });
       expect(view.archetype).toEqual({
         id: archetype.id,
         name: archetype.name,
       });
-      expect(view.plan?.id).toBe(resolvePlanFor(application)?.id);
-      const plan = db.plans.find((p) => p.id === view.plan?.id)!;
-      expect(plan.migrationPath?.archetype.id).toBe(archetype.id);
-      expect(
-        plan.migrationPath?.targetProfiles.some((tp) => tp.id === profile.id)
-      ).toBe(true);
+      expect(view.plan?.id).toBe(defaultPath.plan?.id);
     });
+  });
+
+  it("is configured with at least one path that has a plan, the default only with one (0, 1, 2 runnable paths)", () => {
+    // Customer Management (Java EE): Quarkus 3.x uses Java EE to Quarkus,
+    // OpenJDK 21 on OpenShift Java lift and shift.
+    const view = () => getApplicationMigrations([1])[1];
+    expect(view()).toMatchObject({ configured: true, preflight: "ready" });
+    expect(view().plan).toBeUndefined();
+    expect(view().targetProfile).toBeUndefined();
+    expect(
+      view().migrationPaths?.map(({ targetProfile, plan }) => [
+        targetProfile.id,
+        plan?.id,
+      ])
+    ).toEqual([
+      [11, "1"],
+      [12, "3"],
+    ]);
+    // One path with a plan: the default, wherever it sits.
+    delete db.targetProfilePlans[11];
+    expect(view()).toMatchObject({
+      configured: true,
+      targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+      archetype: { id: 1, name: "Java EE Application" },
+      plan: { id: "3", name: "Java lift and shift" },
+    });
+    // No path with a plan: not configured, and the reason names no profile.
+    delete db.targetProfilePlans[12];
+    expect(view()).toMatchObject({
+      configured: false,
+      preflightReason:
+        "No target profile of this application's archetypes has a migration plan.",
+    });
+    expect(view().plan).toBeUndefined();
   });
 
   it("reports the latest run's plan beside the plan the next run uses", () => {
@@ -391,26 +476,40 @@ describe("Plan resolution", () => {
       id: latest.planId,
       name: latest.planName,
     });
-    expect(view.plan?.id).toBe("1");
+    // Two of its paths have a plan: no default, whatever its latest run.
+    expect(view.plan).toBeUndefined();
   });
 
-  it("counts applications by the plan they resolve to (plan impact)", () => {
+  it("counts applications by any path's plan (plan impact)", () => {
     const portfolio = portfolioApplications();
     db.plans.forEach((plan) => {
       expect(planImpact(plan.id)).toBe(
         portfolio.filter(
-          (application) => resolvePlanFor(application)?.id === plan.id
+          (application) => pathsUsingPlan(application, plan.id).length > 0
         ).length
       );
     });
-    expect(
-      db.plans.reduce((total, plan) => total + planImpact(plan.id), 0)
-    ).toBe(portfolio.length);
+    const ofArchetype = (archetypeId: number) =>
+      portfolio.filter((application) =>
+        application.archetypes?.some(
+          (archetype) => archetype.id === archetypeId
+        )
+      ).length;
+    // Java lift and shift: every Java EE and Legacy Java application, though
+    // none has it as its default.
+    expect(planImpact("3")).toBe(ofArchetype(1) + ofArchetype(3));
+    expect(planImpact("1")).toBe(ofArchetype(1));
+    // .NET Framework to .NET 8 on Quarkus 3.x: the Java EE applications move
+    // from Java EE to Quarkus to it.
+    const before = planImpact("6");
+    assignPlanToTargetProfile(1, 11, { planId: "6" });
+    expect(planImpact("6")).toBe(before + ofArchetype(1));
+    expect(planImpact("1")).toBe(0);
   });
 
   it("starts each application on its own plan with recommended plans", () => {
     const { planRuns } = startApplicationMigrations({
-      applicationIds: [1, 4],
+      applicationIds: [4, 15],
       planSelection: "recommended",
       targetBranch: "main",
     });
@@ -419,62 +518,62 @@ describe("Plan resolution", () => {
     expect(
       runs.map((run) => [run.planId, run.applications.map((a) => a.id)])
     ).toEqual([
-      [
-        resolvePlanFor(portfolioApplications().find((a) => a.id === 1)!)!.id,
-        [1],
-      ],
-      [
-        resolvePlanFor(portfolioApplications().find((a) => a.id === 4)!)!.id,
-        [4],
-      ],
+      [defaultPathOf(portfolioApplication(4))!.plan!.id, [4]],
+      [defaultPathOf(portfolioApplication(15))!.plan!.id, [15]],
     ]);
     runs.forEach((run) => {
       expect(run.name).toBe(`Run #${run.id}: ${run.planName}`);
     });
   });
 
-  it("ignores a new non-default Plan on the same path", () => {
-    const before = recommendedPlan(1);
-    const profiles = db.plans.find((p) => p.id === before?.id)!.migrationPath!;
+  it("ignores a new Plan until a target profile uses it", () => {
+    const before = recommendedPlan(4);
     createPlan({
       name: "Draft plan",
       description: "",
-      migrationPath: { ...profiles, isDefault: false },
       stages: [{ name: "Only", agent: { id: db.agents[0].id } }],
     });
-    expect(recommendedPlan(1)).toEqual(before);
+    expect(recommendedPlan(4)).toEqual(before);
   });
 
-  it("follows the default when it moves, without removing the previous Plan's path", () => {
-    const before = db.plans.find((p) => p.id === recommendedPlan(1)?.id)!;
-    const path = before.migrationPath!;
+  it("follows the target profile's plan when it changes, touching no other profile", () => {
+    const before = recommendedPlan(4)!;
+    const references = { ...db.targetProfilePlans };
     const draft = createPlan({
       name: "Draft plan",
       description: "",
-      migrationPath: { ...path, isDefault: false },
       stages: [{ name: "Only", agent: { id: db.agents[0].id } }],
     });
-    assignPlanToTargetProfile(path.archetype.id, path.targetProfiles[0].id, {
-      planId: draft.id,
-    });
-    expect(recommendedPlan(1)?.id).toBe(draft.id);
-    const previous = db.plans.find((p) => p.id === before.id)!;
-    expect(previous.migrationPath?.targetProfiles).toEqual(path.targetProfiles);
-    expect(previous.migrationPath?.isDefault).toBe(false);
+    assignPlanToTargetProfile(2, 21, { planId: draft.id });
+    expect(recommendedPlan(4)?.id).toBe(draft.id);
+    expect(db.targetProfilePlans).toEqual({ ...references, 21: draft.id });
+    expect(getPlan(before.id).migrationPaths).toEqual([]);
+    expect(getPlan(draft.id).migrationPaths).toEqual([
+      {
+        archetype: { id: 2, name: "Spring Boot Application" },
+        targetProfile: { id: 21, name: "Quarkus 3.x" },
+      },
+    ]);
   });
 
-  it("rejects a second default Plan for a target profile", () => {
-    const path = db.plans.find(
-      (p) => p.id === recommendedPlan(1)?.id
-    )!.migrationPath!;
-    expect(() =>
-      createPlan({
-        name: "Second default",
-        description: "",
-        migrationPath: { ...path, isDefault: true },
-        stages: [{ name: "Only", agent: { id: db.agents[0].id } }],
-      })
-    ).toThrow(/already the default Plan/);
+  it("ignores a migration path a plan write still sends", () => {
+    const references = { ...db.targetProfilePlans };
+    const created = createPlan({
+      name: "Old client plan",
+      description: "",
+      migrationPath: {
+        archetype: { id: 1 },
+        targetProfiles: [{ id: 11 }],
+        isDefault: true,
+      },
+      stages: [{ name: "Only", agent: { id: db.agents[0].id } }],
+    });
+    expect(created.migrationPaths).toEqual([]);
+    expect(created).not.toHaveProperty("migrationPath");
+    expect(db.plans.find((p) => p.id === created.id)).not.toHaveProperty(
+      "migrationPath"
+    );
+    expect(db.targetProfilePlans).toEqual(references);
   });
 
   it("lists each plan's applications: the ones it counts, in name order", () => {
@@ -487,8 +586,10 @@ describe("Plan resolution", () => {
       for (const stored of db.plans) {
         const { applicationImpact } = getPlan(stored.id);
         const expected = portfolioApplications()
-          .filter(
-            (application) => views[application.id]?.plan?.id === stored.id
+          .filter((application) =>
+            views[application.id]?.migrationPaths?.some(
+              (path) => path.plan?.id === stored.id
+            )
           )
           .map((application) => application.name)
           .sort((a, b) => a.localeCompare(b));
@@ -510,20 +611,20 @@ describe("Plan resolution", () => {
 });
 
 describe("skill exclusions", () => {
-  // Application 13 resolves to Plan 5 (Legacy Java runtime modernization).
+  // Application 13 resolves to Plan 5 (Legacy Java runtime modernization):
+  // its second path (Java 8 on OpenShift, Java lift and shift) is cleared,
+  // so Java 17 on OpenShift is its default path.
   const APPLICATION_ID = 13;
   const PLAN_ID = "5";
+  beforeEach(() => {
+    delete db.targetProfilePlans[32];
+  });
 
   const excludeOnPlan = (skillIds: string[]) => {
     const plan = db.plans.find((p) => p.id === PLAN_ID)!;
     updatePlan(PLAN_ID, {
       name: plan.name,
       description: plan.description,
-      migrationPath: plan.migrationPath && {
-        archetype: { id: plan.migrationPath.archetype.id },
-        targetProfiles: plan.migrationPath.targetProfiles,
-        isDefault: plan.migrationPath.isDefault,
-      },
       stages: plan.stages.map((stage) => ({ ...stage })),
       excludedSkills: skillIds.map((id) => ({ id })),
     });
@@ -665,11 +766,16 @@ describe("skill exclusions", () => {
 });
 
 describe("run choices: target profile picks and run exclusions", () => {
-  /** Java EE Application (archetype 1) gets a second target profile. */
-  const SECOND = { id: 19, name: "OpenJDK 21 on OpenShift" };
+  /**
+   * Java EE Application (archetype 1) gets a third target profile. OpenJDK 21
+   * on OpenShift (12) uses no plan here, so Quarkus 3.x is the default path
+   * until a test gives the third profile a plan.
+   */
+  const SECOND = { id: 19, name: "Java 25 on OpenShift" };
   const JAVA_EE = mockArchetypes[1];
   let profiles: typeof JAVA_EE.profiles;
   beforeEach(() => {
+    delete db.targetProfilePlans[12];
     profiles = JAVA_EE.profiles;
     JAVA_EE.profiles = [...(profiles ?? []), { ...SECOND, generators: [] }];
     db.skills.push({
@@ -684,18 +790,16 @@ describe("run choices: target profile picks and run exclusions", () => {
     JAVA_EE.profiles = profiles;
   });
 
-  /** A plan assigned to the second profile. */
-  const assignSecondPlan = () =>
-    createPlan({
+  /** A plan the second profile uses. */
+  const assignSecondPlan = () => {
+    const plan = createPlan({
       name: "Java EE to OpenJDK 21",
       description: "",
-      migrationPath: {
-        archetype: { id: 1 },
-        targetProfiles: [{ id: SECOND.id }],
-        isDefault: true,
-      },
       stages: [{ name: "Only", agent: { id: db.agents[0].id } }],
     });
+    assignPlanToTargetProfile(1, SECOND.id, { planId: plan.id });
+    return plan;
+  };
 
   const start = (overrides: Record<string, unknown>) =>
     startApplicationMigrations({
@@ -729,16 +833,72 @@ describe("run choices: target profile picks and run exclusions", () => {
       },
       {
         archetype: { id: 1, name: JAVA_EE.name },
+        targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+      },
+      {
+        archetype: { id: 1, name: JAVA_EE.name },
         targetProfile: SECOND,
       },
     ]);
     const plan = assignSecondPlan();
-    expect(getApplicationMigrations([1])[1].migrationPaths?.[1].plan).toEqual({
+    const view = getApplicationMigrations([1])[1];
+    expect(view.migrationPaths?.[2].plan).toEqual({
       id: plan.id,
       name: plan.name,
     });
-    // The default stays the archetype's first profile.
-    expect(getApplicationMigrations([1])[1].targetProfile?.id).toBe(11);
+    // Two paths have a plan: no default path, still configured.
+    expect(view.configured).toBe(true);
+    expect(view.targetProfile).toBeUndefined();
+    expect(view.archetype).toBeUndefined();
+    expect(view.plan).toBeUndefined();
+  });
+
+  it("refuses a recommended start without a pick when several paths have a plan", () => {
+    assignSecondPlan();
+    expect(statusOf(() => start({}))).toBe(409);
+    expect(() => start({})).toThrow(
+      /Customer Management has several target profiles with a migration plan .*Pick the target profile it runs on/
+    );
+    // A pick settles it.
+    const {
+      planRuns: [ref],
+    } = start({
+      targetProfiles: [{ application: { id: 1 }, targetProfile: { id: 11 } }],
+    });
+    expect(getPlanRun(ref.id).planId).toBe("1");
+  });
+
+  it("runs one plan for all on the only path that uses it, none without one, and needs a pick with several", () => {
+    // Plan 1 without a pick: Quarkus 3.x, the only profile that uses it.
+    const {
+      planRuns: [onPath],
+    } = start({ planSelection: "single", planId: "1" });
+    expect(profileSkillIds(onPath.id)).toContain("4");
+    // Plan 3 (no profile uses it): no target profile.
+    const {
+      planRuns: [none],
+    } = start({ applicationIds: [2], planSelection: "single", planId: "3" });
+    expect(profileSkillIds(none.id)).toEqual([]);
+    // Both profiles use plan 1: a pick is needed. (A fresh world: the run
+    // above keeps Customer Management busy.)
+    resetExecutionWorld();
+    assignPlanToTargetProfile(1, SECOND.id, { planId: "1" });
+    expect(
+      statusOf(() => start({ planSelection: "single", planId: "1" }))
+    ).toBe(409);
+    expect(() => start({ planSelection: "single", planId: "1" })).toThrow(
+      /Customer Management has several target profiles that use Java EE to Quarkus/
+    );
+    const {
+      planRuns: [picked],
+    } = start({
+      planSelection: "single",
+      planId: "1",
+      targetProfiles: [
+        { application: { id: 1 }, targetProfile: { id: SECOND.id } },
+      ],
+    });
+    expect(profileSkillIds(picked.id)).toEqual(["t-second"]);
   });
 
   it("runs the plan assigned to the picked profile, resolved with that profile", () => {
@@ -763,11 +923,6 @@ describe("run choices: target profile picks and run exclusions", () => {
       targetProfiles: [{ application: { id: 1 }, targetProfile: null }],
     });
     expect(profileSkillIds(ref.id)).toEqual([]);
-    // Without a pick, the default profile as before.
-    const {
-      planRuns: [again],
-    } = start({ applicationIds: [2], planSelection: "single", planId: "3" });
-    expect(profileSkillIds(again.id)).toContain("4");
   });
 
   it("refuses picks the application cannot run on", () => {

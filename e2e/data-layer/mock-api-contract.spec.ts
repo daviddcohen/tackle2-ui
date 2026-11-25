@@ -13,6 +13,7 @@ import {
   agenticRequest,
   bootMockApi,
   expect,
+  fixtureGraph,
   test,
 } from "../support";
 
@@ -39,12 +40,13 @@ interface Stage extends Named {
 interface Plan extends Named {
   stages: Stage[];
   runCount?: number;
-  migrationPath: {
+  migrationPaths?: {
     archetype: { id: number };
-    targetProfiles: { id: number }[];
-  };
+    targetProfile: { id: number };
+  }[];
 }
 interface PlanRun extends Named {
+  planId: string;
   status: string;
   targetBranch: string;
   stageRuns: { stageId: string; status: string }[];
@@ -171,15 +173,41 @@ test("ids are opaque strings; unknown ids are 404", async ({ page }) => {
     expect((await agenticRequest(page, "GET", path)).status, path).toBe(404);
 });
 
+interface MigrationView {
+  preflight?: string;
+  targetProfile?: { id: number };
+  plan?: { id: string };
+  migrationPaths?: {
+    targetProfile: { id: number; name: string };
+    plan?: { id: string; name: string };
+  }[];
+}
+
+/** The views of every application of the fixture graph, by id. */
+const migrationViews = async (page: Page) => {
+  const { applications } = await fixtureGraph(page);
+  return agenticGet<Record<number, MigrationView>>(
+    page,
+    `/application-migrations?applicationIds=${applications.map(({ id }) => id).join(",")}`
+  );
+};
+
 test("202: starting migrations returns the created plan runs", async ({
   page,
 }) => {
   await bootMockApi(page);
+  // An application with a default path: exactly one of its target profiles
+  // has a migration plan.
+  const views = await migrationViews(page);
+  const id = Object.keys(views)
+    .map(Number)
+    .find((candidate) => views[candidate].targetProfile != null);
+  expect(id, "an application with a default target profile").toBeDefined();
   const response = await agenticRequest<{ planRuns: Named[] }>(
     page,
     "POST",
     "/application-migrations",
-    { applicationIds: [1], planSelection: "recommended", targetBranch: "x" }
+    { applicationIds: [id], planSelection: "recommended", targetBranch: "x" }
   );
   expect(response.status).toBe(202);
   expect(response.body.planRuns).toHaveLength(1);
@@ -188,6 +216,71 @@ test("202: starting migrations returns the created plan runs", async ({
     `/plan-runs/${response.body.planRuns[0].id}`
   );
   expect(run.targetBranch).toBe("x");
+  expect(run.planId).toBe(views[id!].plan?.id);
+});
+
+test("409 without a pick, 202 with one: an application with several runnable target profiles", async ({
+  page,
+}) => {
+  await bootMockApi(page);
+  const views = await migrationViews(page);
+  // Ready applications whose target profiles run two plans ...
+  const candidates = Object.keys(views)
+    .map(Number)
+    .filter(
+      (id) =>
+        views[id].preflight === "ready" &&
+        (views[id].migrationPaths ?? []).filter(({ plan }) => plan != null)
+          .length > 1
+    );
+  // ... on the same target profiles (one archetype).
+  const profilesOf = (id: number) =>
+    (views[id].migrationPaths ?? [])
+      .map(({ targetProfile }) => targetProfile.id)
+      .join();
+  const ids = candidates.filter(
+    (id) => profilesOf(id) === profilesOf(candidates[0])
+  );
+  expect(ids.length, "two such applications").toBeGreaterThan(1);
+  // No default path: the server does not guess.
+  for (const id of ids) expect(views[id].targetProfile).toBeUndefined();
+  const start = (id: number, body: object = {}) =>
+    agenticRequest<{ planRuns: Named[] }>(
+      page,
+      "POST",
+      "/application-migrations",
+      {
+        applicationIds: [id],
+        planSelection: "recommended",
+        targetBranch: "main",
+        ...body,
+      }
+    );
+  const unpicked = await start(ids[0]);
+  expect(unpicked.status).toBe(409);
+  expect(JSON.stringify(unpicked.body)).toContain(
+    "Pick the target profile it runs on."
+  );
+
+  // The pick decides the plan: each runnable profile runs its own plan (one
+  // application per start, since a started application is no longer ready).
+  const paths = views[ids[0]].migrationPaths!.filter(
+    (path) => path.plan != null
+  );
+  for (const [index, { targetProfile, plan }] of paths.entries()) {
+    const id = ids[index];
+    const picked = await start(id, {
+      targetProfiles: [
+        { application: { id }, targetProfile: { id: targetProfile.id } },
+      ],
+    });
+    expect(picked.status, targetProfile.name).toBe(202);
+    const run = await agenticGet<PlanRun>(
+      page,
+      `/plan-runs/${picked.body.planRuns[0].id}`
+    );
+    expect(run.planId, targetProfile.name).toBe(plan!.id);
+  }
 });
 
 test("400: starting migrations without applications or without a Plan", async ({
@@ -239,19 +332,17 @@ test("201: a created plan gets server-computed fields and resolves its skills", 
       instructions: stage.instructions,
       requiresApproval: stage.requiresApproval,
     })),
-    migrationPath: {
-      archetype: { id: source.migrationPath.archetype.id },
-      targetProfiles: source.migrationPath.targetProfiles.map((profile) => ({
-        id: profile.id,
-      })),
-      isDefault: false,
-    },
-    // Server-derived: a client value is ignored.
+    // Server-derived: client values are ignored. A plan's paths come from
+    // the target profiles that reference it.
+    migrationPaths: source.migrationPaths,
     runCount: 7,
   });
   expect(created.status).toBe(201);
   const plan = await agenticGet<Plan>(page, `/plans/${created.body.id}`);
   expect(plan.runCount).toBe(0);
+  expect(plan.migrationPaths ?? []).toEqual([]);
+  const sourcePaths = source.migrationPaths ?? [];
+  expect(sourcePaths.length, "a plan a target profile uses").toBeGreaterThan(0);
   const resolved = await agenticRequest<{
     stages: { skills: unknown[] }[];
     everyStage: { skills: unknown[] }[];
@@ -260,12 +351,10 @@ test("201: a created plan gets server-computed fields and resolves its skills", 
       agent: { id: stage.agent.id },
       name: stage.name,
     })),
-    migrationPath: {
-      archetype: { id: plan.migrationPath.archetype.id },
-      targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
-        id,
-      })),
-    },
+    // Preview the new plan on the source plan's target profiles.
+    targetProfiles: sourcePaths.map(({ targetProfile }) => ({
+      id: targetProfile.id,
+    })),
   });
   expect(resolved.status).toBe(200);
   expect(resolved.body.stages).toHaveLength(plan.stages.length);

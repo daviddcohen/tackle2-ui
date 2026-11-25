@@ -7,10 +7,13 @@ import {
   Alert,
   AlertActionLink,
   Button,
+  Content,
   EmptyState,
   EmptyStateActions,
   EmptyStateBody,
   EmptyStateFooter,
+  List,
+  ListItem,
 } from "@patternfly/react-core";
 import { RouteIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
@@ -18,6 +21,7 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
 import {
+  ApplicationMigrationPath,
   ApplicationMigrationResult,
   ApplicationMigrationView,
   EntityId,
@@ -187,7 +191,7 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         />
         <NoMigrationPlan
           migration={migration}
-          archetype={migration.archetype ?? archetypes[0]}
+          archetype={shownPath(migration)?.archetype ?? archetypes[0]}
           linkTo={linkTo}
         />
         {/* A run that used a plan chosen at launch still has its skills. */}
@@ -218,12 +222,20 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
         )
       : migration.stages;
   const hasRun = migration.planRun != null;
-  // The latest run ran another plan than the one the next run uses. Without
-  // the run's plan nothing is said: it is never guessed from the run name.
+  // The latest run ran another plan than the one the next run uses (the
+  // default path's), or, with several runnable target profiles, a plan none
+  // of them uses. Without the run's plan nothing is said: it is never
+  // guessed from the run name.
+  const runPlanId = migration.planRunPlan?.id;
   const ranOtherPlan =
-    migration.planRunPlan != null &&
+    runPlanId != null &&
     migration.plan != null &&
-    migration.planRunPlan.id !== migration.plan.id;
+    runPlanId !== migration.plan.id;
+  const ranUnusedPlan =
+    runPlanId != null &&
+    migration.plan == null &&
+    runnablePaths(migration).length > 1 &&
+    !runnablePaths(migration).some(({ plan }) => plan?.id === runPlanId);
   const planLink = (plan: EntityRef | undefined) =>
     plan != null ? (
       <Link
@@ -293,7 +305,20 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
           headingId="migration-stages-heading"
           title={t("agentic.stageRunsTable.label")}
           description={
-            ranOtherPlan ? (
+            ranUnusedPlan ? (
+              <Trans
+                i18nKey="agentic.execution.latestRunUnusedPlan"
+                values={{ plan: migration.planRunPlan?.name }}
+                components={{
+                  runLink: migration.planRun ? (
+                    <Link to={linkTo(planRunPath(migration.planRun.id))} />
+                  ) : (
+                    <span />
+                  ),
+                  planLink: planLink(migration.planRunPlan),
+                }}
+              />
+            ) : ranOtherPlan ? (
               // Names both plans, so the Stages (the run's plan) and the
               // Migration plan fact (the plan the next run uses) do not read
               // as one plan. The run's own name often holds its plan's
@@ -354,10 +379,93 @@ export const MigrationTab: React.FC<MigrationTabProps> = ({
   );
 };
 
+/** The application's migration paths whose target profile has a plan. */
+const runnablePaths = (migration: ApplicationMigrationView) =>
+  (migration.migrationPaths ?? []).filter(({ plan }) => plan != null);
+
+/**
+ * The migration path the Target profile and Migration plan facts show: the
+ * default path, else the only path (without a plan). Undefined when the
+ * application has several paths and no default: the Target profiles fact
+ * lists them instead.
+ */
+const shownPath = (
+  migration: ApplicationMigrationView
+): ApplicationMigrationPath | undefined => {
+  if (migration.targetProfile != null && migration.archetype != null) {
+    return {
+      archetype: migration.archetype,
+      targetProfile: migration.targetProfile,
+      plan: migration.plan,
+    };
+  }
+  const paths = migration.migrationPaths ?? [];
+  return paths.length === 1 ? paths[0] : undefined;
+};
+
+/**
+ * Every migration path of an application without a default, one per line:
+ * "Quarkus 3.x (Java EE Application): Java EE to Quarkus", the profile and
+ * the plan linked, "Not assigned" for a profile without a plan. With
+ * several plans to run, a note says a run picks one.
+ */
+const MigrationPathsFact: React.FC<{
+  paths: ApplicationMigrationPath[];
+  to: (path: string) => LocationDescriptor;
+  linkTo: (pathname: string) => LocationDescriptor;
+}> = ({ paths, to, linkTo }) => {
+  const { t } = useTranslation();
+  const runnableCount = paths.filter(({ plan }) => plan != null).length;
+  return (
+    <>
+      <List isPlain>
+        {paths.map(({ archetype, targetProfile, plan }) => (
+          <ListItem key={`${archetype.id}-${targetProfile.id}`}>
+            <Trans
+              i18nKey="agentic.execution.migrationPathPlan"
+              values={{
+                profile: targetProfile.name,
+                archetype: archetype.name,
+                plan: plan?.name ?? t("agentic.execution.notAssigned"),
+              }}
+              components={{
+                profileLink: (
+                  <Link
+                    to={to(targetProfilePath(archetype.id, targetProfile.id))}
+                  />
+                ),
+                planLink:
+                  plan != null ? (
+                    <Link
+                      to={linkTo(
+                        generatePath(DevPaths.migrationPlanDetails, {
+                          planId: plan.id,
+                        })
+                      )}
+                    />
+                  ) : (
+                    <i className={textStyles.textColorSubtle} />
+                  ),
+              }}
+            />
+          </ListItem>
+        ))}
+      </List>
+      {runnableCount > 1 && (
+        <Content component="small" className={textStyles.textColorSubtle}>
+          {t("agentic.execution.migrationPathsNote")}
+        </Content>
+      )}
+    </>
+  );
+};
+
 /**
  * The facts: Status, then the chain that decides the plan
- * (Archetype, Target profile, Migration plan), then Plan run and Target
- * branch once there is a run. Each name links where it is edited.
+ * (Archetype, Target profile, Migration plan; or, for several target
+ * profiles and no default, Target profiles with the plan each uses), then
+ * Plan run and Target branch once there is a run. Each name links where it
+ * is edited.
  */
 const MigrationFacts: React.FC<{
   migration: ApplicationMigrationView;
@@ -374,8 +482,10 @@ const MigrationFacts: React.FC<{
   const targetBranch = migration.result?.targetBranch ?? planRun?.targetBranch;
   const to = (path: string) => linkToPath(linkTo, path);
 
+  const chainPath = shownPath(migration);
+  const paths = migration.migrationPaths ?? [];
   // The target profile's archetype first, then the others by name.
-  const chainArchetype = migration.archetype;
+  const chainArchetype = chainPath?.archetype;
   const orderedArchetypes: Ref[] = [
     ...(chainArchetype != null ? [chainArchetype] : []),
     ...[...archetypes]
@@ -414,41 +524,56 @@ const MigrationFacts: React.FC<{
         />
       ),
     ],
-    [
-      t("agentic.execution.targetProfile"),
-      migration.targetProfile == null ? (
-        none
-      ) : migration.archetype != null ? (
-        <Link
-          to={to(
-            targetProfilePath(
-              migration.archetype.id,
-              migration.targetProfile.id
-            )
-          )}
-        >
-          {migration.targetProfile.name}
-        </Link>
-      ) : (
-        migration.targetProfile.name
-      ),
-    ],
-    [
-      t("agentic.entity.migrationPlan"),
-      migration.plan ? (
-        <Link
-          to={linkTo(
-            generatePath(DevPaths.migrationPlanDetails, {
-              planId: migration.plan.id,
-            })
-          )}
-        >
-          {migration.plan.name}
-        </Link>
-      ) : (
-        <EmptyTextMessage message={t("agentic.execution.notAssigned")} />
-      ),
-    ],
+    ...(chainPath == null && paths.length > 1
+      ? ([
+          [
+            t("terms.targetProfiles"),
+            <MigrationPathsFact
+              key="paths"
+              paths={paths}
+              to={to}
+              linkTo={linkTo}
+            />,
+          ],
+        ] as [string, React.ReactNode][])
+      : ([
+          [
+            t("agentic.execution.targetProfile"),
+            chainPath != null ? (
+              <Link
+                to={to(
+                  targetProfilePath(
+                    chainPath.archetype.id,
+                    chainPath.targetProfile.id
+                  )
+                )}
+              >
+                {chainPath.targetProfile.name}
+              </Link>
+            ) : migration.targetProfile != null ? (
+              // A profile without a known archetype stays text.
+              migration.targetProfile.name
+            ) : (
+              none
+            ),
+          ],
+          [
+            t("agentic.entity.migrationPlan"),
+            migration.plan ? (
+              <Link
+                to={linkTo(
+                  generatePath(DevPaths.migrationPlanDetails, {
+                    planId: migration.plan.id,
+                  })
+                )}
+              >
+                {migration.plan.name}
+              </Link>
+            ) : (
+              <EmptyTextMessage message={t("agentic.execution.notAssigned")} />
+            ),
+          ],
+        ] as [string, React.ReactNode][])),
     ...(migration.planRun
       ? ([
           [
@@ -621,9 +746,9 @@ const CommitsSection: React.FC<{ result: ApplicationMigrationResult }> = ({
 
 /**
  * No migration plan resolves for the application. Plans come from the
- * archetype's target profile, so the body names the missing link of that
- * chain (no archetype, no target profile, no plan on the profile) and the
- * action goes where it is fixed.
+ * archetype's target profiles, so the body names the missing link of that
+ * chain (no archetype, no target profile, no plan on its target profile or
+ * on any of them) and the action goes where it is fixed.
  */
 const NoMigrationPlan: React.FC<{
   migration: ApplicationMigrationView;
@@ -636,17 +761,30 @@ const NoMigrationPlan: React.FC<{
       archetype != null ? targetProfilesPath(archetype.id) : DevPaths.archetypes
     )
   );
+  // The archetype's target profiles; without the paths, the server's own.
+  const profiles =
+    migration.migrationPaths != null
+      ? migration.migrationPaths
+          .filter((path) => path.archetype.id === archetype?.id)
+          .map((path) => path.targetProfile)
+      : migration.targetProfile != null
+        ? [migration.targetProfile]
+        : [];
   const body =
     archetype == null
       ? t("agentic.execution.noArchetypeBody")
-      : migration.targetProfile == null
+      : profiles.length === 0
         ? t("agentic.execution.noTargetProfileBody", {
             archetype: archetype.name,
           })
-        : t("agentic.execution.noPlanForProfileBody", {
-            profile: migration.targetProfile.name,
-            archetype: archetype.name,
-          });
+        : profiles.length === 1
+          ? t("agentic.execution.noPlanForProfileBody", {
+              profile: profiles[0].name,
+              archetype: archetype.name,
+            })
+          : t("agentic.execution.noPlanForProfilesBody", {
+              archetype: archetype.name,
+            });
   return (
     <EmptyState
       headingLevel="h2"

@@ -401,9 +401,10 @@ export const resolvePlanSkills = (request: ResolvePlanSkillsRequest) =>
     .then(({ data }) => data);
 
 /**
- * Makes `planId` the default Plan for one target profile of an archetype, in
- * one atomic server-side write (the previous default Plan loses the profile).
- * Real backend: missing (Hub product vocabulary: migration path resolution).
+ * Makes `planId` the migration plan one target profile of an archetype uses.
+ * Only that profile changes; several profiles, of any archetypes, may use one
+ * plan, whose `migrationPaths` the server derives. Real backend: missing (a
+ * `migrationPlan` reference on the Hub `TargetProfile`).
  */
 export const assignPlanToTargetProfile = ({
   archetypeId,

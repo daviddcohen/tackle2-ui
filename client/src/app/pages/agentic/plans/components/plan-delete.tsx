@@ -12,36 +12,41 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 
 /**
  * Why `plan` cannot be deleted, or undefined when it can: the list row and
- * the detail Actions menu say the same thing. A plan with runs, a plan that
- * applications resolve to, and the assigned plan of a target profile are
- * kept. Usage the server did not report blocks the delete.
+ * the detail Actions menu say the same thing. In the server's order: a plan
+ * with runs, then a plan that target profiles use (with how many
+ * applications it can migrate, when it has any). Usage the server did not
+ * report blocks the delete.
  */
 export const getPlanDeleteBlocker = (
   plan: MigrationPlan,
   t: TFunction
 ): string | undefined => {
-  if (plan.runCount == null || plan.applicationImpact == null) {
+  if (
+    plan.runCount == null ||
+    plan.applicationImpact == null ||
+    plan.migrationPaths == null
+  ) {
     return t("agentic.common.usageUnchecked");
   }
   if (plan.runCount > 0) {
     return t("agentic.plan.deleteUsedByRuns", { count: plan.runCount });
   }
-  const profiles = (plan.migrationPath?.targetProfiles ?? [])
-    .map((profile) => profile.name)
-    .join(", ");
-  if (plan.applicationImpact.matching > 0) {
-    return t("agentic.plan.deleteMatchingApplications", {
-      count: plan.applicationImpact.matching,
-      profile: profiles,
-    });
+  const paths = plan.migrationPaths;
+  if (paths.length === 0) {
+    return undefined;
   }
-  if (plan.migrationPath?.isDefault === true) {
-    return t("agentic.plan.deleteAssigned", {
-      archetype: plan.migrationPath.archetype.name,
-      profile: profiles,
-    });
-  }
-  return undefined;
+  const profiles = paths.map(({ archetype, targetProfile }) =>
+    t("agentic.skill.targetProfileOption", {
+      profile: targetProfile.name,
+      archetype: archetype.name,
+    })
+  );
+  return plan.applicationImpact.matching > 0
+    ? t("agentic.plan.deleteMatchingApplications", {
+        count: plan.applicationImpact.matching,
+        profiles,
+      })
+    : t("agentic.plan.deleteAssigned", { count: paths.length, profiles });
 };
 
 /**

@@ -10,15 +10,15 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
-  addTargetProfile,
   dialog,
   expect,
   expectHealthy,
   gotoProto,
   main,
+  mainHeading,
   openRowActions,
-  pickMenuOption,
   pickMulti,
+  pickRunTargetProfile,
   rowByText,
   spaNavigate,
   test,
@@ -30,6 +30,9 @@ const SELECT = "manage-skills-select";
 const PLAN_PATH = "/migration-plans/5";
 const PLAN = "Legacy Java runtime modernization";
 const ARCHETYPE = "Legacy Java Application";
+// Used by target profiles of Java EE Application and Legacy Java Application.
+const SHARED_PLAN_PATH = "/migration-plans/3";
+const SHARED_PLAN = "Java lift and shift";
 const APPLICATION_PATH = "/applications/13";
 const APPLICATION = "Branch Operations";
 // In no Legacy Java Application plan, archetype or agent in the fixtures.
@@ -59,8 +62,8 @@ const applicationSkills = (page: Page) =>
 /**
  * From the application page, before any run: the Migration tab says skills
  * are resolved when a plan runs, so open the Run migration plan dialog from
- * its Stages section and expand Skills by stage and the application's
- * Every stage group.
+ * its Stages section, pick the target profile it runs on and expand Skills
+ * by stage and the application's Every stage group.
  */
 const openRunSkillsPreview = async (page: Page) => {
   await page.getByRole("tab", { name: "Migration", exact: true }).click();
@@ -74,6 +77,13 @@ const openRunSkillsPreview = async (page: Page) => {
     .getByRole("button", { name: "Run migration plan", exact: true })
     .click();
   const preflight = dialog(page, "Run migration plan");
+  // Two of its target profiles have a plan: the run needs a pick.
+  await pickRunTargetProfile(
+    page,
+    preflight,
+    APPLICATION,
+    "Java 17 on OpenShift"
+  );
   await preflight.getByRole("button", { name: "Skills by stage" }).click();
   await preflight
     .getByRole("button", { name: new RegExp(`Every stage: ${APPLICATION}`) })
@@ -166,40 +176,29 @@ test.describe("Skill associations in the plan skill review", () => {
     expectHealthy(diagnostics);
   });
 
-  test("a target profile skill from Manage skills shows in the new plan's Skills step", async ({
+  test("a target profile skill from Manage skills shows in the Skills step of the plan it uses", async ({
     page,
   }) => {
-    // A second profile for the archetype, which no plan is assigned to yet.
-    await gotoProto(page, "/migration-plans");
-    await addTargetProfile(page, 3, { id: 32, name: "Java 17 on RHEL" });
-    await spaNavigate(page, "/archetypes/3/target-profiles");
-    await openRowActions(page, "Java 17 on RHEL");
+    // Java 8 on OpenShift uses Java lift and shift, which a Java EE target
+    // profile uses too: the skill reaches that plan's Every stage.
+    await gotoProto(page, `/archetypes/3/target-profiles`);
+    const profile = "Java 8 on OpenShift";
+    const profileRow = rowByText(page, profile);
+    await expect(profileRow).toContainText(SHARED_PLAN);
+    await openRowActions(page, profile);
     await page.getByRole("menuitem", { name: MANAGE, exact: true }).click();
     await addSkillInModal(
       page,
       SKILL,
-      `Skills for Java 17 on RHEL (${ARCHETYPE}) updated`
+      `Skills for ${profile} (${ARCHETYPE}) updated`
     );
 
-    await spaNavigate(page, "/migration-plans");
-    await page.getByRole("button", { name: "Create migration plan" }).click();
-    const wizard = page.getByRole("dialog");
-    await wizard.getByRole("textbox", { name: /^Name/ }).fill("RHEL review");
-    await wizard.getByRole("button", { name: "Next", exact: true }).click();
-    await wizard.getByRole("button", { name: /^Archetype/ }).click();
-    await pickMenuOption(page, ARCHETYPE);
-    await wizard.locator("#plan-target-profiles-input").click();
-    await pickMenuOption(page, "Java 17 on RHEL");
-    await wizard.getByText(/^Applications in this archetype/).click();
-    await wizard.getByRole("button", { name: "Next", exact: true }).click();
-    await wizard.getByRole("textbox", { name: "Stage name" }).fill("Migrate");
-    await wizard.getByRole("button", { name: /^Agent/ }).click();
-    await pickMenuOption(page, "Code Migrator");
-    await wizard.getByRole("button", { name: "Next", exact: true }).click();
-
+    await spaNavigate(page, SHARED_PLAN_PATH);
+    await expect(mainHeading(page)).toHaveText(SHARED_PLAN);
+    const wizard = await openPlanEdit(page);
     await expect(stageSkillRows(wizard, SKILL)).toHaveCount(1);
     await expect(stageSkillRows(wizard, SKILL)).toContainText(
-      "Target profile: Java 17 on RHEL"
+      `Target profile: ${profile} (${ARCHETYPE})`
     );
     await expect(includeBox(wizard, SKILL)).toBeChecked();
   });

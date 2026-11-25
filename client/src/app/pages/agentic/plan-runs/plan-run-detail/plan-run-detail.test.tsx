@@ -317,24 +317,6 @@ describe("PlanRunDetail", () => {
     })),
   });
 
-  const usePlan = () =>
-    server.use(
-      rest.get(`${AGENTIC_ENDPOINTS.plans}/:id`, (_req, res, ctx) =>
-        res(
-          ctx.json({
-            id: "1",
-            name: "Java EE to Quarkus",
-            stages: [],
-            migrationPath: {
-              archetype: javaEE,
-              targetProfiles: [quarkus],
-              isDefault: true,
-            },
-          })
-        )
-      )
-    );
-
   const skillsTable = () =>
     screen.findByRole("grid", { name: "Skills by stage" });
 
@@ -354,7 +336,6 @@ describe("PlanRunDetail", () => {
   });
 
   it("shows each stage, then each application's Every stage group", async () => {
-    usePlan();
     useRun(run({ skills: snapshot([customers, claims]) }));
     renderPage();
     const table = await skillsTable();
@@ -395,7 +376,6 @@ describe("PlanRunDetail", () => {
   });
 
   it("links with the run as origin, keeping each link's own query and anchor", async () => {
-    usePlan();
     useRun(run({ skills: snapshot([claims]) }));
     renderPage();
     const table = await skillsTable();
@@ -411,12 +391,11 @@ describe("PlanRunDetail", () => {
     expect(
       within(table).getAllByRole("link", { name: "Claims Processing" })[0]
     ).toHaveAttribute("href", "/applications/3?tab=skills&from=run-1");
-    // The plan's own archetype: its profile needs no archetype suffix.
-    await waitFor(() =>
-      expect(
-        within(table).getByRole("row", { name: /Quarkus best practices/ })
-      ).not.toHaveTextContent("(Java EE Application)")
-    );
+    // A run's target profiles can belong to several archetypes: each names
+    // its archetype.
+    expect(
+      within(table).getByRole("row", { name: /Quarkus best practices/ })
+    ).toHaveTextContent("Quarkus 3.x (Java EE Application)");
   });
 
   it("says the section sentence without the attribution for one application", async () => {

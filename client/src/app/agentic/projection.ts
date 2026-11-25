@@ -1,12 +1,11 @@
-import { universalComparator } from "@app/utils/utils";
-
 import {
   Agent,
   ApplicationMigrationDisplayStatus,
   ApplicationMigrationView,
   ConfigurationCheck,
   ControllerRunPhase,
-  HubRef,
+  EntityId,
+  EntityRef,
   MigrationPlan,
   ModelProjection,
   PlanRun,
@@ -98,8 +97,9 @@ export const getStagesWithUnverifiedModel = (
 
 /**
  * Configuration checks of a Plan: its stages have agents, and their models
- * are verified. A plan without a migration path is not a configuration
- * problem (it runs when someone picks it), so there is no path check.
+ * are verified. A plan no target profile uses is not a configuration
+ * problem (it runs when someone picks it), so there is no target profile
+ * check.
  * Pass `undefined` for `agents` or `models`
  * while they are loading or failed to load: the Model check is then not
  * evaluated rather than reported as an issue.
@@ -149,39 +149,20 @@ export const getPlanConfigurationChecks = (
 };
 
 /**
- * One archetype + target profile migration path, as the plan pages present
- * it: "Quarkus 3.x (Java EE Application)".
+ * Every migration plan an application can run: the plan of each of its
+ * migration paths, once each, in path order. Without the paths (a server
+ * that does not report them), its default plan. An application counts for
+ * each of these plans, like a plan's `applicationImpact`.
  */
-export interface PlanTargetProfile {
-  archetype: HubRef;
-  targetProfile: HubRef;
-}
-
-/**
- * Every archetype + target profile pair of the plan's migration path, by
- * archetype name, then profile name. Today derived from `migrationPath` (one
- * archetype); when the plan reference moves onto the target profile (profiles
- * of several archetypes), only this derivation changes.
- */
-export const getPlanTargetProfiles = (
-  plan: MigrationPlan
-): PlanTargetProfile[] => {
-  const path = plan.migrationPath;
-  if (path == null) return [];
-  return path.targetProfiles
-    .map((targetProfile) => ({ archetype: path.archetype, targetProfile }))
-    .sort(
-      (a, b) =>
-        universalComparator(a.archetype.name, b.archetype.name) ||
-        universalComparator(a.targetProfile.name, b.targetProfile.name)
-    );
+export const getApplicationPlans = (
+  migration: ApplicationMigrationView
+): EntityRef[] => {
+  if (migration.migrationPaths == null) {
+    return migration.plan != null ? [migration.plan] : [];
+  }
+  const byId = new Map<EntityId, EntityRef>();
+  for (const { plan } of migration.migrationPaths) {
+    if (plan != null && !byId.has(plan.id)) byId.set(plan.id, plan);
+  }
+  return [...byId.values()];
 };
-
-/**
- * The pairs whose target profile uses the plan (its path is the default):
- * the profiles whose applications are migrated with it. Empty otherwise.
- */
-export const getAssignedTargetProfiles = (
-  plan: MigrationPlan
-): PlanTargetProfile[] =>
-  plan.migrationPath?.isDefault === true ? getPlanTargetProfiles(plan) : [];

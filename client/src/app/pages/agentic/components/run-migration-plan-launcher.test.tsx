@@ -9,9 +9,9 @@ import {
 
 const run = {
   id: "4",
-  name: "Run #4: Java EE lift and shift",
+  name: "Run #4: Java lift and shift",
   planId: "3",
-  planName: "Java EE lift and shift",
+  planName: "Java lift and shift",
   applications: [
     { id: 2, name: "Policy Administration" },
     { id: 4, name: "Order Service" },
@@ -42,6 +42,23 @@ describe("rerunInitialValues", () => {
   it("uses the run's plan for all when an application now resolves elsewhere", () => {
     expect(
       rerunInitialValues(run, run.applications, { 2: view("3"), 4: view("1") })
+    ).toEqual({
+      planSelection: "single",
+      planId: "3",
+      targetBranch: "konveyor/lift-and-shift",
+    });
+  });
+
+  it("uses the run's plan for all when an application has no default plan", () => {
+    // Several target profiles with a plan: no default, so "each
+    // application's plan" would need a pick; the run's plan for all picks
+    // the profile that uses it.
+    const noDefault: ApplicationMigrationView = {
+      ...view("3"),
+      plan: undefined,
+    };
+    expect(
+      rerunInitialValues(run, run.applications, { 2: view("3"), 4: noDefault })
     ).toEqual({
       planSelection: "single",
       planId: "3",

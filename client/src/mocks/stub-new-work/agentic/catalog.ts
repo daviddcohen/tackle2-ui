@@ -14,7 +14,6 @@ import {
   EntityId,
   ExecutionPolicy,
   HubSkillAssociationScope,
-  MigrationPathAssociation,
   MigrationPlan,
   ModelProjection,
   PlanStage,
@@ -49,6 +48,7 @@ import {
   hubIdOf,
   isSeeded,
   listNames,
+  migrationPathsOfPlan,
   nextId,
   notFound,
   nowIso,
@@ -689,9 +689,10 @@ export const startAgentTestRun = (input: unknown) => {
 // ---------------------------------------------------------------------------
 
 /**
- * PUT /archetypes/:archetypeId/target-profiles/:profileId/plan. Atomically
- * makes the Plan the default for the target profile: the previous default Plan
- * loses the profile, the selected Plan gains it (and the archetype).
+ * PUT /archetypes/:archetypeId/target-profiles/:profileId/plan. Makes the
+ * Plan the one this target profile uses (the reference lives on the
+ * profile). Only this profile changes: other profiles, of this archetype or
+ * another, keep their plans, and several profiles may use one Plan.
  */
 export const assignPlanToTargetProfile = (
   archetypeId: number,
@@ -713,40 +714,7 @@ export const assignPlanToTargetProfile = (
   }
   const selected = db.plans.find((plan) => plan.id === planId);
   if (!selected) throw badRequest(`Plan "${planId}" does not exist.`);
-
-  const time = nowIso();
-  db.plans.forEach((plan) => {
-    if (
-      plan.id !== selected.id &&
-      plan.migrationPath?.archetype.id === archetypeId &&
-      plan.migrationPath.isDefault &&
-      plan.migrationPath.targetProfiles.some((p) => p.id === targetProfileId)
-    ) {
-      // The previous default gives up this profile but keeps its migration
-      // path: it stays the default for its other profiles, or, when this was
-      // its only profile, stays associated with it as a non-default Plan.
-      const remaining = plan.migrationPath.targetProfiles.filter(
-        (p) => p.id !== targetProfileId
-      );
-      plan.migrationPath =
-        remaining.length > 0
-          ? { ...plan.migrationPath, targetProfiles: remaining }
-          : { ...plan.migrationPath, isDefault: false };
-      plan.updateTime = time;
-    }
-  });
-  const keep =
-    selected.migrationPath?.archetype.id === archetypeId
-      ? selected.migrationPath.targetProfiles.filter(
-          (p) => p.id !== targetProfileId
-        )
-      : [];
-  selected.migrationPath = {
-    archetype: { id: archetype.id, name: archetype.name },
-    targetProfiles: [...keep, { id: profile.id, name: profile.name }],
-    isDefault: true,
-  };
-  selected.updateTime = time;
+  db.targetProfilePlans[profile.id] = selected.id;
 };
 
 /** Excluded Skills that still exist, with current names. */
@@ -766,7 +734,7 @@ const withoutExcludedSkills = ({
 const planPreview = (plan: StoredPlan) =>
   resolveSkillsByStage({
     stages: stagesOfPlan(plan),
-    context: planContextOf(plan),
+    context: planContextOf(plan.id),
     excludedSkillIds: excludedSkillIdsOf(plan),
   });
 
@@ -776,24 +744,7 @@ export const presentPlan = (plan: StoredPlan): MigrationPlan => ({
     ...stage,
     agent: resolveAgentRef(stage.agent),
   })),
-  migrationPath: plan.migrationPath
-    ? {
-        ...plan.migrationPath,
-        archetype: {
-          id: plan.migrationPath.archetype.id,
-          name:
-            findArchetype(plan.migrationPath.archetype.id)?.name ??
-            plan.migrationPath.archetype.name,
-        },
-        // Profiles deleted from the archetype (a Hub write) drop out.
-        targetProfiles: plan.migrationPath.targetProfiles.flatMap((profile) => {
-          const current = findTargetProfile(profile.id);
-          return current
-            ? [{ id: profile.id, name: current.profile.name }]
-            : [];
-        }),
-      }
-    : undefined,
+  migrationPaths: migrationPathsOfPlan(plan.id),
   ...presentExcludedSkills(plan),
   applicationImpact: {
     matching: planImpact(plan.id),
@@ -806,60 +757,6 @@ export const listPlans = () => db.plans.map(presentPlan);
 
 export const getPlan = (id: EntityId) =>
   presentPlan(findOr404(db.plans, id, "Plan"));
-
-const parseMigrationPath = (value: unknown): MigrationPathAssociation => {
-  const body = asBody(value);
-  const archetypeId = hubIdOf(body.archetype, "migrationPath.archetype");
-  const archetype = findArchetype(archetypeId);
-  if (!archetype) {
-    throw badRequest(`Archetype "${archetypeId}" does not exist.`);
-  }
-  const requestedProfiles = requiredArray(body, "targetProfiles");
-  if (requestedProfiles.length === 0) {
-    throw badRequest("migrationPath.targetProfiles must not be empty.");
-  }
-  const profiles = requestedProfiles.map((profile) => {
-    const id = hubIdOf(profile, "migrationPath.targetProfiles");
-    const match = archetype.profiles?.find((candidate) => candidate.id === id);
-    if (!match) {
-      throw badRequest(
-        `Target profile "${id}" does not belong to archetype "${archetype.name}".`
-      );
-    }
-    return { id: match.id, name: match.name };
-  });
-  return {
-    archetype: { id: archetype.id, name: archetype.name },
-    targetProfiles: profiles,
-    isDefault: body.isDefault === true,
-  };
-};
-
-/**
- * One default Plan per target profile: a default path may not cover a profile
- * that another Plan already defaults. Moving the default is an explicit
- * action (`assignPlanToTargetProfile`).
- */
-const assertSingleDefault = (
-  path: MigrationPathAssociation,
-  planId?: EntityId
-) => {
-  if (!path.isDefault) return;
-  path.targetProfiles.forEach((profile) => {
-    const owner = db.plans.find(
-      (plan) =>
-        plan.id !== planId &&
-        plan.migrationPath?.isDefault === true &&
-        plan.migrationPath.archetype.id === path.archetype.id &&
-        plan.migrationPath.targetProfiles.some((p) => p.id === profile.id)
-    );
-    if (owner) {
-      throw conflict(
-        `Plan "${owner.name}" is already the default Plan for target profile "${profile.name}". Assign the Plan to the target profile to change its default.`
-      );
-    }
-  });
-};
 
 /** Ids of the request's `excludedSkills` (shape only), deduplicated. */
 const excludedSkillIds = (body: Body): EntityId[] => [
@@ -890,11 +787,6 @@ const parsePlan = (input: unknown, existing?: StoredPlan) => {
       requiresApproval: stage.requiresApproval === true,
     };
   });
-  const migrationPath =
-    body.migrationPath != null
-      ? parseMigrationPath(body.migrationPath)
-      : undefined;
-  if (migrationPath) assertSingleDefault(migrationPath, existing?.id);
   // An id that is not a Skill matches nothing, so it is dropped, as the
   // resolver and the reads do (a skill deleted after the wizard resolved).
   const excludedSkills = excludedSkillIds(body)
@@ -903,7 +795,6 @@ const parsePlan = (input: unknown, existing?: StoredPlan) => {
   return {
     name: planName,
     description: description(body, "Plan"),
-    migrationPath,
     stages,
     excludedSkills,
   };
@@ -944,7 +835,6 @@ export const createPlan = (input: unknown) => {
     id: nextId("plans"),
     name: parsed.name,
     description: parsed.description,
-    migrationPath: parsed.migrationPath,
     stages: buildStages(parsed.stages),
     ...(parsed.excludedSkills.length > 0
       ? { excludedSkills: parsed.excludedSkills }
@@ -962,7 +852,6 @@ export const updatePlan = (id: EntityId, input: unknown) => {
   Object.assign(plan, {
     name: parsed.name,
     description: parsed.description,
-    migrationPath: parsed.migrationPath,
     stages: buildStages(parsed.stages, plan),
     updateTime: nowIso(),
   });
@@ -976,14 +865,15 @@ export const updatePlan = (id: EntityId, input: unknown) => {
 /**
  * POST /plans/skills/resolve: what each stage of a draft Plan gets
  * (`resolveSkillsByStage`), for the plan wizard and plan pages. Without
- * `applications` it is the plan preview (context from the draft's
- * migration path); with them, one `everyStage` group per application from
- * its own context, with the target profile each application's entry picks
- * (`targetProfile`: absent, its default; null, none). Malformed bodies are a
- * 400, and so is a pick that is not a profile of the application's
- * archetypes; ids that reference nothing (an agent, archetype, target
- * profile, application or Skill deleted meanwhile, or a draft still being
- * edited) add nothing, unlike a save, which rejects unknown agents.
+ * `applications` it is the plan preview (context: the request's
+ * `targetProfiles` and their archetypes); with them, one `everyStage` group
+ * per application from its own context, with the target profile each
+ * application's entry picks (`targetProfile`: absent, its default path's;
+ * null, none). Malformed bodies are a 400, and so is a pick that is not a
+ * profile of the application's archetypes; ids that reference nothing (an
+ * agent, application, Skill or `targetProfiles` entry deleted meanwhile, or
+ * a draft still being edited) add nothing, unlike a save, which rejects
+ * unknown agents.
  */
 export const resolvePlanSkills = (
   input: unknown
@@ -996,17 +886,17 @@ export const resolvePlanSkills = (
       name: optionalString(stage, "name") || `Stage ${index + 1}`,
     };
   });
-  let context: ResolutionContext = { kind: "plan", targetProfileIds: [] };
-  if (body.migrationPath != null) {
-    const path = asBody(body.migrationPath);
-    context = {
-      kind: "plan",
-      archetypeId: hubIdOf(path.archetype, "migrationPath.archetype"),
-      targetProfileIds: optionalArray(path, "targetProfiles").map((profile) =>
-        hubIdOf(profile, "migrationPath.targetProfiles")
+  let context: ResolutionContext = {
+    kind: "plan",
+    targetProfileIds: [
+      ...new Set(
+        optionalArray(body, "targetProfiles")
+          .map((value, index) => hubIdOf(value, `targetProfiles[${index}]`))
+          // A target profile deleted meanwhile adds nothing.
+          .filter((id) => findTargetProfile(id) != null)
       ),
-    };
-  }
+    ],
+  };
   // An empty list is the same as none: the plan preview.
   const applications = optionalArray(body, "applications");
   if (applications.length > 0) {
@@ -1074,6 +964,11 @@ export const listSkillPlans = (
   };
 };
 
+/**
+ * DELETE /plans/:id. 409 while plan runs use the Plan, then 409 while target
+ * profiles use it (the plan list and page block the delete in the same
+ * order). References left by deleted target profiles go with the Plan.
+ */
 export const deletePlan = (id: EntityId) => {
   const plan = findOr404(db.plans, id, "Plan");
   const runs = runsUsingPlan(id);
@@ -1082,7 +977,22 @@ export const deletePlan = (id: EntityId) => {
       `Plan "${plan.name}" is used by ${runs.length} plan run(s). Plans with runs cannot be deleted.`
     );
   }
+  const paths = migrationPathsOfPlan(id);
+  if (paths.length > 0) {
+    const profiles = listNames(
+      paths.map(
+        ({ archetype, targetProfile }) =>
+          `${targetProfile.name} (${archetype.name})`
+      )
+    );
+    throw conflict(
+      `Plan "${plan.name}" is used by target ${paths.length === 1 ? "profile" : "profiles"} ${profiles}. Assign ${paths.length === 1 ? "it" : "them"} another plan first.`
+    );
+  }
   db.plans = db.plans.filter((candidate) => candidate.id !== id);
+  Object.entries(db.targetProfilePlans).forEach(([profileId, planId]) => {
+    if (planId === id) delete db.targetProfilePlans[Number(profileId)];
+  });
 };
 
 // ---------------------------------------------------------------------------

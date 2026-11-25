@@ -6,6 +6,7 @@ import { Router } from "react-router-dom";
 
 import { ApplicationMigrationView } from "@app/agentic";
 import { Application } from "@app/api/models";
+import { serializeFilterUrlParams } from "@app/hooks/table-controls";
 import { agenticWorkflowRunsWriteScopes, skillsWriteScopes } from "@app/scopes";
 import { render, screen, within } from "@app/test-config/test-utils";
 
@@ -22,6 +23,8 @@ const mockState: {
   canRun: boolean;
   canManageSkills: boolean;
   migration: ApplicationMigrationView;
+  /** A second application (id 2) and its migration, when a test needs one. */
+  other?: { name: string; migration: ApplicationMigrationView };
 } = {
   canRun: true,
   canManageSkills: true,
@@ -93,10 +96,23 @@ const mockApplication: DecoratedApplication = {
   direct: {},
 };
 
+const mockApplications = (): DecoratedApplication[] =>
+  mockState.other != null
+    ? [
+        mockApplication,
+        {
+          ...mockApplication,
+          id: 2,
+          name: mockState.other.name,
+          _: { ...mockApplicationBase, id: 2, name: mockState.other.name },
+        },
+      ]
+    : [mockApplication];
+
 jest.mock("@app/queries/applications", () => ({
   ...jest.requireActual("@app/queries/applications"),
   useFetchApplications: () => ({
-    data: [mockApplication],
+    data: mockApplications(),
     isFetching: false,
     error: null,
   }),
@@ -115,8 +131,8 @@ jest.mock("@app/queries/tasks", () => ({
 jest.mock("../useDecoratedApplications", () => ({
   ...jest.requireActual("../useDecoratedApplications"),
   useDecoratedApplications: () => ({
-    applications: [mockApplication],
-    applicationNames: [mockApplication.name],
+    applications: mockApplications(),
+    applicationNames: mockApplications().map(({ name }) => name),
     referencedArchetypeRefs: [],
     referencedBusinessServiceRefs: [],
     referencedPlatformRefs: [],
@@ -126,7 +142,10 @@ jest.mock("../useDecoratedApplications", () => ({
 jest.mock("@app/queries/agentic", () => ({
   ...jest.requireActual("@app/queries/agentic"),
   useFetchApplicationMigrations: () => ({
-    migrations: { 1: mockState.migration },
+    migrations: {
+      1: mockState.migration,
+      ...(mockState.other != null ? { 2: mockState.other.migration } : {}),
+    },
     isLoading: false,
     fetchError: null,
   }),
@@ -140,9 +159,9 @@ jest.mock("@app/pages/agentic/components/run-migration-plan-launcher", () => ({
   }),
 }));
 
-const renderTable = () =>
+const renderTable = (initialEntry = "/applications") =>
   render(
-    <Router history={createMemoryHistory()}>
+    <Router history={createMemoryHistory({ initialEntries: [initialEntry] })}>
       <ApplicationsTable />
     </Router>
   );
@@ -260,4 +279,70 @@ describe("ApplicationsTable agentic actions", () => {
       })
     ).not.toBeInTheDocument();
   });
+});
+
+describe("ApplicationsTable migration plan filter", () => {
+  const filteredBy = (planId: string) =>
+    `/applications?${new URLSearchParams({
+      filters:
+        serializeFilterUrlParams({ migrationPlan: [planId] }).filters ?? "",
+    })}`;
+  const javaEE = { id: 1, name: "Java EE Application" };
+
+  beforeEach(() => {
+    // Two target profiles with a plan: no default plan.
+    mockState.migration = {
+      configured: true,
+      intervention: "none",
+      stages: [],
+      preflight: "ready",
+      migrationPaths: [
+        {
+          archetype: javaEE,
+          targetProfile: { id: 11, name: "Quarkus 3.x" },
+          plan: { id: "1", name: "Java EE to Quarkus" },
+        },
+        {
+          archetype: javaEE,
+          targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+          plan: { id: "3", name: "Java lift and shift" },
+        },
+      ],
+    };
+  });
+
+  afterEach(() => {
+    mockState.other = undefined;
+    window.history.replaceState({}, "", "/");
+  });
+
+  it.each(["1", "3"])(
+    "matches an application when any of its target profiles uses plan %s",
+    async (planId) => {
+      // Another application on plan 5 only, so plan 5 is an option too.
+      mockState.other = {
+        name: "Billing",
+        migration: {
+          configured: true,
+          intervention: "none",
+          stages: [],
+          plan: { id: "5", name: "Legacy Java to RHEL" },
+          migrationPaths: [
+            {
+              archetype: { id: 3, name: "Legacy Java Application" },
+              targetProfile: { id: 31, name: "Java 17 on OpenShift" },
+              plan: { id: "5", name: "Legacy Java to RHEL" },
+            },
+          ],
+        },
+      };
+      // The URL params hook reads the document's location when it writes.
+      window.history.replaceState({}, "", filteredBy(planId));
+      renderTable(filteredBy(planId));
+      expect(
+        await screen.findByRole("row", { name: /Customer Management/ })
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("row", { name: /Billing/ })).toBeNull();
+    }
+  );
 });

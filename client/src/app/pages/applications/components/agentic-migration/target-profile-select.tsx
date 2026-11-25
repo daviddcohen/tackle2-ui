@@ -19,10 +19,7 @@ export interface TargetProfileSelectProps {
   candidates: ApplicationMigrationPath[];
   /** The profile picked (or preselected); undefined while one is required. */
   selectedId?: number;
-  /**
-   * "Use each application's migration plan": each option says the plan it
-   * runs, and a profile without an assigned plan cannot be picked.
-   */
+  /** "Use each application's migration plan": each option says the plan it runs. */
   showsPlans: boolean;
   onSelect: (targetProfileId: number) => void;
 }
@@ -58,11 +55,10 @@ export const TargetProfileSelect: React.FC<TargetProfileSelectProps> = ({
     const archetypeText = isSeveralArchetypes
       ? t("agentic.runSkills.optionArchetype", { archetype: archetype.name })
       : undefined;
-    const planText = showsPlans
-      ? plan != null
+    const planText =
+      showsPlans && plan != null
         ? t("agentic.runSkills.optionPlan", { plan: plan.name })
-        : t("agentic.runSkills.optionNoPlan")
-      : undefined;
+        : undefined;
     return archetypeText != null && planText != null
       ? t("agentic.runSkills.optionDetails", {
           archetype: archetypeText,
@@ -114,7 +110,6 @@ export const TargetProfileSelect: React.FC<TargetProfileSelectProps> = ({
               key={path.targetProfile.id}
               value={path.targetProfile.id}
               description={description(path)}
-              isDisabled={showsPlans && path.plan == null}
             >
               {path.targetProfile.name}
             </SelectOption>

@@ -158,9 +158,10 @@ const read =
  * delays 10 s. `initial` hides nothing here, on purpose: the preview is the
  * same resolution as a saved plan's, which `initial` does not filter
  * either. Hub archetypes and target profiles are not scenario-aware,
- * so in `initial` a draft with an archetype still resolves the fixture skills
- * associated with it, as a plan saved with that archetype does; those skills
- * are hidden from `GET /skills` and their pages are 404.
+ * so in `initial` a preview with target profiles still resolves the fixture
+ * skills associated with them and their archetypes, as a plan those profiles
+ * use does; those skills are hidden from `GET /skills` and their pages are
+ * 404.
  */
 const query =
   (handler: (req: Req) => Promise<unknown>) =>

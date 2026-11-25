@@ -5,13 +5,11 @@ import type { MigrationPlan } from "@app/agentic";
 import { useFetchMigrationPlans } from "@app/queries/agentic";
 
 /**
- * The one source for the migration plan assigned to each target profile of
- * an archetype, shared by the drawer Target profiles tab and the target
- * profiles page so the two never disagree (archetypes residual).
- *
- * "Assigned" means the default plan: a plan whose migration
- * path is the default for the archetype and lists the profile. Only that
- * plan resolves to applications, so archetype surfaces show only it.
+ * The one source for the migration plan each target profile of an archetype
+ * uses, shared by the drawer Target profiles tab and the target profiles
+ * page so the two never disagree (archetypes residual): the plan whose
+ * `migrationPaths` lists the profile. Any plan can be assigned to any
+ * target profile: profiles of several archetypes can share one.
  *
  * Without the agentic API there is no plans query.
  */
@@ -23,30 +21,17 @@ export const useTargetProfilePlans = (archetypeId: number | undefined) => {
 
   const getAssignedPlan = React.useCallback(
     (profileId: number): MigrationPlan | undefined =>
-      migrationPlans.find(
-        (plan) =>
-          plan.migrationPath?.isDefault &&
-          plan.migrationPath.archetype.id === archetypeId &&
-          plan.migrationPath.targetProfiles.some(
-            (targetProfile) => targetProfile.id === profileId
-          )
+      migrationPlans.find((plan) =>
+        (plan.migrationPaths ?? []).some(
+          ({ targetProfile }) => targetProfile.id === profileId
+        )
       ),
-    [archetypeId, migrationPlans]
-  );
-
-  /** Plans that can be assigned to a profile of this archetype. */
-  const eligiblePlans = React.useMemo(
-    () =>
-      migrationPlans.filter(
-        (plan) =>
-          !plan.migrationPath || plan.migrationPath.archetype.id === archetypeId
-      ),
-    [archetypeId, migrationPlans]
+    [migrationPlans]
   );
 
   return {
     getAssignedPlan,
-    eligiblePlans,
+    migrationPlans,
     isLoading,
     isSuccess,
     isError: fetchError != null,

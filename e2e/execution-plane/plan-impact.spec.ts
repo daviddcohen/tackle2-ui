@@ -75,14 +75,14 @@ test.describe("Plan impact and lifecycle", () => {
     await expect(page.locator(".pf-v6-c-alert.pf-m-warning")).toHaveCount(0);
   });
 
-  // A plan without a migration path runs when someone picks it ("Use one
+  // A plan no target profile uses runs when someone picks it ("Use one
   // migration plan for all applications"): not a configuration issue, so no
   // marker on the plans list and no alert on its page.
-  test("a plan without a migration path has no configuration issue", async ({
+  test("a plan no target profile uses has no configuration issue", async ({
     page,
   }) => {
     // With unverified models some plans get a marker: once one shows, the
-    // checks have run, and none names the missing path.
+    // checks have run, and none names the missing target profile.
     await page.goto(
       protoUrl("/migration-plans", { scenario: "partialConfiguration" })
     );
@@ -91,13 +91,17 @@ test.describe("Plan impact and lifecycle", () => {
         .getByRole("row", { name: /Java EE to Quarkus/ })
         .getByLabel(/not verified/)
     ).toBeVisible();
-    const row = page.getByRole("row", { name: /Java EE lift and shift/ });
+    const row = page.getByRole("row", { name: /Spring Boot 3 modernization/ });
     await expect(row).toBeVisible();
-    await expect(row.getByLabel(/migration path/i)).toHaveCount(0);
+    await expect(row).toContainText("Not assigned");
+    await expect(row.getByLabel(/target profile/i)).toHaveCount(0);
 
-    await page.goto(protoUrl("/migration-plans/3", { scenario: "configured" }));
+    await page.goto(protoUrl("/migration-plans/4", { scenario: "configured" }));
     await expect(
-      page.getByRole("heading", { level: 1, name: "Java EE lift and shift" })
+      page.getByRole("heading", {
+        level: 1,
+        name: "Spring Boot 3 modernization",
+      })
     ).toBeVisible();
     const configuration = page
       .getByRole("main")
@@ -139,7 +143,7 @@ test.describe("Plan impact and lifecycle", () => {
     ).toHaveAttribute("aria-disabled", "true");
   });
 
-  // Regression guard: delete is guarded only by applicationImpact/isDefault, not by plan runs. Deleting a
+  // Regression guard: delete was guarded only by the plan's target profiles, not by plan runs. Deleting a
   // Plan used by a run flips the run to Pending and its Plan link to "Plan not found".
   test("a Plan used by a plan run cannot be deleted", async ({ page }) => {
     await page.goto(protoUrl("/migration-plans", { scenario: "configured" }));
@@ -151,12 +155,6 @@ test.describe("Plan impact and lifecycle", () => {
     await dialog
       .getByRole("textbox", { name: /^Name/ })
       .fill("Plan in use by a run");
-    await dialog.getByRole("button", { name: "Next", exact: true }).click();
-    await dialog.getByRole("button", { name: /^Archetype/ }).click();
-    await pickMenuOption(page, "Node.js Service");
-    await dialog.locator("#plan-target-profiles-input").click();
-    await pickMenuOption(page, "Node.js 22 on OpenShift");
-    await dialog.getByText(/^Applications in this archetype/).click();
     await dialog.getByRole("button", { name: "Next", exact: true }).click();
     await dialog
       .getByRole("textbox", { name: "Stage name" })

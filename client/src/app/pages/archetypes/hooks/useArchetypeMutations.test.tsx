@@ -2,6 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { rest } from "msw";
 
 import { Archetype } from "@app/api/models";
+import { agenticKeys } from "@app/queries/agentic";
 import { ARCHETYPE_QUERY_KEY } from "@app/queries/archetypes";
 import {
   act,
@@ -11,7 +12,10 @@ import {
 } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
-import { useTargetProfileMutation } from "./useArchetypeMutations";
+import {
+  useArchetypeMutations,
+  useTargetProfileMutation,
+} from "./useArchetypeMutations";
 
 jest.mock("react-i18next", () =>
   jest.requireActual("@app/test-config/english-i18n")
@@ -100,5 +104,77 @@ describe("useTargetProfileMutation", () => {
     expect(queryClient.getQueryData([ARCHETYPE_QUERY_KEY, "1"])).toEqual(
       expected
     );
+  });
+});
+
+describe("target profile writes refresh plans and migration views", () => {
+  /** Cached plans and application migrations, to see what is invalidated. */
+  const seeded = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(agenticKeys.list("plans"), []);
+    queryClient.setQueryData(agenticKeys.list("applicationMigrations"), []);
+    server.use(
+      rest.put("/hub/archetypes/1", (_req, res, ctx) => res(ctx.status(204)))
+    );
+    return queryClient;
+  };
+  const isStale = (queryClient: QueryClient) =>
+    (["plans", "applicationMigrations"] as const).every(
+      (group) =>
+        queryClient.getQueryState(agenticKeys.list(group))?.isInvalidated
+    );
+
+  it("after a delete", async () => {
+    const queryClient = seeded();
+    const { result } = renderHook(() => useArchetypeMutations(), {
+      queryClient,
+    });
+    act(() => result.current.deleteTargetProfile(archetype, liftAndShift));
+    await waitFor(() => expect(isStale(queryClient)).toBe(true));
+  });
+
+  it("after a create and a rename, not after another change", async () => {
+    const queryClient = seeded();
+    const { result } = renderHook(() => useTargetProfileMutation(), {
+      queryClient,
+    });
+    const onSuccess = jest.fn();
+    act(() =>
+      result.current.updateTargetProfile(
+        archetype,
+        liftAndShift,
+        { generators: [] },
+        { onSuccess, onGone: jest.fn() }
+      )
+    );
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(isStale(queryClient)).toBe(false);
+
+    act(() =>
+      result.current.updateTargetProfile(
+        archetype,
+        liftAndShift,
+        { name: "Renamed" },
+        { onSuccess, onGone: jest.fn() }
+      )
+    );
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(2));
+    expect(isStale(queryClient)).toBe(true);
+
+    const created = seeded();
+    const { result: creating } = renderHook(() => useTargetProfileMutation(), {
+      queryClient: created,
+    });
+    act(() =>
+      creating.current.createTargetProfile(
+        archetype,
+        { name: "Payara 6", generators: [] },
+        onSuccess
+      )
+    );
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(3));
+    expect(isStale(created)).toBe(true);
   });
 });

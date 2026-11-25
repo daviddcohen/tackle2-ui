@@ -8,7 +8,7 @@ import {
 } from "@mocks/stub-new-work/prototype-support";
 
 import { resetAgenticDb } from "./db";
-import { getApplicationMigration, resolvePlanFor } from "./execution";
+import { getApplicationMigration } from "./execution";
 import {
   mockAgentTestRuns,
   mockAgents,
@@ -18,8 +18,10 @@ import {
   mockProviders,
   mockSkillCollections,
   mockSkills,
+  mockTargetProfilePlans,
 } from "./fixtures";
 import { PORTFOLIO_APPLICATION_IDS, selectPortfolio } from "./portfolio";
+import { migrationPathsOf } from "./skill-resolution";
 
 const ids = <T extends { id: number | string }>(items: T[]) =>
   new Set<number | string>(items.map((item) => item.id));
@@ -127,28 +129,42 @@ describe("agentic prototype fixtures", () => {
     });
   });
 
-  it("gives every archetype exactly one target profile", () => {
-    archetypes.forEach((archetype) =>
-      expect(archetype.profiles ?? []).toHaveLength(1)
+  it("gives every archetype a target profile, and the Java archetypes two", () => {
+    expect(
+      archetypes.map((archetype) => [
+        archetype.name,
+        (archetype.profiles ?? []).map((profile) => profile.name),
+      ])
+    ).toEqual([
+      ["Java EE Application", ["Quarkus 3.x", "OpenJDK 21 on OpenShift"]],
+      ["Spring Boot Application", ["Quarkus 3.x"]],
+      [
+        "Legacy Java Application",
+        ["Java 17 on OpenShift", "Java 8 on OpenShift"],
+      ],
+      [".NET Framework Application", [".NET 8 on OpenShift"]],
+      ["Node.js Service", ["Node.js 22 on OpenShift"]],
+    ]);
+    // Target profile ids are unique across archetypes.
+    expect(ids(targetProfiles).size).toBe(targetProfiles.length);
+  });
+
+  it("shares Java lift and shift between profiles of two archetypes", () => {
+    expect(
+      Object.entries(mockTargetProfilePlans)
+        .filter(([, planId]) => planId === "3")
+        .map(([profileId]) => Number(profileId))
+    ).toEqual([12, 32]);
+    expect(mockMigrationPlans.find((plan) => plan.id === "3")?.name).toBe(
+      "Java lift and shift"
     );
   });
 
-  it("connects every Plan to at most one valid migration path and valid Agents", () => {
+  it("connects every Plan to valid Agents and every target profile to an existing Plan", () => {
     const agentIds = ids(mockAgents);
-    const assignedTargetProfileIds = new Set<number>();
-
-    // The alternatives a user picks with "Use one migration plan for all
-    // applications" have no migration path.
-    expect(
-      mockMigrationPlans
-        .filter((plan) => plan.migrationPath == null)
-        .map((plan) => plan.name)
-    ).toEqual([
-      "Java EE lift and shift",
-      "Spring Boot 3 modernization",
-      ".NET lift and shift",
-    ]);
     mockMigrationPlans.forEach((plan) => {
+      // A plan's migration paths are server-derived, never seeded.
+      expect(plan).not.toHaveProperty("migrationPaths");
       expect(plan.stages.map((stage) => stage.order)).toEqual(
         plan.stages.map((_, index) => index + 1)
       );
@@ -160,29 +176,26 @@ describe("agentic prototype fixtures", () => {
       });
     });
 
-    mockMigrationPlans
-      .filter((plan) => plan.migrationPath != null)
-      .forEach((plan) => {
-        const archetype = mockArchetypes[plan.migrationPath!.archetype.id];
-        expect(archetype?.name).toBe(plan.migrationPath!.archetype.name);
-        expect(plan.migrationPath!.targetProfiles.length).toBeGreaterThan(0);
-        plan.migrationPath!.targetProfiles.forEach((profileRef) => {
-          const profile = archetype.profiles?.find(
-            (candidate) => candidate.id === profileRef.id
-          );
-          expect(profile?.name).toBe(profileRef.name);
-          expect(assignedTargetProfileIds.has(profileRef.id)).toBe(false);
-          assignedTargetProfileIds.add(profileRef.id);
-        });
-        expect(plan.migrationPath!.isDefault).toBe(true);
-      });
-
-    // Every target profile has its default plan.
+    const planIds = ids(mockMigrationPlans);
+    const profileIds = ids(targetProfiles);
+    Object.entries(mockTargetProfilePlans).forEach(([profileId, planId]) => {
+      expect(profileIds.has(Number(profileId))).toBe(true);
+      expect(planIds.has(planId)).toBe(true);
+    });
+    // Every target profile uses a plan.
     expect(
       targetProfiles
-        .filter((profile) => !assignedTargetProfileIds.has(profile.id))
+        .filter((profile) => mockTargetProfilePlans[profile.id] == null)
         .map((profile) => profile.id)
     ).toEqual([]);
+    // The alternatives a user picks with "Use one migration plan for all
+    // applications": no target profile uses them.
+    const used = new Set(Object.values(mockTargetProfilePlans));
+    expect(
+      mockMigrationPlans
+        .filter((plan) => !used.has(plan.id))
+        .map((plan) => plan.name)
+    ).toEqual(["Spring Boot 3 modernization", ".NET lift and shift"]);
   });
 
   it("sets a load policy on every Skill: rules for process and house rules", () => {
@@ -328,9 +341,21 @@ describe("agentic prototype fixtures", () => {
     const generatorIds = ids(mockGenerators);
     const analysisProfileIds = ids(mockAnalysisProfiles);
 
+    // Java 8 on OpenShift has none: the "Not assigned" analysis profile.
+    expect(
+      targetProfiles
+        .filter((profile) => profile.analysisProfile == null)
+        .map((profile) => profile.id)
+    ).toEqual([32]);
     targetProfiles.forEach((profile) => {
-      expect(profile.analysisProfile).toBeDefined();
-      expect(analysisProfileIds.has(profile.analysisProfile!.id)).toBe(true);
+      if (profile.analysisProfile != null) {
+        expect(analysisProfileIds.has(profile.analysisProfile.id)).toBe(true);
+        expect(
+          mockAnalysisProfiles.find(
+            (candidate) => candidate.id === profile.analysisProfile!.id
+          )?.name
+        ).toBe(profile.analysisProfile.name);
+      }
       profile.generators.forEach((generator) => {
         expect(generatorIds.has(generator.id)).toBe(true);
         expect(
@@ -341,17 +366,17 @@ describe("agentic prototype fixtures", () => {
     });
   });
 
-  it("resolves each portfolio Application to a Plan for its own Archetype", () => {
+  it("configures every portfolio Application: a target profile of its Archetype uses a Plan", () => {
     resetAgenticDb();
     selectPortfolio(mockApplicationArray).forEach((application) => {
-      const plan = resolvePlanFor(application);
-      expect(plan).toBeDefined();
-      expect(plan!.migrationPath!.archetype.id).toBe(
-        application.archetypes![0].id
+      const runnable = migrationPathsOf(application).filter(
+        (path) => path.plan != null
       );
-      const migration = getApplicationMigration(application);
-      expect(migration.configured).toBe(true);
-      expect(migration.plan).toBeDefined();
+      expect(runnable.length).toBeGreaterThan(0);
+      runnable.forEach((path) =>
+        expect(path.archetypeId).toBe(application.archetypes![0].id)
+      );
+      expect(getApplicationMigration(application).configured).toBe(true);
     });
   });
 

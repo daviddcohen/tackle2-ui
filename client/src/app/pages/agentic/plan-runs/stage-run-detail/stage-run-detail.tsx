@@ -44,10 +44,7 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import {
-  useFetchMigrationPlanById,
-  useFetchPlanRun,
-} from "@app/queries/agentic";
+import { useFetchPlanRun } from "@app/queries/agentic";
 import { useFetchStageAgentRuns } from "@app/queries/agentic-observability";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import { formatDuration, stageRunDurationSeconds } from "@app/utils/agentic";
@@ -244,8 +241,6 @@ const StageRunDetail: React.FC = () => {
   const canManageRun = useHasSomeScopes(agenticWorkflowRunsWriteScopes);
 
   const { planRun, isLoading, fetchError, isNotFound } = useFetchPlanRun(runId);
-  // The plan's archetype, for the From values of the Skills section.
-  const { migrationPlan } = useFetchMigrationPlanById(planRun?.planId);
   // The stage definition comes from the run's snapshot, not the current Plan.
   const stageRun = planRun?.stageRuns.find((sr) => sr.stageId === stageId);
   const stageStatus = stageRun?.status;
@@ -894,9 +889,6 @@ const StageRunDetail: React.FC = () => {
                   stageChildCrumbs
                 )
               }
-              originOptions={{
-                archetypeId: migrationPlan?.migrationPath?.archetype.id,
-              }}
               // The Run migration plan dialog's tables start at 400.
               rowIndexOffset={100}
               // Until the application is chosen the filter would keep every

@@ -382,7 +382,8 @@ test.describe("Preflight modal", () => {
   }) => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
-    const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    // One target profile with a plan: it runs without a pick.
+    const dialog = await openBulkRunMigration(page, ["Order Service"]);
     const start = dialog.getByRole("button", {
       name: "Run on 1 application",
     });

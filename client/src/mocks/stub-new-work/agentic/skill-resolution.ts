@@ -9,10 +9,11 @@
  *   that agent uses. Only that stage: nothing is pooled across stages.
  * - Every stage also gets the context skills, listed once in an `everyStage`
  *   group: for an application, the skills attached to each of its archetypes,
- *   to the target profile the run picks for it (by default its own: its
- *   archetype's first; none when the pick is null) and to the application
- *   itself; for a plan preview without applications, the plan's archetype
- *   and the target profiles of its migration path.
+ *   to the target profile the run picks for it (without a pick, its default
+ *   path's: the only one whose profile uses a plan, else none; none when the
+ *   pick is null) and to the application itself; for a plan preview
+ *   without applications, the preview's target profiles (a saved plan's: the
+ *   profiles that use it) and the archetypes that own them.
  * - A plan exclusion applies to every origin except the application itself:
  *   a skill attached to the application is never excluded. A run exclusion
  *   applies to every origin. Excluded skills stay listed with
@@ -37,6 +38,7 @@ import {
 import { Application } from "@app/api/models";
 
 import {
+  StoredPlan,
   StoredSkill,
   badRequest,
   db,
@@ -44,10 +46,13 @@ import {
   findArchetype,
   findTargetProfile,
   hubIdOf,
+  isSeeded,
+  migrationPathsOfPlan,
   resolveAgentRef,
   resolveCollectionRef,
   resolveSkillRef,
 } from "./db";
+import { getPrototypeScenario } from "./prototype-state";
 
 // ---------------------------------------------------------------------------
 // Input
@@ -64,17 +69,19 @@ export interface StageInput {
 }
 
 /**
- * Where the context skills come from: the plan's own migration path (a plan
- * preview) or the applications of a run or of the application view.
+ * Where the context skills come from: target profiles and the archetypes
+ * that own them (a plan preview) or the applications of a run or of the
+ * application view.
  */
 export type ResolutionContext =
-  | { kind: "plan"; archetypeId?: number; targetProfileIds: number[] }
+  | { kind: "plan"; targetProfileIds: number[] }
   | {
       kind: "applications";
       applicationIds: number[];
       /**
        * The target profile a run picks per application id (null: none). An
-       * application left out gets its default (`targetProfileFor`).
+       * application left out gets its default path's (`defaultPathOf`), or
+       * none without one. Runs always pass a pick for every application.
        */
       targetProfileIds?: ReadonlyMap<number, number | null>;
     };
@@ -106,17 +113,15 @@ export const stagesOfPlan = (plan: {
       stageId: stage.id,
     }));
 
-/** The plan preview context of a plan: its archetype and target profiles. */
-export const planContextOf = (plan: {
-  migrationPath?: {
-    archetype: { id: number };
-    targetProfiles: { id: number }[];
-  };
-}): ResolutionContext => ({
+/**
+ * The plan preview context of a saved plan: the target profiles that use it
+ * (its `migrationPaths`) and their archetypes.
+ */
+export const planContextOf = (planId: EntityId): ResolutionContext => ({
   kind: "plan",
-  archetypeId: plan.migrationPath?.archetype.id,
-  targetProfileIds:
-    plan.migrationPath?.targetProfiles.map((profile) => profile.id) ?? [],
+  targetProfileIds: migrationPathsOfPlan(planId).map(
+    ({ targetProfile }) => targetProfile.id
+  ),
 });
 
 /** Ids of the Skills a Plan turns off. */
@@ -125,17 +130,23 @@ export const excludedSkillIdsOf = (plan: {
 }): Set<EntityId> => new Set((plan.excludedSkills ?? []).map((ref) => ref.id));
 
 // ---------------------------------------------------------------------------
-// Applications: their archetypes and their own target profile
+// Applications: their archetypes and migration paths
 // ---------------------------------------------------------------------------
 
 /**
- * The target profile an application migrates to: its archetype's target
- * profile (one per archetype; when an archetype has several, the first). With
- * several archetypes, the first one that has a profile. Undefined when none
- * of its archetypes has a profile.
+ * The Plan a target profile uses (its stored reference), hidden in the
+ * `initial` scenario like every seeded Plan.
  */
-export const targetProfileFor = (application: Application) =>
-  targetProfilesOf(application)[0];
+export const assignedPlanFor = (
+  targetProfileId: number
+): StoredPlan | undefined => {
+  const planId = db.targetProfilePlans[targetProfileId];
+  if (planId == null) return undefined;
+  if (getPrototypeScenario() === "initial" && isSeeded("plans", planId)) {
+    return undefined;
+  }
+  return db.plans.find((plan) => plan.id === planId);
+};
 
 /**
  * Every target profile an application can migrate on: the profiles of each
@@ -148,6 +159,32 @@ export const targetProfilesOf = (application: Application) =>
       profile,
     }))
   );
+
+/**
+ * An application's migration paths (`targetProfilesOf`), each with the Plan
+ * its target profile uses, if any.
+ */
+export const migrationPathsOf = (application: Application) =>
+  targetProfilesOf(application).map((path) => ({
+    ...path,
+    plan: assignedPlanFor(path.profile.id),
+  }));
+
+/**
+ * The application's default path: its only path whose target profile uses a
+ * Plan. Undefined when none does, or several do (then a run needs a pick).
+ * Never "the first profile": the order of profiles means nothing.
+ */
+export const defaultPathOf = (application: Application) => {
+  const runnable = migrationPathsOf(application).filter(
+    (path) => path.plan != null
+  );
+  return runnable.length === 1 ? runnable[0] : undefined;
+};
+
+/** The application's paths whose target profile uses the Plan. */
+export const pathsUsingPlan = (application: Application, planId: EntityId) =>
+  migrationPathsOf(application).filter((path) => path.plan?.id === planId);
 
 /**
  * Reads a run's target profile pick for an application (`{ id }` or null;
@@ -330,7 +367,8 @@ const targetProfileReaches = (targetProfileId: number): Reach[] => {
 
 /**
  * Context reaches of one application: its archetypes, the target profile the
- * run picks (`undefined`: its default; null: none) and itself.
+ * run picks (`undefined`: its default path's, none without one; null: none)
+ * and itself.
  */
 const applicationReaches = (
   application: Application,
@@ -339,7 +377,7 @@ const applicationReaches = (
   const profileId =
     targetProfileId !== undefined
       ? targetProfileId
-      : targetProfileFor(application)?.profile.id;
+      : defaultPathOf(application)?.profile.id;
   const ref: HubRef = { id: application.id, name: application.name };
   return [
     ...(application.archetypes ?? []).flatMap((archetype) =>
@@ -381,10 +419,15 @@ export const resolveSkillsByStage = ({
     })
   );
   if (context.kind === "plan") {
+    // Each target profile and the archetype that owns it, deduplicated.
+    const archetypeIds = new Set(
+      context.targetProfileIds.flatMap((id) => {
+        const found = findTargetProfile(id);
+        return found != null ? [found.archetype.id] : [];
+      })
+    );
     const reaches = [
-      ...(context.archetypeId != null
-        ? archetypeReaches(context.archetypeId)
-        : []),
+      ...[...archetypeIds].flatMap(archetypeReaches),
       ...context.targetProfileIds.flatMap(targetProfileReaches),
     ];
     return {

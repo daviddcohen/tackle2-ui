@@ -32,7 +32,6 @@ import {
 import {
   ConfigurationCheck,
   MigrationPlan,
-  getAssignedTargetProfiles,
   getPlanConfigurationChecks,
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
@@ -171,7 +170,7 @@ const MigrationPlansPage: React.FC = () => {
   const archetypeOptions = [
     ...new Map(
       migrationPlans.flatMap((plan) =>
-        getAssignedTargetProfiles(plan).map(({ archetype }) => [
+        (plan.migrationPaths ?? []).map(({ archetype }) => [
           archetype.id,
           archetype,
         ])
@@ -217,10 +216,13 @@ const MigrationPlansPage: React.FC = () => {
           { value: NOT_ASSIGNED, label: t("agentic.execution.notAssigned") },
         ],
         matcher: (filter: string, item: MigrationPlan) => {
-          const assigned = getAssignedTargetProfiles(item);
+          // Unknown paths (not reported) match neither an archetype nor
+          // Not assigned.
+          const paths = item.migrationPaths;
+          if (paths == null) return false;
           return filter === NOT_ASSIGNED
-            ? assigned.length === 0
-            : assigned.some(({ archetype }) => String(archetype.id) === filter);
+            ? paths.length === 0
+            : paths.some(({ archetype }) => String(archetype.id) === filter);
         },
       },
     ],
@@ -448,7 +450,7 @@ const MigrationPlansPage: React.FC = () => {
                         >
                           <TargetProfilesCell
                             planName={plan.name}
-                            targetProfiles={getAssignedTargetProfiles(plan)}
+                            migrationPaths={plan.migrationPaths}
                             linkTo={to}
                           />
                         </Td>

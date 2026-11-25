@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import type { Archetype, TargetProfile } from "@app/api/models";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { invalidateAgentic } from "@app/queries/agentic";
 import {
   ARCHETYPES_QUERY_KEY,
   ARCHETYPE_QUERY_KEY,
@@ -164,6 +165,8 @@ export const useArchetypeMutations = ({
 
   // Delete target profile success handler
   const onDeleteTargetProfileSuccess = (_updatedArchetype: Archetype) => {
+    // The plan it used loses a migration path, and its applications too.
+    void invalidateAgentic(queryClient, "targetProfile");
     pushNotification({
       title: t("toastr.success.targetProfileDeleted"),
       variant: "success",
@@ -239,7 +242,13 @@ export const useTargetProfileMutation = () => {
         // The hub assigns the id.
         profiles: [...(archetype.profiles ?? []), { ...profile, id: 0 }],
       },
-      { onSuccess }
+      {
+        onSuccess: () => {
+          // A new migration path for the archetype's applications.
+          void invalidateAgentic(queryClient, "targetProfile");
+          onSuccess();
+        },
+      }
     );
 
   /**
@@ -273,6 +282,10 @@ export const useTargetProfileMutation = () => {
           [ARCHETYPE_QUERY_KEY, String(updated.id)],
           updated
         );
+        // Plans and migration views name the profile.
+        if (changes.name != null && changes.name !== profile.name) {
+          void invalidateAgentic(queryClient, "targetProfile");
+        }
         onSuccess();
       },
     });
