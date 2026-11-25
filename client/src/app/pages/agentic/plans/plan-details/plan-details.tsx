@@ -1,7 +1,7 @@
 import * as React from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Link, generatePath, useHistory, useParams } from "react-router-dom";
+import { generatePath, useHistory, useParams } from "react-router-dom";
 import {
   Button,
   Content,
@@ -23,6 +23,7 @@ import {
   MigrationPlan,
   ResolvePlanSkillsRequest,
   getPlanConfigurationChecks,
+  getPlanTargetProfiles,
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { adminViewScopes } from "@app/auth/roles-to-scopes";
@@ -38,7 +39,6 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import {
-  archetypePath,
   targetProfilePath,
   targetProfilesPath,
 } from "@app/pages/agentic/entity-paths";
@@ -96,40 +96,45 @@ const tabTitleKeys: Record<PlanDetailTab, string> = {
 const PANEL_PREFIX = "plan-detail";
 const panelId = (tab: PlanDetailTab) => tabPanelId(PANEL_PREFIX, tab);
 
-/** The plan's target profiles as link labels, plus the unassigned cue. */
+/**
+ * Every archetype + target profile pair of the plan's path as link labels
+ * ("Quarkus 3.x (Java EE Application)"), plus the unassigned cue. A path
+ * without target profiles reads Not assigned too: no profile can use it.
+ */
 const TargetProfilesFact: React.FC<{
   plan: MigrationPlan;
   linkCrumbs: BreadcrumbEntry[];
 }> = ({ plan, linkCrumbs }) => {
   const { t } = useTranslation();
-  const path = plan.migrationPath;
+  const pairs = getPlanTargetProfiles(plan);
+  // The cue opens the Target profiles page of the path's archetype.
   const profilesLink = useLinkComponent(
-    path == null
+    pairs.length === 0
       ? undefined
-      : breadcrumbTo(targetProfilesPath(path.archetype.id), "", linkCrumbs)
+      : breadcrumbTo(targetProfilesPath(pairs[0].archetype.id), "", linkCrumbs)
   );
-  if (path == null) {
+  if (pairs.length === 0) {
     // A plan without a migration path runs when someone picks it: "Not
     // assigned", not a failed read.
     return <EmptyTextMessage message={t("agentic.execution.notAssigned")} />;
   }
-  if (path.targetProfiles.length === 0) {
-    return <EmptyTextMessage message={t("terms.none")} />;
-  }
   return (
     <>
       <LinkLabels
-        items={path.targetProfiles.map((profile) => ({
-          id: profile.id,
-          name: profile.name,
+        items={pairs.map(({ archetype, targetProfile }) => ({
+          id: `${archetype.id}-${targetProfile.id}`,
+          name: t("agentic.skill.targetProfileOption", {
+            profile: targetProfile.name,
+            archetype: archetype.name,
+          }),
           to: breadcrumbTo(
-            targetProfilePath(path.archetype.id, profile.id),
+            targetProfilePath(archetype.id, targetProfile.id),
             "",
             linkCrumbs
           ),
         }))}
       />
-      {!path.isDefault && (
+      {plan.migrationPath?.isDefault === false && (
         <Content component="small" className={textStyles.textColorSubtle}>
           {t("agentic.plan.notAssignedCue")}{" "}
           <Button variant="link" isInline component={profilesLink}>
@@ -282,22 +287,6 @@ const PlanDetailsPage: React.FC = () => {
     (check) => check.status === "issue"
   );
   const facts: [string, React.ReactNode][] = [
-    [
-      t("terms.archetype"),
-      path ? (
-        <Link
-          to={breadcrumbTo(
-            archetypePath(path.archetype.id),
-            "",
-            planChildCrumbs
-          )}
-        >
-          {path.archetype.name}
-        </Link>
-      ) : (
-        <EmptyTextMessage message={t("agentic.execution.notAssigned")} />
-      ),
-    ],
     [
       t("terms.targetProfiles"),
       <TargetProfilesFact

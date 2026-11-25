@@ -7,10 +7,7 @@ import {
   ButtonVariant,
   Content,
   Icon,
-  Label,
-  LabelGroup,
   PageSection,
-  Skeleton,
   Stack,
   StackItem,
   Toolbar,
@@ -35,14 +32,12 @@ import {
 import {
   ConfigurationCheck,
   MigrationPlan,
-  PlanRun,
+  getAssignedTargetProfiles,
   getPlanConfigurationChecks,
-  getShownPlanRun,
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
 import { ConditionalRender } from "@app/components/ConditionalRender";
-import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar, FilterType } from "@app/components/FilterToolbar";
 import { NoDataEmptyState } from "@app/components/NoDataEmptyState";
 import { PageHeader } from "@app/components/PageHeader";
@@ -55,14 +50,9 @@ import {
 import { useLocalTableControls } from "@app/hooks/table-controls";
 import { useBreadcrumbs } from "@app/hooks/useBreadcrumbs";
 import {
-  applicationDetailsPath,
-  planRunPath,
-} from "@app/pages/applications/components/agentic-migration/paths";
-import {
   useFetchAgents,
   useFetchGateways,
   useFetchMigrationPlans,
-  useFetchPlanRuns,
 } from "@app/queries/agentic";
 import { plansWriteScopes } from "@app/scopes";
 import {
@@ -72,16 +62,15 @@ import {
 } from "@app/utils/agentic";
 import { openModalAfterMenuClose, universalComparator } from "@app/utils/utils";
 
-import { RunStatus, statusPresentation } from "../components/agentic-status";
-import { CountLink } from "../components/count-link";
 import { useRunMigrationPlanLauncher } from "../components/run-migration-plan-launcher";
 
 import {
   getPlanDeleteBlocker,
   useDeletePlanDialog,
 } from "./components/plan-delete";
-import { planApplicationsLocation, planPath } from "./components/plan-paths";
+import { planPath } from "./components/plan-paths";
 import { getRunBlocker, preflightPlanOf } from "./components/plan-run-blocker";
+import { TargetProfilesCell } from "./components/target-profiles-cell";
 import { PlanWizard } from "./plan-wizard/plan-wizard";
 
 type LinkTo = (pathname: string) => LocationDescriptor;
@@ -90,7 +79,7 @@ type LinkTo = (pathname: string) => LocationDescriptor;
 const rowActionId = (plan: MigrationPlan, action: string) =>
   `migration-plans-table-row-${plan.id}-${action}`;
 
-/** Archetype filter value of the plans without a migration path. */
+/** Archetype filter value of the plans no target profile uses. */
 const NOT_ASSIGNED = "notAssigned";
 
 /**
@@ -137,104 +126,6 @@ const PlanNameCell: React.FC<{
   );
 };
 
-/**
- * The plan's applications in name order, two shown and "{n} more" for the
- * rest, each a link to the application. A server that only
- * counts them gets the count, which opens the filtered inventory.
- */
-const ApplicationsCell: React.FC<{
-  plan: MigrationPlan;
-  linkTo: LinkTo;
-  linkCrumbs: Parameters<typeof planApplicationsLocation>[1];
-}> = ({ plan, linkTo, linkCrumbs }) => {
-  const { t } = useTranslation();
-  const impact = plan.applicationImpact;
-  if (impact == null) {
-    return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
-  }
-  if (impact.matching === 0 || impact.applications?.length === 0) {
-    return <EmptyTextMessage message={t("terms.none")} />;
-  }
-  if (impact.applications == null) {
-    return (
-      <CountLink to={planApplicationsLocation(plan.id, linkCrumbs)}>
-        {t("agentic.plan.applicationCount", { count: impact.matching })}
-      </CountLink>
-    );
-  }
-  return (
-    <LabelGroup
-      isCompact
-      numLabels={2}
-      aria-label={t("agentic.plan.applicationsOfPlan", { plan: plan.name })}
-      collapsedText={t("agentic.plan.moreApplications", {
-        count: impact.applications.length - 2,
-      })}
-      expandedText={t("terms.showLess")}
-    >
-      {impact.applications.map((application) => (
-        <Label
-          key={application.id}
-          variant="outline"
-          isCompact
-          textMaxWidth="18ch"
-          render={({ className, content, componentRef }) => (
-            <Link
-              to={linkTo(applicationDetailsPath(application.id))}
-              className={className}
-              ref={componentRef}
-            >
-              {content}
-            </Link>
-          )}
-        >
-          {application.name}
-        </Label>
-      ))}
-    </LabelGroup>
-  );
-};
-
-/**
- * The status of the plan's shown run (`getShownPlanRun`), linked to that
- * run, with "{n} runs" below when there are several. Only this cell waits
- * for the runs query.
- */
-const RunsCell: React.FC<{
-  plan: MigrationPlan;
-  runs: PlanRun[] | undefined;
-  isLoadingRuns: boolean;
-  linkTo: LinkTo;
-}> = ({ plan, runs, isLoadingRuns, linkTo }) => {
-  const { t } = useTranslation();
-  if (isLoadingRuns) {
-    return <Skeleton screenreaderText={t("terms.loading")} />;
-  }
-  if (runs == null) {
-    return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
-  }
-  const shown = getShownPlanRun(runs, plan.id);
-  if (shown == null) {
-    return <EmptyTextMessage message={t("agentic.plan.notRun")} />;
-  }
-  const count = runs.filter((run) => run.planId === plan.id).length;
-  return (
-    <RunStatus
-      status={shown.status}
-      to={linkTo(planRunPath(shown.id))}
-      linkAriaLabel={t("agentic.plan.runStatusLabel", {
-        status: t(
-          statusPresentation.run[shown.status]?.labelKey ?? shown.status
-        ),
-        run: shown.name,
-      })}
-      supportingText={
-        count > 1 ? t("agentic.plan.runCount", { count }) : undefined
-      }
-    />
-  );
-};
-
 const MigrationPlansPage: React.FC = () => {
   const { t } = useTranslation();
   const { to, linkCrumbs } = useBreadcrumbs(t("sidebar.plans"), []);
@@ -262,11 +153,6 @@ const MigrationPlansPage: React.FC = () => {
     isLoading: isLoadingModels,
     fetchError: modelsFetchError,
   } = useFetchGateways();
-  const {
-    planRuns,
-    isLoading: isLoadingRuns,
-    fetchError: runsFetchError,
-  } = useFetchPlanRuns();
   // The marker needs both secondary queries: no marker until they load.
   const canCheckConfiguration =
     !isLoadingAgents &&
@@ -280,13 +166,15 @@ const MigrationPlansPage: React.FC = () => {
         )
       : [];
 
-  // The archetypes of the listed plans, by name.
+  // The archetypes of the target profiles that use the listed plans, by
+  // name: the filter matches what the Target profiles column shows.
   const archetypeOptions = [
     ...new Map(
       migrationPlans.flatMap((plan) =>
-        plan.migrationPath != null
-          ? [[plan.migrationPath.archetype.id, plan.migrationPath.archetype]]
-          : []
+        getAssignedTargetProfiles(plan).map(({ archetype }) => [
+          archetype.id,
+          archetype,
+        ])
       )
     ).values(),
   ]
@@ -305,8 +193,7 @@ const MigrationPlansPage: React.FC = () => {
     items: migrationPlans,
     columnNames: {
       name: t("terms.name"),
-      applications: t("terms.applications"),
-      runs: t("agentic.plan.runs"),
+      targetProfiles: t("terms.targetProfiles"),
     },
     isFilterEnabled: true,
     isSortEnabled: true,
@@ -329,10 +216,12 @@ const MigrationPlansPage: React.FC = () => {
           ...archetypeOptions,
           { value: NOT_ASSIGNED, label: t("agentic.execution.notAssigned") },
         ],
-        matcher: (filter: string, item: MigrationPlan) =>
-          filter === NOT_ASSIGNED
-            ? item.migrationPath == null
-            : String(item.migrationPath?.archetype.id) === filter,
+        matcher: (filter: string, item: MigrationPlan) => {
+          const assigned = getAssignedTargetProfiles(item);
+          return filter === NOT_ASSIGNED
+            ? assigned.length === 0
+            : assigned.some(({ archetype }) => String(archetype.id) === filter);
+        },
       },
     ],
     initialItemsPerPage: 10,
@@ -482,19 +371,17 @@ const MigrationPlansPage: React.FC = () => {
                   <TableHeaderContentWithControls {...tableControls}>
                     <Th {...getThProps({ columnKey: "name" })} />
                     <Th
-                      {...getThProps({ columnKey: "applications" })}
+                      {...getThProps({ columnKey: "targetProfiles" })}
                       info={{
-                        popover: t("agentic.plan.applicationsHelp"),
-                        ariaLabel: t("agentic.plan.applicationsHelpLabel"),
+                        popover: t("agentic.plan.targetProfilesHelp"),
+                        ariaLabel: t("agentic.plan.targetProfilesHelpLabel"),
                         popoverProps: {
                           closeBtnAriaLabel: t("actions.close"),
-                          "aria-label": t("agentic.plan.applicationsHelpLabel"),
+                          "aria-label": t(
+                            "agentic.plan.targetProfilesHelpLabel"
+                          ),
                         },
                       }}
-                    />
-                    <Th
-                      {...getThProps({ columnKey: "runs" })}
-                      modifier="fitContent"
                     />
                     {hasRowActions && (
                       <Th screenReaderText={t("actions.rowActions")} />
@@ -553,26 +440,15 @@ const MigrationPlansPage: React.FC = () => {
                             linkTo={to}
                           />
                         </Td>
-                        {/* The width sits on the cells: on a Th with info, PF
+                        {/* The width sits on the cell: on a Th with info, PF
                             also applies it to the header text, which truncates. */}
                         <Td
-                          {...getTdProps({ columnKey: "applications" })}
-                          width={45}
+                          {...getTdProps({ columnKey: "targetProfiles" })}
+                          width={50}
                         >
-                          <ApplicationsCell
-                            plan={plan}
-                            linkTo={to}
-                            linkCrumbs={linkCrumbs}
-                          />
-                        </Td>
-                        <Td
-                          {...getTdProps({ columnKey: "runs" })}
-                          modifier="nowrap"
-                        >
-                          <RunsCell
-                            plan={plan}
-                            runs={runsFetchError == null ? planRuns : undefined}
-                            isLoadingRuns={isLoadingRuns}
+                          <TargetProfilesCell
+                            planName={plan.name}
+                            targetProfiles={getAssignedTargetProfiles(plan)}
                             linkTo={to}
                           />
                         </Td>

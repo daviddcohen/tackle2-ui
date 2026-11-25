@@ -1,7 +1,7 @@
 /**
- * The migration plans list (applications and run status per plan) and
- * running a plan from its row menu or its page (the dialog with the plan
- * fixed and a selectable readiness table).
+ * The migration plans list (the target profiles that use each plan, and the
+ * archetype filter) and running a plan from its row menu or its page (the
+ * dialog with the plan fixed and a selectable readiness table).
  *
  * The fixture data changes over time (plans gain or lose their migration
  * path, runs are renamed), so plans, applications and runs are read from the
@@ -11,13 +11,20 @@ import type { Page } from "@playwright/test";
 
 import {
   type Persona,
+  addTargetProfile,
   agenticGet,
+  agenticRequest,
   appPath,
+  bootMockApi,
+  dataRows,
   dialog,
   expect,
   expectTooltipOnHover,
+  filterBy,
+  hubRequest,
   protoUrl,
   rowActions,
+  spaNavigate,
   test,
 } from "../support";
 
@@ -29,50 +36,37 @@ interface Plan {
   id: string;
   name: string;
   stages: unknown[];
-  migrationPath?: { archetype: Ref };
+  migrationPath?: { archetype: Ref; targetProfiles: Ref[]; isDefault: boolean };
   operatorManaged?: boolean;
   applicationImpact?: { matching: number; applications?: Ref[] };
 }
 interface Run {
   id: string;
-  name: string;
   planId: string;
-  status: string;
-  startedAt: string;
   applications: Ref[];
 }
 
-const STATUS_TEXT: Record<string, string> = {
-  Pending: "Pending",
-  Running: "Running",
-  Succeeded: "Succeeded",
-  Failed: "Failed",
-  AwaitingApproval: "Action required",
-};
+// assignedProfiles and runBlocker mirror getAssignedTargetProfiles
+// (projection.ts) and getRunBlocker (plan-run-blocker.ts) on purpose: the
+// rules themselves are unit-tested there, and this spec checks the wiring
+// against live mock data. A rule change must update both.
 
-// shownRun and runBlocker mirror getShownPlanRun (projection.ts) and
-// getRunBlocker (plan-run-blocker.ts) on purpose: the rules themselves are
-// unit-tested there, and this spec checks the wiring against live mock data.
-// A rule change must update both.
+/** The target profiles that use the plan: those of its path when it is the default. */
+const assignedProfiles = (plan: Plan) =>
+  plan.migrationPath?.isDefault === true
+    ? plan.migrationPath.targetProfiles
+    : [];
 
-/** The list's rule: the newest run that needs action, else the newest (Pending first). */
-const shownRun = (runs: Run[]) => {
-  const start = (run: Run) => {
-    if (run.status === "Pending") return Infinity;
-    const time = Date.parse(run.startedAt);
-    return Number.isNaN(time) ? -Infinity : time;
-  };
-  const newestFirst = [...runs].sort((a, b) => start(b) - start(a) || 0);
-  return (
-    newestFirst.find((run) => run.status === "AwaitingApproval") ??
-    newestFirst[0]
+/** The link of a target profile on its archetype's Target profiles page. */
+const profileHref = (archetype: Ref, profile: Ref) =>
+  new RegExp(
+    `/archetypes/${archetype.id}/target-profiles#target-profile-${profile.id}$`
   );
-};
 
 /** Why Run is off for the Enterprise Architect (who can edit plans), as the UI says it. */
 const runBlocker = (plan: Plan) => {
   if (plan.migrationPath == null)
-    return "This migration plan is not assigned to an archetype, so it has no applications. To run it, select applications in the application inventory.";
+    return "This migration plan is not assigned to a target profile, so it has no applications. To run it, select applications in the application inventory.";
   if (plan.stages.length === 0)
     return plan.operatorManaged
       ? "This migration plan has no stages yet."
@@ -165,70 +159,140 @@ const runOnOne = async (page: Page, application: Ref, ready: number) => {
 };
 
 test.describe("Migration plans list and running a plan", () => {
-  test("the list shows each plan's applications and the status of its shown run", async ({
+  test("the list shows the target profiles that use each plan", async ({
     page,
   }) => {
     await openList(page);
-    const { plans, runs } = await loadData(page);
-    await expect(
-      page.getByRole("main").getByRole("columnheader", { name: "Archetype" })
-    ).toHaveCount(0);
+    const { plans } = await loadData(page);
+    const main = page.getByRole("main");
+    await expect(main.getByRole("link", { name: plans[0].name })).toBeVisible();
+    // The actions column is named for screen readers only; the table
+    // controls add an unnamed column after the data.
+    expect(
+      await main
+        .getByRole("columnheader")
+        .evaluateAll((headers) =>
+          headers
+            .map((header) => header.textContent?.trim())
+            .filter((text) => text !== "")
+        )
+    ).toEqual(["Name", "Target profiles", "Row actions"]);
     for (const plan of plans) {
       const row = planRow(page, plan);
-      const applications = plan.applicationImpact?.applications ?? [];
-      if (applications.length === 0) {
-        await expect(row.getByRole("list")).toHaveCount(0);
-        await expect(row.getByText("None", { exact: true })).toBeVisible();
-      } else {
-        const labels = row.getByRole("list", {
-          name: `Applications of ${plan.name}`,
-        });
-        for (const application of applications.slice(0, 2))
-          await expect(
-            labels.getByRole("link", { name: application.name })
-          ).toBeVisible();
-        if (applications.length > 2)
-          await expect(
-            labels.getByRole("button", {
-              name: `${applications.length - 2} more`,
-            })
-          ).toBeVisible();
-      }
-      const own = runs.filter((run) => run.planId === plan.id);
-      if (own.length === 0) {
-        await expect(row.getByText("Not run", { exact: true })).toBeVisible();
+      const profiles = assignedProfiles(plan);
+      if (profiles.length === 0) {
+        await expect(row).toContainText("Not assigned");
         continue;
       }
-      const shown = shownRun(own);
-      const status = row.getByRole("link", {
-        name: `${STATUS_TEXT[shown.status]}, ${shown.name}`,
-        exact: true,
-      });
-      await expect(status).toHaveText(STATUS_TEXT[shown.status]);
-      await expect(status).toHaveAttribute(
-        "href",
-        new RegExp(`/plan-runs/${shown.id}$`)
-      );
-      await expect(row.getByText(`${own.length} runs`)).toHaveCount(
-        own.length > 1 ? 1 : 0
-      );
+      const { archetype } = plan.migrationPath!;
+      if (profiles.length > 1) {
+        await expect(
+          row.getByRole("button", {
+            name: `${profiles.length} target profiles`,
+          })
+        ).toBeVisible();
+        continue;
+      }
+      // "Quarkus 3.x (Java EE Application)": only the profile is a link.
+      const [profile] = profiles;
+      await expect(row).toContainText(`${profile.name} (${archetype.name})`);
+      await expect(
+        row.getByRole("link", { name: profile.name, exact: true })
+      ).toHaveAttribute("href", profileHref(archetype, profile));
+      await expect(
+        row.getByRole("link", { name: archetype.name, exact: true })
+      ).toHaveCount(0);
     }
   });
 
-  test("in the Action required scenario a plan shows the run that needs action", async ({
+  test("a plan used by several target profiles lists them in a popover", async ({
     page,
   }) => {
-    // Independent of the rule copy above: this scenario always has a run
-    // awaiting approval, so some plan's status names one.
-    await page.goto(
-      protoUrl("/migration-plans", { scenario: "actionRequired" })
+    await bootMockApi(page);
+    const plans = await agenticGet<Plan[]>(page, "/plans");
+    const plan = plans.find(
+      (candidate) => assignedProfiles(candidate).length === 1
     );
-    await expect(
-      page
-        .getByRole("main")
-        .getByRole("link", { name: /^Action required, / })
-        .first()
-    ).toHaveText("Action required");
+    expect(plan, "a plan one target profile uses").toBeDefined();
+    const { archetype, targetProfiles } = plan!.migrationPath!;
+    // A second profile of the same archetype, with an id no profile has.
+    const archetypes = await hubRequest<{ profiles?: Ref[] }[]>(
+      page,
+      "GET",
+      "/archetypes"
+    );
+    const id =
+      Math.max(
+        ...archetypes.body.flatMap((owner) =>
+          (owner.profiles ?? []).map((profile) => profile.id)
+        )
+      ) + 1;
+    const added = { id, name: "Second target profile" };
+    await addTargetProfile(page, archetype.id, added);
+    const assign = await agenticRequest(
+      page,
+      "PUT",
+      `/archetypes/${archetype.id}/target-profiles/${added.id}/plan`,
+      { planId: plan!.id }
+    );
+    expect(assign.status).toBeLessThan(300);
+    // In-app navigation: a reload would reset the mock's state.
+    await spaNavigate(page, "/migration-plans");
+    const row = planRow(page, plan!);
+    const count = row.getByRole("button", { name: "2 target profiles" });
+    await count.click();
+    const popover = page.getByRole("dialog", {
+      name: `Target profiles using ${plan!.name}`,
+    });
+    await expect(popover).toBeVisible();
+    const pairs = [targetProfiles[0], added].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+    await expect(popover.getByRole("listitem")).toHaveText(
+      pairs.map((profile) => `${profile.name} (${archetype.name})`)
+    );
+    for (const profile of pairs)
+      await expect(
+        popover.getByRole("link", { name: profile.name, exact: true })
+      ).toHaveAttribute("href", profileHref(archetype, profile));
+    await page.keyboard.press("Escape");
+    await expect(popover).toBeHidden();
+
+    // The archetype filter matches the archetype of either profile.
+    await filterBy(page, "Archetype", archetype.name);
+    await page.keyboard.press("Escape");
+    await expect(row).toBeVisible();
+    await page.getByRole("combobox", { name: "Type to filter" }).click();
+    await page
+      .getByRole("menuitem", { name: archetype.name, exact: true })
+      .click();
+    await page
+      .getByRole("menuitem", { name: "Not assigned", exact: true })
+      .click();
+    await page.keyboard.press("Escape");
+    await expect(dataRows(page).first()).toBeVisible();
+    await expect(row).toHaveCount(0);
+  });
+
+  test("the Not assigned filter shows exactly the plans no target profile uses", async ({
+    page,
+  }) => {
+    await openList(page);
+    const { plans } = await loadData(page);
+    const unassigned = plans.filter(
+      (plan) => assignedProfiles(plan).length === 0
+    );
+    expect(unassigned.length, "a plan no target profile uses").toBeGreaterThan(
+      0
+    );
+    await filterBy(page, "Archetype", "Not assigned");
+    await page.keyboard.press("Escape");
+    await expect(dataRows(page)).toHaveCount(unassigned.length);
+    for (const plan of unassigned) {
+      const row = planRow(page, plan);
+      await expect(row).toBeVisible();
+      await expect(row).toContainText("Not assigned");
+    }
   });
 
   test("runs a plan from its row menu on the selected applications and opens the new run", async ({

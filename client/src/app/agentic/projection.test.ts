@@ -2,13 +2,15 @@ import {
   Agent,
   ApplicationMigrationDisplayStatus,
   ApplicationMigrationView,
+  HubRef,
   MigrationPlan,
   ModelProjection,
   PlanRun,
+  getAssignedTargetProfiles,
   getMigrationDisplayStatus,
   getOrderedStageRuns,
   getPlanConfigurationChecks,
-  getShownPlanRun,
+  getPlanTargetProfiles,
   getStageDefinition,
   getStagesWithUnverifiedModel,
   isActivePlanRun,
@@ -237,133 +239,49 @@ describe("run helpers", () => {
   });
 });
 
-describe("getShownPlanRun", () => {
-  const run = (
-    id: string,
-    status: PlanRun["status"],
-    startedAt: string,
-    planId = "1"
-  ): PlanRun => ({
-    id,
-    name: `Run #${id}`,
-    planId,
-    planName: "Plan",
-    applications: [],
-    status,
-    targetBranch: "main",
-    startedAt,
-    stageRuns: [],
+describe("plan target profiles", () => {
+  const path = (targetProfiles: HubRef[], isDefault = true): MigrationPlan => ({
+    ...plan,
+    migrationPath: {
+      archetype: { id: 1, name: "Java EE" },
+      targetProfiles,
+      isDefault,
+    },
   });
 
-  it("is undefined without runs of the plan", () => {
-    expect(getShownPlanRun([], "1")).toBeUndefined();
-    expect(
-      getShownPlanRun([run("1", "Failed", "2026-01-01", "2")], "1")
-    ).toBeUndefined();
+  it("is empty without a migration path or target profiles", () => {
+    const noPath = { ...plan, migrationPath: undefined };
+    expect(getPlanTargetProfiles(noPath)).toEqual([]);
+    expect(getAssignedTargetProfiles(noPath)).toEqual([]);
+    expect(getPlanTargetProfiles(path([]))).toEqual([]);
+    expect(getAssignedTargetProfiles(path([]))).toEqual([]);
   });
 
-  it("shows a newer failure over an older running run", () => {
+  it("pairs each target profile with the archetype, by profile name", () => {
+    const pairs = getPlanTargetProfiles(
+      path([
+        { id: 3, name: "Spring Boot 3" },
+        { id: 2, name: "Quarkus" },
+      ])
+    );
+    expect(pairs).toEqual([
+      {
+        archetype: { id: 1, name: "Java EE" },
+        targetProfile: { id: 2, name: "Quarkus" },
+      },
+      {
+        archetype: { id: 1, name: "Java EE" },
+        targetProfile: { id: 3, name: "Spring Boot 3" },
+      },
+    ]);
     expect(
-      getShownPlanRun(
-        [run("1", "Running", "2026-01-01"), run("2", "Failed", "2026-01-02")],
-        "1"
-      )?.id
-    ).toBe("2");
+      getAssignedTargetProfiles(path(pairs.map((p) => p.targetProfile)))
+    ).toEqual(pairs);
   });
 
-  it("shows a newer retry over an older failure", () => {
-    expect(
-      getShownPlanRun(
-        [run("1", "Failed", "2026-01-01"), run("2", "Running", "2026-01-02")],
-        "1"
-      )?.id
-    ).toBe("2");
-  });
-
-  it("counts a queued pending run as the newest", () => {
-    expect(
-      getShownPlanRun(
-        [
-          run("1", "Pending", "2026-01-01"),
-          run("2", "Succeeded", "2026-01-03"),
-        ],
-        "1"
-      )?.id
-    ).toBe("1");
-  });
-
-  it("sorts a run without a readable start last", () => {
-    expect(
-      getShownPlanRun(
-        [run("1", "Failed", ""), run("2", "Succeeded", "2026-01-02")],
-        "1"
-      )?.id
-    ).toBe("2");
-    expect(
-      getShownPlanRun(
-        [run("2", "Succeeded", "2026-01-02"), run("1", "Failed", "")],
-        "1"
-      )?.id
-    ).toBe("2");
-  });
-
-  it("shows a newer success over an older running run", () => {
-    expect(
-      getShownPlanRun(
-        [
-          run("1", "Running", "2026-01-01"),
-          run("2", "Succeeded", "2026-01-02"),
-        ],
-        "1"
-      )?.id
-    ).toBe("2");
-  });
-
-  it("keeps an older run that needs action over a newer running or succeeded one", () => {
-    for (const newer of ["Running", "Succeeded"] as const) {
-      expect(
-        getShownPlanRun(
-          [
-            run("1", "AwaitingApproval", "2026-01-01"),
-            run("2", newer, "2026-01-02"),
-          ],
-          "1"
-        )?.id
-      ).toBe("1");
-    }
-  });
-
-  it("shows a run that needs action over a failure, whichever is newer", () => {
-    expect(
-      getShownPlanRun(
-        [
-          run("1", "Failed", "2026-01-01"),
-          run("2", "AwaitingApproval", "2026-01-02"),
-        ],
-        "1"
-      )?.id
-    ).toBe("2");
-    expect(
-      getShownPlanRun(
-        [
-          run("1", "AwaitingApproval", "2026-01-01"),
-          run("2", "Failed", "2026-01-02"),
-        ],
-        "1"
-      )?.id
-    ).toBe("1");
-  });
-
-  it("shows a run that needs action over any newer run", () => {
-    expect(
-      getShownPlanRun(
-        [
-          run("1", "AwaitingApproval", "2026-01-01"),
-          run("2", "AwaitingApproval", "2026-01-02"),
-          run("3", "Failed", "2026-01-03"),
-        ],
-        "1"
-      )?.id
-    ).toBe("2");
+  it("assigns none while the path is not the default", () => {
+    const notDefault = path([{ id: 2, name: "Quarkus" }], false);
+    expect(getPlanTargetProfiles(notDefault)).toHaveLength(1);
+    expect(getAssignedTargetProfiles(notDefault)).toEqual([]);
   });
 });
