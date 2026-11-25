@@ -1966,9 +1966,7 @@
       "duration": "Duration",
       "approvalNeeded": "Approval needed: {{stage}}",
       "applicationCount_one": "{{count}} application",
-      "applicationCount_other": "{{count}} applications",
-      "archetypes_one": "Archetype:",
-      "archetypes_other": "Archetypes:"
+      "applicationCount_other": "{{count}} applications"
     },
     "stageRunsTable": {
       "label": "Stages",
@@ -2341,10 +2339,7 @@
       "targetProfileFormDescription": "A target profile is where applications in this archetype are going. After you create it, assign a migration plan to it.",
       "targetProfilesDescription": "A target profile is where applications in this archetype are going. Assign a migration plan to each profile.",
       "targetProfilesDescriptionWithoutPlans": "A target profile is where applications in this archetype are going.",
-      "targetProfilesTabDescription": "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it.",
-      "planRuns": "Plan runs",
-      "planRunCount_one": "{{count}} plan run",
-      "planRunCount_other": "{{count}} plan runs"
+      "targetProfilesTabDescription": "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it."
     },
     "provider": {
       "title": "Model providers",

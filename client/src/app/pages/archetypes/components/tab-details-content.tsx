@@ -12,7 +12,6 @@ import {
 } from "@patternfly/react-core";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 
-import { isAgenticEnabled } from "@app/Constants";
 import { Archetype, Ref, Tag, TagRef } from "@app/api/models";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { RiskLabel } from "@app/components/RiskLabel";
@@ -22,7 +21,6 @@ import { LabelsFromTags } from "@app/components/labels/labels-from-tags/labels-f
 import { dedupeArrayOfObjects } from "@app/utils/utils";
 
 import LinkToArchetypeApplications from "./link-to-archetype-applications";
-import LinkToArchetypePlanRuns from "./link-to-archetype-plan-runs";
 
 const TagLabels: React.FC<{ tags?: Tag[] }> = ({ tags }) => (
   <LabelsFromTags tags={tags} />
@@ -76,17 +74,6 @@ export const TabDetailsContent: React.FC<{
             />
           </DescriptionListDescription>
         </DescriptionListGroup>
-
-        {isAgenticEnabled && (
-          <DescriptionListGroup>
-            <DescriptionListTerm>
-              {t("agentic.archetype.planRuns")}
-            </DescriptionListTerm>
-            <DescriptionListDescription>
-              <LinkToArchetypePlanRuns archetype={archetype} />
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-        )}
 
         <DescriptionListGroup>
           <DescriptionListTerm>{t("terms.tagsCriteria")}</DescriptionListTerm>

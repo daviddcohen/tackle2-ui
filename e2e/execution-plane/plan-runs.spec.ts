@@ -3,7 +3,6 @@ import type { Page } from "@playwright/test";
 import {
   AGENTIC_STATUS,
   agenticGet,
-  breadcrumbTitles,
   expect,
   expectNoBrokenText,
   hubRequest,
@@ -135,10 +134,6 @@ test.describe("Plan runs list", () => {
   }) => {
     await page.goto(protoUrl("/plan-runs", { scenario: "configured" }));
     await expect(runRows(page)).toHaveCount(7);
-    // Each row names its applications' archetype under them.
-    await expect(
-      runRows(page).filter({ hasText: "Archetype: Java EE Application" })
-    ).not.toHaveCount(0);
     // Partner Portal's run used a plan that target profiles of two
     // archetypes share: it belongs to Java EE, its application's archetype.
     const expected = await runsOfArchetype(page, "Java EE Application");
@@ -154,10 +149,6 @@ test.describe("Plan runs list", () => {
 
     await expect(runRows(page)).toHaveCount(expected.length);
     expect(await runNames(page)).toEqual(expected);
-    for (const row of await runRows(page).all())
-      await expect(
-        row.getByRole("link", { name: "Java EE Application" })
-      ).toBeVisible();
     // The filter is in the URL, by archetype id.
     expect(
       JSON.parse(
@@ -165,41 +156,6 @@ test.describe("Plan runs list", () => {
       )
     ).toEqual({ archetype: ["1"] });
     expect(pageErrors).toEqual([]);
-  });
-
-  test("an archetype's Plan runs link opens the list filtered by it, with the way back", async ({
-    page,
-  }) => {
-    await page.goto(
-      protoUrl("/archetypes?ar:activeItem=1&ar:tab=0", {
-        scenario: "configured",
-      })
-    );
-    const drawer = page.locator("#page-drawer-content");
-    await expect(
-      drawer.getByRole("heading", { name: "Java EE Application" })
-    ).toBeVisible();
-    const expected = await runsOfArchetype(page, "Java EE Application");
-    await drawer
-      .getByRole("link", { name: `${expected.length} plan runs` })
-      .click();
-
-    await expect(page).toHaveURL(/\/plan-runs\?/);
-    await expect(runRows(page)).toHaveCount(expected.length);
-    expect(await runNames(page)).toEqual(expected);
-    expect(await breadcrumbTitles(page)).toEqual([
-      "Archetypes",
-      "Java EE Application",
-      "Plan runs",
-    ]);
-
-    await page
-      .getByRole("navigation", { name: "Breadcrumb" })
-      .getByRole("link", { name: "Java EE Application" })
-      .click();
-    await expect(
-      drawer.getByRole("heading", { name: "Java EE Application" })
-    ).toBeVisible();
   });
 
   test("initial scenario shows the empty state", async ({ page }) => {
