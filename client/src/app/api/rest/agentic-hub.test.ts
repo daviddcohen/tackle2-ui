@@ -392,6 +392,39 @@ describe("Hub-backed agentic REST reference", () => {
     ]);
   });
 
+  it("refuses a test run with added skills instead of dropping them", async () => {
+    await expect(
+      hubApi.startAgentTestRun({
+        agentId: "migrate",
+        applicationId: 7,
+        task: "Try it",
+        addedSkills: [{ id: "spring-boot-3" }],
+      })
+    ).rejects.toThrow("no Hub backend");
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
+  it("starts a test run when the added skills are empty", async () => {
+    const run = await hubApi.startAgentTestRun({
+      agentId: "migrate",
+      applicationId: 7,
+      task: "Try it",
+      addedSkills: [],
+    });
+    expect(mockedAxios.post).toHaveBeenCalledWith(`${BASE}/agentruns`, {
+      metadata: {
+        generateName: "ui-",
+        labels: { "konveyor.io/application": "7" },
+      },
+      spec: {
+        agentRef: "migrate",
+        instructions: "Try it",
+        env: [{ name: "APP_ID", value: "7" }],
+      },
+    });
+    expect(run).not.toHaveProperty("addedSkills");
+  });
+
   it("starts a test run with its Model and target branch", async () => {
     await hubApi.startAgentTestRun({
       agentId: "migrate",

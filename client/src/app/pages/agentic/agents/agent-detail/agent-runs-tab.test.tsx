@@ -116,6 +116,45 @@ describe("AgentRunsTab", () => {
     expect(screen.queryByText("Type")).toBeNull();
   });
 
+  it("shows the skills each test run added, None when it added none", async () => {
+    const user = userEvent.setup();
+    const withSkills: AgentTestRun = {
+      ...testRun,
+      id: "9003",
+      startedAt: "2026-09-19T11:00:00Z",
+      addedSkills: [
+        { id: "16", name: "Spring Boot 3 upgrade" },
+        { id: "4", name: "Quarkus best practices" },
+        { id: "5", name: "Corporate coding standards" },
+      ],
+    };
+    renderTab({ testRuns: [testRun, withSkills] });
+    const grid = screen.getByRole("grid", { name: "Test runs" });
+    expect(
+      within(grid)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent)
+    ).toEqual(["Application", "Task", "Added skills", "Status", "Started"]);
+
+    const [latest, plain] = rowsOf("Test runs");
+    expect(plain).toHaveTextContent("None");
+    const skills = within(latest).getByRole("list", {
+      name: "Skills added to the test run on Inventory Service started 2026-09-19 11:00",
+    });
+    expect(
+      within(skills).getByRole("link", { name: "Spring Boot 3 upgrade" })
+    ).toHaveAttribute("href", "/skills/16");
+    expect(
+      within(skills).queryByRole("link", {
+        name: "Corporate coding standards",
+      })
+    ).toBeNull();
+    await user.click(within(skills).getByRole("button", { name: "1 more" }));
+    expect(
+      within(skills).getByRole("link", { name: "Corporate coding standards" })
+    ).toHaveAttribute("href", "/skills/5");
+  });
+
   it("pages a section only when it has more than 10 rows", async () => {
     const manyStages = Array.from({ length: 11 }, (_, index) =>
       run(String(index + 1), [stage("1", "2", { status: "Pending" })])

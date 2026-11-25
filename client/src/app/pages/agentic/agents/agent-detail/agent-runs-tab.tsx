@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
+import { Label, LabelGroup } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
@@ -236,6 +237,59 @@ const StageRunsSection: React.FC<{
   );
 };
 
+/**
+ * The skills a test run added to the agent's own, two shown and "{n} more"
+ * for the rest, each a link to the skill (as the plans list Applications).
+ */
+const AddedSkillsCell: React.FC<{
+  run: AgentTestRun;
+  linkCrumbs: BreadcrumbEntry[];
+}> = ({ run, linkCrumbs }) => {
+  const { t } = useTranslation();
+  const addedSkills = run.addedSkills ?? [];
+  if (addedSkills.length === 0) {
+    return <EmptyTextMessage message={t("terms.none")} />;
+  }
+  return (
+    <LabelGroup
+      isCompact
+      numLabels={2}
+      aria-label={t("agentic.agentDetail.addedSkillsOfRun", {
+        application: run.application.name,
+        started: formatTableDate(new Date(run.startedAt)),
+      })}
+      collapsedText={t("agentic.agentDetail.moreAddedSkills", {
+        count: addedSkills.length - 2,
+      })}
+      expandedText={t("terms.showLess")}
+    >
+      {addedSkills.map((skill) => (
+        <Label
+          key={skill.id}
+          variant="outline"
+          isCompact
+          textMaxWidth="18ch"
+          render={({ className, content, componentRef }) => (
+            <Link
+              to={breadcrumbTo(
+                generatePath(DevPaths.skillDetails, { skillId: skill.id }),
+                "",
+                linkCrumbs
+              )}
+              className={className}
+              ref={componentRef}
+            >
+              {content}
+            </Link>
+          )}
+        >
+          {skill.name}
+        </Label>
+      ))}
+    </LabelGroup>
+  );
+};
+
 const TestRunsSection: React.FC<{
   testRuns: AgentTestRun[];
   isLoading: boolean;
@@ -253,6 +307,7 @@ const TestRunsSection: React.FC<{
     columnNames: {
       application: t("terms.application"),
       task: t("terms.task"),
+      addedSkills: t("agentic.agentDetail.addedSkills"),
       status: t("terms.status"),
       started: t("terms.started"),
     },
@@ -312,6 +367,10 @@ const TestRunsSection: React.FC<{
                   />
                   <Th {...getThProps({ columnKey: "task" })} />
                   <Th
+                    {...getThProps({ columnKey: "addedSkills" })}
+                    width={25}
+                  />
+                  <Th
                     {...getThProps({ columnKey: "status" })}
                     modifier="fitContent"
                   />
@@ -354,6 +413,9 @@ const TestRunsSection: React.FC<{
                         {...getTdProps({ columnKey: "task" })}
                       >
                         {run.task}
+                      </Td>
+                      <Td {...getTdProps({ columnKey: "addedSkills" })}>
+                        <AddedSkillsCell run={run} linkCrumbs={linkCrumbs} />
                       </Td>
                       <Td
                         modifier="nowrap"

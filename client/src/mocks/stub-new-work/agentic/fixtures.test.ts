@@ -100,6 +100,33 @@ describe("agentic prototype fixtures", () => {
     });
   });
 
+  it("adds only existing Skills the test run's Agent does not have", () => {
+    const skillsById = new Map(mockSkills.map((skill) => [skill.id, skill]));
+    const withAddedSkills = mockAgentTestRuns.filter(
+      (run) => (run.addedSkills ?? []).length > 0
+    );
+    expect(withAddedSkills.length).toBeGreaterThan(0);
+    withAddedSkills.forEach((run) => {
+      const agent = mockAgents.find(
+        (candidate) => candidate.id === run.agent.id
+      );
+      expect(agent?.name).toBe(run.agent.name);
+      // Its own skills and its skill collections' skills.
+      const agentSkillIds = [
+        ...(agent?.skills ?? []),
+        ...mockSkillCollections
+          .filter((collection) =>
+            (agent?.skillCollections ?? []).some((c) => c.id === collection.id)
+          )
+          .flatMap((collection) => collection.skills),
+      ].map((skill) => skill.id);
+      run.addedSkills?.forEach((skillRef) => {
+        expect(skillsById.get(skillRef.id)?.name).toBe(skillRef.name);
+        expect(agentSkillIds).not.toContain(skillRef.id);
+      });
+    });
+  });
+
   it("gives every archetype exactly one target profile", () => {
     archetypes.forEach((archetype) =>
       expect(archetype.profiles ?? []).toHaveLength(1)

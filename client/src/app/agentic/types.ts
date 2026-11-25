@@ -280,6 +280,14 @@ export interface AgentTestRunRequest {
    * (the prototype API ignores it).
    */
   params?: Record<string, string>;
+  /**
+   * Skills added to the Agent's own skills (and its skill collections' skills)
+   * for this run only; the Agent is not changed. No AgentRun field holds them
+   * yet (proposed: a run-level `spec.skillCards[]` that `resolveSkillVolumes`
+   * merges after the Agent's own), so the Hub client refuses a request that
+   * sets them. A skill the Agent already has adds nothing.
+   */
+  addedSkills?: IdRef[];
 }
 
 export interface AgentTestRun {
@@ -289,6 +297,12 @@ export interface AgentTestRun {
   task: string;
   phase: ControllerRunPhase;
   startedAt: string;
+  /**
+   * The skills the request added for this run only (`AgentTestRunRequest.
+   * addedSkills`), not every skill the run had. Absent or empty when none
+   * were added; the Hub adapter leaves it absent.
+   */
+  addedSkills?: EntityRef[];
 }
 
 // ---------------------------------------------------------------------------

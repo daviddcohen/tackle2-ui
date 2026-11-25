@@ -16,6 +16,7 @@ import {
   main,
   openRowActions,
   pickMulti,
+  pickTypeahead,
   rowByText,
   spaNavigate,
   test,
@@ -323,6 +324,46 @@ test.describe("Import skill", () => {
 });
 
 test.describe("Skill detail", () => {
+  test("Test with an agent starts a test run with the skill added", async ({
+    page,
+  }) => {
+    await gotoProto(page, "/skills/16", { persona: ARCHITECT });
+    await page.getByRole("button", { name: "Actions", exact: true }).click();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "Edit",
+      "Test with an agent",
+      "Delete",
+    ]);
+    await page.getByRole("menuitem", { name: "Test with an agent" }).click();
+    await expect(dialog(page)).toContainText(
+      "Runs an agent once on one application with Spring Boot 3 upgrade added to its skills."
+    );
+    await expect(
+      dialog(page).getByRole("button", { name: "Remove Spring Boot 3 upgrade" })
+    ).toBeVisible();
+    await pickTypeahead(page, "agent-test-agent-select", "Code Migrator");
+    await pickTypeahead(
+      page,
+      "agent-test-application-select",
+      "Customer Management"
+    );
+    await field(dialog(page), "Task").fill("Upgrade the web layer");
+    await dialog(page).getByRole("button", { name: "Start test run" }).click();
+    await expect(
+      toast(page, "Test run for Code Migrator queued")
+    ).toBeVisible();
+    await page
+      .locator(".pf-v6-c-alert-group")
+      .getByRole("link", { name: "View runs" })
+      .click();
+    const runRow = page
+      .getByRole("grid", { name: "Test runs" })
+      .getByRole("row", { name: /Upgrade the web layer/ });
+    await expect(
+      runRow.getByRole("link", { name: "Spring Boot 3 upgrade" })
+    ).toBeVisible();
+  });
+
   test("details and usage tabs render", async ({ page, diagnostics }) => {
     await gotoProto(page, "/skills/1", { persona: ARCHITECT });
     await expect(

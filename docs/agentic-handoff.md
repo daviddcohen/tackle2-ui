@@ -126,7 +126,7 @@ No field pools skills across stages: the pooled fields (`MigrationPlan.effective
 Backend needs:
 
 - Hub storage for archetype, target profile and application skill attachments (a join table), which Manage skills writes (UX first: Manage skills stays).
-- One optional run-level skills field the Hub fills when it creates a run, merged by `resolveSkillVolumes` after the agent's own skills.
+- One optional run-level skills field the Hub fills when it creates a run, merged by `resolveSkillVolumes` after the agent's own skills. Agent test runs fill it with their added skills ([Agent test run ↔ AgentRun](#agent-test-run--agentrun-agenticagentruns)).
 - Recording what each stage got (agentic-controller#172), so a run shows its real snapshot.
 - A per-stage preview endpoint (`POST /hub/agentic/workflows/skills/resolve`, see 7.7) answering `SkillsByStage`.
 - Plan exclusions stored per stage (`AgentWorkflowStage.skills.exclude[]`, see 7.7).
@@ -380,8 +380,14 @@ No backend source. `Provider` has no CRD; `providersWriteScopes` reuses the gate
 | `startedAt`                                            | `status.startTime`, else `creationTimestamp`                |                                                                          |
 | Request `agentId`, `applicationId`, `task`             | `CreateRunInput.agentRef`, `applicationRef`, `instructions` | `toCreateRunInput`                                                       |
 | Request `modelId`, `targetBranch`, `params` (optional) | `spec.gateway`, env `TARGET_BRANCH`, `spec.params`          | omitted when empty; see [B](#b-runs-need-inputs-the-ui-does-not-collect) |
+| Request `addedSkills: IdRef[]` (optional)              | no source (proposed: `spec.skillCards[].ref`)               | `agentic-hub.ts` refuses a non-empty list ("no Hub backend")             |
+| `addedSkills: EntityRef[]` (optional)                  | no source (proposed: `spec.skillCards[].ref`)               | absent from `toAgentTestRun`                                             |
 
 AgentRuns created for workflow stages carry the label `konveyor.io/agentworkflowrun`; `isAgentTestRun` excludes them.
+
+Added skills (the Test agent modal's "Added skills" field and the skill page's "Test with an agent") are skills a test run gets on top of its Agent's own skills and its skill collections' skills, for that run only; the Agent is not changed. The prototype API validates them (400 for a malformed list or an unknown skill), stores each once, resolves their names on read and lists them on the run; the UI shows them in the agent's Test runs table and never offers a skill the Agent already has. The seeded run 9003 repeats 9002's task with two added skills.
+
+Backend need: `AgentRunSpec` has no skills field, and `resolveSkillVolumes(ctx, run, agent)` stages only the Agent's `spec.skillCards` and `spec.skillCollections`. Proposed: an optional `AgentRun.spec.skillCards[]` (`{ ref }`, as on the Agent) that `resolveSkillVolumes` merges after the Agent's own. It is the same run-level skills field [Skill resolution](#skill-resolution) "Backend needs" already lists for plan runs, so test runs need no new concept. The controller treats a skill reached twice with the same delivery as a no-op, so a run-level skill the Agent already has is harmless. Until it exists, `agentic-hub.ts` `startAgentTestRun` throws for a request with added skills rather than starting a run without them.
 
 ### Skill ↔ SkillCard (`/agentic/skills`)
 

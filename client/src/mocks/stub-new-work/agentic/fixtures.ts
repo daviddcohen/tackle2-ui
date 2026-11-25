@@ -1646,6 +1646,19 @@ export const mockAgentTestRuns: AgentTestRun[] = [
     phase: "Failed",
     startedAt: "2026-09-19T09:30:00Z",
   },
+  {
+    // The same task again with skills the agent does not have, to compare.
+    id: "9003",
+    agent: { id: "2", name: "Code Migrator" },
+    application: applicationRef(5),
+    task: "Apply the Spring Boot to Quarkus conversion patterns to the service layer.",
+    phase: "Succeeded",
+    startedAt: "2026-09-19T11:00:00Z",
+    addedSkills: [
+      { id: "16", name: "Spring Boot 3 upgrade" },
+      { id: "4", name: "Quarkus best practices" },
+    ],
+  },
 ];
 
 export const availableModelsByProviderType: Record<

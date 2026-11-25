@@ -23,10 +23,16 @@ jest.mock("react-markdown", () => ({
   ),
 }));
 
-const mockGrantedScopes: { all: boolean } = { all: true };
+/** Every scope, or only the listed ones. */
+const mockGrantedScopes: { all: boolean; only: string[] } = {
+  all: true,
+  only: [],
+};
 jest.mock("@app/auth", () => ({
   ...jest.requireActual("@app/auth"),
-  useHasSomeScopes: () => mockGrantedScopes.all,
+  useHasSomeScopes: (scopes: string[]) =>
+    mockGrantedScopes.all ||
+    scopes.some((scope) => mockGrantedScopes.only.includes(scope)),
 }));
 
 const inlineSkill: Skill = {
@@ -175,6 +181,7 @@ const findTitle = () =>
 describe("SkillDetail, Details tab", () => {
   afterEach(() => {
     mockGrantedScopes.all = true;
+    mockGrantedScopes.only = [];
   });
 
   it("shows the description in the header, the facts and the content", async () => {
@@ -405,6 +412,79 @@ describe("SkillDetail, Details tab", () => {
     // detail query never asks for the deleted skill (a 404 in the console).
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(readsAfterDelete).toBe(0);
+  });
+
+  it("lists Edit, Test with an agent, then Delete", async () => {
+    useEndpoints();
+    renderPage();
+    const user = userEvent.setup();
+
+    await findTitle();
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual(["Edit", "Test with an agent", "Delete"]);
+  });
+
+  it("opens the test modal with the skill preselected", async () => {
+    useEndpoints();
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.skills, (_req, res, ctx) =>
+        res(ctx.json([inlineSkill]))
+      ),
+      rest.get("/hub/applications", (_req, res, ctx) => res(ctx.json([]))),
+      rest.get(AGENTIC_ENDPOINTS.agents, (_req, res, ctx) =>
+        res(ctx.json(agents.map((agent) => ({ ...agent, skills: [] }))))
+      )
+    );
+    renderPage();
+    const user = userEvent.setup();
+
+    await findTitle();
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Test with an agent" })
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("heading", { name: "Test agent" })
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("combobox", { name: "Agent" })
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Remove Spring Boot to Quarkus migration",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("offers only Test with an agent with the run scope alone", async () => {
+    mockGrantedScopes.all = false;
+    mockGrantedScopes.only = ["agentic.agentruns:post"];
+    useEndpoints();
+    renderPage();
+    const user = userEvent.setup();
+
+    await findTitle();
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual(["Test with an agent"]);
+  });
+
+  it("offers Edit and Delete only with the skill write scope alone", async () => {
+    mockGrantedScopes.all = false;
+    mockGrantedScopes.only = ["agentic.skills:put"];
+    useEndpoints();
+    renderPage();
+    const user = userEvent.setup();
+
+    await findTitle();
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual(["Edit", "Delete"]);
   });
 
   it("has no Actions menu without the write scope", async () => {

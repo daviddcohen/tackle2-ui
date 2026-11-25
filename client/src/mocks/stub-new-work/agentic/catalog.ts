@@ -631,7 +631,13 @@ const presentTestRun = (run: AgentTestRun): AgentTestRun => {
   ) {
     run.phase = "Succeeded";
   }
-  return { ...run, agent: resolveAgentRef(run.agent) };
+  return {
+    ...run,
+    agent: resolveAgentRef(run.agent),
+    ...(run.addedSkills != null && {
+      addedSkills: run.addedSkills.map(resolveSkillRef),
+    }),
+  };
 };
 
 export const listAgentTestRuns = (agentId?: EntityId | null) =>
@@ -656,6 +662,13 @@ export const startAgentTestRun = (input: unknown) => {
   if (!application) {
     throw badRequest(`Application "${applicationId}" does not exist.`);
   }
+  // Added for this run only: the Agent keeps its own skills.
+  const addedSkillIds = entityIds(
+    optionalArray(body, "addedSkills"),
+    "addedSkills",
+    db.skills,
+    "Skill"
+  );
   const run: AgentTestRun = {
     id: nextId("agentTestRuns"),
     agent: { id: agent.id, name: agent.name },
@@ -663,6 +676,9 @@ export const startAgentTestRun = (input: unknown) => {
     task,
     phase: "Running",
     startedAt: nowIso(),
+    ...(addedSkillIds.length > 0 && {
+      addedSkills: addedSkillIds.map((id) => resolveSkillRef({ id, name: "" })),
+    }),
   };
   db.agentTestRuns.push(run);
   return presentTestRun(run);
