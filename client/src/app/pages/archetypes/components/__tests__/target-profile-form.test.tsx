@@ -132,7 +132,7 @@ describe("CreateTargetProfileModal", () => {
     expect(create).toBeDisabled();
   });
 
-  it("validates the name like Edit: unique within the archetype", async () => {
+  it("validates the name like Rename: unique within the archetype", async () => {
     renderCreate();
 
     const name = await screen.findByRole("textbox", { name: /Name/ });
@@ -179,7 +179,7 @@ describe("CreateTargetProfileModal", () => {
     release();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(notifications.pushNotification).toHaveBeenCalledWith({
-      title: "Target profile created",
+      title: "Target profile JBoss EAP 8 on OpenShift created",
       variant: "success",
     });
   });
@@ -243,7 +243,9 @@ describe("EditTargetProfileModal", () => {
   it("edits only the name", () => {
     renderEdit();
 
-    const dialog = screen.getByRole("dialog", { name: "Edit target profile" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Rename target profile",
+    });
     expect(dialog).toHaveAccessibleDescription(
       "A target profile is where applications in this archetype are going."
     );
@@ -310,7 +312,7 @@ describe("EditTargetProfileModal", () => {
     release();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(notifications.pushNotification).toHaveBeenCalledWith({
-      title: "Target profile updated",
+      title: "Target profile renamed to Quarkus 3.15",
       variant: "success",
     });
   });

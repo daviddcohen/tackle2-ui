@@ -118,7 +118,9 @@ export const CreateTargetProfileModal: React.FC<TargetProfileModalProps> = ({
               },
               () => {
                 pushNotification({
-                  title: t("toastr.success.targetProfileCreated"),
+                  title: t("toastr.success.targetProfileCreated", {
+                    profile: values.name,
+                  }),
                   variant: "success",
                 });
                 onClose();
@@ -272,7 +274,9 @@ export const EditTargetProfileModal: React.FC<
               {
                 onSuccess: () => {
                   pushNotification({
-                    title: t("toastr.success.targetProfileUpdated"),
+                    title: t("toastr.success.targetProfileUpdated", {
+                      profile: name,
+                    }),
                     variant: "success",
                   });
                   onClose();

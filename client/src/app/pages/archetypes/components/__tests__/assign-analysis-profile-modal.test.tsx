@@ -211,7 +211,7 @@ describe("AssignAnalysisProfileModal", () => {
     release();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(notifications.pushNotification).toHaveBeenCalledWith({
-      title: "Analysis profile assigned",
+      title: "Analysis profile for Quarkus 3.x updated",
       variant: "success",
     });
   });
@@ -234,7 +234,7 @@ describe("AssignAnalysisProfileModal", () => {
       expect.objectContaining({ profiles: [kept, liftAndShift] })
     );
     expect(notifications.pushNotification).toHaveBeenCalledWith({
-      title: "Analysis profile removed",
+      title: "Analysis profile for Quarkus 3.x removed",
       variant: "success",
     });
   });

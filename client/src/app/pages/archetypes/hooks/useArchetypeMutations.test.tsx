@@ -107,6 +107,35 @@ describe("useTargetProfileMutation", () => {
   });
 });
 
+describe("useArchetypeMutations deleteTargetProfile", () => {
+  it("names each deleted profile in its toast, also for two deletes at once", async () => {
+    server.use(
+      rest.put("/hub/archetypes/1", (_req, res, ctx) => res(ctx.status(204)))
+    );
+    const notifications = createMockNotifications();
+    const { result } = renderHook(() => useArchetypeMutations(), {
+      notifications,
+    });
+
+    act(() => {
+      result.current.deleteTargetProfile(archetype, quarkus);
+      result.current.deleteTargetProfile(archetype, liftAndShift);
+    });
+
+    await waitFor(() =>
+      expect(notifications.pushNotification).toHaveBeenCalledTimes(2)
+    );
+    expect(notifications.pushNotification).toHaveBeenCalledWith({
+      title: "Target profile Quarkus 3.x deleted",
+      variant: "success",
+    });
+    expect(notifications.pushNotification).toHaveBeenCalledWith({
+      title: "Target profile OpenShift lift and shift deleted",
+      variant: "success",
+    });
+  });
+});
+
 describe("target profile writes refresh plans and migration views", () => {
   /** Cached plans and application migrations, to see what is invalidated. */
   const seeded = () => {

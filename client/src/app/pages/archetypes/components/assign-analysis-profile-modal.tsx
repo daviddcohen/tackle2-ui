@@ -92,8 +92,12 @@ export const AssignAnalysisProfileModal: React.FC<
           pushNotification({
             title:
               analysisProfile != null
-                ? t("agentic.archetype.analysisProfileAssigned")
-                : t("agentic.archetype.analysisProfileRemoved"),
+                ? t("agentic.archetype.analysisProfileAssigned", {
+                    profile: profile.name,
+                  })
+                : t("agentic.archetype.analysisProfileRemoved", {
+                    profile: profile.name,
+                  }),
             variant: "success",
           });
           onClose();

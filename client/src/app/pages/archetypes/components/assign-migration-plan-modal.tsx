@@ -29,6 +29,8 @@ import { getAxiosErrorMessage } from "@app/utils/utils";
 
 const FORM_ID = "assign-migration-plan-form";
 const TITLE_ID = "assign-migration-plan-modal-title";
+const DESCRIPTION_ID = "assign-migration-plan-modal-description";
+const SELECT_ID = "migration-plan-select";
 
 export interface AssignMigrationPlanModalProps {
   archetype: Archetype;
@@ -68,7 +70,9 @@ export const AssignMigrationPlanModal: React.FC<
     useAssignPlanToTargetProfileMutation(
       () => {
         pushNotification({
-          title: t("agentic.archetype.planAssigned"),
+          title: t("agentic.archetype.planAssigned", {
+            profile: profile.name,
+          }),
           variant: "success",
         });
         onClose();
@@ -121,11 +125,11 @@ export const AssignMigrationPlanModal: React.FC<
       <Form id={FORM_ID} onSubmit={onSubmit}>
         <FormGroup
           label={t("agentic.entity.migrationPlan")}
-          fieldId="migration-plan-select"
+          fieldId={SELECT_ID}
           isRequired
         >
           <FormSelect
-            id="migration-plan-select"
+            id={SELECT_ID}
             value={planId ?? ""}
             onChange={(_event, value) => setPlanId(value || null)}
           >
@@ -158,12 +162,18 @@ export const AssignMigrationPlanModal: React.FC<
     <Modal
       variant="small"
       isOpen
-      onClose={onClose}
+      onClose={() => {
+        if (!isPending) onClose();
+      }}
       aria-labelledby={TITLE_ID}
+      aria-describedby={DESCRIPTION_ID}
       id="assign-migration-plan-modal"
+      // Other states keep the default: their first tabbable element.
+      elementToFocus={canSubmit ? `#${SELECT_ID}` : undefined}
     >
       <ModalHeader
         labelId={TITLE_ID}
+        descriptorId={DESCRIPTION_ID}
         title={
           assignedPlan
             ? t("agentic.archetype.changePlan")
@@ -182,12 +192,14 @@ export const AssignMigrationPlanModal: React.FC<
               variant="primary"
               type="submit"
               form={FORM_ID}
-              isDisabled={isUnchanged || isPending}
-              isLoading={isPending}
+              isDisabled={isUnchanged}
+              // Still focusable while saving, so focus stays in the dialog.
+              isAriaDisabled={isPending}
+              isLoading={isPending || undefined}
             >
               {t("actions.save")}
             </Button>
-            <Button variant="link" onClick={onClose}>
+            <Button variant="link" isDisabled={isPending} onClick={onClose}>
               {t("actions.cancel")}
             </Button>
           </>
