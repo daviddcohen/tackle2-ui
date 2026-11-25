@@ -108,17 +108,23 @@ test.describe("Plan impact and lifecycle", () => {
       });
     await expect(configuration).toContainText("Checks passed");
     await expect(page.locator(".pf-v6-c-alert.pf-m-warning")).toHaveCount(0);
-    // Its archetype and target profiles read "Not assigned".
-    for (const term of ["Archetype", "Target profiles"])
-      await expect(
-        page
-          .getByRole("main")
-          .locator("dl")
-          .locator(".pf-v6-c-description-list__group")
-          .filter({
-            has: page.getByRole("term").getByText(term, { exact: true }),
-          })
-      ).toContainText("Not assigned");
+    // Its target profiles read "Not assigned"; no separate Archetype fact.
+    const facts = page
+      .getByRole("main")
+      .locator("dl")
+      .locator(".pf-v6-c-description-list__group");
+    await expect(
+      facts.filter({
+        has: page.getByRole("term").getByText("Target profiles", {
+          exact: true,
+        }),
+      })
+    ).toContainText("Not assigned");
+    await expect(
+      facts.filter({
+        has: page.getByRole("term").getByText("Archetype", { exact: true }),
+      })
+    ).toHaveCount(0);
   });
 
   test("all fixture plans are protected from deletion while in use", async ({

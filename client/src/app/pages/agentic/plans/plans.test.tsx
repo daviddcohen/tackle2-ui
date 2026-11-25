@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { rest } from "msw";
 import { MemoryRouter } from "react-router-dom";
 
-import { Agent, MigrationPlan, ModelProjection, PlanRun } from "@app/agentic";
+import { Agent, MigrationPlan, ModelProjection } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
 import { render, screen, waitFor, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
@@ -66,33 +66,12 @@ const basePlan: MigrationPlan = {
   runCount: 1,
 };
 
-const planRun = (
-  id: string,
-  status: PlanRun["status"],
-  startedAt: string,
-  planId = "1"
-) =>
-  ({
-    id,
-    name: `Run #${id}`,
-    planId,
-    planName: basePlan.name,
-    status,
-    startedAt,
-    applications: [],
-    stageRuns: [],
-  }) as unknown as PlanRun;
-
-const run = planRun("4", "Running", "2026-11-01T10:00:00Z");
-
 const useEndpoints = ({
   plans = [basePlan],
   models = [model],
-  runs = [run],
 }: {
   plans?: MigrationPlan[];
   models?: ModelProjection[];
-  runs?: PlanRun[];
 }) =>
   server.use(
     rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) => res(ctx.json(plans))),
@@ -101,9 +80,6 @@ const useEndpoints = ({
     ),
     rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) =>
       res(ctx.json(models))
-    ),
-    rest.get(AGENTIC_ENDPOINTS.planRuns, (_req, res, ctx) =>
-      res(ctx.json(runs))
     ),
     rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.json([]))),
     rest.get(AGENTIC_ENDPOINTS.applicationMigrations, (_req, res, ctx) =>
@@ -127,7 +103,7 @@ describe("MigrationPlansPage", () => {
     mockGrantedScopes.scopes = [];
   });
 
-  it("lists each plan's name, applications and shown run, and nothing else", async () => {
+  it("lists each plan's name and target profiles, and nothing else", async () => {
     useEndpoints({});
     renderList();
     const plan = await row("Java EE to Quarkus");
@@ -137,126 +113,100 @@ describe("MigrationPlansPage", () => {
         // The table controls add an unnamed column after the data.
         .filter((header) => header.textContent !== "")
         .map((header) => header.textContent)
-    ).toEqual([
-      "terms.name",
-      "terms.applications",
-      "agentic.plan.runs",
-      "actions.rowActions",
-    ]);
-    // Two application labels link to their pages; PF's toggle holds the rest.
-    const applications = within(plan).getByRole("list", {
-      name: "agentic.plan.applicationsOfPlan",
-    });
+    ).toEqual(["terms.name", "terms.targetProfiles", "actions.rowActions"]);
+    // One target profile is shown inline (its copy and link are covered by
+    // the cell's own tests, which render English).
     expect(
-      within(applications).getByRole("link", { name: "Billing" })
-    ).toHaveAttribute("href", "/applications/3");
-    expect(
-      within(applications).getByRole("link", { name: "Customer Management" })
+      within(plan).getByText("agentic.plan.targetProfilePath")
     ).toBeInTheDocument();
-    expect(
-      within(applications).queryByRole("link", { name: "Inventory Service" })
-    ).toBeNull();
-    // The overflow toggle and its expanded text are translated.
-    expect(
-      within(applications).getByRole("button", {
-        name: "agentic.plan.moreApplications",
-      })
-    ).toBeInTheDocument();
-    // The run's status links to it; one run has no count line.
-    const status = await within(plan).findByRole("link", {
-      name: "agentic.plan.runStatusLabel",
-    });
-    expect(status).toHaveAttribute("href", "/plan-runs/4");
-    expect(status).toHaveTextContent("agentic.runStatus.running");
-    expect(within(plan).queryByText("agentic.plan.runCount")).toBeNull();
     expect(within(plan).queryByLabelText(/configurationCheck/)).toBeNull();
   });
 
-  it("expands the rest of the applications with a translated toggle", async () => {
-    const user = userEvent.setup();
-    useEndpoints({});
-    renderList();
-    const plan = await row("Java EE to Quarkus");
-    await user.click(
-      within(plan).getByRole("button", {
-        name: "agentic.plan.moreApplications",
-      })
-    );
-    expect(
-      within(plan).getByRole("link", { name: "Inventory Service" })
-    ).toBeInTheDocument();
-    expect(
-      within(plan).getByRole("button", { name: "terms.showLess" })
-    ).toBeInTheDocument();
-  });
-
-  it("explains the Applications column in a help popover", async () => {
+  it("explains the Target profiles column in a help popover", async () => {
     const user = userEvent.setup();
     useEndpoints({});
     renderList();
     await row("Java EE to Quarkus");
     await user.click(
-      screen.getByRole("button", { name: "agentic.plan.applicationsHelpLabel" })
+      screen.getByRole("button", {
+        name: "agentic.plan.targetProfilesHelpLabel",
+      })
     );
     expect(
-      await screen.findByText("agentic.plan.applicationsHelp")
+      await screen.findByText("agentic.plan.targetProfilesHelp")
     ).toBeInTheDocument();
     // Translated close button and a named dialog, not PF's English defaults.
     expect(
-      screen.getByRole("dialog", { name: "agentic.plan.applicationsHelpLabel" })
+      screen.getByRole("dialog", {
+        name: "agentic.plan.targetProfilesHelpLabel",
+      })
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "actions.close" })
     ).toBeInTheDocument();
   });
 
-  it("shows the run that needs action, with the count, and Not run without runs", async () => {
+  it("says Not assigned when no target profile uses the plan", async () => {
     useEndpoints({
       plans: [
-        basePlan,
-        { ...basePlan, id: "2", name: "Spring Boot to Quarkus" },
-      ],
-      runs: [
-        planRun("1", "AwaitingApproval", "2026-11-01T10:00:00Z"),
-        planRun("2", "Succeeded", "2026-11-02T10:00:00Z"),
+        { ...basePlan, migrationPath: undefined },
+        {
+          ...basePlan,
+          id: "2",
+          name: "Not the default",
+          migrationPath: { ...basePlan.migrationPath!, isDefault: false },
+        },
+        {
+          ...basePlan,
+          id: "3",
+          name: "No profiles",
+          migrationPath: { ...basePlan.migrationPath!, targetProfiles: [] },
+        },
       ],
     });
     renderList();
-    const plan = await row("Java EE to Quarkus");
-    const status = await within(plan).findByRole("link", {
-      name: "agentic.plan.runStatusLabel",
-    });
-    expect(status).toHaveAttribute("href", "/plan-runs/1");
-    expect(status).toHaveTextContent("agentic.runStatus.awaitingApproval");
-    expect(within(plan).getByText("agentic.plan.runCount")).toBeInTheDocument();
-    const other = await row("Spring Boot to Quarkus");
-    expect(within(other).getByText("agentic.plan.notRun")).toBeInTheDocument();
+    for (const name of [
+      "Java EE to Quarkus",
+      "Not the default",
+      "No profiles",
+    ]) {
+      const plan = await row(name);
+      expect(
+        within(plan).getByText("agentic.execution.notAssigned")
+      ).toBeInTheDocument();
+      expect(within(plan).getAllByRole("link")).toHaveLength(1);
+    }
   });
 
-  it("waits for runs only in the Runs cell, and says Unavailable if they fail", async () => {
-    let releaseRuns = () => {};
-    const runsReleased = new Promise<void>((resolve) => {
-      releaseRuns = resolve;
+  it("counts several target profiles and lists them in a popover", async () => {
+    const user = userEvent.setup();
+    useEndpoints({
+      plans: [
+        {
+          ...basePlan,
+          migrationPath: {
+            ...basePlan.migrationPath!,
+            targetProfiles: [
+              { id: 12, name: "Spring Boot 3" },
+              { id: 11, name: "Quarkus 3.x" },
+            ],
+          },
+        },
+      ],
     });
-    useEndpoints({});
-    server.use(
-      rest.get(AGENTIC_ENDPOINTS.planRuns, async (_req, res, ctx) => {
-        await runsReleased;
-        return res(ctx.status(500));
-      })
-    );
     renderList();
     const plan = await row("Java EE to Quarkus");
-    // The rest of the row is there while the runs load.
-    expect(within(plan).getByRole("link", { name: "Billing" })).toBeVisible();
-    expect(within(plan).getByText("terms.loading")).toBeInTheDocument();
-    releaseRuns();
+    await user.click(
+      within(plan).getByRole("button", {
+        name: "agentic.plan.targetProfileCount",
+      })
+    );
+    const popover = await screen.findByRole("dialog", {
+      name: "agentic.plan.targetProfilesOfPlan",
+    });
+    expect(within(popover).getAllByRole("listitem")).toHaveLength(2);
     expect(
-      await within(plan).findByText(
-        "agentic.common.unavailable",
-        {},
-        { timeout: 5000 }
-      )
+      within(popover).getByRole("button", { name: "actions.close" })
     ).toBeInTheDocument();
   });
 
@@ -269,47 +219,6 @@ describe("MigrationPlansPage", () => {
         "agentic.plan.configurationCheck.models.unavailable"
       )
     ).toBeInTheDocument();
-  });
-
-  it("says None without applications and a count when the server only counts them", async () => {
-    useEndpoints({
-      plans: [
-        { ...basePlan, applicationImpact: { matching: 0, applications: [] } },
-        {
-          ...basePlan,
-          id: "2",
-          name: "Spring Boot to Quarkus",
-          applicationImpact: { matching: 2 },
-        },
-      ],
-    });
-    renderList();
-    const empty = await row("Java EE to Quarkus");
-    expect(within(empty).getByText("terms.none")).toBeInTheDocument();
-    const counted = await row("Spring Boot to Quarkus");
-    expect(
-      within(counted).getByRole("link", {
-        name: "agentic.plan.applicationCount",
-      })
-    ).toBeInTheDocument();
-  });
-
-  it("says Unavailable for the applications the server did not report", async () => {
-    useEndpoints({
-      plans: [
-        {
-          ...basePlan,
-          migrationPath: undefined,
-          applicationImpact: undefined,
-          runCount: undefined,
-        },
-      ],
-    });
-    renderList();
-    const plan = await row("Java EE to Quarkus");
-    expect(
-      within(plan).getAllByText("agentic.common.unavailable")
-    ).toHaveLength(1);
   });
 
   it("marks no plan for having no migration path", async () => {
@@ -540,7 +449,7 @@ describe("MigrationPlansPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("filters by archetype, with Not assigned for plans without a path", async () => {
+  it("filters by the archetypes of the target profiles, with Not assigned", async () => {
     const user = userEvent.setup();
     useEndpoints({
       plans: [
@@ -548,6 +457,26 @@ describe("MigrationPlansPage", () => {
         {
           ...basePlan,
           id: "2",
+          name: "Spring Boot upgrade",
+          migrationPath: {
+            archetype: { id: 2, name: "Spring Boot Application" },
+            targetProfiles: [{ id: 21, name: "Spring Boot 3" }],
+            isDefault: true,
+          },
+        },
+        {
+          ...basePlan,
+          id: "3",
+          name: "Draft plan",
+          migrationPath: {
+            archetype: { id: 3, name: "Node.js Service" },
+            targetProfiles: [{ id: 31, name: "Node 22" }],
+            isDefault: false,
+          },
+        },
+        {
+          ...basePlan,
+          id: "4",
           name: "Java EE lift and shift",
           migrationPath: undefined,
         },
@@ -564,20 +493,39 @@ describe("MigrationPlansPage", () => {
       await screen.findByRole("menuitem", { name: "terms.archetype" })
     );
     await user.click(screen.getByRole("combobox"));
+    // Only archetypes whose target profiles use a listed plan.
     const options = screen.getAllByRole("menuitem");
     expect(options.map((option) => option.textContent?.trim())).toEqual([
       "Java EE Application",
+      "Spring Boot Application",
       "agentic.execution.notAssigned",
     ]);
-    await user.click(within(options[1]).getByRole("checkbox"));
+    await user.click(within(options[2]).getByRole("checkbox"));
     await waitFor(() =>
       expect(
         screen.queryByRole("link", { name: "Java EE to Quarkus" })
       ).toBeNull()
     );
     expect(
-      screen.getByRole("link", { name: "Java EE lift and shift" })
+      screen.queryByRole("link", { name: "Spring Boot upgrade" })
+    ).toBeNull();
+    // The rows the column says Not assigned for.
+    for (const name of ["Draft plan", "Java EE lift and shift"]) {
+      expect(
+        within(await row(name)).getByText("agentic.execution.notAssigned")
+      ).toBeInTheDocument();
+    }
+    await user.click(within(options[2]).getByRole("checkbox"));
+    await user.click(within(options[1]).getByRole("checkbox"));
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: "Draft plan" })).toBeNull()
+    );
+    expect(
+      screen.getByRole("link", { name: "Spring Boot upgrade" })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Java EE to Quarkus" })
+    ).toBeNull();
   });
 
   it("disables Edit and Delete of a plan managed by Konveyor", async () => {

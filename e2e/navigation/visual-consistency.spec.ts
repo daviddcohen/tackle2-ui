@@ -30,28 +30,13 @@ const truncatedHeaders = (page: Page) =>
         .map((cell) => cell.textContent)
     );
 
-test("plans list: application labels keep one height in a row with N more", async ({
-  page,
-}) => {
+// A width on a Th with an info button also applies to its text, which then
+// truncates: the plans list sets the Target profiles width on its cells.
+test("plans list: no header truncates", async ({ page }) => {
   await page.goto(protoUrl("/migration-plans"));
   await expect(mainHeading(page)).toHaveText("Migration plans");
-  const withMore = rowByText(page, /\d+ more/);
-  await expect(withMore.first()).toBeVisible();
-  // Every application label, and the "N more" button, is compact.
-  await expect
-    .poll(async () => {
-      const heights = await dataRows(page).evaluateAll((rows) =>
-        rows.flatMap((row) =>
-          Array.from(
-            row.querySelectorAll<HTMLElement>(
-              ".pf-v6-c-label-group__list-item > *"
-            )
-          ).map((element) => Math.round(element.getBoundingClientRect().height))
-        )
-      );
-      return heights.length > 2 ? new Set(heights).size : -1;
-    })
-    .toBe(1);
+  await expect(dataRows(page).first().getByRole("link").first()).toBeVisible();
+  await expect.poll(() => truncatedHeaders(page)).toEqual([]);
 });
 
 for (const width of [1280, 1024]) {

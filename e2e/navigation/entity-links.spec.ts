@@ -216,7 +216,6 @@ for (const group of GROUPS) {
                 {
                   href: element.getAttribute("href") ?? "",
                   label: element.textContent?.trim() ?? "",
-                  ariaLabel: element.getAttribute("aria-label"),
                 },
               ])
           ).values(),
@@ -228,7 +227,7 @@ for (const group of GROUPS) {
           .map((link) => link.href)
           .filter((href) => href.startsWith("/") && !href.startsWith(BASE_PATH))
       ).toEqual([]);
-      for (const { href, label, ariaLabel } of links.filter((link) =>
+      for (const { href, label } of links.filter((link) =>
         internalEntity.test(appPath(link.href))
       )) {
         await test.step(`${source} -> ${href}`, async () => {
@@ -285,11 +284,14 @@ for (const group of GROUPS) {
               /^\d+ (agents?|collections?|archetypes?|target profiles?|applications?|skills)(, \d+ (agents?|collections?|archetypes?|target profiles?|applications?))*$/.test(
                 label
               ) && /^\/skills\//.test(destination.pathname);
-            // A skill's "Attached to" facts name each target profile
-            // with its archetype, "{profile} ({archetype})":
-            // profile names repeat across archetypes.
+            // A skill's "Attached to" facts and a plan's Target profiles
+            // fact name each target profile with its archetype,
+            // "{profile} ({archetype})": profile names repeat across
+            // archetypes.
             const isQualifiedTargetProfile =
-              /^\/skills\/\d+$/.test(appUrl(sourceURL).pathname) &&
+              /^\/(skills|migration-plans)\/\d+$/.test(
+                appUrl(sourceURL).pathname
+              ) &&
               /#target-profile-\d+$/.test(href) &&
               label.startsWith(`${expected} (`) &&
               label.endsWith(")");
@@ -298,20 +300,8 @@ for (const group of GROUPS) {
             const isMigrationStatusLink =
               /^\/applications\/\d+$/.test(destination.pathname) &&
               destination.searchParams.get("tab") === "migration";
-            // The plans list Runs status links to the shown run; its words
-            // are the status and its accessible name "{status}, {run}".
-            const isRunStatusLink =
-              /^\/plan-runs\/\d+$/.test(destination.pathname) &&
-              ariaLabel != null &&
-              ariaLabel.startsWith(`${label}, `);
-            if (isRunStatusLink)
-              expect(
-                ariaLabel,
-                `mislabelled run status ${source} -> ${href}`
-              ).toBe(`${label}, ${expected}`);
             if (
               !/\/stages\//.test(href) &&
-              !isRunStatusLink &&
               !isRunCountLink &&
               !isAgentCountLink &&
               !isPlanRunsCountLink &&

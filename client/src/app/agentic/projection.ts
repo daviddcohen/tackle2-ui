@@ -1,10 +1,12 @@
+import { universalComparator } from "@app/utils/utils";
+
 import {
   Agent,
   ApplicationMigrationDisplayStatus,
   ApplicationMigrationView,
   ConfigurationCheck,
   ControllerRunPhase,
-  EntityId,
+  HubRef,
   MigrationPlan,
   ModelProjection,
   PlanRun,
@@ -147,27 +149,39 @@ export const getPlanConfigurationChecks = (
 };
 
 /**
- * The run of a plan that the plans list shows: the newest run that needs
- * action (awaiting approval) if there is one, otherwise the newest run by
- * start, whatever its phase; a Pending run has not started and counts as the
- * newest. A failure is never hidden behind an older run that needs nobody.
- * Undefined when the plan has no runs.
+ * One archetype + target profile migration path, as the plan pages present
+ * it: "Quarkus 3.x (Java EE Application)".
  */
-export const getShownPlanRun = (
-  runs: PlanRun[],
-  planId: EntityId
-): PlanRun | undefined => {
-  // A run without a readable start sorts last, so the order is total.
-  const startOf = (run: PlanRun) => {
-    if (run.status === "Pending") return Infinity;
-    const start = Date.parse(run.startedAt);
-    return Number.isNaN(start) ? -Infinity : start;
-  };
-  const newestFirst = runs
-    .filter((run) => run.planId === planId)
-    .sort((a, b) => startOf(b) - startOf(a) || 0);
-  return (
-    newestFirst.find((run) => run.status === "AwaitingApproval") ??
-    newestFirst[0]
-  );
+export interface PlanTargetProfile {
+  archetype: HubRef;
+  targetProfile: HubRef;
+}
+
+/**
+ * Every archetype + target profile pair of the plan's migration path, by
+ * archetype name, then profile name. Today derived from `migrationPath` (one
+ * archetype); when the plan reference moves onto the target profile (profiles
+ * of several archetypes), only this derivation changes.
+ */
+export const getPlanTargetProfiles = (
+  plan: MigrationPlan
+): PlanTargetProfile[] => {
+  const path = plan.migrationPath;
+  if (path == null) return [];
+  return path.targetProfiles
+    .map((targetProfile) => ({ archetype: path.archetype, targetProfile }))
+    .sort(
+      (a, b) =>
+        universalComparator(a.archetype.name, b.archetype.name) ||
+        universalComparator(a.targetProfile.name, b.targetProfile.name)
+    );
 };
+
+/**
+ * The pairs whose target profile uses the plan (its path is the default):
+ * the profiles whose applications are migrated with it. Empty otherwise.
+ */
+export const getAssignedTargetProfiles = (
+  plan: MigrationPlan
+): PlanTargetProfile[] =>
+  plan.migrationPath?.isDefault === true ? getPlanTargetProfiles(plan) : [];

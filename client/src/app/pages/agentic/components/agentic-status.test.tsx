@@ -202,21 +202,6 @@ describe("status components", () => {
     expect(screen.getAllByText("agentic.runStatus.running")).toHaveLength(1);
   });
 
-  it("name the link with linkAriaLabel and keep the visible text", () => {
-    render(
-      <MemoryRouter>
-        <RunStatus
-          status="Failed"
-          to="/plan-runs/3"
-          linkAriaLabel="Failed, Run #3"
-        />
-      </MemoryRouter>
-    );
-    const link = screen.getByRole("link", { name: "Failed, Run #3" });
-    expect(link).toHaveAttribute("href", "/plan-runs/3");
-    expect(link).toHaveTextContent("agentic.runStatus.failed");
-  });
-
   it("render the aggregate of a plan's checks", () => {
     const { container } = render(
       <ConfigurationStatus

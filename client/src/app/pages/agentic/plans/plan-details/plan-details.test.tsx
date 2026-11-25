@@ -197,11 +197,21 @@ describe("PlanDetailsPage", () => {
     expect(
       screen.getByText("Moves Java EE applications to Quarkus.")
     ).toBeInTheDocument();
+    // One Target profiles fact, each profile with its archetype; no
+    // Archetype fact of its own.
     expect(
-      within(fact("terms.archetype")).getByRole("link", {
-        name: "Java EE Application",
+      within(fact("terms.targetProfiles")).getByRole("link", {
+        name: "agentic.skill.targetProfileOption",
       })
-    ).toBeInTheDocument();
+    ).toHaveAttribute(
+      "href",
+      "/archetypes/1/target-profiles#target-profile-11"
+    );
+    expect(
+      screen.queryByText("terms.archetype", {
+        selector: ".pf-v6-c-description-list__text",
+      })
+    ).toBeNull();
     expect(
       within(fact("terms.applications")).getByRole("link", {
         name: "agentic.plan.applicationCount",
@@ -301,11 +311,11 @@ describe("PlanDetailsPage", () => {
     renderAt();
     await screen.findByRole("heading", { level: 1 });
     // No migration path is a plan that runs when someone picks it.
-    for (const term of ["terms.archetype", "terms.targetProfiles"]) {
-      expect(
-        within(fact(term)).getByText("agentic.execution.notAssigned")
-      ).toBeInTheDocument();
-    }
+    expect(
+      within(fact("terms.targetProfiles")).getByText(
+        "agentic.execution.notAssigned"
+      )
+    ).toBeInTheDocument();
     expect(
       within(fact("terms.applications")).getByText("agentic.common.unavailable")
     ).toBeInTheDocument();
@@ -390,6 +400,42 @@ describe("PlanDetailsPage", () => {
     expect(
       within(table).getAllByText("agentic.stageSkills.noSkills")
     ).toHaveLength(2);
+  });
+
+  it("shows every target profile of the path", async () => {
+    useEndpoints({
+      ...plan,
+      migrationPath: {
+        ...plan.migrationPath!,
+        targetProfiles: [
+          { id: 12, name: "Spring Boot 3" },
+          { id: 11, name: "Quarkus 3.x" },
+        ],
+      },
+    });
+    renderAt();
+    await screen.findByRole("heading", { level: 1 });
+    const links = within(fact("terms.targetProfiles")).getAllByRole("link");
+    // By profile name, each to its target profile.
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/archetypes/1/target-profiles#target-profile-11",
+      "/archetypes/1/target-profiles#target-profile-12",
+    ]);
+  });
+
+  it("says Not assigned for a path without target profiles", async () => {
+    useEndpoints({
+      ...plan,
+      migrationPath: { ...plan.migrationPath!, targetProfiles: [] },
+    });
+    renderAt();
+    await screen.findByRole("heading", { level: 1 });
+    expect(
+      within(fact("terms.targetProfiles")).getByText(
+        "agentic.execution.notAssigned"
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("agentic.plan.notAssignedCue")).toBeNull();
   });
 
   it("cues a plan that is not assigned to its target profiles", async () => {

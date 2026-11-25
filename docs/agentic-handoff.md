@@ -520,26 +520,31 @@ How the migration plan pages read these fields:
   assigned." with a link to the archetype's target profiles page. Archetype surfaces show only the assigned plan.
 - **Server-derived fields need Hub support.** With the real adapters `migrationPath` and
   `applicationImpact` are undefined, and `runCount` is undefined unless runs are passed. The UI treats undefined as unknown,
-  never as empty: Applications, Runs and Skills by stage read "Unavailable" (on the plan page, Archetype and Target
-  profiles read "Not assigned": the prototype treats an absent `migrationPath` as a plan that runs when someone picks it;
-  the plans list still reads "Unavailable" there), and Delete is
+  never as empty: Applications, Runs and Skills by stage read "Unavailable" (Target profiles on the plans list and the
+  plan page read "Not assigned": the prototype treats an absent `migrationPath` as a plan that runs when someone picks
+  it), and Delete is
   disabled with "Usage could not be checked. Try again later." A plan without a migration path is not a configuration
   issue (it runs when someone picks it), so the configuration checks are "Stages have agents" and "Models verified"
   only: no path alert, no list marker for it. Skills by stage therefore only works
   once the Hub serves these fields (7.2, 7.7).
 - **The plan's applications.** `applicationImpact.applications` (optional, additive) lists the applications counted
-  in `matching`: those whose migration view resolves to this plan, in name order. The plans list shows their names, and
+  in `matching`: those whose migration view resolves to this plan, in name order. The plan page counts them, and
   "Run migration plan" on the plans list and the plan page runs exactly these applications. A server that only counts
   them leaves the field out; the UI then shows the count and disables the run with a reason. The Hub needs the same plan
   resolution it needs for `matching` (7.2). The run starts `planSelection: "single"` with the plan's id and the
   applications the user keeps selected in the dialog (`StartApplicationMigrationsRequest`, unchanged). PatternFly
   hard-codes the selection checkbox names ("Select row n", "Select all rows"); the Application cell is the row header, so
   it names each row, and the checkboxes should not be replaced with custom ones to rename them.
-- **The plans list Runs column.** The list fetches every plan run once (`useFetchPlanRuns()`) and derives each plan's
-  shown run client-side (`getShownPlanRun`: the newest run awaiting approval, otherwise the newest by start, a Pending
-  run first) and its run count. That is fine for the mock, but a real backend would want a per-plan run summary on the
-  plan (shown run ref and status, run count) or at least a `spec.workflowRef` filter on the workflow run list, so the
-  list does not page through every run.
+- **Target profiles on the plans list and plan page.** Both show a plan's archetype + target profile pairs
+  ("Quarkus 3.x (Java EE Application)"), derived client-side from `migrationPath` by `getPlanTargetProfiles`
+  (`projection.ts`): the list shows the assigned pairs only (`isDefault`, `getAssignedTargetProfiles`), and its Archetype
+  filter matches them; the plan page shows every pair of the path. In the intended model the reference is on the target
+  profile: one archetype has several target profiles, and several profiles, across archetypes, can use one plan.
+  `migrationPath` (one archetype) cannot express that, and `assignPlanToTargetProfile` replaces the path when a plan is
+  assigned to a profile of another archetype. Backend need: a migration plan ref on Hub `TargetProfile` (like
+  `analysisProfile`); the client then derives each plan's pairs from `GET /hub/archetypes` (profiles are inline) with no
+  new query, or the server returns a derived list of target profile refs on the plan. Only `getPlanTargetProfiles`
+  changes on the client.
 - **Skill review.** The wizard and the plan page resolve a plan's skills per stage with `resolvePlanSkills`, which includes the
   agents' collection skills, and the skill page lists the plans that resolve a skill with
   `getSkillPlans`, from the same resolver. With the real backend the call is unwired (7.7, checklist step 8)
@@ -824,7 +829,7 @@ Do these in order; each step leaves the app working.
    - application migrations: the inventory Migration column, attention alert and Run migration plan (`applications-table.tsx`), the Migration tab (`migration-tab.tsx`), the start dialog (`migration-preflight-modal.tsx`, `use-start-migrations.tsx`);
    - Providers and available models: Administration > Providers (`providers.tsx`, `provider-form.tsx`) and the Model form (`model-form.tsx`);
    - the organization default Model (`models.tsx`, "make default");
-   - Plan migration paths: Assign/Change migration plan on the target profiles page (`assign-migration-plan-modal.tsx`), the wizard's path step (`plan-wizard.tsx`), path columns and details in `plans.tsx`, `plan-details.tsx`, the Skill form's archetype and profile scopes;
+   - Plan migration paths: Assign/Change migration plan on the target profiles page (`assign-migration-plan-modal.tsx`), the wizard's path step (`plan-wizard.tsx`), the Target profiles column and fact in `plans.tsx`, `plan-details.tsx` (pairs from `getPlanTargetProfiles`), the Skill form's archetype and profile scopes;
    - plan skill review: `useResolvePlanSkills` (the wizard's Skills step and Review, the plan page's Skills by stage, and the Run migration plan dialog's Skills by stage, which sends `applications` for every run it previews except one application on its own plan, whose migration view already carries `skills`; while the endpoint is not served the dialog shows "Unavailable" with "You can still run the migration plan." and Run stays enabled), `useFetchSkillPlans` (the skill page's "Used in migration plans") and the `excludedSkills` rows on plan, run and application pages, until the Hub serves the resolve endpoints and the CRD has stage `skills.exclude` (7.7). While the endpoints are not served (404 or 501), the wizard's Skills step, the plan page's Skills by stage and the skill page section already show an informational "not available" state without a retry; hide them instead if that reads better. When the Hub serves them, write a plan-level exclusion into every stage and read the run's exclusions from its snapshot;
    - approvals (`plan-run-detail.tsx`, `stage-run-detail.tsx`, `migration-tab.tsx`) until step 7.
    - Hub-scope Skill attachments: the "Manage skills" actions on archetypes, target profiles and applications
