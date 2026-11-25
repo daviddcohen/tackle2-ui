@@ -1,9 +1,12 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { rest } from "msw";
-import { MemoryRouter } from "react-router-dom";
+import { BrowserRouter, MemoryRouter } from "react-router-dom";
 
 import { PlanRun } from "@app/agentic";
+import { Archetype } from "@app/api/models";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
+import { ARCHETYPES_QUERY_KEY } from "@app/queries/archetypes";
 import { render, screen, waitFor, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
@@ -21,12 +24,19 @@ jest.mock("@app/auth", () => ({
   useHasSomeScopes: () => mockGrantedScopes.all,
 }));
 
-const run = (id: string, planId: string, planName: string): PlanRun => ({
+const run = (
+  id: string,
+  planId: string,
+  planName: string,
+  applications: PlanRun["applications"] = [
+    { id: 1, name: "Customer Management" },
+  ]
+): PlanRun => ({
   id,
   name: `Run #${id}: ${planName}`,
   planId,
   planName,
-  applications: [{ id: 1, name: "Customer Management" }],
+  applications,
   status: "Running",
   targetBranch: "konveyor/agentic-migration",
   startedAt: "2026-11-10T10:06:00Z",
@@ -40,6 +50,57 @@ const useRuns = (runs: PlanRun[]) =>
     )
   );
 
+// Hub computes membership; Document Preview Service is in no archetype.
+const archetypes: Partial<Archetype>[] = [
+  {
+    id: 2,
+    name: "Spring Boot Application",
+    applications: [{ id: 4, name: "Order Service" }],
+  },
+  {
+    id: 1,
+    name: "Java EE Application",
+    applications: [
+      { id: 1, name: "Customer Management" },
+      { id: 7, name: "Partner Portal" },
+    ],
+  },
+  { id: 5, name: "Node.js Service", applications: [] },
+];
+
+const useArchetypes = (response = archetypes) =>
+  server.use(
+    rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.json(response)))
+  );
+
+/**
+ * The list opened at its URL state: it merges through document.location, so
+ * a browser router keeps the two the same. With `queryClient`, that client
+ * (retries, cached data) instead of the test default.
+ */
+const renderList = (
+  filters: Record<string, string[]>,
+  queryClient?: QueryClient
+) => {
+  window.history.replaceState(
+    {},
+    "",
+    `/plan-runs?planRuns:filters=${encodeURIComponent(JSON.stringify(filters))}`
+  );
+  const page = (
+    <BrowserRouter>
+      <PlanRunsPage />
+    </BrowserRouter>
+  );
+  return render(
+    queryClient ? (
+      <QueryClientProvider client={queryClient}>{page}</QueryClientProvider>
+    ) : (
+      page
+    )
+  );
+};
+
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={["/plan-runs"]}>
@@ -49,12 +110,19 @@ const renderPage = () =>
 
 beforeEach(() => {
   mockGrantedScopes.all = true;
+  useArchetypes();
 });
+
+afterEach(() => window.history.replaceState({}, "", "/"));
 
 describe("PlanRunsPage", () => {
   it("has the list header and its own name filter placeholder", async () => {
     useRuns([run("1", "1", "Java EE to Quarkus")]);
     renderPage();
+    // Opened from the sidebar: no trail.
+    expect(
+      screen.queryByRole("navigation", { name: "Breadcrumb" })
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 1, name: "Plan runs" })
     ).toBeInTheDocument();
@@ -104,6 +172,271 @@ describe("PlanRunsPage", () => {
         name: "Run #2: Spring Boot to Quarkus",
       })
     ).toBeInTheDocument();
+  });
+
+  it("filters by archetype: runs with any application in it", async () => {
+    useRuns([
+      run("1", "1", "Java EE to Quarkus"),
+      run("2", "2", "Spring Boot to Quarkus", [
+        { id: 4, name: "Order Service" },
+      ]),
+      // One plan for applications of two archetypes: it counts for both.
+      run("3", "3", "Java EE lift and shift", [
+        { id: 7, name: "Partner Portal" },
+        { id: 4, name: "Order Service" },
+      ]),
+      run("4", "4", "Node.js runtime", [
+        { id: 19, name: "Document Preview Service" },
+      ]),
+    ]);
+    renderPage();
+    const table = await screen.findByRole("grid", { name: "Plan runs" });
+    const runRow = (name: string) =>
+      within(table).getByRole("row", { name: new RegExp(name) });
+    await waitFor(() =>
+      expect(
+        within(runRow("Run #3")).getByRole("link", {
+          name: "Java EE Application",
+        })
+      ).toBeInTheDocument()
+    );
+    expect(runRow("Run #3")).toHaveTextContent(
+      "Archetypes: Java EE Application, Spring Boot Application"
+    );
+    expect(runRow("Run #4")).not.toHaveTextContent(/Archetypes?:/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Name" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Archetype" }));
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Type to filter" })
+    );
+    // Only archetypes that some run touches, by name.
+    const options = screen.getAllByRole("menuitem");
+    expect(options.map((option) => option.textContent?.trim())).toEqual([
+      "Java EE Application",
+      "Spring Boot Application",
+    ]);
+    await userEvent.click(within(options[0]).getByRole("checkbox"));
+
+    await waitFor(() =>
+      expect(
+        within(table)
+          .getAllByRole("link", { name: /^Run #/ })
+          .map((link) => link.textContent)
+      ).toEqual([
+        "Run #1: Java EE to Quarkus",
+        "Run #3: Java EE lift and shift",
+      ])
+    );
+  });
+
+  it("opens filtered by the archetype in the URL", async () => {
+    useRuns([
+      run("1", "1", "Java EE to Quarkus"),
+      run("2", "2", "Spring Boot to Quarkus", [
+        { id: 4, name: "Order Service" },
+      ]),
+    ]);
+    // The list's URL state merges through document.location: a browser
+    // router keeps the two the same.
+    const filters = encodeURIComponent(JSON.stringify({ archetype: ["2"] }));
+    window.history.replaceState(
+      {},
+      "",
+      `/plan-runs?planRuns:filters=${filters}`
+    );
+    render(
+      <BrowserRouter>
+        <PlanRunsPage />
+      </BrowserRouter>
+    );
+    const table = await screen.findByRole("grid", { name: "Plan runs" });
+    await waitFor(() =>
+      expect(
+        within(table)
+          .getAllByRole("link", { name: /^Run #/ })
+          .map((link) => link.textContent)
+      ).toEqual(["Run #2: Spring Boot to Quarkus"])
+    );
+  });
+
+  it("shows the inventory's trail when opened from its View plan runs toast", async () => {
+    useRuns([run("1", "1", "Java EE to Quarkus")]);
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/plan-runs",
+            state: {
+              breadcrumbs: [
+                { title: "Application inventory", path: "/applications" },
+              ],
+            },
+          },
+        ]}
+      >
+        <PlanRunsPage />
+      </MemoryRouter>
+    );
+    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(
+      within(trail).getByRole("link", { name: "Application inventory" })
+    ).toHaveAttribute("href", "/applications");
+    expect(within(trail).getByText("Plan runs")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("link", { name: "Run #1: Java EE to Quarkus" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the trail it was opened with", async () => {
+    useRuns([run("1", "1", "Java EE to Quarkus")]);
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/plan-runs",
+            state: {
+              breadcrumbs: [
+                { title: "Archetypes", path: "/archetypes" },
+                {
+                  title: "Java EE Application",
+                  path: "/archetypes?ar:activeItem=1",
+                },
+              ],
+            },
+          },
+        ]}
+      >
+        <PlanRunsPage />
+      </MemoryRouter>
+    );
+    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(
+      within(trail).getByRole("link", { name: "Java EE Application" })
+    ).toHaveAttribute("href", "/archetypes?ar:activeItem=1");
+    expect(within(trail).getByText("Plan runs")).toBeInTheDocument();
+  });
+
+  describe("a selected archetype the runs do not offer", () => {
+    // Run 1 is on Customer Management (Java EE); Node.js has no runs.
+    const runs = [run("1", "1", "Java EE to Quarkus")];
+    const runLinks = () =>
+      within(screen.getByRole("grid", { name: "Plan runs" })).queryAllByRole(
+        "link",
+        { name: /^Run #/ }
+      );
+
+    it.each([
+      ["an archetype without runs, by its Hub name", "5", "Node.js Service"],
+      ["an archetype the Hub does not know, by id", "99", "#99"],
+    ])("keeps a chip for %s, and clears it", async (_case, id, chip) => {
+      useRuns(runs);
+      renderList({ archetype: [id] });
+      expect(await screen.findByText("No results found")).toBeInTheDocument();
+      expect(screen.getByText(chip)).toBeInTheDocument();
+      expect(runLinks()).toHaveLength(0);
+
+      await userEvent.click(
+        screen.getAllByRole("button", { name: "Clear all filters" })[0]
+      );
+      await waitFor(() => expect(runLinks()).toHaveLength(1));
+      expect(screen.queryByText(chip)).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps the archetypes it has when a refresh fails", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData([ARCHETYPES_QUERY_KEY], archetypes);
+    const refreshed = jest.fn();
+    server.use(
+      rest.get("/hub/archetypes", (_req, res, ctx) => {
+        refreshed();
+        return res(ctx.status(500));
+      })
+    );
+    useRuns([run("1", "1", "Java EE to Quarkus")]);
+    renderList({}, queryClient);
+    const row = await screen.findByRole("row", { name: /Run #1/ });
+    await waitFor(() => expect(refreshed).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(queryClient.getQueryState([ARCHETYPES_QUERY_KEY])?.status).toBe(
+        "error"
+      )
+    );
+    expect(row).toHaveTextContent("Archetype: Java EE Application");
+    queryClient.clear();
+  });
+
+  describe("while the archetypes load", () => {
+    let release: () => void = () => undefined;
+    beforeEach(() => {
+      const answered = new Promise<void>((resolve) => (release = resolve));
+      server.use(
+        rest.get("/hub/archetypes", async (_req, res, ctx) => {
+          await answered;
+          return res(ctx.json(archetypes));
+        })
+      );
+      useRuns([run("1", "1", "Java EE to Quarkus")]);
+    });
+    afterEach(() => release());
+
+    it("lists the runs, and their archetypes when they arrive", async () => {
+      renderList({});
+      const row = await screen.findByRole("row", { name: /Run #1/ });
+      expect(row).not.toHaveTextContent(/Archetypes?:/);
+      release();
+      await waitFor(() =>
+        expect(row).toHaveTextContent("Archetype: Java EE Application")
+      );
+    });
+
+    it("filtered by archetype, waits for them instead of listing every run", async () => {
+      renderList({ archetype: ["1"] });
+      const table = screen.getByRole("grid", { name: "Plan runs" });
+      // The runs have arrived; the filter cannot be applied yet.
+      await waitFor(() =>
+        expect(within(table).getByRole("progressbar")).toBeInTheDocument()
+      );
+      expect(
+        within(table).queryByRole("link", { name: /^Run #/ })
+      ).not.toBeInTheDocument();
+      release();
+      expect(
+        await within(table).findByRole("link", {
+          name: "Run #1: Java EE to Quarkus",
+        })
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("filtered by archetype, stops waiting after the first failed attempt, not its retries", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: 3, retryDelay: 60_000 } },
+    });
+    server.use(
+      rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.status(500)))
+    );
+    useRuns([run("1", "1", "Java EE to Quarkus")]);
+    renderList({ archetype: ["1"] }, queryClient);
+    // Retrying (the next attempt is a minute away): the chip says why the
+    // list is empty, with the id the Hub has not named yet.
+    expect(await screen.findByText("No results found")).toBeInTheDocument();
+    expect(screen.getByText("#1")).toBeInTheDocument();
+    queryClient.clear();
+  });
+
+  it("still lists the runs when the archetypes cannot be read", async () => {
+    server.use(
+      rest.get("/hub/archetypes", (_req, res, ctx) => res(ctx.status(500)))
+    );
+    useRuns([run("1", "1", "Java EE to Quarkus")]);
+    renderPage();
+    const row = await screen.findByRole("row", { name: /Run #1/ });
+    expect(row).toHaveTextContent("Customer Management");
+    expect(row).not.toHaveTextContent(/Archetypes?:/);
   });
 
   it("orders the status options with the runs that need a person first", async () => {

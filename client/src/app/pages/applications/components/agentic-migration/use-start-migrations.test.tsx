@@ -1,7 +1,8 @@
 jest.unmock("react-router-dom");
 
 import * as React from "react";
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createMemoryHistory } from "history";
 import { Router } from "react-router-dom";
 
@@ -10,6 +11,7 @@ import {
   StartApplicationMigrationsResponse,
 } from "@app/agentic";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import { BreadcrumbEntry } from "@app/hooks/useBreadcrumbs";
 
 import { useStartMigrations } from "./use-start-migrations";
 
@@ -35,11 +37,11 @@ const request: StartApplicationMigrationsRequest = {
   targetBranch: "konveyor/agentic-migration",
 };
 
-const start = () => {
+const start = (linkCrumbs: BreadcrumbEntry[] = []) => {
   const history = createMemoryHistory({ initialEntries: ["/applications"] });
   const pushNotification = jest.fn();
   const onStarted = jest.fn();
-  renderHook(() => useStartMigrations([], onStarted), {
+  renderHook(() => useStartMigrations(linkCrumbs, onStarted), {
     wrapper: ({ children }: { children: React.ReactNode }) => (
       <Router history={history}>
         <NotificationsContext.Provider
@@ -93,6 +95,31 @@ describe("useStartMigrations", () => {
     );
     const { message } = pushNotification.mock.calls[0][0];
     expect(message.props.children).toBe("agentic.execution.viewPlanRuns");
+  });
+
+  it("opens the plan runs with the page's trail from the toast", async () => {
+    // The inventory's trail: the plan runs list shows it as
+    // "Application inventory > Plan runs" (plan-runs.test.tsx).
+    const crumbs = [{ title: "Application inventory", path: "/applications" }];
+    const { history, pushNotification } = start(crumbs);
+    act(() =>
+      mockMutation.onSuccess?.(
+        {
+          planRuns: [
+            { id: "7", name: "Run #7" },
+            { id: "8", name: "Run #8" },
+          ],
+        },
+        request
+      )
+    );
+    const { message } = pushNotification.mock.calls[0][0];
+    render(<Router history={history}>{message}</Router>);
+    await userEvent.click(
+      screen.getByRole("link", { name: "agentic.execution.viewPlanRuns" })
+    );
+    expect(history.location.pathname).toBe("/plan-runs");
+    expect(history.location.state).toEqual({ breadcrumbs: crumbs });
   });
 
   it("stays and says so when none was created", () => {

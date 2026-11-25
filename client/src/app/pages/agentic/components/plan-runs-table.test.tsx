@@ -198,6 +198,53 @@ describe("PlanRunsTable", () => {
     expect(cells(bodyRows()[0])[0]).toBe("Run #7: Java EE to Quarkus");
   });
 
+  it("names no archetypes without them (the tabs)", () => {
+    renderTable({});
+    expect(screen.queryByText(/^Archetypes?:/)).not.toBeInTheDocument();
+  });
+
+  it("names the archetypes of each run under its applications", () => {
+    const javaEe = { id: 1, name: "Java EE Application" };
+    const springBoot = { id: 2, name: "Spring Boot Application" };
+    const archetypesByRun: Record<string, (typeof javaEe)[] | undefined> = {
+      "7": [],
+      "1": [javaEe, springBoot],
+      "3": [javaEe],
+    };
+    renderTable({ getArchetypes: (item) => archetypesByRun[item.id] });
+
+    // No column of its own: the list keeps its six columns.
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent)
+    ).toEqual([
+      "Run",
+      "Migration plan",
+      "Status",
+      "Applications",
+      "Started",
+      "Duration",
+    ]);
+    const [none, several, one] = bodyRows();
+    expect(cells(none)[3]).toBe("Customer Management");
+    expect(cells(several)[3]).toBe(
+      "3 applicationsArchetypes: Java EE Application, Spring Boot Application"
+    );
+    expect(cells(one)[3]).toBe(
+      "Customer ManagementArchetype: Java EE Application"
+    );
+    expect(
+      within(several).getByRole("link", { name: "Java EE Application" })
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1");
+    expect(
+      within(several).getByRole("link", { name: "Spring Boot Application" })
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=2");
+  });
+
+  it("names no archetypes when they could not be read", () => {
+    renderTable({ getArchetypes: () => undefined });
+    expect(cells(bodyRows()[2])[3]).toBe("Customer Management");
+  });
+
   it("paginates a tab only above 10 runs", () => {
     const { unmount } = renderTable({});
     expect(screen.queryByLabelText(/pagination/i)).not.toBeInTheDocument();

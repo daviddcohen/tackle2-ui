@@ -2,11 +2,20 @@ import * as React from "react";
 import { LocationDescriptor } from "history";
 import { useTranslation } from "react-i18next";
 import { Link, generatePath } from "react-router-dom";
-import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
+import {
+  Content,
+  Stack,
+  StackItem,
+  Toolbar,
+  ToolbarContent,
+  ToolbarItem,
+} from "@patternfly/react-core";
+import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
 import { DevPaths } from "@app/Paths";
 import { PlanRun, isTerminalRunPhase } from "@app/agentic";
+import { Ref } from "@app/api/models";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { FilterToolbar } from "@app/components/FilterToolbar";
 import { FilterCategory } from "@app/components/FilterToolbar/FilterToolbar";
@@ -24,6 +33,9 @@ import {
   planRunDurationSeconds,
 } from "@app/utils/agentic";
 import { formatTableDate } from "@app/utils/utils";
+
+import { archetypePath } from "../entity-paths";
+import { planRunsPersistenceKeyPrefix } from "../plan-runs/plan-runs-paths";
 
 import { RunStatus } from "./agentic-status";
 import { CountLink } from "./count-link";
@@ -56,6 +68,44 @@ const PlanRunStatus: React.FC<{ run: PlanRun }> = ({ run }) => {
 };
 
 /**
+ * The Applications cell, with a subtle second line in list mode naming the
+ * archetypes of those applications ("Archetype: Java EE Application"), each
+ * linking to the archetype's drawer (with the trail only: the archetypes page
+ * reads no `?from=` origin). A line, not a column: the list is at its
+ * narrowest content width at 1280px, and a seventh column would squeeze the
+ * run names. No line when no archetype has the applications or the
+ * archetypes could not be read.
+ */
+const RunApplications: React.FC<{
+  archetypes: Ref[] | undefined;
+  linkTo: PlanRunsTableProps["linkTo"];
+  children: React.ReactNode;
+}> = ({ archetypes, linkTo, children }) => {
+  const { t } = useTranslation();
+  if (archetypes == null || archetypes.length === 0) return <>{children}</>;
+  return (
+    <Stack>
+      <StackItem>{children}</StackItem>
+      <StackItem>
+        <Content component="small" className={textStyles.textColorSubtle}>
+          {t("agentic.planRunsTable.archetypes", {
+            count: archetypes.length,
+          })}{" "}
+          {archetypes.map((archetype, index) => (
+            <React.Fragment key={archetype.id}>
+              {index > 0 && ", "}
+              <Link to={linkTo(archetypePath(archetype.id))}>
+                {archetype.name}
+              </Link>
+            </React.Fragment>
+          ))}
+        </Content>
+      </StackItem>
+    </Stack>
+  );
+};
+
+/**
  * Two modes, set by `filterCategories`. The list (`/plan-runs`) passes it and
  * gets the toolbar, URL state and top pagination; it also passes `isLoading`,
  * `fetchError` and `emptyState`, which render inside the table. A detail tab
@@ -71,6 +121,13 @@ export interface PlanRunsTableProps {
   fetchError?: unknown;
   /** False on a migration plan's Runs tab, where the page names the plan. */
   showPlan?: boolean;
+  /**
+   * List mode: the archetypes each run touches, by name, shown under its
+   * applications; `undefined` for a run when they cannot be read. A tab
+   * leaves it out: its page already names the application, and a plan's runs
+   * are mostly one archetype.
+   */
+  getArchetypes?: (run: PlanRun) => Ref[] | undefined;
   /**
    * The `/plan-runs` toolbar: these filters, URL state and top pagination.
    * Without it (detail tabs) the rows are the caller's, and pagination shows
@@ -89,7 +146,8 @@ export interface PlanRunsTableProps {
 
 /**
  * The one plan runs table: Run · Migration plan ·
- * Status (with the active stage) · Applications · Started · Duration. Used on
+ * Status (with the active stage) · Applications (with their archetypes on
+ * the list) · Started · Duration. Used on
  * `/plan-runs`, a migration plan's Runs tab and an application's Plan runs
  * tab. Run names are rendered verbatim: they are opaque.
  */
@@ -98,6 +156,7 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
   isLoading = false,
   fetchError,
   showPlan = true,
+  getArchetypes,
   filterCategories,
   emptyState,
   linkTo,
@@ -118,7 +177,7 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
   const tableControls = useLocalTableControls({
     // Only the list keeps its view in the URL; a tab's table is its own.
     persistTo: hasToolbar ? "urlParams" : "state",
-    persistenceKeyPrefix: hasToolbar ? "planRuns" : undefined,
+    persistenceKeyPrefix: hasToolbar ? planRunsPersistenceKeyPrefix : undefined,
     tableName: "plan-runs-table",
     idProperty: "id",
     dataNameProperty: "name",
@@ -268,38 +327,43 @@ export const PlanRunsTable: React.FC<PlanRunsTableProps> = ({
                       <PlanRunStatus run={run} />
                     </Td>
                     <Td {...getTdProps({ columnKey: "applications" })}>
-                      {run.applications.length === 1 &&
-                      run.applications[0].id === currentApplicationId ? (
-                        run.applications[0].name
-                      ) : run.applications.length === 1 ? (
-                        <Link
-                          to={linkTo(
-                            generatePath(DevPaths.applicationDetails, {
-                              applicationId: String(run.applications[0].id),
-                            }),
-                            origin
-                          )}
-                        >
-                          {run.applications[0].name}
-                        </Link>
-                      ) : run.applications.length > 1 ? (
-                        // "{n} applications" opens the run, whose page
-                        // lists them.
-                        <CountLink
-                          to={linkTo(
-                            generatePath(DevPaths.planRunDetails, {
-                              runId: run.id,
-                            }),
-                            origin
-                          )}
-                        >
-                          {t("agentic.planRunsTable.applicationCount", {
-                            count: run.applications.length,
-                          })}
-                        </CountLink>
-                      ) : (
-                        <EmptyTextMessage message={t("terms.none")} />
-                      )}
+                      <RunApplications
+                        archetypes={getArchetypes?.(run)}
+                        linkTo={linkTo}
+                      >
+                        {run.applications.length === 1 &&
+                        run.applications[0].id === currentApplicationId ? (
+                          run.applications[0].name
+                        ) : run.applications.length === 1 ? (
+                          <Link
+                            to={linkTo(
+                              generatePath(DevPaths.applicationDetails, {
+                                applicationId: String(run.applications[0].id),
+                              }),
+                              origin
+                            )}
+                          >
+                            {run.applications[0].name}
+                          </Link>
+                        ) : run.applications.length > 1 ? (
+                          // "{n} applications" opens the run, whose page
+                          // lists them.
+                          <CountLink
+                            to={linkTo(
+                              generatePath(DevPaths.planRunDetails, {
+                                runId: run.id,
+                              }),
+                              origin
+                            )}
+                          >
+                            {t("agentic.planRunsTable.applicationCount", {
+                              count: run.applications.length,
+                            })}
+                          </CountLink>
+                        ) : (
+                          <EmptyTextMessage message={t("terms.none")} />
+                        )}
+                      </RunApplications>
                     </Td>
                     <Td
                       modifier="nowrap"

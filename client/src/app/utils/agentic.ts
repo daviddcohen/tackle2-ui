@@ -20,7 +20,7 @@ import {
   OPERATOR_DEFAULTS_MANAGER,
   invalidTargetBranchReason,
 } from "@app/api/agentic/contract";
-import type { Application } from "@app/api/models";
+import type { Application, Archetype } from "@app/api/models";
 import { disabledMenuItemButton } from "@app/components/disabled-menu-item-button";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
@@ -298,6 +298,35 @@ export const runApplicationDisplayName = (
   if (!id) return "";
   return applicationsById.get(id)?.name ?? `#${id}`;
 };
+
+// --------------------------------------------------- archetype <-> run
+
+/**
+ * True when the run includes an application that is a member of the
+ * archetype. Membership is the Hub's current `archetype.applications`, not
+ * the migration path of the run's plan: a plan without a path, or one plan
+ * run on applications of several archetypes, still counts for each of them.
+ */
+export const runTouchesArchetype = (
+  run: Pick<PlanRun, "applications">,
+  archetype: Pick<Archetype, "applications">
+): boolean => {
+  const members = new Set(
+    (archetype.applications ?? []).map((application) => application.id)
+  );
+  return run.applications.some((application) => members.has(application.id));
+};
+
+/** The archetypes the run touches (see `runTouchesArchetype`), by name. */
+export const runArchetypes = <
+  T extends Pick<Archetype, "name" | "applications">,
+>(
+  run: Pick<PlanRun, "applications">,
+  archetypes: T[]
+): T[] =>
+  archetypes
+    .filter((archetype) => runTouchesArchetype(run, archetype))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
 // ------------------------------------------------- run eligibility
 
