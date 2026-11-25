@@ -286,7 +286,7 @@ describe("TargetProfilesPage", () => {
     );
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Edit",
+      "Rename",
       "Manage generators",
       "Change analysis profile",
       "Change migration plan",
@@ -351,7 +351,7 @@ describe("TargetProfilesPage", () => {
     );
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Edit",
+      "Rename",
       "Manage generators",
       "Change analysis profile",
       "Change migration plan",
@@ -452,7 +452,7 @@ describe("TargetProfilesPage", () => {
     );
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Edit",
+      "Rename",
       "Manage generators",
       "Change analysis profile",
       "Manage skills",
@@ -479,7 +479,7 @@ describe("TargetProfilesPage", () => {
     );
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Edit",
+      "Rename",
       "Manage generators",
       "Assign analysis profile",
       "Assign migration plan",
@@ -618,7 +618,7 @@ describe("TargetProfilesPage", () => {
       within(await row(profile)).getByRole("button", { name: "Kebab toggle" });
 
     it.each([
-      ["Edit", "Edit target profile"],
+      ["Rename", "Rename target profile"],
       ["Manage generators", "Manage generators for OpenShift lift and shift"],
       ["Assign analysis profile", "Assign analysis profile"],
       ["Assign migration plan", "Assign migration plan"],
@@ -731,7 +731,7 @@ describe("TargetProfilesPage", () => {
         </QueryClientProvider>
       );
 
-      const dialog = await openRowAction("OpenShift lift and shift", "Edit");
+      const dialog = await openRowAction("OpenShift lift and shift", "Rename");
       const name = within(dialog).getByRole("textbox", { name: /Name/ });
       await userEvent.clear(name);
       await userEvent.type(name, "OpenShift lift and shift 2");
@@ -826,7 +826,7 @@ describe("TargetProfilesPage", () => {
       await waitFor(() => expect(saved).toHaveBeenCalledWith({ planId: "3" }));
       await waitFor(() =>
         expect(notifications.pushNotification).toHaveBeenCalledWith({
-          title: "Migration plan assigned",
+          title: "Migration plan for Quarkus 3.x updated",
           variant: "success",
         })
       );
@@ -887,7 +887,9 @@ describe("TargetProfilesPage", () => {
       );
       await waitFor(() =>
         expect(notifications.pushNotification).toHaveBeenCalledWith(
-          expect.objectContaining({ title: "Target profile deleted" })
+          expect.objectContaining({
+            title: "Target profile OpenShift lift and shift deleted",
+          })
         )
       );
     });

@@ -54,6 +54,7 @@
     "manageTargetProfiles": "Manage target profiles",
     "next": "Next",
     "override": "Override",
+    "rename": "Rename",
     "reset": "Reset",
     "revoke": "Revoke",
     "review": "Review",
@@ -208,7 +209,7 @@
       "updateStakeholderGroup": "Update stakeholder group",
       "updateTag": "Update tag",
       "updateTagCategory": "Update tag category",
-      "updateTargetProfile": "Edit target profile"
+      "updateTargetProfile": "Rename target profile"
     }
   },
   "efforts": {
@@ -760,9 +761,9 @@
       "fileSavedToBeProcessed": "Success! file saved to be processed.",
       "reviewDiscarded": "Success! Review discarded for {{application}}.",
       "discoverApplications": "Success! Applications discovered on platform {{platformName}}.",
-      "targetProfileCreated": "Target profile created",
-      "targetProfileUpdated": "Target profile updated",
-      "targetProfileDeleted": "Target profile deleted",
+      "targetProfileCreated": "Target profile {{profile}} created",
+      "targetProfileUpdated": "Target profile renamed to {{profile}}",
+      "targetProfileDeleted": "Target profile {{profile}} deleted",
       "analysisProfileCreated": "Analysis profile {{name}} was successfully created.",
       "analysisProfileUpdated": "Analysis profile {{name}} was successfully updated."
     },
@@ -2285,8 +2286,8 @@
       "analysisProfileHelp": "The analysis profile used when applications are analyzed for this target.",
       "analysisProfileHelpLabel": "More information about analysis profile",
       "analysisProfilePlaceholder": "Select an analysis profile",
-      "analysisProfileAssigned": "Analysis profile assigned",
-      "analysisProfileRemoved": "Analysis profile removed",
+      "analysisProfileAssigned": "Analysis profile for {{profile}} updated",
+      "analysisProfileRemoved": "Analysis profile for {{profile}} removed",
       "analysisProfilesLoadFailed": "Analysis profiles could not be loaded. Try again later.",
       "assignAnalysisProfile": "Assign analysis profile",
       "assignAnalysisProfileDescription": "Applications in {{archetype}} that target {{profile}} are analyzed with this analysis profile.",
@@ -2330,7 +2331,7 @@
       "notAssigned": "Not assigned",
       "notFoundBody": "This archetype may have been deleted, or the link is out of date.",
       "notFoundTitle": "Archetype not found",
-      "planAssigned": "Migration plan assigned",
+      "planAssigned": "Migration plan for {{profile}} updated",
       "plansLoadFailed": "Migration plans could not be loaded",
       "plansNotLoaded": "Migration plans are not loaded yet.",
       "selectPlan": "Select a migration plan",

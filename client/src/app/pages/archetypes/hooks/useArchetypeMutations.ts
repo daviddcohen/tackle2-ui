@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
@@ -163,12 +163,19 @@ export const useArchetypeMutations = ({
       });
   };
 
+  // The name of the profile each delete removes, keyed by the archetype it
+  // sends, so every delete's toast names its own profile, also when several
+  // run at once.
+  const deletedProfileNames = useRef(new WeakMap<Archetype, string>());
+
   // Delete target profile success handler
-  const onDeleteTargetProfileSuccess = (_updatedArchetype: Archetype) => {
+  const onDeleteTargetProfileSuccess = (updatedArchetype: Archetype) => {
     // The plan it used loses a migration path, and its applications too.
     void invalidateAgentic(queryClient, "targetProfile");
     pushNotification({
-      title: t("toastr.success.targetProfileDeleted"),
+      title: t("toastr.success.targetProfileDeleted", {
+        profile: deletedProfileNames.current.get(updatedArchetype),
+      }),
       variant: "success",
     });
     onActionSuccess();
@@ -188,7 +195,9 @@ export const useArchetypeMutations = ({
     const updatedProfiles = archetype.profiles?.filter(
       (p) => p.id !== profile.id
     );
-    deleteTargetProfileMutation({ ...archetype, profiles: updatedProfiles });
+    const updatedArchetype = { ...archetype, profiles: updatedProfiles };
+    deletedProfileNames.current.set(updatedArchetype, profile.name);
+    deleteTargetProfileMutation(updatedArchetype);
   };
 
   return {

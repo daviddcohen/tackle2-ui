@@ -390,7 +390,7 @@ const TargetProfilesPage: React.FC = () => {
                   ...(canWriteProfiles
                     ? [
                         {
-                          title: t("actions.edit"),
+                          title: t("actions.rename"),
                           onClick: () => openRowModal("edit", profile),
                         },
                         {

@@ -63,7 +63,7 @@ describe("TargetProfilesPage without the agentic API", () => {
     );
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Edit",
+      "Rename",
       "Manage generators",
       "Assign analysis profile",
       "Delete",

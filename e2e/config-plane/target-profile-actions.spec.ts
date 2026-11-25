@@ -45,7 +45,7 @@ test.describe("Target profile row actions", () => {
     await gotoProto(page, PAGE);
     await rowActions(rowByText(page, PROFILE)).click();
     await expect(page.getByRole("menuitem")).toHaveText([
-      "Edit",
+      "Rename",
       "Manage generators",
       "Change analysis profile",
       "Change migration plan",
@@ -56,7 +56,7 @@ test.describe("Target profile row actions", () => {
     expectHealthy(diagnostics);
   });
 
-  test("Edit renames the profile and keeps its other fields", async ({
+  test("Rename renames the profile and keeps its other fields", async ({
     page,
     diagnostics,
   }) => {
@@ -64,16 +64,18 @@ test.describe("Target profile row actions", () => {
     // The row by its id: its text changes.
     const row = page.locator("#target-profile-11");
     const kebab = rowActions(row);
-    await openAction(page, kebab, "Edit");
+    await openAction(page, kebab, "Rename");
 
-    const edit = dialog(page, "Edit target profile");
+    const edit = dialog(page, "Rename target profile");
     const name = edit.getByRole("textbox", { name: /^Name/ });
     await expect(name).toBeFocused();
     await expect(edit.getByText("Generators")).toHaveCount(0);
     await name.fill("Quarkus 3.15");
     await edit.getByRole("button", { name: "Save" }).click();
 
-    await expect(toast(page, "Target profile updated")).toBeVisible();
+    await expect(
+      toast(page, "Target profile renamed to Quarkus 3.15")
+    ).toBeVisible();
     await expect(edit).toHaveCount(0);
     await expect(kebab).toBeFocused();
     await expect(cell(row, "Name")).toHaveText("Quarkus 3.15");
@@ -138,7 +140,9 @@ test.describe("Target profile row actions", () => {
     await pickMenuOption(page, "Spring Boot to Quarkus");
     await change.getByRole("button", { name: "Save" }).click();
 
-    await expect(toast(page, "Analysis profile assigned")).toBeVisible();
+    await expect(
+      toast(page, `Analysis profile for ${PROFILE} updated`)
+    ).toBeVisible();
     await expect(change).toHaveCount(0);
     await expect(kebab).toBeFocused();
     await expect(cell(row, "Analysis profile")).toHaveText(
@@ -148,7 +152,9 @@ test.describe("Target profile row actions", () => {
     await openAction(page, kebab, "Change analysis profile");
     await change.getByRole("button", { name: "Clear input value" }).click();
     await change.getByRole("button", { name: "Save" }).click();
-    await expect(toast(page, "Analysis profile removed")).toBeVisible();
+    await expect(
+      toast(page, `Analysis profile for ${PROFILE} removed`)
+    ).toBeVisible();
     await expect(cell(row, "Analysis profile")).toHaveText("Not assigned");
     await expect(cell(row, "Generators")).toHaveText("OpenShift manifests");
 
@@ -159,7 +165,7 @@ test.describe("Target profile row actions", () => {
   });
 
   for (const [action, title] of [
-    ["Edit", "Edit target profile"],
+    ["Rename", "Rename target profile"],
     ["Manage generators", `Manage generators for ${PROFILE}`],
     ["Change analysis profile", "Change analysis profile"],
     ["Change migration plan", "Change migration plan"],
@@ -210,7 +216,9 @@ test.describe("Target profile row actions", () => {
 
     await openAction(page, kebab, "Delete");
     await confirm.getByRole("button", { name: "Delete" }).click();
-    await expect(toast(page, "Target profile deleted")).toBeVisible();
+    await expect(
+      toast(page, "Target profile Retired profile deleted")
+    ).toBeVisible();
     await expect(row).toHaveCount(0);
     await expect(create).toBeFocused();
     expectHealthy(diagnostics);
@@ -239,7 +247,9 @@ test.describe("Target profile row actions", () => {
     await pickMenuOption(page, "Java EE lift and shift");
     await create.getByRole("button", { name: "Create" }).click();
 
-    await expect(toast(page, "Target profile created")).toBeVisible();
+    await expect(
+      toast(page, "Target profile JBoss EAP 8 on OpenShift created")
+    ).toBeVisible();
     await expect(create).toHaveCount(0);
     const row = rowByText(page, "JBoss EAP 8 on OpenShift");
     await expect(cell(row, "Generators")).toHaveText("Container build assets");
@@ -262,7 +272,9 @@ test.describe("Target profile row actions", () => {
       `${profile} will be deleted, and applications in Java EE Application can no longer run ${SHARED_PLAN} on it.`
     );
     await confirm.getByRole("button", { name: "Delete" }).click();
-    await expect(toast(page, "Target profile deleted")).toBeVisible();
+    await expect(
+      toast(page, `Target profile ${profile} deleted`)
+    ).toBeVisible();
     await expect(row).toHaveCount(0);
 
     // The plan keeps its other target profile.
@@ -305,11 +317,13 @@ test.describe("Target profile row actions", () => {
     const second = page.locator(
       `#${await rowByText(page, "Second new profile").getAttribute("id")}`
     );
-    await openAction(page, rowActions(second), "Edit");
-    const edit = dialog(page, "Edit target profile");
+    await openAction(page, rowActions(second), "Rename");
+    const edit = dialog(page, "Rename target profile");
     await edit.getByRole("textbox", { name: /^Name/ }).fill("Renamed profile");
     await edit.getByRole("button", { name: "Save" }).click();
-    await expect(toast(page, "Target profile updated")).toBeVisible();
+    await expect(
+      toast(page, "Target profile renamed to Renamed profile")
+    ).toBeVisible();
     await expect(cell(second, "Name")).toHaveText("Renamed profile");
     await expect(rowByText(page, "First new profile")).toHaveCount(1);
 
@@ -322,7 +336,9 @@ test.describe("Target profile row actions", () => {
     await dialog(page, "Confirm dialog")
       .getByRole("button", { name: "Delete" })
       .click();
-    await expect(toast(page, "Target profile deleted")).toBeVisible();
+    await expect(
+      toast(page, "Target profile First new profile deleted")
+    ).toBeVisible();
     await expect(rowByText(page, "First new profile")).toHaveCount(0);
     await expect(rowByText(page, "Renamed profile")).toHaveCount(1);
     expectHealthy(diagnostics);
@@ -347,7 +363,9 @@ test.describe("Target profile row actions", () => {
     ).toHaveCount(1);
     await select.selectOption({ label: SHARED_PLAN });
     await change.getByRole("button", { name: "Save" }).click();
-    await expect(toast(page, "Migration plan assigned")).toBeVisible();
+    await expect(
+      toast(page, `Migration plan for ${PROFILE} updated`)
+    ).toBeVisible();
     await expect(cell(row, "Migration plan")).toHaveText(SHARED_PLAN);
     await expect(
       cell(rowByText(page, "OpenJDK 21 on OpenShift"), "Migration plan")
