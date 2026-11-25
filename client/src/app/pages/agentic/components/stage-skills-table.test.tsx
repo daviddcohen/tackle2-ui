@@ -257,9 +257,10 @@ describe("StageSkillsTable", () => {
 
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // A collapsed group renders no skill rows.
     expect(
-      screen.getByText("Incremental transformation workflow")
-    ).not.toBeVisible();
+      screen.queryByText("Incremental transformation workflow")
+    ).not.toBeInTheDocument();
     // The collapsed title row says what it holds, after "Run by".
     expect(screen.getByText("3 skills, 1 excluded")).toBeVisible();
     expect(toggle).toHaveFocus();
