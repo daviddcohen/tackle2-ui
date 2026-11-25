@@ -44,8 +44,8 @@ export interface FormattedSkillOrigin {
  * ({archetype})" outside the link when the profile's archetype is not the
  * one in context), "Application: {name}" or "This application". Each name
  * links to where it is edited: the agent and collection pages, the
- * archetype drawer's Skills tab, the target profile on its archetype's
- * target profiles page, the application's Skills tab.
+ * archetype drawer (its Details tab lists the skills), the target profile
+ * on its archetype's target profiles page, the application's Skills tab.
  */
 export const formatSkillOrigin = (
   origin: SkillOrigin,
@@ -73,7 +73,7 @@ export const formatSkillOrigin = (
       return {
         i18nKey: `${key}.archetype`,
         values: { name: origin.archetype.name },
-        path: archetypePath(origin.archetype.id, "skills"),
+        path: archetypePath(origin.archetype.id),
       };
     case "targetProfile": {
       const path = targetProfilePath(

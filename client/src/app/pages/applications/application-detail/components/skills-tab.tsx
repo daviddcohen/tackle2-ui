@@ -1,30 +1,35 @@
 import * as React from "react";
-import { Trans, useTranslation } from "react-i18next";
-import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { Link, generatePath } from "react-router-dom";
+import { Button } from "@patternfly/react-core";
 
 import { DevPaths } from "@app/Paths";
 import { Ref } from "@app/api/models";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { StateError } from "@app/components/StateError";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
-  AttachedSkillsGroup,
-  AttachedSkillsList,
+  AttachedSkill,
   attachedSkillsFor,
+  useLoadPolicyMarker,
 } from "@app/pages/agentic/components/attached-skills-list";
+import {
+  DetailFacts,
+  DetailSection,
+  DetailSections,
+  LinkLabels,
+  SectionEmpty,
+} from "@app/pages/agentic/components/detail-section";
 import {
   manageSkillsButtonId,
   useCanManageSkills,
 } from "@app/pages/agentic/components/manage-skills-modal";
 import { linkToPath } from "@app/pages/agentic/components/skill-origin";
 import { archetypePath } from "@app/pages/agentic/entity-paths";
-import {
-  useFetchApplicationMigrations,
-  useFetchSkills,
-} from "@app/queries/agentic";
+import { useFetchSkills } from "@app/queries/agentic";
 import { universalComparator } from "@app/utils/utils";
-
-import { SKILLS_BY_STAGE_HASH } from "./skills-by-stage-anchor";
 
 interface SkillsTabProps {
   linkCrumbs: BreadcrumbEntry[];
@@ -35,14 +40,19 @@ interface SkillsTabProps {
   onManageSkills: () => void;
 }
 
+const applicationSkillsHeadingId = "application-skills-heading";
+const archetypeSkillsHeadingId = "archetype-skills-heading";
+
+const byName = (a: AttachedSkill, b: AttachedSkill) =>
+  universalComparator(a.skill.name, b.skill.name);
+
 /**
- * The skills this application has before any run, laid out like the Tags
- * tab: its own group first, editable with Manage skills; then one read-only
- * group per archetype, by name, whose skills it inherits. Each group says
- * how far its skills reach. A target profile is not listed: it is one of
- * its archetype's migration paths, picked when a migration plan runs, so
- * its skills belong to the run with the agents' own skills and the plan's
- * exclusions. The intro says where those are shown.
+ * The skills this application has before any run: its own, editable with
+ * Manage skills, then the ones it inherits from its archetypes, read-only,
+ * one term per archetype (by name) that links where they are edited. Each
+ * section states its scope once. A target profile is not listed: it is
+ * picked when a migration plan runs, so its skills belong to the run (the
+ * Migration tab's Skills by stage).
  */
 export const SkillsTab: React.FC<SkillsTabProps> = ({
   applicationId,
@@ -52,122 +62,135 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
   onManageSkills,
 }) => {
   const { t } = useTranslation();
-  const location = useLocation();
+  const markerOf = useLoadPolicyMarker();
   const canManageSkills = useCanManageSkills();
   const linkTo = (pathname: string, search = "") =>
     breadcrumbTo(pathname, search, linkCrumbs);
-  const {
-    migrations,
-    isLoading: isLoadingMigration,
-    fetchError: migrationError,
-  } = useFetchApplicationMigrations([applicationId]);
-  const migration = migrations[applicationId];
+  const GoToArchetypesLink = useLinkComponent(linkTo(DevPaths.archetypes));
   const {
     skills,
     isLoading: isLoadingSkills,
     fetchError: skillsError,
   } = useFetchSkills();
 
-  // Every group reads the skills list: without it, all of them would be wrong.
+  // Both sections read the skills list: without it, both would be wrong.
   if (isLoadingSkills) return <AppPlaceholder />;
   if (skillsError != null) return <StateError />;
 
-  const ownerLink = (path: string) => <Link to={linkToPath(linkTo, path)} />;
+  const skillLabels = (attached: AttachedSkill[], ownerName: string) => (
+    <LinkLabels
+      aria-label={t("agentic.skill.skillsOf", { name: ownerName })}
+      items={[...attached].sort(byName).map(({ skill, loadPolicy }) => ({
+        id: skill.id,
+        name: skill.name,
+        marker: markerOf(loadPolicy),
+        to: linkTo(generatePath(DevPaths.skillDetails, { skillId: skill.id })),
+      }))}
+    />
+  );
 
-  const applicationGroup: AttachedSkillsGroup = {
-    key: `application-${applicationId}`,
-    heading: t("agentic.attachedSkills.application"),
-    headingText: t("agentic.attachedSkills.application"),
-    description: t("agentic.skill.scopeSentence.application"),
-    skills: attachedSkillsFor(skills, "application", applicationId),
-    emptyText: t("agentic.attachedSkills.applicationEmpty"),
-    ...(canManageSkills
-      ? {
-          manage: {
-            onClick: onManageSkills,
-            buttonId: manageSkillsButtonId({
-              scope: "application",
-              id: applicationId,
-            }),
-            ariaLabel: t("agentic.skill.manageSkills.titleFor", {
-              name: applicationName,
-            }),
-          },
-        }
-      : {}),
-  };
+  const applicationSkills = attachedSkillsFor(
+    skills,
+    "application",
+    applicationId
+  );
 
   const sortedArchetypes = [...archetypes].sort((a, b) =>
     universalComparator(a.name, b.name)
   );
-  const archetypeGroups: AttachedSkillsGroup[] =
-    sortedArchetypes.length > 0
-      ? sortedArchetypes.map((archetype) => ({
-          key: `archetype-${archetype.id}`,
-          heading: (
-            <Trans
-              i18nKey="agentic.attachedSkills.archetype"
-              values={{ name: archetype.name }}
-              components={{
-                nameLink: ownerLink(archetypePath(archetype.id, "skills")),
-              }}
-            />
-          ),
-          description: t("agentic.skill.scopeSentence.archetype"),
-          skills: attachedSkillsFor(skills, "archetype", archetype.id),
-          emptyText: t("agentic.attachedSkills.archetypeEmpty"),
-        }))
-      : [
-          {
-            key: "archetype-none",
-            heading: t("agentic.attachedSkills.archetypeOwn"),
-            skills: [],
-            emptyText: t("agentic.attachedSkills.noArchetype"),
-            emptyAction: {
-              label: t("agentic.execution.goToArchetypes"),
-              to: linkTo(DevPaths.archetypes),
-            },
-          },
-        ];
-
-  // What is added when a migration plan runs (each stage's agent skills,
-  // the skills of the target profile the run uses) is not attached here.
-  // The intro says so and points where it is shown: the latest run's
-  // snapshot on the Migration tab, or, before any run, the Run migration
-  // plan dialog. While the view loads or fails, only the first sentence.
-  const migrationTab = new URLSearchParams(location.search);
-  migrationTab.set("tab", "migration");
-  const hasRun = migration?.planRun != null;
-  const hasNoRun =
-    !isLoadingMigration && migrationError == null && migration?.planRun == null;
-  const intro = (
-    <>
-      {t("agentic.applicationDetail.skillsIntro")}
-      {hasRun && (
-        <>
-          {" "}
-          <Link
-            to={{
-              pathname: location.pathname,
-              search: `?${migrationTab.toString()}`,
-              hash: SKILLS_BY_STAGE_HASH,
-              state: location.state,
-            }}
-          >
-            {t("agentic.applicationDetail.seeSkillsByStage")}
-          </Link>
-        </>
-      )}
-      {hasNoRun && <> {t("agentic.applicationDetail.skillsIntroNoRun")}</>}
-    </>
-  );
+  const archetypeSkills = sortedArchetypes.map((archetype) => ({
+    archetype,
+    skills: attachedSkillsFor(skills, "archetype", archetype.id),
+  }));
+  // A skill on two archetypes counts once.
+  const inheritedCount = new Set(
+    archetypeSkills.flatMap((entry) => entry.skills.map((s) => s.skill.id))
+  ).size;
 
   return (
-    <AttachedSkillsList
-      groups={[applicationGroup, ...archetypeGroups]}
-      headingLevel="h2"
-      intro={intro}
-      linkTo={(pathname) => linkTo(pathname)}
-    />
+    <DetailSections>
+      <DetailSection
+        headingId={applicationSkillsHeadingId}
+        title={
+          applicationSkills.length > 0
+            ? t("agentic.attachedSkills.applicationWithCount", {
+                count: applicationSkills.length,
+              })
+            : t("agentic.attachedSkills.application")
+        }
+        description={t("agentic.skill.scopeSentence.application")}
+        actions={
+          canManageSkills ? (
+            <Button
+              id={manageSkillsButtonId({
+                scope: "application",
+                id: applicationId,
+              })}
+              variant="link"
+              isInline
+              aria-label={t("agentic.skill.manageSkills.titleFor", {
+                name: applicationName,
+              })}
+              onClick={onManageSkills}
+            >
+              {t("agentic.skill.manageSkills.title")}
+            </Button>
+          ) : undefined
+        }
+      >
+        {applicationSkills.length > 0 ? (
+          skillLabels(applicationSkills, applicationName)
+        ) : (
+          <SectionEmpty>
+            {t("agentic.attachedSkills.applicationEmpty")}
+          </SectionEmpty>
+        )}
+      </DetailSection>
+
+      <DetailSection
+        headingId={archetypeSkillsHeadingId}
+        title={
+          inheritedCount > 0
+            ? t("agentic.attachedSkills.archetypesWithCount", {
+                count: inheritedCount,
+              })
+            : t("agentic.attachedSkills.archetypes")
+        }
+        description={
+          archetypes.length > 0
+            ? t("agentic.attachedSkills.inherited")
+            : undefined
+        }
+      >
+        {archetypes.length > 0 ? (
+          <DetailFacts
+            facts={archetypeSkills.map(({ archetype, skills: attached }) => [
+              <Link
+                key={archetype.id}
+                to={linkToPath(linkTo, archetypePath(archetype.id))}
+              >
+                {archetype.name}
+              </Link>,
+              attached.length > 0 ? (
+                skillLabels(attached, archetype.name)
+              ) : (
+                <EmptyTextMessage message={t("terms.none")} />
+              ),
+              { key: archetype.id },
+            ])}
+          />
+        ) : (
+          <SectionEmpty
+            action={
+              <Button variant="link" isInline component={GoToArchetypesLink}>
+                {t("agentic.execution.goToArchetypes")}
+              </Button>
+            }
+          >
+            {t("agentic.attachedSkills.noArchetype")}
+          </SectionEmpty>
+        )}
+      </DetailSection>
+    </DetailSections>
   );
 };

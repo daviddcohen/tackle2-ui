@@ -255,6 +255,73 @@ describe("PlanRunDetail", () => {
     );
   });
 
+  it("names the target profile each application ran on, when the run reports it", async () => {
+    useRun(
+      run({
+        applications: [
+          { id: 1, name: "Customer Management" },
+          { id: 3, name: "Claims Processing" },
+          { id: 15, name: "Inventory Service" },
+        ],
+        targetProfiles: [
+          {
+            application: { id: 1, name: "Customer Management" },
+            targetProfile: { id: 11, name: "Quarkus 3.x" },
+            archetype: { id: 1, name: "Java EE Application" },
+          },
+          {
+            application: { id: 3, name: "Claims Processing" },
+            targetProfile: null,
+          },
+          {
+            application: { id: 15, name: "Inventory Service" },
+            targetProfile: { id: 41, name: ".NET 8 on OpenShift" },
+          },
+        ],
+      })
+    );
+    renderPage();
+    await screen.findByRole("heading", { level: 1 });
+    const items = within(fact("Applications")).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Customer Management (Quarkus 3.x)",
+      "Claims Processing (no target profile)",
+      "Inventory Service (.NET 8 on OpenShift)",
+    ]);
+    expect(
+      within(items[0])
+        .getAllByRole("link")
+        .map((link) => [link.textContent, link.getAttribute("href")])
+    ).toEqual([
+      ["Customer Management", "/applications/1"],
+      ["Quarkus 3.x", "/archetypes/1/target-profiles#target-profile-11"],
+    ]);
+    expect(
+      within(items[1])
+        .getAllByRole("link")
+        .map((link) => link.textContent)
+    ).toEqual(["Claims Processing"]);
+    // A profile without a known archetype stays text.
+    expect(
+      within(items[2])
+        .getAllByRole("link")
+        .map((link) => link.textContent)
+    ).toEqual(["Inventory Service"]);
+  });
+
+  it("keeps the application labels when the run does not report target profiles", async () => {
+    useRun(run({}));
+    renderPage();
+    await screen.findByRole("heading", { level: 1 });
+    // Labels, as before: no profile in brackets.
+    expect(fact("Applications")).not.toHaveTextContent("(");
+    expect(
+      within(fact("Applications"))
+        .getAllByRole("link")
+        .map((link) => link.textContent)
+    ).toEqual(["Customer Management", "Claims Processing"]);
+  });
+
   const javaCoder = { id: "9", name: "Java Code Migrator" };
   const javaEE = { id: 1, name: "Java EE Application" };
   const quarkus = { id: 11, name: "Quarkus 3.x" };

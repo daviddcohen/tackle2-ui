@@ -33,9 +33,13 @@ export type StageRunTemplate = Omit<
 
 /**
  * Content for a seeded plan run (configured world). See `execution.ts`. The
- * skills snapshot is not written here: the resolver computes it.
+ * skills snapshot and the target profiles are not written here: they come
+ * from each application's path that uses the run's plan (`seedPicksFor`).
  */
-export type PlanRunTemplate = Omit<PlanRun, "stageRuns" | "skills"> & {
+export type PlanRunTemplate = Omit<
+  PlanRun,
+  "stageRuns" | "skills" | "targetProfiles"
+> & {
   stageRuns: StageRunTemplate[];
 };
 

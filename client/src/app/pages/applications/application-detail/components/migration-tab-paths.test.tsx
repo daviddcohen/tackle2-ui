@@ -57,31 +57,41 @@ jest.mock("@app/pages/agentic/components/run-migration-plan-launcher", () => ({
   useRunMigrationPlanLauncher: () => ({ open: undefined, modal: null }),
 }));
 
+const javaEEPaths = mockMigration.migrationPaths;
+
+const renderTab = (archetypes = [javaEE]) => {
+  render(
+    <Router history={createMemoryHistory()}>
+      <MigrationTab
+        application={
+          {
+            id: 1,
+            name: "Customer Management",
+            archetypes,
+          } as DecoratedApplication
+        }
+        applicationId={1}
+        linkCrumbs={[]}
+      />
+    </Router>
+  );
+  return screen
+    .getByText("Target profiles")
+    .closest(".pf-v6-c-description-list__group") as HTMLElement;
+};
+
 describe("MigrationTab with several target profiles and no default", () => {
-  it("lists each target profile with its archetype and plan, both linked", () => {
-    render(
-      <Router history={createMemoryHistory()}>
-        <MigrationTab
-          application={
-            {
-              id: 1,
-              name: "Customer Management",
-              archetypes: [javaEE],
-            } as DecoratedApplication
-          }
-          applicationId={1}
-          linkCrumbs={[]}
-        />
-      </Router>
-    );
-    const fact = screen
-      .getByText("Target profiles")
-      .closest(".pf-v6-c-description-list__group") as HTMLElement;
+  afterEach(() => {
+    mockMigration.migrationPaths = javaEEPaths;
+  });
+
+  it("lists each target profile with its plan, both linked, without repeating the one archetype", () => {
+    const fact = renderTab();
     const items = within(fact).getAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Quarkus 3.x (Java EE Application): Java EE to Quarkus",
-      "OpenJDK 21 on OpenShift (Java EE Application): Java lift and shift",
-      "Payara 6 (Java EE Application): Not assigned",
+      "Quarkus 3.x: Java EE to Quarkus",
+      "OpenJDK 21 on OpenShift: Java lift and shift",
+      "Payara 6: Not assigned",
     ]);
     expect(
       within(items[1]).getByRole("link", { name: "OpenJDK 21 on OpenShift" })
@@ -97,5 +107,26 @@ describe("MigrationTab with several target profiles and no default", () => {
     expect(fact).toHaveTextContent(
       "Each run picks one of these target profiles and runs the migration plan it uses."
     );
+  });
+
+  it("names each profile's archetype when the paths span several", () => {
+    const legacyJava = { id: 2, name: "Legacy Java Application" };
+    mockMigration.migrationPaths = [
+      javaEEPaths![0],
+      {
+        archetype: legacyJava,
+        targetProfile: { id: 21, name: "Java 8 on OpenShift" },
+        plan: { id: "3", name: "Java lift and shift" },
+      },
+    ];
+    const fact = renderTab([javaEE, legacyJava]);
+    expect(
+      within(fact)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent)
+    ).toEqual([
+      "Quarkus 3.x (Java EE Application): Java EE to Quarkus",
+      "Java 8 on OpenShift (Legacy Java Application): Java lift and shift",
+    ]);
   });
 });

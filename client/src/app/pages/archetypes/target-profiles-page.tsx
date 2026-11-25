@@ -339,7 +339,17 @@ const TargetProfilesPage: React.FC = () => {
               {isAgenticEnabled && (
                 <>
                   <Th>{t("agentic.entity.migrationPlan")}</Th>
-                  <Th modifier="fitContent">{t("agentic.archetype.skills")}</Th>
+                  <Th
+                    info={{
+                      popover: t("agentic.skill.scopeSentence.targetProfile"),
+                      ariaLabel: t("agentic.archetype.profileSkillsHelpLabel"),
+                      popoverProps: {
+                        headerContent: t("agentic.archetype.skills"),
+                      },
+                    }}
+                  >
+                    {t("agentic.archetype.skills")}
+                  </Th>
                 </>
               )}
               {hasRowActions && (
@@ -488,13 +498,10 @@ const TargetProfilesPage: React.FC = () => {
                             linkTo={(pathname) => to(pathname)}
                           />
                         </Td>
-                        <Td
-                          dataLabel={t("agentic.archetype.skills")}
-                          modifier="nowrap"
-                        >
+                        <Td dataLabel={t("agentic.archetype.skills")}>
                           <TargetProfileSkills
-                            profile={profile}
                             skills={profileSkills(profile)}
+                            profileName={profile.name}
                             isError={isSkillsError}
                             linkTo={(pathname) => to(pathname)}
                           />

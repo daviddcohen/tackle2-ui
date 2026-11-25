@@ -91,7 +91,7 @@ test.describe("Plan skill review", () => {
     // skills yet.
     await expect(
       dialog.getByText(
-        "Each stage gets its agent's skills and the skills in Every stage. No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetype's skills and its own skills, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can."
+        "Each stage gets its agent's skills and the skills in Every stage. No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetypes' skills and its own skills, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can."
       )
     ).toBeVisible();
     await expect(dialog.getByText("No skills excluded.")).toBeVisible();
@@ -171,7 +171,7 @@ test.describe("Plan skill review", () => {
     await expect(mainHeading(page)).toHaveText(planName);
     await expect(
       main(page).getByText(
-        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills."
+        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetypes' skills, the skills of the target profile it runs on, and its own skills."
       )
     ).toBeVisible();
     await expect(
@@ -246,7 +246,7 @@ test.describe("Plan skill review", () => {
     ).toBeVisible();
     await expect(
       main(page).getByText(
-        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills."
+        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetypes' skills, the skills of the target profile it runs on, and its own skills."
       )
     ).toBeVisible();
     const table = skillsTable(main(page));

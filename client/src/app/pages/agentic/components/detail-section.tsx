@@ -8,8 +8,6 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  EmptyState,
-  EmptyStateBody,
   Flex,
   FlexItem,
   Label,
@@ -17,7 +15,9 @@ import {
   Split,
   SplitItem,
   Title,
+  Tooltip,
 } from "@patternfly/react-core";
+import accessibility from "@patternfly/react-styles/css/utilities/Accessibility/accessibility";
 import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
@@ -141,22 +141,37 @@ export const DetailSection: React.FC<DetailSectionProps> = ({
   );
 };
 
-/** A section's empty state: one sentence, no icon, no "(0)" heading. */
-export const SectionEmpty: React.FC<{ children: string }> = ({ children }) => (
-  <EmptyState variant="xs">
-    <EmptyStateBody>{children}</EmptyStateBody>
-  </EmptyState>
+/**
+ * A section's empty state: one left-aligned sentence under the section
+ * heading, as an empty group of attached skills reads, with an optional
+ * inline action after it. No icon, no centering (an EmptyState is for an
+ * empty page or table), no "(0)" heading.
+ */
+export const SectionEmpty: React.FC<{
+  children: string;
+  /** An inline link button after the sentence. */
+  action?: React.ReactNode;
+}> = ({ children, action }) => (
+  <Content component="p">
+    {children}
+    {action != null && <> {action}</>}
+  </Content>
 );
 
 export interface DetailFactOptions {
   /** Field help after the term text: a `Popover` on a plain help `Button`. */
   termHelp?: React.ReactNode;
+  /** The pair's key when its term is not a string (a link). */
+  key?: React.Key;
 }
 
 export interface DetailFactsProps {
-  /** Term and value pairs, in order, each with optional term options. */
+  /**
+   * Term and value pairs, in order, each with optional term options. A term
+   * is text, or a link to the object the value belongs to (with a `key`).
+   */
   facts: [
-    term: string,
+    term: React.ReactNode,
     description: React.ReactNode,
     options?: DetailFactOptions,
   ][];
@@ -175,8 +190,10 @@ export const DetailFacts: React.FC<DetailFactsProps> = ({
     horizontalTermWidthModifier={{ default: "18ch" }}
     columnModifier={isTwoColumn ? { lg: "2Col" } : undefined}
   >
-    {facts.map(([term, description, options]) => (
-      <DescriptionListGroup key={term}>
+    {facts.map(([term, description, options], index) => (
+      <DescriptionListGroup
+        key={options?.key ?? (typeof term === "string" ? term : index)}
+      >
         <DescriptionListTerm>
           {term}
           {options?.termHelp != null && <> {options.termHelp}</>}
@@ -192,6 +209,12 @@ export interface LinkLabelItem {
   name: string;
   /** Without it the label is plain text: the object has no page to open. */
   to?: LocationDescriptor;
+  /**
+   * A property worth seeing at a glance (a skill that is always followed):
+   * an icon in the label with `text` as its tooltip and in the label's
+   * accessible name.
+   */
+  marker?: { icon: React.ReactNode; text: string };
 }
 
 /** Labels a set-valued fact shows before "{n} more". */
@@ -200,36 +223,58 @@ export const MAX_LABELS = 5;
 /**
  * A set-valued fact as outlined, clickable link labels, even for one item:
  * the first five, then "more". The caller renders
- * the empty case ("None").
+ * the empty case ("None"). `aria-label` names the group for screen readers
+ * (without it they hear PatternFly's generic "Label group category").
  */
-export const LinkLabels: React.FC<{ items: LinkLabelItem[] }> = ({ items }) => {
+export const LinkLabels: React.FC<{
+  items: LinkLabelItem[];
+  "aria-label"?: string;
+}> = ({ items, "aria-label": ariaLabel }) => {
   const { t } = useTranslation();
   return (
     <LabelGroup
+      {...(ariaLabel != null ? { "aria-label": ariaLabel } : {})}
       isCompact
       numLabels={MAX_LABELS}
       collapsedText={t("terms.moreCount", { count: items.length - MAX_LABELS })}
       expandedText={t("terms.showLess")}
     >
       {items.map((item) => {
-        const { to } = item;
+        const { to, marker } = item;
+        const icon =
+          marker != null ? (
+            <Tooltip content={marker.text}>
+              <span>{marker.icon}</span>
+            </Tooltip>
+          ) : undefined;
+        const name = (
+          <>
+            {item.name}
+            {marker != null && (
+              <span className={accessibility.screenReader}>
+                {` (${marker.text})`}
+              </span>
+            )}
+          </>
+        );
         return to != null ? (
           <Label
             key={item.id}
             variant="outline"
             isCompact
             isClickable
+            icon={icon}
             render={({ className, content }) => (
               <Link className={className} to={to}>
                 {content}
               </Link>
             )}
           >
-            {item.name}
+            {name}
           </Label>
         ) : (
-          <Label key={item.id} variant="outline" isCompact>
-            {item.name}
+          <Label key={item.id} variant="outline" isCompact icon={icon}>
+            {name}
           </Label>
         );
       })}

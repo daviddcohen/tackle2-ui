@@ -91,7 +91,7 @@ test("agent detail lists the plans that use it", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("application skills tab lists the skills it inherits, by owner", async ({
+test("application skills tab lists its own skills, then each archetype's", async ({
   page,
 }) => {
   await page.goto(protoUrl("/applications/1?tab=skills"));
@@ -101,20 +101,22 @@ test("application skills tab lists the skills it inherits, by owner", async ({
       name: "Corporate coding standards",
     })
   ).toBeVisible();
-  const archetype = group(/^Archetype skills: Java EE Application/);
+  // One section for every archetype: a term per archetype, its skills beside it.
+  const archetypes = group(/^Archetype skills/);
   await expect(
-    archetype.getByRole("link", { name: "EJB to CDI conversion patterns" })
+    archetypes.getByRole("link", { name: "EJB to CDI conversion patterns" })
   ).toBeVisible();
-  // The owner's name links where its skills are attached.
+  // The archetype's name links where its skills are edited.
   await expect(
-    archetype.getByRole("link", { name: "Java EE Application" })
+    archetypes
+      .getByRole("term")
+      .getByRole("link", { name: "Java EE Application" })
   ).toHaveAttribute("href", /\/archetypes\?.*activeItem=1/);
   // A target profile is picked when a migration plan runs: its skills are
   // not the application's, and neither are the agents' own.
-  await expect(group(/^Target profile skills/)).toHaveCount(0);
-  await expect(main(page)).toContainText(
-    "When a migration plan runs, each stage also gets its agent's skills and the skills of the target profile the run uses. Run migration plan lists them before the run starts, and you can exclude some for that run."
-  );
+  await expect(main(page)).not.toContainText("Target profile skills");
+  // No intro: each section says what its skills are for.
+  await expect(main(page)).not.toContainText("When a migration plan runs");
   await expect(main(page).getByRole("grid")).toHaveCount(0);
 });
 

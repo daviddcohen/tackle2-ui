@@ -234,7 +234,7 @@ describe("MigrationTab", () => {
       );
       expect(
         within(fact("agentic.execution.archetype")).getByRole("link")
-      ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=3&ar%3Atab=2");
+      ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=3");
       expect(
         screen.getByRole("link", {
           name: "agentic.execution.viewTargetProfiles",
@@ -382,7 +382,7 @@ describe("MigrationTab", () => {
         within(fact("agentic.execution.archetype")).getByRole("link", {
           name: "Java EE Application",
         })
-      ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=4&ar%3Atab=2");
+      ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=4");
       expect(
         within(fact("agentic.execution.targetProfile")).getByRole("link")
       ).toHaveAttribute(
@@ -608,6 +608,89 @@ describe("MigrationTab", () => {
       ).toBeNull();
     });
 
+    it("names the target profile this application ran on in its latest run, linked", () => {
+      mockState.migration = view({ planRun: runRef, runPhase: "Running" });
+      mockState.planRun = {
+        ...run("Running", []),
+        targetProfiles: [
+          {
+            application: { id: 1, name: "Customer Management" },
+            targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+            archetype: { id: 4, name: "Java EE Application" },
+          },
+          {
+            application: { id: 2, name: "Policy Administration" },
+            targetProfile: { id: 11, name: "Quarkus 3.x" },
+            archetype: { id: 4, name: "Java EE Application" },
+          },
+        ],
+      };
+      renderTab();
+      const ranOn = fact("agentic.execution.runTargetProfile");
+      expect(ranOn).toHaveTextContent("OpenJDK 21 on OpenShift");
+      expect(
+        within(ranOn).getByRole("link", { name: "OpenJDK 21 on OpenShift" })
+      ).toHaveAttribute(
+        "href",
+        "/archetypes/4/target-profiles#target-profile-12"
+      );
+    });
+
+    it("says None when the latest run used no target profile, and a profile without an archetype as text", () => {
+      mockState.migration = view({ planRun: runRef, runPhase: "Running" });
+      mockState.planRun = {
+        ...run("Running", []),
+        targetProfiles: [
+          {
+            application: { id: 1, name: "Customer Management" },
+            targetProfile: null,
+          },
+        ],
+      };
+      const { unmount } = renderTab();
+      expect(fact("agentic.execution.runTargetProfile")).toHaveTextContent(
+        "agentic.execution.none"
+      );
+      unmount();
+      mockState.planRun = {
+        ...run("Running", []),
+        targetProfiles: [
+          {
+            application: { id: 1, name: "Customer Management" },
+            targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+          },
+        ],
+      };
+      renderTab();
+      const ranOn = fact("agentic.execution.runTargetProfile");
+      expect(ranOn).toHaveTextContent("OpenJDK 21 on OpenShift");
+      expect(within(ranOn).queryByRole("link")).toBeNull();
+    });
+
+    it("adds no run target profile fact when the run does not report this application's", () => {
+      mockState.migration = view({ planRun: runRef, runPhase: "Running" });
+      mockState.planRun = run("Running", []);
+      const { unmount } = renderTab();
+      expect(
+        screen.queryByText("agentic.execution.runTargetProfile")
+      ).toBeNull();
+      unmount();
+      mockState.planRun = {
+        ...run("Running", []),
+        targetProfiles: [
+          {
+            application: { id: 2, name: "Policy Administration" },
+            targetProfile: { id: 11, name: "Quarkus 3.x" },
+            archetype: { id: 4, name: "Java EE Application" },
+          },
+        ],
+      };
+      renderTab();
+      expect(
+        screen.queryByText("agentic.execution.runTargetProfile")
+      ).toBeNull();
+    });
+
     it("sends the user to the run when it cannot be read and needs action", () => {
       mockState.migration = view({
         planRun: runRef,
@@ -734,6 +817,56 @@ describe("MigrationTab", () => {
       expect(within(table).queryByText("Other application's skill")).toBeNull();
     });
 
+    it("names a target profile's archetype only when it is not the application's", () => {
+      const profileSkill = (archetypeId: number): SkillsByStage => ({
+        stages: skillsByStage.stages,
+        everyStage: [
+          {
+            application: { id: 1, name: "Customer Management" },
+            skills: [
+              {
+                skill: { id: "7", name: "OpenShift deployment conventions" },
+                loadPolicy: "skill",
+                from: [
+                  {
+                    kind: "targetProfile",
+                    targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+                    archetype: { id: archetypeId, name: "Some archetype" },
+                  },
+                ],
+                excluded: false,
+              },
+            ],
+          },
+        ],
+      });
+      // No default path, one archetype: it is the context.
+      mockState.migration = view({
+        archetype: undefined,
+        targetProfile: undefined,
+        planRun: runRef,
+        runPhase: "Succeeded",
+      });
+      mockState.planRun = { ...run("Succeeded", []), skills: profileSkill(4) };
+      const { unmount } = renderTab(
+        application([{ id: 4, name: "Java EE Application" }])
+      );
+      const table = () =>
+        screen.getByRole("grid", { name: "agentic.stageSkills.title" });
+      expect(
+        within(table()).getByText("agentic.stageSkills.origin.targetProfile")
+      ).toBeInTheDocument();
+      unmount();
+
+      mockState.planRun = { ...run("Succeeded", []), skills: profileSkill(9) };
+      renderTab(application([{ id: 4, name: "Java EE Application" }]));
+      expect(
+        within(table()).getByText(
+          "agentic.stageSkills.origin.targetProfileWithArchetype"
+        )
+      ).toBeInTheDocument();
+    });
+
     it("before any run, says skills are resolved when a plan runs, with no second Run button", () => {
       mockState.migration = view();
       renderTab();
@@ -809,6 +942,9 @@ describe("MigrationTab", () => {
           screen.getByRole("grid", { name: "agentic.stageSkills.title" })
         ).getByText("API compatibility checklist")
       ).toBeInTheDocument();
+      expect(fact("agentic.execution.targetBranch")).toHaveTextContent(
+        "konveyor/agentic-migration"
+      );
     });
 
     it("takes focus when the tab opens at its section", async () => {

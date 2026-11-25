@@ -1,12 +1,6 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Button,
-  EmptyState,
-  EmptyStateActions,
-  EmptyStateBody,
-  EmptyStateFooter,
-} from "@patternfly/react-core";
+import { Button } from "@patternfly/react-core";
 
 import { getMigrationDisplayStatus } from "@app/agentic";
 import { AppPlaceholder } from "@app/components/AppPlaceholder";
@@ -15,6 +9,7 @@ import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
 import {
   DetailSection,
   DetailSections,
+  SectionEmpty,
 } from "@app/pages/agentic/components/detail-section";
 import { PlanRunsTable } from "@app/pages/agentic/components/plan-runs-table";
 import { useRunMigrationPlanLauncher } from "@app/pages/agentic/components/run-migration-plan-launcher";
@@ -78,23 +73,21 @@ export const PlanRunsTab: React.FC<PlanRunsTabProps> = ({
       <DetailSections>
         {appRuns.length === 0 ? (
           <DetailSection title={t("agentic.applicationDetail.tabPlanRuns")}>
-            <EmptyState variant="xs">
-              <EmptyStateBody>
-                {t("agentic.applicationDetail.planRunsEmpty")}
-              </EmptyStateBody>
-              {canStart && (
-                <EmptyStateFooter>
-                  <EmptyStateActions>
-                    <Button
-                      variant="link"
-                      onClick={() => runMigrationPlan.open?.()}
-                    >
-                      {t("agentic.execution.startMigration")}
-                    </Button>
-                  </EmptyStateActions>
-                </EmptyStateFooter>
-              )}
-            </EmptyState>
+            <SectionEmpty
+              action={
+                canStart ? (
+                  <Button
+                    variant="link"
+                    isInline
+                    onClick={() => runMigrationPlan.open?.()}
+                  >
+                    {t("agentic.execution.startMigration")}
+                  </Button>
+                ) : undefined
+              }
+            >
+              {t("agentic.applicationDetail.planRunsEmpty")}
+            </SectionEmpty>
           </DetailSection>
         ) : (
           <DetailSection

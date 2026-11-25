@@ -226,11 +226,6 @@ test.describe("Skill associations in the plan skill review", () => {
       applicationSkills(page).getByRole("link", { name: OTHER_SKILL })
     ).toBeVisible();
 
-    // No run yet: the tab says where every stage's skills are listed.
-    await expect(main(page)).toContainText(
-      "Run migration plan lists them before the run starts, and you can exclude some for that run."
-    );
-
     // Every stage of the run gets it, from this application.
     const preflight = await openRunSkillsPreview(page);
     const rows = stageSkillRows(preflight, OTHER_SKILL);
@@ -404,19 +399,18 @@ test.describe("Skill associations in the plan skill review", () => {
     await rowByText(page, ARCHETYPE)
       .getByText(ARCHETYPE, { exact: true })
       .click();
-    await page.getByRole("tab", { name: "Skills", exact: true }).click();
     const drawer = page.locator("#page-drawer-content");
-    // The archetype's own group, the only one: target profiles have theirs
-    // on the target profiles page.
-    await drawer
+    // The Details tab's Skills fact lists the archetype's own skills only:
+    // target profiles have theirs on the target profiles page.
+    const skills = drawer.locator(".pf-v6-c-description-list__group").filter({
+      has: drawer.page().getByRole("term").getByText("Skills", { exact: true }),
+    });
+    await expect(skills.getByRole("link", { name: SKILL })).toHaveCount(0);
+    await skills
       .getByRole("button", { name: `${MANAGE} for ${ARCHETYPE}` })
       .click();
     await addSkillInModal(page, SKILL, `Skills for ${ARCHETYPE} updated`);
-    await expect(
-      drawer
-        .getByRole("region", { name: /^Archetype skills/ })
-        .getByRole("link", { name: SKILL })
-    ).toBeVisible();
+    await expect(skills.getByRole("link", { name: SKILL })).toBeVisible();
 
     await spaNavigate(page, PLAN_PATH);
     await expect(stageSkillRows(main(page), SKILL)).toHaveCount(1);

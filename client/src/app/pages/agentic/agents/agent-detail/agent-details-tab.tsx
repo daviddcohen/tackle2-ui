@@ -18,8 +18,10 @@ import { Agent, EntityRef, Gateway, MigrationPlan } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { ConditionalTableBody } from "@app/components/TableControls";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
+import { useFetchSkills } from "@app/queries/agentic";
 import { formatDate } from "@app/utils/utils";
 
+import { useLoadPolicyMarker } from "../../components/attached-skills-list";
 import {
   DetailFacts,
   DetailSection,
@@ -70,8 +72,18 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
   );
   const collections = agent.skillCollections ?? [];
 
+  // The agent holds skill refs; the skills list says which are rules.
+  const { skills } = useFetchSkills();
+  const markerOf = useLoadPolicyMarker();
+  const skillMarker = (id: string) =>
+    markerOf(skills.find((skill) => skill.id === id)?.loadPolicy);
+
   /** A set-valued fact: link labels, even for one item. */
-  const linkLabels = (refs: EntityRef[], pathOf: (id: string) => string) =>
+  const linkLabels = (
+    refs: EntityRef[],
+    pathOf: (id: string) => string,
+    markerFor?: (id: string) => ReturnType<typeof skillMarker>
+  ) =>
     refs.length === 0 ? (
       none
     ) : (
@@ -79,6 +91,7 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
         items={refs.map((ref) => ({
           id: ref.id,
           name: ref.name,
+          marker: markerFor?.(ref.id),
           to: linkTo(pathOf(ref.id)),
         }))}
       />
@@ -98,8 +111,10 @@ export const AgentDetailsTab: React.FC<AgentDetailsTabProps> = ({
     ],
     [
       t("agentic.agent.skills"),
-      linkLabels(agent.skills, (skillId) =>
-        generatePath(DevPaths.skillDetails, { skillId })
+      linkLabels(
+        agent.skills,
+        (skillId) => generatePath(DevPaths.skillDetails, { skillId }),
+        skillMarker
       ),
     ],
     [

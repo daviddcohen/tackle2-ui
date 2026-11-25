@@ -165,7 +165,7 @@ describe("TargetProfilesPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the assigned plan and the profile's skills", async () => {
+  it("shows the assigned plan and the profile's skills as labels", async () => {
     serve();
     renderPage();
 
@@ -173,32 +173,19 @@ describe("TargetProfilesPage", () => {
     expect(
       within(quarkus).getByRole("link", { name: "Java EE to Quarkus" })
     ).toHaveAttribute("href", "/migration-plans/1");
-    const button = within(quarkus).getByRole("button", {
-      name: "2 skills for Quarkus 3.x",
-    });
-    expect(button).toHaveTextContent("2 skills");
-    await userEvent.click(button);
-    const popover = await screen.findByRole("dialog", {
-      name: "Target profile skills: Quarkus 3.x",
-    });
+    // Every skill by name, like the generators: no count to open.
     expect(
-      within(popover).getByRole("link", { name: "Quarkus best practices" })
+      within(quarkus).getByRole("link", {
+        name: "Quarkus best practices (Always followed)",
+      })
     ).toHaveAttribute("href", "/skills/4");
-    // Only the rule carries the marker.
-    expect(within(popover).getAllByText("Always followed")).toHaveLength(1);
-    // The sentence first, then the list.
-    const sentence = within(popover).getByText(
-      "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
-    );
     expect(
-      sentence.compareDocumentPosition(within(popover).getByRole("list")) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+      within(quarkus).queryByRole("button", { name: /skills/ })
+    ).toBeNull();
 
     const liftAndShift = await row("OpenShift lift and shift");
     // Neither an analysis profile nor a plan.
     expect(within(liftAndShift).getAllByText("Not assigned")).toHaveLength(2);
-    // One skill is its name, not "1 skill".
     expect(
       within(liftAndShift).getByRole("link", {
         name: "Containerization standards",
@@ -206,7 +193,7 @@ describe("TargetProfilesPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("gives a second profile's popover the same sentence as the first", async () => {
+  it("says once, in the Skills header, when agents use a profile's skills", async () => {
     serve({
       skillsResolver: (_req, res, ctx) =>
         res(
@@ -216,27 +203,20 @@ describe("TargetProfilesPage", () => {
     renderPage();
 
     const liftAndShift = await row("OpenShift lift and shift");
-    await userEvent.click(
-      within(liftAndShift).getByRole("button", {
-        name: "2 skills for OpenShift lift and shift",
-      })
-    );
-    const popover = await screen.findByRole("dialog", {
-      name: "Target profile skills: OpenShift lift and shift",
-    });
-    // Both profiles are migration paths of the archetype: neither is
-    // "the one its applications use".
+    // Both profiles are migration paths of the archetype: one sentence for all.
     expect(
-      within(popover).getByText(
-        "Agents use these skills in every stage when a migration plan runs on this target profile, unless the plan excludes them."
-      )
-    ).toBeInTheDocument();
-    expect(within(popover).queryByText(/do not get these skills/)).toBeNull();
-    expect(
-      within(popover)
+      within(liftAndShift)
         .getAllByRole("link")
         .map((link) => link.textContent)
     ).toEqual(["Containerization standards", "Database migration patterns"]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "More about target profile skills" })
+    );
+    expect(
+      await screen.findByText(
+        "Agents can use these skills in every stage when a migration plan runs on this target profile."
+      )
+    ).toBeInTheDocument();
   });
 
   it("keeps the Hub columns and says Unavailable when plans and skills fail", async () => {

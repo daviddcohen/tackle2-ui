@@ -514,7 +514,7 @@ describe("SkillDetail, Usage tab", () => {
     );
     expect(
       section.getByText(
-        "An agent uses this skill in every stage it runs. An archetype, target profile or application adds it to every stage when a matching application is migrated. A migration plan can exclude it, except where it is attached to the application itself."
+        "An agent can use this skill in every stage it runs. An archetype, target profile or application adds it to every stage when a matching application is migrated. A migration plan can exclude it, except where it is attached to the application itself."
       )
     ).toBeInTheDocument();
     expect(
@@ -523,7 +523,7 @@ describe("SkillDetail, Usage tab", () => {
     // Every archetype link from a skills surface opens its Skills tab.
     expect(
       section.getByRole("link", { name: "Spring Boot Application" })
-    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1&ar%3Atab=2");
+    ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1");
     expect(
       await section.findByRole("link", {
         name: "Quarkus 3.x (Spring Boot Application)",

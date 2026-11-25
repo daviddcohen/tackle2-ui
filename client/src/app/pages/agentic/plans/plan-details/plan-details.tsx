@@ -5,10 +5,6 @@ import { generatePath, useHistory, useParams } from "react-router-dom";
 import {
   Button,
   Content,
-  EmptyState,
-  EmptyStateActions,
-  EmptyStateBody,
-  EmptyStateFooter,
   PageSection,
   Skeleton,
   Tab,
@@ -55,6 +51,7 @@ import {
   DetailSection,
   DetailSections,
   LinkLabels,
+  SectionEmpty,
 } from "../../components/detail-section";
 import { PlanRunsTable } from "../../components/plan-runs-table";
 import { useRunMigrationPlanLauncher } from "../../components/run-migration-plan-launcher";
@@ -475,28 +472,23 @@ const PlanDetailsPage: React.FC = () => {
             </DetailSection>
           ) : planRuns.length === 0 ? (
             <DetailSection title={t("agentic.planDetail.runsTitleEmpty")}>
-              <EmptyState variant="xs">
-                <EmptyStateBody>
-                  {t("agentic.planDetail.runsEmptyDescription")}
-                </EmptyStateBody>
-                {runPlan != null && (
-                  <EmptyStateFooter>
-                    <EmptyStateActions>
-                      {runBlockedReason != null ? (
-                        <Tooltip content={runBlockedReason}>
-                          <Button variant="link" isAriaDisabled>
-                            {t("agentic.execution.startMigration")}
-                          </Button>
-                        </Tooltip>
-                      ) : (
-                        <Button variant="link" onClick={runPlan}>
-                          {t("agentic.execution.startMigration")}
-                        </Button>
-                      )}
-                    </EmptyStateActions>
-                  </EmptyStateFooter>
-                )}
-              </EmptyState>
+              <SectionEmpty
+                action={
+                  runPlan == null ? undefined : runBlockedReason != null ? (
+                    <Tooltip content={runBlockedReason}>
+                      <Button variant="link" isInline isAriaDisabled>
+                        {t("agentic.execution.startMigration")}
+                      </Button>
+                    </Tooltip>
+                  ) : (
+                    <Button variant="link" isInline onClick={runPlan}>
+                      {t("agentic.execution.startMigration")}
+                    </Button>
+                  )
+                }
+              >
+                {t("agentic.planDetail.runsEmptyDescription")}
+              </SectionEmpty>
             </DetailSection>
           ) : (
             <DetailSection

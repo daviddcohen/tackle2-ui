@@ -749,6 +749,23 @@ export interface PlanRun {
    * Absent when it excluded none (and on a server that does not report it).
    */
   excludedSkills?: EntityRef[];
+  /**
+   * The target profile each application ran on, settled when the run was
+   * created (the start request's `targetProfiles` pick, else the
+   * application's path that uses the run's plan): one entry per
+   * application, in `applications` order. Absent on a server that does not
+   * report it, never "no target profile".
+   */
+  targetProfiles?: PlanRunTargetProfile[];
+}
+
+/** The migration path one application of a plan run ran on. */
+export interface PlanRunTargetProfile {
+  application: HubRef;
+  /** Null: the run used no target profile (no target profile skills). */
+  targetProfile: HubRef | null;
+  /** The archetype that owns `targetProfile`; absent when null or unknown. */
+  archetype?: HubRef;
 }
 
 export type ApplicationMigrationDisplayStatus =

@@ -813,6 +813,7 @@ describe("AgentWorkflowRun -> Plan run", () => {
       ],
       skills: undefined,
       excludedSkills: undefined,
+      targetProfiles: undefined,
     });
   });
 

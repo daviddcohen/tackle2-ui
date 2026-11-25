@@ -65,7 +65,9 @@ const toStageRun = (
  * sources: the exclusions from the `status.stages[].skills` snapshot; what
  * each stage mounted from agentic-controller#172 (`status.skillSources`,
  * `status.skills`); the run's own exclusions from a run-level skills field
- * (docs/agentic-handoff.md, "Run skill review").
+ * (docs/agentic-handoff.md, "Run skill review"). `targetProfiles` is
+ * undefined too: the controller never sees target profiles, so only the Hub
+ * can record the pick when it creates the run ("Run target profiles").
  */
 export const toPlanRun = (
   run: Crd.AgentWorkflowRun,
@@ -95,6 +97,7 @@ export const toPlanRun = (
     ),
     skills: undefined,
     excludedSkills: undefined,
+    targetProfiles: undefined,
   };
 };
 

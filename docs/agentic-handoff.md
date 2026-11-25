@@ -613,6 +613,27 @@ Mock rules (`execution.ts`, `skill-resolution.ts`, `catalog.ts`):
 - The dialog sends exactly what its preview shows: the picks of the applications whose view reports `migrationPaths` (an explicit null for a plan no target profile of the application uses), and per plan run the cleared skills that the preview still resolves and the plan does not already exclude.
 - The real-backend adapters leave all of these unmapped: `toWorkflowRunInputs` drops the picks and exclusions, `toPlanRun` sets `excludedSkills` undefined, and `getApplicationMigrations` and `resolvePlanSkills` are not wired (`agentic-hub.ts`).
 
+### Run target profiles (which migration path a run took)
+
+A plan run records the target profile each application ran on, so the plan run page and an application's Migration tab can say which migration path the run took. Before, the only hint was a "Target profile: X" origin in the skills snapshot, missing when that profile has no skills. Additive (prototype commits "Data layer: ..." and "Mock data: ..." on the branch `skills/inherited-views-redesign`); with the field absent the pages render exactly as before. Upstream Konveyor records the same pick on the task it creates (`data: { profiles: [targetProfile] }` in the Generate assets flow).
+
+| Field                                                                                                   | Meaning                                                                                                                                                                                                                                                                                                                                      | Proposed backend                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlanRun.targetProfiles?: { application: HubRef; targetProfile: HubRef \| null; archetype?: HubRef }[]` | one entry per application, in `applications` order: the profile settled when the run was created (the start request's `targetProfiles` pick, else the application's path that uses the run's plan); null, none (no target profile skills); `archetype`, the profile's owner, absent when null or unknown. Absent: not reported, never "none" | the Hub records the settled pick when it creates each AgentWorkflowRun (for example a `konveyor.io/target-profile` label, or a field on the Hub's run record, as `data.profiles` on an upstream task) and reports it with current names. The controller needs nothing: it never sees target profiles |
+
+Mock rules (`execution.ts`):
+
+- `POST /application-migrations` records, on every run it creates, the target profile it settled for each application (`effectivePicks`), the same picks its skills snapshot resolves with. Seeded runs record `seedPicksFor`, the picks their snapshots use (Run #4, Java lift and shift on Partner Portal, ran on OpenJDK 21 on OpenShift). Reads return current application, profile and archetype names; a profile that no longer exists keeps the names it was recorded with.
+- Running a failed run again starts a new run through the Run migration plan dialog, which takes its plan, branch and own exclusions but not its picks, so the new run records whatever the dialog settles.
+- The real-backend adapter leaves it unmapped: `toPlanRun` sets `targetProfiles` undefined.
+
+UI: the plan run page's Applications fact lists each application with its profile ("Claims Processing (Quarkus 3.x)", the profile linked to its archetype's target profiles page; "(no target profile)" for null); the Migration tab adds a "Run's target profile" fact after Plan run ("None" for null). Absent, both show what they did before.
+
+Related, when wiring the backend:
+
+- "Which runs used a skill" on the skill page's Usage tab waits for agentic-controller#172 (AgentRun records the skills it assembled); until then the tab lists the plans whose stages get the skill, not runs.
+- The real Hub does not report archetype, target profile and application skill attachments, so the views that list them (the archetype Skills fact, the target profiles Skills column, the application Skills tab, the skill Usage tab's Archetypes, Target profiles and Applications facts) should read "Unavailable", not "None", on the real Hub: gate them on one capability (for example `useCanManageSkills`) rather than checking each view.
+
 ### Shared migration plans (the reference on the target profile)
 
 The model: a target profile belongs to exactly one archetype, an archetype has one or more target profiles, the

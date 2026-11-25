@@ -30,6 +30,7 @@ import {
   EntityRef,
   HubRef,
   PlanRun,
+  PlanRunTargetProfile,
   PlanStage,
   StageMessage,
   StageRun,
@@ -53,6 +54,7 @@ import {
   entityIdOf,
   findApplication,
   findArchetype,
+  findTargetProfile,
   hubIdOf,
   listNames,
   notFound,
@@ -529,6 +531,39 @@ export const seedPicksFor = (
     })
   );
 
+/**
+ * The target profile each application of a run ran on, from the picks the
+ * run was created with (null or no entry: none), with the profile's
+ * archetype. Picks are validated before a run is created, so a profile
+ * that is not found only happens after a Hub archetype write removed it.
+ */
+const runTargetProfiles = (
+  applications: PlanRun["applications"],
+  picks: ReadonlyMap<number, number | null>
+): PlanRunTargetProfile[] =>
+  applications.map((application) => {
+    const profileId = picks.get(application.id) ?? null;
+    const found = profileId != null ? findTargetProfile(profileId) : undefined;
+    return {
+      application: { id: application.id, name: application.name },
+      targetProfile:
+        found != null
+          ? { id: found.profile.id, name: found.profile.name }
+          : profileId != null
+            ? { id: profileId, name: String(profileId) }
+            : null,
+      ...(found != null
+        ? { archetype: { id: found.archetype.id, name: found.archetype.name } }
+        : {}),
+    };
+  });
+
+/** The target profiles of a seeded run: the picks its snapshot resolves with. */
+const seedTargetProfilesFor = (
+  planId: EntityId,
+  applications: PlanRun["applications"]
+) => runTargetProfiles(applications, seedPicksFor(planId, applications));
+
 const applicationRefs = (ids: number[]) =>
   ids
     .map((id) => findApplication(id))
@@ -555,6 +590,7 @@ const generateRun = (
     ...template,
     applications,
     skills: seedSkillsFor(template.planId, applications),
+    targetProfiles: seedTargetProfilesFor(template.planId, applications),
     startedAt: new Date(baseMs).toISOString(),
     completedAt: undefined,
     status: phase,
@@ -617,6 +653,10 @@ const fixtureRun = (template: PlanRunTemplate): RunRecord => {
       ...template,
       applications: template.applications.map((ref) => ({ ...ref })),
       skills: seedSkillsFor(template.planId, template.applications),
+      targetProfiles: seedTargetProfilesFor(
+        template.planId,
+        template.applications
+      ),
       stageRuns: stages.map((stage) => {
         const content = template.stageRuns.find(
           (sr) => sr.stageId === stage.id
@@ -798,9 +838,40 @@ const presentRunSkills = (
     : {}),
 });
 
+/**
+ * The run's target profiles with current names; a profile no longer found
+ * keeps the names it had when the run was created.
+ */
+const presentTargetProfiles = (
+  targetProfiles: PlanRunTargetProfile[]
+): PlanRunTargetProfile[] =>
+  targetProfiles.map((entry) => {
+    const application = {
+      id: entry.application.id,
+      name:
+        findApplication(entry.application.id)?.name ?? entry.application.name,
+    };
+    const found =
+      entry.targetProfile != null
+        ? findTargetProfile(entry.targetProfile.id)
+        : undefined;
+    return found != null
+      ? {
+          application,
+          targetProfile: { id: found.profile.id, name: found.profile.name },
+          archetype: { id: found.archetype.id, name: found.archetype.name },
+        }
+      : { ...entry, application };
+  });
+
 const presentRun = (record: RunRecord, now = Date.now()): PlanRun => {
   const { run, live } = record;
-  const { skills: _skills, excludedSkills: _excludedSkills, ...rest } = run;
+  const {
+    skills: _skills,
+    excludedSkills: _excludedSkills,
+    targetProfiles,
+    ...rest
+  } = run;
   return {
     ...rest,
     planName: resolvePlanRef({ id: run.planId, name: run.planName }).name,
@@ -808,6 +879,9 @@ const presentRun = (record: RunRecord, now = Date.now()): PlanRun => {
       id: ref.id,
       name: findApplication(ref.id)?.name ?? ref.name,
     })),
+    ...(targetProfiles != null
+      ? { targetProfiles: presentTargetProfiles(targetProfiles) }
+      : {}),
     ...presentRunSkills(run),
     stageRuns: run.stageRuns.map((stageRun, index) => ({
       ...stageRun,
@@ -1237,6 +1311,10 @@ const createRun = (
   choices: RunChoices = {}
 ): RunRecord => {
   const id = nextRunId();
+  const runApplications = applications.map((application) => ({
+    id: application.id,
+    name: application.name,
+  }));
   const skills = resolveRunSkills(
     plan,
     applications.map((application) => application.id),
@@ -1257,15 +1335,18 @@ const createRun = (
       name: `Run #${id}: ${plan.name}`,
       planId: plan.id,
       planName: plan.name,
-      applications: applications.map((application) => ({
-        id: application.id,
-        name: application.name,
-      })),
+      applications: runApplications,
       status: "Pending",
       targetBranch,
       startedAt: new Date(now).toISOString(),
       skills,
       ...(excludedSkills.length > 0 ? { excludedSkills } : {}),
+      // The profiles the snapshot resolved with (`startApplicationMigrations`
+      // settles one for every application, null for none).
+      targetProfiles: runTargetProfiles(
+        runApplications,
+        choices.targetProfileIds ?? new Map()
+      ),
       stageRuns: [...plan.stages]
         .sort((a, b) => a.order - b.order)
         .map((stage) =>
@@ -1289,7 +1370,8 @@ const createRun = (
  *   needs a pick, or none has); with "single" on its only path whose
  *   profile uses the Plan (`planPicksFor`: none, no target profile; several,
  *   409). Every application's target profile is settled before any run is
- *   created, and its snapshot resolves with it.
+ *   created; its snapshot resolves with it and the run records it
+ *   (`PlanRun.targetProfiles`).
  * - `excludedSkills`: per Plan the request runs (400 for another Plan), the
  *   Skills that run excludes on top of the Plan's, for every origin. Ids
  *   that are not Skills, or that the run's snapshot does not list, are

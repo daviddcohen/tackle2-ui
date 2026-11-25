@@ -55,10 +55,8 @@ describe("english-i18n", () => {
   it("keeps a self-closing tag's own children, and counts zero", () => {
     const { container } = render(
       <>
-        {Trans({
-          i18nKey: "agentic.attachedSkills.headingWithCount",
-          values: { count: 2 },
-          components: { heading: <strong>Application skills</strong> },
+        {transNodes("<heading/> (2)", {
+          heading: <strong>Application skills</strong>,
         })}
       </>
     );

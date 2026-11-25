@@ -36,7 +36,7 @@ import {
 } from "@app/queries/agentic";
 import { skillsWriteScopes } from "@app/scopes";
 import { isSameSet } from "@app/utils/agentic";
-import { getAxiosErrorMessage } from "@app/utils/utils";
+import { getAxiosErrorMessage, universalComparator } from "@app/utils/utils";
 
 import { PICKER_MENU_HEIGHT, PICKER_MENU_POPPER } from "./picker-menu";
 
@@ -56,7 +56,13 @@ export type ManageSkillsTarget =
       name: string;
       archetype: { id: number; name: string };
     }
-  | { scope: "application"; id: number; name: string };
+  | {
+      scope: "application";
+      id: number;
+      name: string;
+      /** The application's archetypes: their skills reach it already. */
+      archetypes?: { id: number; name: string }[];
+    };
 
 /**
  * The id of the Manage skills button that edits `target` ("manage-skills-
@@ -404,6 +410,10 @@ const ManageSkillsForm: React.FC<ManageSkillsFormProps> = ({
   }, []);
   const isChanged = !isSameSet(selected, initial);
 
+  // An application already gets its archetypes' skills: the options say
+  // which, so the same skill is not attached twice without noticing.
+  const archetypes =
+    target.scope === "application" ? target.archetypes : undefined;
   const options = React.useMemo<FilterSelectOptionProps[]>(
     () =>
       [...skills]
@@ -413,20 +423,37 @@ const ManageSkillsForm: React.FC<ManageSkillsFormProps> = ({
           const policy = t(
             `agentic.skill.loadPolicy.${skill.loadPolicy ?? "skill"}`
           );
+          const inheritedFrom = (archetypes ?? [])
+            .filter((archetype) =>
+              skill.associations?.some(
+                (association) =>
+                  association.scope === "archetype" &&
+                  String(association.resource.id) === String(archetype.id)
+              )
+            )
+            .map((archetype) => archetype.name)
+            .sort(universalComparator);
+          const inherited =
+            inheritedFrom.length > 0
+              ? t("agentic.skill.manageSkills.inheritedFrom", {
+                  archetypes: inheritedFrom.join(", "),
+                })
+              : undefined;
+          const facts = inherited != null ? `${policy} · ${inherited}` : policy;
           return {
             value: skill.id,
             label: skill.name,
             optionProps: {
               description: skill.description
                 ? t("agentic.skill.manageSkills.optionDescription", {
-                    policy,
+                    policy: facts,
                     description: skill.description,
                   })
-                : policy,
+                : facts,
             },
           };
         }),
-    [skills, t]
+    [skills, archetypes, t]
   );
 
   const helper =

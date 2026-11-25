@@ -4,19 +4,15 @@ import { TablePersistenceKeyPrefix } from "@app/Constants";
 import { DevPaths } from "@app/Paths";
 import { SkillAssociation } from "@app/agentic";
 import { Archetype } from "@app/api/models";
-import { ArchetypeDrawerTab } from "@app/pages/archetypes/components/archetype-drawer-tabs";
 
 /**
- * An archetype, open in the drawer of the archetypes table; with "skills",
- * on its Skills tab (every archetype link from a skills surface).
+ * An archetype, open in the drawer of the archetypes table, on its Details
+ * tab, which lists its skills.
  */
-export const archetypePath = (id: number, tab?: "skills") => {
+export const archetypePath = (id: number) => {
   const prefix = TablePersistenceKeyPrefix.archetypes;
   return `${DevPaths.archetypes}?${new URLSearchParams({
     [`${prefix}:activeItem`]: String(id),
-    ...(tab === "skills"
-      ? { [`${prefix}:tab`]: String(ArchetypeDrawerTab.Skills) }
-      : {}),
   })}`;
 };
 
@@ -51,8 +47,8 @@ export const targetProfileOwnerPath = (
 
 /**
  * Where a skill's attachment is edited: the agent page, the archetype
- * drawer's Skills tab, the target profile on its archetype's page, the
- * application's Skills tab.
+ * drawer (its Details tab lists the skills), the target profile on its
+ * archetype's page, the application's Skills tab.
  */
 export const skillAssociationPath = (
   association: SkillAssociation,
@@ -66,7 +62,7 @@ export const skillAssociationPath = (
     case "application":
       return applicationSkillsPath(association.resource.id);
     case "archetype":
-      return archetypePath(association.resource.id, "skills");
+      return archetypePath(association.resource.id);
     case "targetProfile":
       return targetProfileOwnerPath(association.resource.id, archetypes);
   }
