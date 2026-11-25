@@ -1957,7 +1957,9 @@
       "duration": "Duration",
       "approvalNeeded": "Approval needed: {{stage}}",
       "applicationCount_one": "{{count}} application",
-      "applicationCount_other": "{{count}} applications"
+      "applicationCount_other": "{{count}} applications",
+      "archetypes_one": "Archetype:",
+      "archetypes_other": "Archetypes:"
     },
     "stageRunsTable": {
       "label": "Stages",
@@ -2015,6 +2017,7 @@
       "filterByStatus": "Filter by status",
       "filterByName": "Filter by run name",
       "filterByMigrationPlan": "Filter by migration plan",
+      "filterByArchetype": "Filter by archetype",
       "emptyTitle": "No plan runs yet",
       "emptyDescription": "Plan runs appear here when you run a migration plan on applications.",
       "emptyDescriptionReadOnly": "Plan runs appear here once they are created.",
@@ -2294,7 +2297,10 @@
       "targetProfileFormDescription": "A target profile is where applications in this archetype are going. After you create it, assign a migration plan to it.",
       "targetProfilesDescription": "A target profile is where applications in this archetype are going. Assign a migration plan to each profile.",
       "targetProfilesDescriptionWithoutPlans": "A target profile is where applications in this archetype are going.",
-      "targetProfilesTabDescription": "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it."
+      "targetProfilesTabDescription": "Each target profile is a migration path for applications in this archetype. A migration plan run picks the target profile, and by default uses the plan assigned to it.",
+      "planRuns": "Plan runs",
+      "planRunCount_one": "{{count}} plan run",
+      "planRunCount_other": "{{count}} plan runs"
     },
     "provider": {
       "title": "Model providers",

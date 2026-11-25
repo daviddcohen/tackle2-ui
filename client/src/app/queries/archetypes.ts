@@ -23,17 +23,19 @@ export const useFetchArchetypes = (
   refetchInterval: number | false = DEFAULT_REFETCH_INTERVAL
 ) => {
   const queryClient = useQueryClient();
-  const { data, isLoading, isSuccess, error, refetch } = useQuery({
-    queryKey: [ARCHETYPES_QUERY_KEY],
-    queryFn: getArchetypes,
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [assessmentsByItemIdQueryKey],
-      });
-    },
-    onError: (error: AxiosError) => console.log(error),
-    refetchInterval,
-  });
+  const { data, isLoading, isSuccess, error, failureCount, refetch } = useQuery(
+    {
+      queryKey: [ARCHETYPES_QUERY_KEY],
+      queryFn: getArchetypes,
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: [assessmentsByItemIdQueryKey],
+        });
+      },
+      onError: (error: AxiosError) => console.log(error),
+      refetchInterval,
+    }
+  );
 
   const archetypesById = useMemo(() => {
     return !data ? {} : objectify(data, ({ id }) => id);
@@ -43,6 +45,10 @@ export const useFetchArchetypes = (
     archetypes: data || [],
     archetypesById,
     isFetching: isLoading,
+    /** No data yet; stays true through the retries of a first load. */
+    isLoading,
+    /** Failed attempts of the current fetch, so a caller can stop waiting after the first. */
+    failureCount,
     isSuccess,
     error,
     refetch,

@@ -3,14 +3,58 @@ import type { Page } from "@playwright/test";
 import {
   AGENTIC_STATUS,
   agenticGet,
+  breadcrumbTitles,
   expect,
   expectNoBrokenText,
+  hubRequest,
   main,
   protoUrl,
   stageLinks,
   stagesTable,
   test,
 } from "../support";
+
+interface Membership {
+  id: number;
+  name: string;
+  applications?: { id: number }[];
+}
+
+/**
+ * The names of the seeded runs with an application in the archetype, the
+ * rule of the Archetype filter (Hub membership, not the plan's path).
+ */
+const runsOfArchetype = async (page: Page, name: string) => {
+  const { body: archetypes } = await hubRequest<Membership[]>(
+    page,
+    "GET",
+    "/archetypes"
+  );
+  const archetype = archetypes.find((candidate) => candidate.name === name);
+  expect(archetype, `the seeded archetype ${name}`).toBeDefined();
+  const members = new Set(
+    (archetype!.applications ?? []).map((application) => application.id)
+  );
+  const runs = await agenticGet<
+    { name: string; applications: { id: number }[] }[]
+  >(page, "/plan-runs");
+  return runs
+    .filter((run) => run.applications.some((app) => members.has(app.id)))
+    .map((run) => run.name)
+    .sort();
+};
+
+const runRows = (page: Page) =>
+  page
+    .getByRole("row")
+    .filter({ has: page.getByRole("link", { name: /^Run #\d+/ }) });
+
+const runNames = async (page: Page) =>
+  (
+    await runRows(page)
+      .getByRole("link", { name: /^Run #\d+/ })
+      .allInnerTexts()
+  ).sort();
 
 test.describe("Plan runs list", () => {
   test("a run awaiting approval whose clock cannot be read says Not finished", async ({
@@ -83,6 +127,79 @@ test.describe("Plan runs list", () => {
     await expect(rows).toHaveCount(2);
     for (const row of await rows.all())
       await expect(row).toContainText("Action required");
+  });
+
+  test("Archetype filter narrows the list to runs on that archetype's applications", async ({
+    page,
+    pageErrors,
+  }) => {
+    await page.goto(protoUrl("/plan-runs", { scenario: "configured" }));
+    await expect(runRows(page)).toHaveCount(7);
+    // Each row names its applications' archetype under them.
+    await expect(
+      runRows(page).filter({ hasText: "Archetype: Java EE Application" })
+    ).not.toHaveCount(0);
+    // Partner Portal's run used a plan without a migration path: it still
+    // belongs to Java EE, its application's archetype.
+    const expected = await runsOfArchetype(page, "Java EE Application");
+    expect(expected).toContain("Run #4: Java EE lift and shift");
+
+    await page.getByRole("button", { name: "Name" }).first().click();
+    await page.getByRole("menuitem", { name: "Archetype" }).click();
+    await page.getByRole("combobox", { name: "Type to filter" }).click();
+    await page
+      .getByRole("menuitem", { name: "Java EE Application", exact: true })
+      .click();
+    await page.keyboard.press("Escape");
+
+    await expect(runRows(page)).toHaveCount(expected.length);
+    expect(await runNames(page)).toEqual(expected);
+    for (const row of await runRows(page).all())
+      await expect(
+        row.getByRole("link", { name: "Java EE Application" })
+      ).toBeVisible();
+    // The filter is in the URL, by archetype id.
+    expect(
+      JSON.parse(
+        new URL(page.url()).searchParams.get("planRuns:filters") ?? "{}"
+      )
+    ).toEqual({ archetype: ["1"] });
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("an archetype's Plan runs link opens the list filtered by it, with the way back", async ({
+    page,
+  }) => {
+    await page.goto(
+      protoUrl("/archetypes?ar:activeItem=1&ar:tab=0", {
+        scenario: "configured",
+      })
+    );
+    const drawer = page.locator("#page-drawer-content");
+    await expect(
+      drawer.getByRole("heading", { name: "Java EE Application" })
+    ).toBeVisible();
+    const expected = await runsOfArchetype(page, "Java EE Application");
+    await drawer
+      .getByRole("link", { name: `${expected.length} plan runs` })
+      .click();
+
+    await expect(page).toHaveURL(/\/plan-runs\?/);
+    await expect(runRows(page)).toHaveCount(expected.length);
+    expect(await runNames(page)).toEqual(expected);
+    expect(await breadcrumbTitles(page)).toEqual([
+      "Archetypes",
+      "Java EE Application",
+      "Plan runs",
+    ]);
+
+    await page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("link", { name: "Java EE Application" })
+      .click();
+    await expect(
+      drawer.getByRole("heading", { name: "Java EE Application" })
+    ).toBeVisible();
   });
 
   test("initial scenario shows the empty state", async ({ page }) => {
