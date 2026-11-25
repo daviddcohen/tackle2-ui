@@ -35,6 +35,7 @@ import { DevPaths, Paths } from "@app/Paths";
 import {
   ApplicationMigrationDisplayStatus,
   UNCONFIGURED_MIGRATION,
+  getApplicationPlans,
   getMigrationDisplayStatus,
 } from "@app/agentic";
 import { Assessment, Ref, TaskState } from "@app/api/models";
@@ -706,18 +707,20 @@ export const ApplicationsTable: FC = () => {
                 t("actions.filterBy", {
                   what: t("agentic.execution.planFilter").toLowerCase(),
                 }) + "...",
+              // Every plan an application can run, and an application
+              // matches each of them, like the plan's application count.
               selectOptions: Object.values(migrations)
-                .flatMap((migration) =>
-                  migration.plan ? [migration.plan] : []
-                )
+                .flatMap(getApplicationPlans)
                 .filter(
                   (plan, index, plans) =>
                     plans.findIndex(({ id }) => id === plan.id) === index
                 )
                 .map((plan) => ({ value: plan.id, label: plan.name }))
                 .sort((a, b) => universalComparator(a.label, b.label)),
-              getItemValue: (item: DecoratedApplication) =>
-                getMigration(item).plan?.id ?? "",
+              matcher: (filter: string, item: DecoratedApplication) =>
+                getApplicationPlans(getMigration(item)).some(
+                  (plan) => String(plan.id) === filter
+                ),
             },
           ]
         : []),

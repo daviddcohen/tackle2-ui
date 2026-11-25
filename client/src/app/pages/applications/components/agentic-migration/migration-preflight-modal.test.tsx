@@ -379,11 +379,39 @@ describe("MigrationPreflightModal opened from a plan", () => {
     expect(screen.queryByText("Java EE to Quarkus")).not.toBeInTheDocument();
   });
 
-  it("describes a plan without a target profile by its name only", () => {
-    renderFromPlan({ plan: { id: "1", name: "Java EE to Quarkus" } });
+  it("describes a plan of several target profiles by its name, and shows each row's profile", () => {
+    renderFromPlan({
+      plan: { id: "1", name: "Java EE to Quarkus" },
+      migrations: {
+        ...planMigrations,
+        4: view({
+          migrationPaths: [
+            {
+              archetype: { id: 1, name: "Java EE Application" },
+              targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+              plan: { id: "1", name: "Java EE to Quarkus" },
+            },
+          ],
+        }),
+      },
+    });
     expect(
       screen.getByText("agentic.execution.preflightDescriptionPlan")
     ).toBeInTheDocument();
+    // The description names no target profile: the column says which one
+    // each application runs on, as text (no pick is needed).
+    expect(
+      screen.getAllByRole("columnheader").map((header) => header.textContent)
+    ).toEqual([
+      "",
+      "terms.application",
+      "agentic.execution.targetProfile",
+      "agentic.execution.readiness",
+    ]);
+    expect(rowOf("Account Ledger")).toHaveTextContent(
+      "OpenJDK 21 on OpenShift"
+    );
+    expect(within(rowOf("Account Ledger")).queryByRole("button")).toBeNull();
   });
 
   it("starts with every ready application selected and the others disabled", async () => {

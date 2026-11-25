@@ -52,8 +52,8 @@ const handlers: RestHandler[] = [
 
     const lastId = Math.max(...Object.keys(mockArchetypes).map((k) => +k));
     create.id = lastId + 1;
-    mockArchetypes[create.id] = create;
-    return res(ctx.status(201), ctx.json(create));
+    mockArchetypes[create.id] = withTargetProfileIds(create);
+    return res(ctx.status(201), ctx.json(mockArchetypes[create.id]));
   }),
 
   rest.put(hub`/archetypes/:id`, async (req, res, ctx) => {
@@ -70,7 +70,7 @@ const handlers: RestHandler[] = [
 
     const id_ = Array.isArray(id) ? id[0] : id;
     if (id_ in mockArchetypes) {
-      mockArchetypes[Number(id_)] = update;
+      mockArchetypes[Number(id_)] = withTargetProfileIds(update);
       return res(ctx.status(204));
     }
     return res(ctx.status(404));
@@ -127,7 +127,8 @@ export const mockArchetypes: Record<number, Archetype> = {
     name: "Java EE Application",
     description:
       "Enterprise Java applications using Java EE APIs and application server services.",
-    comments: "Primary archetype for the Java EE to Quarkus migration path.",
+    comments:
+      "Re-platform to Quarkus, or lift and shift to OpenShift on OpenJDK 21.",
     criteria: [tagData[1]],
     tags: [tagData[81]],
     stakeholders: [],
@@ -147,6 +148,15 @@ export const mockArchetypes: Record<number, Archetype> = {
         name: "Quarkus 3.x",
         generators: [{ id: 2, name: "OpenShift manifests" }],
         analysisProfile: { id: 1, name: "Java EE to Quarkus" },
+      },
+      {
+        id: 12,
+        name: "OpenJDK 21 on OpenShift",
+        generators: [
+          { id: 1, name: "Container build assets" },
+          { id: 2, name: "OpenShift manifests" },
+        ],
+        analysisProfile: { id: 3, name: "Java EE lift and shift" },
       },
     ],
     assessed: false,
@@ -185,7 +195,8 @@ export const mockArchetypes: Record<number, Archetype> = {
     name: "Legacy Java Application",
     description:
       "Java applications on older runtimes that require dependency and platform modernization.",
-    comments: "Supports Java 17 runtime modernization and containerization.",
+    comments:
+      "Modernize to Java 17, or containerize on the current Java 8 runtime.",
     criteria: [tagData[3]],
     tags: [tagData[82]],
     stakeholders: [],
@@ -203,6 +214,14 @@ export const mockArchetypes: Record<number, Archetype> = {
           { id: 2, name: "OpenShift manifests" },
         ],
         analysisProfile: { id: 5, name: "Legacy Java runtime modernization" },
+      },
+      {
+        id: 32,
+        name: "Java 8 on OpenShift",
+        generators: [
+          { id: 1, name: "Container build assets" },
+          { id: 2, name: "OpenShift manifests" },
+        ],
       },
     ],
     assessed: false,
@@ -263,5 +282,36 @@ export const mockArchetypes: Record<number, Archetype> = {
     assessed: false,
   },
 };
+
+/**
+ * The last target profile id handed out. It starts above every fixture
+ * profile and only grows, so a deleted profile's id never comes back: a new
+ * profile reusing it would inherit the deleted one's migration plan
+ * reference and skill attachments, which are keyed by target profile id.
+ */
+let lastTargetProfileId = Math.max(
+  0,
+  ...Object.values(mockArchetypes).flatMap((archetype) =>
+    (archetype.profiles ?? []).map((profile) => profile.id)
+  )
+);
+
+/**
+ * Gives every target profile without an id (the client sends a new one with
+ * id 0; the Hub assigns ids) a new id, and keeps the others, as the Hub does
+ * on an archetype create or update.
+ */
+const withTargetProfileIds = (archetype: Archetype): Archetype => ({
+  ...archetype,
+  ...(archetype.profiles != null
+    ? {
+        profiles: archetype.profiles.map((profile) =>
+          profile.id != null && profile.id !== 0
+            ? profile
+            : { ...profile, id: ++lastTargetProfileId }
+        ),
+      }
+    : {}),
+});
 
 export default handlers;

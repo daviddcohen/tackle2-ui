@@ -369,11 +369,6 @@ describe("observability mock", () => {
     updatePlan("5", {
       name: plan.name,
       description: plan.description,
-      migrationPath: plan.migrationPath && {
-        archetype: { id: plan.migrationPath.archetype.id },
-        targetProfiles: plan.migrationPath.targetProfiles,
-        isDefault: plan.migrationPath.isDefault,
-      },
       stages: plan.stages.map((stage) => ({ ...stage })),
       excludedSkills: [{ id: "8" }],
     });
@@ -381,7 +376,8 @@ describe("observability mock", () => {
       planRuns: [ref],
     } = startApplicationMigrations({
       applicationIds: [13],
-      planSelection: "recommended",
+      planSelection: "single",
+      planId: "5",
       targetBranch: "main",
     });
     const run = getPlanRun(ref.id);
@@ -443,7 +439,8 @@ describe("observability mock", () => {
         planRuns: [ref],
       } = startApplicationMigrations({
         applicationIds: [1],
-        planSelection: "recommended",
+        planSelection: "single",
+        planId: "1",
         targetBranch: "main",
       });
       const index = getPlanRun(ref.id).stageRuns.findIndex(
@@ -647,11 +644,6 @@ describe("observability mock: runs on several applications", () => {
     updatePlan("1", {
       name: plan.name,
       description: plan.description,
-      migrationPath: plan.migrationPath && {
-        archetype: { id: plan.migrationPath.archetype.id },
-        targetProfiles: plan.migrationPath.targetProfiles,
-        isDefault: plan.migrationPath.isDefault,
-      },
       stages: plan.stages.map((stage) => ({
         ...stage,
         requiresApproval: false,
@@ -787,11 +779,6 @@ describe("observability mock: runs on several applications", () => {
     updatePlan("1", {
       name: plan.name,
       description: plan.description,
-      migrationPath: plan.migrationPath && {
-        archetype: { id: plan.migrationPath.archetype.id },
-        targetProfiles: plan.migrationPath.targetProfiles,
-        isDefault: plan.migrationPath.isDefault,
-      },
       stages: plan.stages.map((stage, index) => ({
         ...stage,
         name: index < 2 ? `${long} ${index + 1}` : stage.name,

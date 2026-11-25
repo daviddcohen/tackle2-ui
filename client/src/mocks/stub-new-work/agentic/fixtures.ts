@@ -12,6 +12,7 @@ import {
   Agent,
   AgentTestRun,
   AvailableModel,
+  EntityId,
   ExecutionPolicy,
   MigrationPlan,
   ModelProjection,
@@ -329,7 +330,15 @@ export const mockSkills: Skill[] = [
       { scope: "agent", resource: { id: "6", name: "Deployment Agent" } },
       {
         scope: "targetProfile",
+        resource: { id: 12, name: "OpenJDK 21 on OpenShift" },
+      },
+      {
+        scope: "targetProfile",
         resource: { id: 31, name: "Java 17 on OpenShift" },
+      },
+      {
+        scope: "targetProfile",
+        resource: { id: 32, name: "Java 8 on OpenShift" },
       },
       {
         scope: "targetProfile",
@@ -732,11 +741,6 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: "Java EE to Quarkus",
     description:
       "End-to-end migration plan for Java EE applications targeting Quarkus 3.x. Covers planning, code transformation, and build validation.",
-    migrationPath: {
-      archetype: { id: 1, name: "Java EE Application" },
-      targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
-      isDefault: true,
-    },
     stages: [
       {
         id: "1",
@@ -774,11 +778,6 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: "Spring Boot to Quarkus",
     description:
       "Migration plan for Spring Boot applications targeting Quarkus 3.x, including framework conversion and validation.",
-    migrationPath: {
-      archetype: { id: 2, name: "Spring Boot Application" },
-      targetProfiles: [{ id: 21, name: "Quarkus 3.x" }],
-      isDefault: true,
-    },
     stages: [
       {
         id: "4",
@@ -813,11 +812,9 @@ export const mockMigrationPlans: MigrationPlan[] = [
   },
   {
     id: "3",
-    name: "Java EE lift and shift",
+    name: "Java lift and shift",
     description:
-      "Containerizes Java EE applications with minimal code changes and deploys them to OpenShift.",
-    // No migration path: an alternative a user picks with "Use one
-    // migration plan for all applications".
+      "Containerizes Java applications with minimal code changes and deploys them to OpenShift.",
     stages: [
       {
         id: "7",
@@ -833,7 +830,7 @@ export const mockMigrationPlans: MigrationPlan[] = [
         name: "Containerize",
         agent: { id: "5", name: "Containerization Agent" },
         instructions:
-          "Create hardened container build assets using the approved Java application server base image.",
+          "Create hardened container build assets using the approved Java runtime base image.",
         requiresApproval: false,
         order: 2,
       },
@@ -864,8 +861,6 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: "Spring Boot 3 modernization",
     description:
       "Upgrades Spring Boot services to Spring Boot 3 and prepares them for OpenShift deployment.",
-    // No migration path: an alternative a user picks with "Use one
-    // migration plan for all applications".
     stages: [
       {
         id: "11",
@@ -903,11 +898,6 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: "Legacy Java runtime modernization",
     description:
       "Upgrades legacy Java applications to Java 17, containerizes them, and prepares OpenShift deployment resources.",
-    migrationPath: {
-      archetype: { id: 3, name: "Legacy Java Application" },
-      targetProfiles: [{ id: 31, name: "Java 17 on OpenShift" }],
-      isDefault: true,
-    },
     stages: [
       {
         id: "14",
@@ -954,11 +944,6 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: ".NET Framework to .NET 8",
     description:
       "Migrates .NET Framework applications to .NET 8 and generates OpenShift deployment configuration.",
-    migrationPath: {
-      archetype: { id: 4, name: ".NET Framework Application" },
-      targetProfiles: [{ id: 41, name: ".NET 8 on OpenShift" }],
-      isDefault: true,
-    },
     stages: [
       {
         id: "18",
@@ -1005,8 +990,6 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: ".NET lift and shift",
     description:
       "Containerizes compatible .NET Framework workloads with minimal application changes.",
-    // No migration path: an alternative a user picks with "Use one
-    // migration plan for all applications".
     stages: [
       {
         id: "22",
@@ -1053,11 +1036,6 @@ export const mockMigrationPlans: MigrationPlan[] = [
     name: "Node.js runtime modernization",
     description:
       "Upgrades Node.js services to Node.js 22 and prepares secure OpenShift deployment resources.",
-    migrationPath: {
-      archetype: { id: 5, name: "Node.js Service" },
-      targetProfiles: [{ id: 51, name: "Node.js 22 on OpenShift" }],
-      isDefault: true,
-    },
     stages: [
       {
         id: "26",
@@ -1101,6 +1079,27 @@ export const mockMigrationPlans: MigrationPlan[] = [
   },
 ];
 
+/**
+ * The migration plan each target profile uses: target profile id (Hub) ->
+ * plan id. The reference lives on the target profile, as a Hub
+ * `TargetProfile.migrationPlan` would; a plan's `migrationPaths` are derived
+ * from it. Java lift and shift is shared across archetypes: OpenJDK 21 on
+ * OpenShift (Java EE Application) and Java 8 on OpenShift (Legacy Java
+ * Application) use it, so applications of those archetypes have two
+ * runnable paths and a run picks one. Plans no profile uses (Spring Boot 3
+ * modernization, .NET lift and shift) are the alternatives a user picks
+ * with "Use one migration plan for all applications".
+ */
+export const mockTargetProfilePlans: Record<number, EntityId> = {
+  11: "1",
+  12: "3",
+  21: "2",
+  31: "5",
+  32: "3",
+  41: "6",
+  51: "8",
+};
+
 export const mockSkillCollections: SkillCollection[] = [
   {
     id: "1",
@@ -1141,20 +1140,14 @@ export const mockSkillCollections: SkillCollection[] = [
 ];
 
 /**
- * Seeded runs that used "Use one migration plan for all applications" on
- * purpose: their applications resolve to another plan. Run #4 runs Java EE
- * lift and shift (no migration path) on Partner Portal, whose own plan is
- * Java EE to Quarkus.
- */
-export const SINGLE_PLAN_RUN_IDS: ReadonlySet<string> = new Set(["4"]);
-
-/**
  * Plan runs of the "configured" world. `applications` is that world's
  * membership; the execution scenarios (queued, running, ...) re-seed the same
  * runs with their own membership and phases (see `execution.ts`). Every
- * application of a run resolves to that run's plan (its archetype and target
- * profile), except in Run #4 (`SINGLE_PLAN_RUN_IDS`). The skills snapshot of
- * each run is computed by the skill resolver when the world is seeded.
+ * application of a run has exactly one target profile that uses that run's
+ * plan (Partner Portal in Run #4: OpenJDK 21 on OpenShift, though Quarkus
+ * 3.x uses Java EE to Quarkus). The skills snapshot of each run is computed
+ * by the skill resolver when the world is seeded, each application on that
+ * target profile.
  */
 export const mockPlanRuns: PlanRunTemplate[] = [
   {
@@ -1375,9 +1368,9 @@ export const mockPlanRuns: PlanRunTemplate[] = [
   },
   {
     id: "4",
-    name: "Run #4: Java EE lift and shift",
+    name: "Run #4: Java lift and shift",
     planId: "3",
-    planName: "Java EE lift and shift",
+    planName: "Java lift and shift",
     applications: [applicationRef(7)],
     status: "Running",
     targetBranch: "konveyor/lift-shift",

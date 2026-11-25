@@ -56,12 +56,9 @@ const everyStageOf = async (plan: MigrationPlan) =>
   (
     await resolvePlanSkills({
       stages: plan.stages.map(({ agent }) => ({ agent: { id: agent.id } })),
-      migrationPath: plan.migrationPath && {
-        archetype: { id: plan.migrationPath.archetype.id },
-        targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
-          id,
-        })),
-      },
+      targetProfiles: plan.migrationPaths?.map(({ targetProfile }) => ({
+        id: targetProfile.id,
+      })),
     })
   ).everyStage.flatMap((group) => group.skills);
 
@@ -122,7 +119,9 @@ describe("PUT /archetypes/:id/skills", () => {
 
   it("feeds the plan's server-derived skills for every stage", async () => {
     const plan = await getMigrationPlanById("1");
-    expect(plan.migrationPath?.archetype.id).toBe(1);
+    expect(plan.migrationPaths?.map(({ archetype }) => archetype.id)).toEqual([
+      1,
+    ]);
     const before = await everyStageOf(plan);
     const added = (await getSkills()).find(
       (skill) => !before.some((entry) => entry.skill.id === skill.id)

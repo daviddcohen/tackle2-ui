@@ -42,14 +42,6 @@ const agents = [
   },
 ] as unknown as Agent[];
 
-const archetypes = [
-  {
-    id: 1,
-    name: "Java EE Application",
-    profiles: [{ id: 11, name: "Quarkus 3.x" }],
-  },
-];
-
 const proposer = { id: "1", name: "Migration Proposal Agent" };
 const coder = { id: "2", name: "Code Migrator" };
 const javaEE = { id: 1, name: "Java EE Application" };
@@ -67,13 +59,14 @@ const entry = (
 
 /**
  * The mock resolution by stage: each stage gets its agent's skills (Code
- * Migrator also its collection's); every stage gets the archetype's EJB
- * skill and the profile's Quarkus skill. EJB also sits on Code Migrator, so
- * it shows in both groups.
+ * Migrator also its collection's); with target profile 11 (Quarkus 3.x, of
+ * Java EE Application), every stage gets the archetype's EJB skill and the
+ * profile's Quarkus skill. EJB also sits on Code Migrator, so it shows in
+ * both groups. Without target profiles every stage gets nothing.
  */
 const resolve = ({
   stages,
-  migrationPath,
+  targetProfiles = [],
 }: ResolvePlanSkillsRequest): SkillsByStage => ({
   stages: stages.map((stage, index) => ({
     order: index + 1,
@@ -101,25 +94,20 @@ const resolve = ({
   })),
   everyStage: [
     {
-      skills:
-        migrationPath == null
-          ? []
-          : [
-              entry("9", "EJB to CDI conversion patterns", [
-                { kind: "archetype", archetype: javaEE },
-              ]),
-              ...(migrationPath.targetProfiles.some(({ id }) => id === 11)
-                ? [
-                    entry("3", "Quarkus best practices", [
-                      {
-                        kind: "targetProfile",
-                        targetProfile: { id: 11, name: "Quarkus 3.x" },
-                        archetype: javaEE,
-                      },
-                    ]),
-                  ]
-                : []),
-            ],
+      skills: targetProfiles.some(({ id }) => id === 11)
+        ? [
+            entry("9", "EJB to CDI conversion patterns", [
+              { kind: "archetype", archetype: javaEE },
+            ]),
+            entry("3", "Quarkus best practices", [
+              {
+                kind: "targetProfile",
+                targetProfile: { id: 11, name: "Quarkus 3.x" },
+                archetype: javaEE,
+              },
+            ]),
+          ]
+        : [],
     },
   ],
 });
@@ -134,11 +122,12 @@ const plan = {
   id: "2",
   name: "Spring Boot to Quarkus",
   description: "",
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
-    isDefault: true,
-  },
+  migrationPaths: [
+    {
+      archetype: { id: 1, name: "Java EE Application" },
+      targetProfile: { id: 11, name: "Quarkus 3.x" },
+    },
+  ],
   stages: [
     {
       id: "5",
@@ -155,8 +144,8 @@ const withExclusions = (
   excludedSkills: { id: string; name: string }[]
 ): MigrationPlan => ({ ...plan, excludedSkills });
 
-// Walking the create flow through four steps with userEvent is slow on a busy
-// machine.
+// Walking the create flow through three steps with userEvent is slow on a
+// busy machine.
 jest.setTimeout(20000);
 
 // A failure that is final (4xx, not retried) but not a missing endpoint
@@ -186,9 +175,6 @@ describe("PlanWizard Skills step", () => {
       rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
         res(ctx.json([plan]))
       ),
-      rest.get("/hub/archetypes", (_req, res, ctx) =>
-        res(ctx.json(archetypes))
-      ),
       rest.get(AGENTIC_ENDPOINTS.models, (_req, res, ctx) => res(ctx.json([]))),
       rest.post(AGENTIC_ENDPOINTS.planSkillsResolve, async (req, res, ctx) => {
         const body: ResolvePlanSkillsRequest = await req.json();
@@ -207,9 +193,13 @@ describe("PlanWizard Skills step", () => {
   });
 
   // The plan page's Every stage note sits in the intro, after its first
-  // sentence.
-  const intro =
-    "Each stage gets its agent's skills and the skills in Every stage. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its archetype's skills instead, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can.";
+  // sentence: for a plan target profiles use, and for one none uses yet.
+  const intro = (everyStage: string) =>
+    `Each stage gets its agent's skills and the skills in Every stage. ${everyStage} Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can.`;
+  const usedNote =
+    "Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills.";
+  const unusedNote =
+    "No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetype's skills and its own skills, and no target profile skills.";
   const user = () => userEvent.setup();
   const nextButton = () => screen.getByRole("button", { name: "Next" });
   const stepButton = (name: string) => screen.getByRole("button", { name });
@@ -234,14 +224,6 @@ describe("PlanWizard Skills step", () => {
     await actor.type(screen.getByRole("textbox", { name: /^Name/ }), "New");
     await waitFor(() => expect(nextButton()).toBeEnabled());
     await actor.click(nextButton());
-    await actor.click(screen.getByRole("button", { name: /^Archetype/ }));
-    await actor.click(
-      await screen.findByRole("option", { name: "Java EE Application" })
-    );
-    await actor.click(screen.getByRole("combobox"));
-    await actor.click(await screen.findByText("Quarkus 3.x"));
-    await waitFor(() => expect(nextButton()).toBeEnabled());
-    await actor.click(nextButton());
     await actor.type(
       screen.getByRole("textbox", { name: "Stage name" }),
       "Migrate"
@@ -254,7 +236,16 @@ describe("PlanWizard Skills step", () => {
     await actor.click(nextButton());
   };
 
-  it("shows Skills by stage for the draft, with an Include checkbox per row", async () => {
+  /** Edit mode at the Skills step: `plan` is used by Quarkus 3.x. */
+  const editToSkills = async (
+    actor: ReturnType<typeof userEvent.setup>,
+    edited: MigrationPlan = plan
+  ) => {
+    render(<PlanWizard isOpen plan={edited} onClose={jest.fn()} />);
+    await actor.click(stepButton("Skills"));
+  };
+
+  it("previews a new plan without archetype or target profile skills", async () => {
     const actor = user();
     await createToSkills(actor);
 
@@ -262,7 +253,9 @@ describe("PlanWizard Skills step", () => {
       "aria-live",
       "polite"
     );
-    expect(screen.getByText(intro)).toBeInTheDocument();
+    // No target profile uses a new plan yet: the note says where those
+    // skills come from.
+    expect(screen.getByText(intro(unusedNote))).toBeInTheDocument();
     const table = skillsTable();
     // Group titles at h2 under the wizard's h1, named after the form.
     expect(
@@ -270,32 +263,11 @@ describe("PlanWizard Skills step", () => {
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent)
     ).toEqual(["Stage 1: Migrate", "Every stage"]);
-    // The table's Every stage title has only the subtitle every context
-    // shows; the note on application skills is in the intro above.
-    expect(
-      within(table).getByText(
-        "Archetype, target profile and application skills"
-      )
-    ).toBeVisible();
-    expect(
-      within(table).queryByText(/skills of this plan's archetype/)
-    ).toBeNull();
-    const rows = within(table).getAllByRole("row", {
-      name: /EJB to CDI conversion patterns/,
-    });
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Agent: Code Migrator"),
-      expect.stringContaining("Archetype: Java EE Application"),
-    ]);
     expect(
       within(table).getByRole("row", { name: /Jakarta EE namespace migration/ })
     ).toHaveTextContent("Collection: Java modernization foundation");
-    // The draft's own archetype: no suffix on its target profile.
-    const quarkus = within(table).getByRole("row", {
-      name: /Quarkus best practices/,
-    });
-    expect(quarkus).toHaveTextContent("Target profile: Quarkus 3.x");
-    expect(quarkus).not.toHaveTextContent("(Java EE Application)");
+    expect(within(table).getAllByText("No skills")).toHaveLength(1);
+    expect(within(table).queryByText(/Quarkus best practices/)).toBeNull();
     // Plain names in the wizard: a link would leave the draft. No marker.
     expect(within(table).queryByRole("link")).toBeNull();
     expect(within(table).queryByText("Excluded")).toBeNull();
@@ -303,16 +275,49 @@ describe("PlanWizard Skills step", () => {
     expect(
       within(table).getByRole("heading", { name: "Stage 1: Migrate" })
     ).toHaveAttribute("id", "simple-node300");
-    // The request holds what decides the skills, not the names or exclusions.
+    // The request holds what decides the skills, not the names or
+    // exclusions; a new plan has no target profiles.
     expect(resolveRequests.at(-1)).toEqual({
       stages: [{ agent: { id: "2" } }],
-      migrationPath: { archetype: { id: 1 }, targetProfiles: [{ id: 11 }] },
+      targetProfiles: [],
+    });
+  });
+
+  it("previews an edit with the target profiles that use the plan", async () => {
+    const actor = user();
+    await editToSkills(actor);
+    await screen.findByText("No skills excluded.");
+
+    expect(screen.getByText(intro(usedNote))).toBeInTheDocument();
+    const table = skillsTable();
+    // The table's Every stage title has only the subtitle every context
+    // shows; the note on application skills is in the intro above.
+    expect(
+      within(table).getByText(
+        "Archetype, target profile and application skills"
+      )
+    ).toBeVisible();
+    const rows = within(table).getAllByRole("row", {
+      name: /EJB to CDI conversion patterns/,
+    });
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Agent: Code Migrator"),
+      expect.stringContaining("Archetype: Java EE Application"),
+    ]);
+    // The plan's target profiles can belong to several archetypes: each
+    // names its archetype.
+    expect(
+      within(table).getByRole("row", { name: /Quarkus best practices/ })
+    ).toHaveTextContent("Target profile: Quarkus 3.x (Java EE Application)");
+    expect(resolveRequests.at(-1)).toEqual({
+      stages: [{ agent: { id: "2" } }],
+      targetProfiles: [{ id: 11 }],
     });
   });
 
   it("excludes a skill from every stage that has it, and names them in the live line", async () => {
     const actor = user();
-    await createToSkills(actor);
+    await editToSkills(actor);
     await screen.findByText("No skills excluded.");
     const requestsBefore = resolveRequests.length;
 
@@ -396,21 +401,21 @@ describe("PlanWizard Skills step", () => {
     expect(within(reviewFact()).queryByText(/\d+ skills?/)).toBeNull();
 
     await actor.click(stepButton("Skills"));
-    await actor.click(includeBoxes("Quarkus best practices")[0]);
     await actor.click(includeBoxes("Jakarta EE namespace migration")[0]);
+    await actor.click(includeBoxes("EJB to CDI conversion patterns")[0]);
     await actor.click(nextButton());
     expect(
       within(reviewFact())
         .getAllByText(/\(/)
         .map((line) => line.textContent)
     ).toEqual([
+      "EJB to CDI conversion patterns (stage 1)",
       "Jakarta EE namespace migration (stage 1)",
-      "Quarkus best practices (every stage)",
     ]);
 
     await actor.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(creates).toHaveLength(1));
-    expect(creates[0].excludedSkills).toEqual([{ id: "3" }, { id: "1" }]);
+    expect(creates[0].excludedSkills).toEqual([{ id: "1" }, { id: "9" }]);
   });
 
   it("creates the plan without an exclusion list when nothing is excluded", async () => {
@@ -575,7 +580,7 @@ describe("PlanWizard Skills step", () => {
       screen.getByText("Loading skills. You can continue without waiting.")
     ).toBeInTheDocument();
     // The intro sets up the rows that are coming.
-    expect(screen.getByText(intro)).toBeInTheDocument();
+    expect(screen.getByText(intro(usedNote))).toBeInTheDocument();
     await waitFor(() => expect(nextButton()).toBeEnabled());
     await actor.click(nextButton());
     expect(
@@ -614,7 +619,7 @@ describe("PlanWizard Skills step", () => {
     ).toBeInTheDocument();
     expect(nextButton()).toBeEnabled();
     // The intro points at rows that are not there.
-    expect(screen.queryByText(intro)).toBeNull();
+    expect(screen.queryByText(intro(usedNote))).toBeNull();
 
     await actor.click(nextButton());
     expect(within(reviewFact()).getByText("Unavailable")).toBeInTheDocument();
@@ -685,7 +690,7 @@ describe("PlanWizard Skills step", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Skills could not be loaded.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    expect(screen.queryByText(intro)).toBeNull();
+    expect(screen.queryByText(intro(unusedNote))).toBeNull();
     expect(nextButton()).toBeEnabled();
     await actor.click(nextButton());
     expect(within(reviewFact()).getByText("Unavailable")).toBeInTheDocument();
@@ -885,22 +890,12 @@ describe("PlanWizard Skills step", () => {
     }
   });
 
-  it("says what every stage gets for a draft without a migration path", async () => {
+  it("says what every stage gets for an edit of a plan no target profile uses", async () => {
     const actor = user();
-    render(
-      <PlanWizard
-        isOpen
-        plan={{ ...plan, migrationPath: undefined }}
-        onClose={jest.fn()}
-      />
-    );
-    await actor.click(stepButton("Skills"));
+    await editToSkills(actor, { ...plan, migrationPaths: [] });
     await screen.findByRole("grid", { name: "Skills by stage" });
-    expect(
-      screen.getByText(
-        "Each stage gets its agent's skills and the skills in Every stage. This plan has no archetype or target profile. When it runs, each application gets its archetype's skills and its own skills in every stage, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can."
-      )
-    ).toBeVisible();
+    expect(screen.getByText(intro(unusedNote))).toBeVisible();
+    expect(resolveRequests.at(-1)?.targetProfiles).toEqual([]);
   });
 
   it("says No skills in each group when the draft gets none", async () => {

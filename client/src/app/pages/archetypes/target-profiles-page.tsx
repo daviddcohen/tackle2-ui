@@ -220,7 +220,7 @@ const TargetProfilesPage: React.FC = () => {
   const numericArchetypeId = Number(archetypeId);
   const {
     getAssignedPlan,
-    eligiblePlans: eligibleMigrationPlans,
+    migrationPlans,
     isLoading: isPlansLoading,
     isError: isPlansError,
   } = useTargetProfilePlans(
@@ -240,6 +240,26 @@ const TargetProfilesPage: React.FC = () => {
           association.resource.id === profile.id
       )
     );
+  // The delete confirm: the skills consequence and the plan consequence,
+  // each only when it applies.
+  const deleteMessage = (profile: TargetProfile) => {
+    const skillCount = isAgenticEnabled ? profileSkills(profile).length : 0;
+    const plan = isAgenticEnabled ? getAssignedPlan(profile.id) : undefined;
+    const values = {
+      profile: profile.name,
+      count: skillCount,
+      archetype: archetype?.name,
+      plan: plan?.name,
+    };
+    if (plan != null && archetype != null) {
+      return skillCount > 0
+        ? t("agentic.archetype.deleteBodyWithSkillsAndPlan", values)
+        : t("agentic.archetype.deleteBodyWithPlan", values);
+    }
+    return skillCount > 0
+      ? t("agentic.archetype.deleteBodyWithSkills", values)
+      : t("agentic.archetype.deleteBody", values);
+  };
   const onDeleteProfile = (profile: TargetProfile | null) => {
     if (!archetype || !profile) return;
     deleteTargetProfile(archetype, profile);
@@ -415,18 +435,14 @@ const TargetProfilesPage: React.FC = () => {
                       ]
                     : []),
                 ];
-                // An assigned plan blocks Delete; without the plans query
-                // that cannot be checked, and without the skills query the
-                // confirm could not say which skills stop applying.
-                const deleteBlocker = !isAgenticEnabled
-                  ? undefined
-                  : isPlansError || isSkillsError
+                // Without the plans or skills query the confirm could not
+                // say which plan or skills stop applying. A plan does not
+                // block Delete: the reference lives on the profile, so it
+                // goes with it (the confirm says so).
+                const deleteBlocker =
+                  isAgenticEnabled && (isPlansError || isSkillsError)
                     ? t("agentic.common.usageUnchecked")
-                    : assignedPlan
-                      ? t("agentic.archetype.deleteBlocked", {
-                          plan: assignedPlan.name,
-                        })
-                      : undefined;
+                    : undefined;
                 const rowActions: IAction[] = [
                   ...editActions,
                   ...(canWriteProfiles
@@ -542,7 +558,7 @@ const TargetProfilesPage: React.FC = () => {
               archetype={archetype}
               profile={rowModal.profile}
               assignedPlan={getAssignedPlan(rowModal.profile.id)}
-              eligiblePlans={eligibleMigrationPlans}
+              plans={migrationPlans}
               isPlansError={isPlansError}
               linkTo={(pathname) => to(pathname)}
               onClose={closeRowModal}
@@ -560,18 +576,7 @@ const TargetProfilesPage: React.FC = () => {
           <ConfirmDialog
             isOpen={!!profileToDelete}
             title={t("agentic.archetype.deleteTitle")}
-            message={
-              profileToDelete &&
-              // The skills consequence only when it applies.
-              (isAgenticEnabled && profileSkills(profileToDelete).length > 0
-                ? t("agentic.archetype.deleteBodyWithSkills", {
-                    profile: profileToDelete.name,
-                    count: profileSkills(profileToDelete).length,
-                  })
-                : t("agentic.archetype.deleteBody", {
-                    profile: profileToDelete.name,
-                  }))
-            }
+            message={profileToDelete && deleteMessage(profileToDelete)}
             confirmBtnLabel={t("actions.delete")}
             confirmBtnVariant={ButtonVariant.danger}
             cancelBtnLabel={t("actions.cancel")}

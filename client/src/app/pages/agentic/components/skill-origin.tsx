@@ -15,9 +15,11 @@ import {
 /** What the page already says, so the From values need not repeat it. */
 export interface SkillOriginOptions {
   /**
-   * The archetype in context (the plan's, the application's). A target
-   * profile of another archetype is named with its archetype ("Quarkus 3.x
-   * (Java EE Application)"); without it the archetype always shows.
+   * The archetype in context: on an application's page, the archetype of its
+   * default migration path. A target profile of another archetype is named
+   * with its archetype ("Quarkus 3.x (Java EE Application)"); without it the
+   * archetype always shows. Plan and run pages pass none: a plan's target
+   * profiles can belong to several archetypes.
    */
   archetypeId?: number;
   /** The application whose page this is: its origin reads "This application". */

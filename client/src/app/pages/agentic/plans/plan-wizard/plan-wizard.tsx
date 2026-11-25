@@ -17,12 +17,7 @@ import {
   FormHelperText,
   HelperText,
   HelperTextItem,
-  MenuToggle,
   Modal,
-  Select,
-  SelectList,
-  SelectOption,
-  Skeleton,
   Stack,
   StackItem,
   TextArea,
@@ -35,6 +30,7 @@ import {
 import { PlusCircleIcon } from "@patternfly/react-icons";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
+import { DevPaths } from "@app/Paths";
 import {
   EntityId,
   EntityRef,
@@ -43,10 +39,8 @@ import {
   ResolvePlanSkillsRequest,
 } from "@app/agentic";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
-import { MultiSelect } from "@app/components/FilterToolbar/components/MultiSelect";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
-import { targetProfilesPath } from "@app/pages/agentic/entity-paths";
 import {
   planSkillsState,
   useCreateMigrationPlanMutation,
@@ -56,7 +50,6 @@ import {
   useResolvePlanSkills,
   useUpdateMigrationPlanMutation,
 } from "@app/queries/agentic";
-import { useFetchArchetypes } from "@app/queries/archetypes";
 import { getAxiosErrorMessage } from "@app/utils/utils";
 
 import { DetailSection, DetailSections } from "../../components/detail-section";
@@ -79,10 +72,8 @@ interface PlanWizardProps {
 interface PlanFormValues {
   name: string;
   description: string;
-  archetypeId: number | null;
-  targetProfileIds: number[];
   stages: StageFormData[];
-  /** Skills excluded from every stage; kept when the stages or path change. */
+  /** Skills excluded from every stage; kept when the stages change. */
   excludedSkillIds: EntityId[];
 }
 
@@ -93,13 +84,9 @@ const DESCRIPTION_MAX_LENGTH = 500;
 const MODAL_ID = "plan-wizard";
 
 const DETAILS_STEP_ID = "step-plan-details";
-const PATH_STEP_ID = "step-migration-path";
 const STAGES_STEP_ID = "step-stages";
 const SKILLS_STEP_ID = "step-skills";
-type EditableStepId =
-  | typeof DETAILS_STEP_ID
-  | typeof PATH_STEP_ID
-  | typeof STAGES_STEP_ID;
+type EditableStepId = typeof DETAILS_STEP_ID | typeof STAGES_STEP_ID;
 
 /** The first wizard step that holds an invalid field, if any. */
 const firstInvalidStep = (
@@ -107,9 +94,6 @@ const firstInvalidStep = (
 ): EditableStepId | undefined => {
   if (errors.name != null || errors.description != null) {
     return DETAILS_STEP_ID;
-  }
-  if (errors.archetypeId != null || errors.targetProfileIds != null) {
-    return PATH_STEP_ID;
   }
   return errors.stages != null ? STAGES_STEP_ID : undefined;
 };
@@ -139,16 +123,20 @@ const InvalidStepAlert: React.FC<{
   );
 };
 
-/** "View target profiles" in the create toast: a new plan is not assigned yet. */
-const TargetProfilesToastLink: React.FC<{ archetypeId: number }> = ({
-  archetypeId,
-}) => {
+/**
+ * The create toast's next step: a new plan is used by no target profile, and
+ * plans are assigned on an archetype's target profiles page.
+ */
+const AssignPlanToastMessage: React.FC = () => {
   const { t } = useTranslation();
-  const link = useLinkComponent(targetProfilesPath(archetypeId));
+  const link = useLinkComponent(DevPaths.archetypes);
   return (
-    <Button variant="link" isInline component={link}>
-      {t("agentic.plan.viewTargetProfiles")}
-    </Button>
+    <>
+      {t("agentic.plan.createdAssignHint")}{" "}
+      <Button variant="link" isInline component={link}>
+        {t("agentic.execution.goToArchetypes")}
+      </Button>
+    </>
   );
 };
 
@@ -176,8 +164,8 @@ const helper = (
 );
 
 /**
- * Create or edit a migration plan in five steps:
- * Plan details, Migration path, Stages, Skills, Review. Next
+ * Create or edit a migration plan in four steps:
+ * Plan details, Stages, Skills, Review. Next
  * stays disabled until the step is valid, and every control that blocks it
  * says why (the Skills step never blocks it). Creating visits the steps in
  * order; editing can open any step.
@@ -204,18 +192,11 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     isLoading: isLoadingPlans,
     fetchError: plansFetchError,
   } = useFetchMigrationPlans();
-  const {
-    archetypes,
-    isFetching: isLoadingArchetypes,
-    error: archetypesFetchError,
-  } = useFetchArchetypes(false);
   const loadedAgents =
     isLoadingAgents || agentsFetchError != null ? undefined : agents;
   const loadedModels =
     isLoadingModels || modelsFetchError != null ? undefined : gateways;
   const arePlansLoaded = !isLoadingPlans && plansFetchError == null;
-  const areArchetypesLoaded =
-    !isLoadingArchetypes && archetypesFetchError == null;
 
   const isDuplicateName = React.useCallback(
     (value: string | undefined) =>
@@ -246,8 +227,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
             DESCRIPTION_MAX_LENGTH,
             t("agentic.plan.validation.descriptionMaximum")
           ),
-        archetypeId: number().nullable().required(),
-        targetProfileIds: array().of(number().required()).min(1).required(),
         stages: array()
           .of(
             object({
@@ -277,8 +256,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     defaultValues: {
       name: "",
       description: "",
-      archetypeId: null,
-      targetProfileIds: [],
       stages: [emptyStage(1)],
       excludedSkillIds: [],
     },
@@ -288,29 +265,26 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
 
   const name = useWatch({ control, name: "name" });
   const description = useWatch({ control, name: "description" });
-  const archetypeId = useWatch({ control, name: "archetypeId" });
-  const targetProfileIds = useWatch({ control, name: "targetProfileIds" });
   const stages = useWatch({ control, name: "stages" });
   const excludedSkillIds = useWatch({ control, name: "excludedSkillIds" });
 
   // The draft's skills come from the server. The request holds only what
   // decides the skills, not the exclusions: the checkboxes read the form, so
-  // clearing one refetches nothing.
+  // clearing one refetches nothing. Archetype and target profile skills come
+  // from the target profiles that use the plan: an edit previews with them,
+  // a new plan has none.
   const skillsRequest = React.useMemo<ResolvePlanSkillsRequest>(
     () => ({
       stages: stages.flatMap((stage) =>
         stage.agentId != null ? [{ agent: { id: stage.agentId } }] : []
       ),
-      migrationPath:
-        archetypeId != null
-          ? {
-              archetype: { id: archetypeId },
-              targetProfiles: targetProfileIds.map((id) => ({ id })),
-            }
-          : undefined,
+      targetProfiles: (plan?.migrationPaths ?? []).map(({ targetProfile }) => ({
+        id: targetProfile.id,
+      })),
     }),
-    [stages, archetypeId, targetProfileIds]
+    [stages, plan]
   );
+  const hasTargetProfiles = (plan?.migrationPaths ?? []).length > 0;
   const skillsQuery = useResolvePlanSkills(skillsRequest, { enabled: isOpen });
   // The request's stages by position, numbered and named as in the form.
   const stageTitles = React.useMemo<DraftStageTitle[]>(
@@ -331,8 +305,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
       { shouldDirty: true }
     );
 
-  const [isArchetypeSelectOpen, setIsArchetypeSelectOpen] =
-    React.useState(false);
   // Step that blocked the last submit; cleared when the wizard reopens.
   const [invalidStepId, setInvalidStepId] = React.useState<EditableStepId>();
   // Stage cards that are open: new stages open, existing ones start closed (4.5).
@@ -358,9 +330,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
       reset({
         name: plan.name,
         description: plan.description,
-        archetypeId: plan.migrationPath?.archetype.id ?? null,
-        targetProfileIds:
-          plan.migrationPath?.targetProfiles.map((profile) => profile.id) ?? [],
         stages: [...plan.stages]
           .sort((a, b) => a.order - b.order)
           .map((s) => ({
@@ -380,8 +349,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
       reset({
         name: "",
         description: "",
-        archetypeId: null,
-        targetProfileIds: [],
         stages: [first],
         excludedSkillIds: [],
       });
@@ -392,11 +359,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
   const onSuccess = () => {
     pushNotification({
       title: plan ? t("agentic.plan.updated") : t("agentic.plan.created"),
-      // The form still holds the submitted values when the save answers.
-      message:
-        !plan && archetypeId != null ? (
-          <TargetProfilesToastLink archetypeId={archetypeId} />
-        ) : undefined,
+      message: plan ? undefined : <AssignPlanToastMessage />,
       variant: "success",
     });
     onClose();
@@ -420,8 +383,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     const {
       name: submittedName,
       description: submittedDescription,
-      archetypeId: archetype,
-      targetProfileIds: submittedTargetProfileIds,
       stages: submittedStages,
       excludedSkillIds: submittedExcludedSkillIds,
     } = formValues;
@@ -448,16 +409,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     const payload: MigrationPlanRequest = {
       name: submittedName.trim(),
       description: submittedDescription.trim(),
-      // Built from the form's ids, not the loaded archetypes, so a slow or
-      // failed archetypes query cannot drop the path; the server validates them.
-      migrationPath:
-        archetype != null && submittedTargetProfileIds.length > 0
-          ? {
-              archetype: { id: archetype },
-              targetProfiles: submittedTargetProfileIds.map((id) => ({ id })),
-              isDefault: plan?.migrationPath?.isDefault ?? false,
-            }
-          : undefined,
       stages: submittedStages
         .filter((s) => s.agentId != null)
         .map((s) => ({
@@ -515,33 +466,16 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
     // The duplicate check needs every plan.
     arePlansLoaded &&
     !isDuplicateName(name);
-  // A saved path or stage agent is only confirmed once its options load.
-  const isPathValid =
-    areArchetypesLoaded && archetypeId != null && targetProfileIds.length > 0;
+  // A saved stage agent is only confirmed once its options load.
   const isStagesValid =
     loadedAgents != null &&
     (stages || []).length > 0 &&
     stages.every((s) => s.name.trim() && s.agentId != null);
   // Editing can open Review directly: it cannot state names it has not loaded.
-  const areOptionsLoaded =
-    arePlansLoaded && areArchetypesLoaded && loadedAgents != null;
-
-  const selectedArchetype = archetypes.find((a) => a.id === archetypeId);
-  const targetProfiles = selectedArchetype?.profiles ?? [];
-  const selectedTargetProfiles = targetProfiles.filter((profile) =>
-    targetProfileIds.includes(profile.id)
-  );
-  const isPathAssigned = plan?.migrationPath?.isDefault === true;
-  // Review names come from the archetypes query.
-  const archetypesState = isLoadingArchetypes ? (
-    <Skeleton width="8rem" screenreaderText={t("terms.loading")} />
-  ) : (
-    <EmptyTextMessage message={t("agentic.common.unavailable")} />
-  );
+  const areOptionsLoaded = arePlansLoaded && loadedAgents != null;
 
   const stepNames: Record<EditableStepId, string> = {
     [DETAILS_STEP_ID]: t("agentic.plan.detailsStep"),
-    [PATH_STEP_ID]: t("agentic.plan.pathStep"),
     [STAGES_STEP_ID]: t("agentic.plan.stages"),
   };
 
@@ -639,128 +573,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
         </WizardStep>
 
         <WizardStep
-          id={PATH_STEP_ID}
-          name={stepNames[PATH_STEP_ID]}
-          footer={{ isNextDisabled: !isPathValid }}
-        >
-          <Form onSubmit={(event) => event.preventDefault()}>
-            <Content component="p" className={textStyles.textColorSubtle}>
-              {plan && isPathAssigned
-                ? t("agentic.plan.pathIntroAssigned")
-                : t("agentic.plan.pathIntro")}
-            </Content>
-            <FormGroup
-              label={t("terms.archetype")}
-              isRequired
-              fieldId="plan-archetype"
-            >
-              <Select
-                id="plan-archetype-select"
-                popperProps={{ appendTo: appendToModal }}
-                isScrollable
-                maxMenuHeight="16rem"
-                isOpen={isArchetypeSelectOpen}
-                onOpenChange={setIsArchetypeSelectOpen}
-                selected={archetypeId?.toString()}
-                onSelect={(_event, value) => {
-                  if (Number(value) !== archetypeId) {
-                    setValue("archetypeId", Number(value), {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                    setValue("targetProfileIds", [], {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                  }
-                  setIsArchetypeSelectOpen(false);
-                }}
-                toggle={(toggleRef) => (
-                  <MenuToggle
-                    ref={toggleRef}
-                    id="plan-archetype"
-                    onClick={() =>
-                      setIsArchetypeSelectOpen(!isArchetypeSelectOpen)
-                    }
-                    isExpanded={isArchetypeSelectOpen}
-                    isDisabled={
-                      isLoadingArchetypes || archetypesFetchError != null
-                    }
-                    isFullWidth
-                  >
-                    {selectedArchetype?.name ||
-                      t("agentic.plan.selectArchetype")}
-                  </MenuToggle>
-                )}
-              >
-                <SelectList aria-label={t("terms.archetypes")}>
-                  {[...archetypes]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((archetype) => (
-                      <SelectOption
-                        key={archetype.id}
-                        value={archetype.id.toString()}
-                      >
-                        {archetype.name}
-                      </SelectOption>
-                    ))}
-                </SelectList>
-              </Select>
-              {archetypesFetchError != null
-                ? helper(t("agentic.plan.archetypesLoadFailed"), "error")
-                : isLoadingArchetypes
-                  ? helper(t("agentic.plan.loadingArchetypes"))
-                  : archetypeId != null
-                    ? helper(t("agentic.plan.archetypeHelper"))
-                    : null}
-            </FormGroup>
-            <FormGroup
-              label={t("terms.targetProfiles")}
-              isRequired
-              fieldId="plan-target-profiles-input"
-            >
-              <MultiSelect
-                toggleId="plan-target-profiles"
-                toggleAriaLabel={t("agentic.plan.selectTargetProfiles")}
-                ariaLabel={t("terms.targetProfiles")}
-                inputAriaLabel={t("terms.targetProfiles")}
-                values={targetProfileIds.map(String)}
-                options={targetProfiles.map((profile) => ({
-                  value: String(profile.id),
-                  label: profile.name,
-                }))}
-                isDisabled={selectedArchetype == null}
-                hasCheckbox
-                hasChips
-                onSelect={(selection) => {
-                  const selectedId = Number(selection);
-                  if (selection == null || Number.isNaN(selectedId)) return;
-                  setValue(
-                    "targetProfileIds",
-                    targetProfileIds.includes(selectedId)
-                      ? targetProfileIds.filter((id) => id !== selectedId)
-                      : [...targetProfileIds, selectedId],
-                    { shouldDirty: true, shouldValidate: true }
-                  );
-                }}
-                onClear={() =>
-                  setValue("targetProfileIds", [], {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-                placeholderText={t("agentic.plan.selectTargetProfiles")}
-              />
-              {helper(
-                selectedArchetype == null
-                  ? t("agentic.plan.selectArchetypeFirst")
-                  : t("agentic.plan.targetProfilesHelper")
-              )}
-            </FormGroup>
-          </Form>
-        </WizardStep>
-
-        <WizardStep
           id={STAGES_STEP_ID}
           name={stepNames[STAGES_STEP_ID]}
           footer={{ isNextDisabled: !isStagesValid }}
@@ -816,7 +628,7 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
           <PlanSkillsStep
             query={skillsQuery}
             stageTitles={stageTitles}
-            archetypeId={archetypeId ?? undefined}
+            hasTargetProfiles={hasTargetProfiles}
             excludedIds={excludedSkillIds}
             onIncludeChange={setSkillIncluded}
             isEdit={plan != null}
@@ -864,34 +676,6 @@ export const PlanWizard: React.FC<PlanWizardProps> = ({
                 </DescriptionListTerm>
                 <DescriptionListDescription>
                   {(description || "").trim() || (
-                    <EmptyTextMessage message={t("terms.none")} />
-                  )}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("terms.archetype")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {!areArchetypesLoaded
-                    ? archetypesState
-                    : (selectedArchetype?.name ?? (
-                        <EmptyTextMessage message={t("terms.none")} />
-                      ))}
-                </DescriptionListDescription>
-              </DescriptionListGroup>
-              <DescriptionListGroup>
-                <DescriptionListTerm>
-                  {t("terms.targetProfiles")}
-                </DescriptionListTerm>
-                <DescriptionListDescription>
-                  {!areArchetypesLoaded ? (
-                    archetypesState
-                  ) : selectedTargetProfiles.length > 0 ? (
-                    selectedTargetProfiles
-                      .map((profile) => profile.name)
-                      .join(", ")
-                  ) : (
                     <EmptyTextMessage message={t("terms.none")} />
                   )}
                 </DescriptionListDescription>

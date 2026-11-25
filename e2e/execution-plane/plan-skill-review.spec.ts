@@ -9,12 +9,12 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
-  addTargetProfile,
   expect,
   main,
   mainHeading,
   pickMenuOption,
   protoUrl,
+  rowActions,
   spaNavigate,
   test,
 } from "../support";
@@ -55,30 +55,19 @@ const openEdit = async (page: Page) => {
 };
 
 test.describe("Plan skill review", () => {
-  test("architect reviews and excludes skills while creating a plan", async ({
+  test("architect reviews and excludes skills while creating a plan, then a target profile uses it", async ({
     page,
   }) => {
-    // A second profile for the archetype, which no plan is assigned to yet,
-    // added before any page reads the archetypes.
-    await page.goto(protoUrl("/models", { scenario: "configured" }));
-    await addTargetProfile(page, 3, { id: 32, name: "Java 17 on RHEL" });
-    await spaNavigate(page, "/migration-plans");
+    const planName = "Legacy Java containers E2E";
+    await page.goto(protoUrl("/migration-plans", { scenario: "configured" }));
     await page.getByRole("button", { name: "Create migration plan" }).click();
     const dialog = page.getByRole("dialog");
     await expect(
       dialog.getByText(
-        "Choose which applications the plan is for, define the stages that run in order, and review their skills."
+        "Define the stages that run in order and review the skills each stage gets."
       )
     ).toBeVisible();
-    await dialog
-      .getByRole("textbox", { name: /^Name/ })
-      .fill("Legacy Java on RHEL E2E");
-    await next(dialog).click();
-    await dialog.getByRole("button", { name: /^Archetype/ }).click();
-    await pickMenuOption(page, "Legacy Java Application");
-    await dialog.locator("#plan-target-profiles-input").click();
-    await pickMenuOption(page, "Java 17 on RHEL");
-    await dialog.getByText(/^Applications in this archetype/).click();
+    await dialog.getByRole("textbox", { name: /^Name/ }).fill(planName);
     await next(dialog).click();
     const stages: [string, string][] = [
       ["Propose", "Migration Proposal Agent"],
@@ -98,9 +87,11 @@ test.describe("Plan skill review", () => {
     await next(dialog).click();
 
     // Skills step: what each stage gets, and where each skill comes from.
+    // No target profile uses a new plan, so no archetype or target profile
+    // skills yet.
     await expect(
       dialog.getByText(
-        "Each stage gets its agent's skills and the skills in Every stage. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its archetype's skills instead, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can."
+        "Each stage gets its agent's skills and the skills in Every stage. No target profile uses this plan yet, so Every stage holds no archetype or target profile skills. Once a target profile uses it, Every stage holds that profile's skills and its archetype's. Until then, a run gives each application its archetype's skills and its own skills, and no target profile skills. Clear a skill to exclude it from this plan; it is then left out of every stage. Skills attached to an application stay included: a plan cannot exclude them, only a run can."
       )
     ).toBeVisible();
     await expect(dialog.getByText("No skills excluded.")).toBeVisible();
@@ -116,50 +107,34 @@ test.describe("Plan skill review", () => {
     await expect(jakarta).toContainText(
       "Collection: Java modernization foundation"
     );
-    // On the stage agent and on the archetype: one row in each group.
     const validation = skillRows(table, "Build validation standards");
-    await expect(validation).toHaveCount(2);
-    await expect(validation.nth(0)).toContainText("Agent: Build Validator");
-    await expect(validation.nth(1)).toContainText(
-      "Archetype: Legacy Java Application"
+    await expect(validation).toHaveCount(1);
+    await expect(validation).toContainText("Agent: Build Validator");
+    await expect(table.getByText(/^(Archetype|Target profile): /)).toHaveCount(
+      0
     );
     // Plain names: a link would leave the draft.
     await expect(table.getByRole("link")).toHaveCount(0);
 
-    await includeBox(
-      table,
-      "Containerization standards",
-      "every stage"
-    ).uncheck();
-    await expect(
-      dialog.getByText(
-        "Containerization standards excluded from every stage. 1 skill excluded from this plan."
-      )
-    ).toBeVisible();
     await includeBox(table, "API compatibility checklist", "stage 1").uncheck();
     await expect(
       dialog.getByText(
-        "API compatibility checklist excluded from stage 1. 2 skills excluded from this plan."
+        "API compatibility checklist excluded from stage 1. 1 skill excluded from this plan."
       )
     ).toBeVisible();
-    await expect(table.getByText("Excluded", { exact: true })).toHaveCount(2);
+    await expect(table.getByText("Excluded", { exact: true })).toHaveCount(1);
 
     await next(dialog).click();
     const review = reviewSkills(dialog);
     await expect(review).toContainText("API compatibility checklist (stage 1)");
-    await expect(review).toContainText(
-      "Containerization standards (every stage)"
-    );
     await expect(review).not.toContainText(/\d+ skills?/);
     await dialog.getByRole("button", { name: "Create", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByText("Migration plan created")).toBeVisible();
 
     // Plan Details (SPA navigation keeps the mock state).
-    await main(page)
-      .getByRole("link", { name: "Legacy Java on RHEL E2E" })
-      .click();
-    await expect(mainHeading(page)).toHaveText("Legacy Java on RHEL E2E");
+    await main(page).getByRole("link", { name: planName }).click();
+    await expect(mainHeading(page)).toHaveText(planName);
     await expect(
       main(page).getByRole("heading", { level: 2, name: "Skills by stage" })
     ).toBeVisible();
@@ -170,15 +145,53 @@ test.describe("Plan skill review", () => {
       "Stage 3: Validate",
       "Every stage",
     ]);
-    for (const skill of [
-      "Containerization standards",
-      "API compatibility checklist",
-    ]) {
-      await expect(skillRows(details, skill)).toHaveCount(1);
-      await expect(skillRows(details, skill)).toContainText("Excluded");
-    }
-    await expect(details.getByText("Excluded", { exact: true })).toHaveCount(2);
+    await expect(
+      skillRows(details, "API compatibility checklist")
+    ).toContainText("Excluded");
+    await expect(details.getByText("Excluded", { exact: true })).toHaveCount(1);
     await expect(details.getByRole("checkbox")).toHaveCount(0);
+
+    // Java 8 on OpenShift (Legacy Java Application) now uses it: Every stage
+    // gets the archetype's skills, and an exclusion still applies.
+    await spaNavigate(page, "/archetypes/3/target-profiles");
+    const profile = page.locator("#target-profile-32");
+    await expect(profile).toContainText("Java 8 on OpenShift");
+    await rowActions(profile).click();
+    await page.getByRole("menuitem", { name: "Change migration plan" }).click();
+    const change = page.getByRole("dialog", { name: "Change migration plan" });
+    await change
+      .getByRole("combobox", { name: /^Migration plan/ })
+      .selectOption({ label: planName });
+    await change.getByRole("button", { name: "Save" }).click();
+    await expect(change).toBeHidden();
+    await expect(profile).toContainText(planName);
+
+    await spaNavigate(page, "/migration-plans");
+    await main(page).getByRole("link", { name: planName }).click();
+    await expect(mainHeading(page)).toHaveText(planName);
+    await expect(
+      main(page).getByText(
+        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills."
+      )
+    ).toBeVisible();
+    await expect(
+      main(page)
+        .locator(".pf-v6-c-description-list__group")
+        .filter({
+          has: page
+            .getByRole("term")
+            .getByText("Target profiles", { exact: true }),
+        })
+    ).toContainText("Java 8 on OpenShift (Legacy Java Application)");
+    const containers = skillRows(details, "Containerization standards");
+    await expect(containers.first()).toBeVisible();
+    await expect(containers.first()).toContainText(
+      "Archetype: Legacy Java Application"
+    );
+    await expect(skillRows(details, "Build validation standards")).toHaveCount(
+      2
+    );
+    await expect(details.getByText("Excluded", { exact: true })).toHaveCount(1);
   });
 
   test("architect excludes a skill when editing a plan, and sees it kept", async ({
@@ -233,7 +246,7 @@ test.describe("Plan skill review", () => {
     ).toBeVisible();
     await expect(
       main(page).getByText(
-        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of this plan's archetype and target profile. When it runs, each application also gets its own skills. An application from another archetype gets its archetype's skills instead, and no target profile skills."
+        "What each stage's agent gets when this plan runs, and where each skill comes from. Every stage holds the skills of the target profiles that use this plan, and of their archetypes. When it runs, each application gets only its archetype's skills, the skills of the target profile it runs on, and its own skills."
       )
     ).toBeVisible();
     const table = skillsTable(main(page));

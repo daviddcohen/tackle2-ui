@@ -21,10 +21,7 @@ import {
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
-import {
-  useFetchMigrationPlanById,
-  useFetchPlanRun,
-} from "@app/queries/agentic";
+import { useFetchPlanRun } from "@app/queries/agentic";
 import { useFetchPlanRunAgentRuns } from "@app/queries/agentic-observability";
 import { agenticWorkflowRunsWriteScopes } from "@app/scopes";
 import {
@@ -112,12 +109,6 @@ const PlanRunDetail: React.FC = () => {
     isLoading: isLoadingAgentRuns,
     fetchError: agentRunsError,
   } = useFetchPlanRunAgentRuns(runId, planRun?.status);
-  // The plan's archetype, so its own target profiles need no archetype
-  // suffix in Skills by stage. It comes from the plan as it is now:
-  // the run snapshot does not record it, so if the plan's path changed after
-  // the run, the suffix follows the new path. Until the plan loads, or if it
-  // is gone, every profile names its archetype.
-  const { migrationPlan } = useFetchMigrationPlanById(planRun?.planId);
 
   const { approve, isApproving } = useApproveStage(runId);
 
@@ -343,9 +334,6 @@ const PlanRunDetail: React.FC = () => {
             linkTo={(pathname, search) =>
               runLink(pathname, searchWithFrom(search, `run-${runId}`))
             }
-            originOptions={{
-              archetypeId: migrationPlan?.migrationPath?.archetype.id,
-            }}
             // Many applications: their Every stage groups start collapsed,
             // the stages stay open.
             defaultExpanded={

@@ -1,6 +1,11 @@
 /**
  * Journey 1 (configured): pick apps -> preflight -> start -> plan run detail, all via clicks.
+ * Customer Management (Java EE Application) has two target profiles with a
+ * migration plan, so with "Use each application's migration plan" the
+ * journey picks the one it runs on (Quarkus 3.x, Java EE to Quarkus).
  */
+
+const QUARKUS = "Quarkus 3.x";
 import {
   AGENTIC_STATUS,
   approveButton,
@@ -10,6 +15,7 @@ import {
   migrationCell,
   openBulkRunMigration,
   pickMenuOption,
+  pickRunTargetProfile,
   protoUrl,
   test,
   waitForInventory,
@@ -22,6 +28,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    await pickRunTargetProfile(page, dialog, "Customer Management", QUARKUS);
     await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -52,6 +59,7 @@ test.describe("Start migration journey", () => {
       "Customer Management",
       "Order Service",
     ]);
+    await pickRunTargetProfile(page, dialog, "Customer Management", QUARKUS);
     const toggle = dialog.getByRole("button", { name: "Skills by stage" });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
@@ -99,6 +107,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    await pickRunTargetProfile(page, dialog, "Customer Management", QUARKUS);
     await dialog
       .getByRole("textbox", { name: /Target branch/ })
       .fill("feature/e2e-branch");
@@ -136,6 +145,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    await pickRunTargetProfile(page, dialog, "Customer Management", QUARKUS);
     await expect(
       dialog.getByRole("row", { name: /Customer Management/ })
     ).toContainText("Java EE to Quarkus");
@@ -154,6 +164,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    await pickRunTargetProfile(page, dialog, "Customer Management", QUARKUS);
     await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await page
@@ -176,6 +187,7 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
+    await pickRunTargetProfile(page, dialog, "Customer Management", QUARKUS);
     await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Run #/);
@@ -201,12 +213,12 @@ test.describe("Start migration journey", () => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
     const dialog = await openBulkRunMigration(page, ["Customer Management"]);
-    // Java EE lift and shift has two approval gates.
+    // Java lift and shift has two approval gates.
     await dialog
       .getByLabel("Use one migration plan for all applications")
       .check();
     await dialog.getByRole("button", { name: "Migration plan to run" }).click();
-    await pickMenuOption(page, "Java EE lift and shift");
+    await pickMenuOption(page, "Java lift and shift");
     await dialog.getByRole("button", { name: "Run on 1 application" }).click();
     await expect(page).toHaveURL(/\/plan-runs\/\d+\?/);
     const status = page.getByRole("main").locator(AGENTIC_STATUS).first();

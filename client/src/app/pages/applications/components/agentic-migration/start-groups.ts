@@ -29,16 +29,12 @@ export type TargetProfilePicks = Readonly<Record<number, number>>;
  * - `server`: the server does not report the application's target profiles
  *   (`migrationPaths`): the run uses its default, nothing is sent, and
  *   `path` (from `targetProfile` and `plan`) is shown as text;
- * - `loading`: one plan for all, and that plan's migration path is not
- *   known yet (the plans list loads);
  * - `picked`: the run uses `path` (null: no target profile), picked by the
  *   user among `candidates` or the only choice there is; it is sent;
- * - `required`: several candidates and none picked (the server's default
- *   is not one of them): Run waits for a pick.
+ * - `required`: several candidates and none picked: Run waits for a pick.
  */
 export type TargetProfileChoice =
   | { kind: "server"; path?: ApplicationMigrationPath }
-  | { kind: "loading" }
   | {
       kind: "picked";
       path: ApplicationMigrationPath | null;
@@ -47,17 +43,17 @@ export type TargetProfileChoice =
   | { kind: "required"; candidates: ApplicationMigrationPath[] };
 
 /**
- * Which target profile an application runs on. "Use each application's
- * migration plan": any profile of its archetypes (the pick decides the
- * plan). One plan for all: the profiles of that plan's migration path on
- * the application's archetypes; none when the plan has no path there.
- * Several candidates: the user's pick, else the server's default when it is
- * one of them, else a pick is required.
+ * Which target profile an application runs on, among its migration paths.
+ * "Use each application's migration plan": the paths whose target profile
+ * has a plan (the pick decides the plan; a profile without one cannot run).
+ * One plan for all: the paths whose target profile uses that plan; none
+ * when no path does (the run gets no target profile). One candidate is
+ * used; with several the user's pick is, and there is no default: a pick is
+ * required.
  */
 export const targetProfileChoice = (
   migration: ApplicationMigrationView,
   choice: PlanChoice,
-  plan: MigrationPlan | undefined,
   pickedId: number | undefined
 ): TargetProfileChoice => {
   const paths = migration.migrationPaths;
@@ -74,24 +70,18 @@ export const targetProfileChoice = (
           : undefined,
     };
   }
-  let candidates = paths;
-  if (choice.planSelection === "single") {
-    if (plan == null) return { kind: "loading" };
-    const planPath = plan.migrationPath;
-    candidates = paths.filter(
-      ({ archetype, targetProfile }) =>
-        planPath?.archetype.id === archetype.id &&
-        planPath.targetProfiles.some(({ id }) => id === targetProfile.id)
-    );
-  }
+  const candidates = paths.filter(({ plan }) =>
+    choice.planSelection === "single"
+      ? plan?.id === choice.planId
+      : plan != null
+  );
   if (candidates.length <= 1) {
     return { kind: "picked", path: candidates[0] ?? null, candidates };
   }
-  const byId = (id: number | undefined) =>
-    id != null
-      ? candidates.find(({ targetProfile }) => targetProfile.id === id)
+  const path =
+    pickedId != null
+      ? candidates.find(({ targetProfile }) => targetProfile.id === pickedId)
       : undefined;
-  const path = byId(pickedId) ?? byId(migration.targetProfile?.id);
   return path != null
     ? { kind: "picked", path, candidates }
     : { kind: "required", candidates };
@@ -110,7 +100,7 @@ export interface StartGroup {
    * left out: it runs on the server's default.
    */
   targetProfiles: Map<number, number | null>;
-  /** An application still needs a target profile (picked, or the plan to load). */
+  /** An application still needs a target profile pick. */
   isTargetProfileMissing: boolean;
 }
 
@@ -154,7 +144,7 @@ export const groupReadyApplicationsByPlan = (
         profile.path?.targetProfile.id ?? null
       );
     }
-    if (profile.kind === "loading" || profile.kind === "required") {
+    if (profile.kind === "required") {
       group.isTargetProfileMissing = true;
     }
     groups.set(plan.id, group);
@@ -170,12 +160,7 @@ export const groupReadyApplicationsByPlan = (
       add(
         plan,
         row,
-        targetProfileChoice(
-          row.migration,
-          choice,
-          singlePlan,
-          picks[row.application.id]
-        )
+        targetProfileChoice(row.migration, choice, picks[row.application.id])
       )
     );
     return [...groups.values()];
@@ -185,7 +170,6 @@ export const groupReadyApplicationsByPlan = (
     const profile = targetProfileChoice(
       row.migration,
       choice,
-      undefined,
       picks[row.application.id]
     );
     const plan =

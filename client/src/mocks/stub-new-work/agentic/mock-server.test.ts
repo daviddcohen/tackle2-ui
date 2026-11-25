@@ -5,7 +5,11 @@
  */
 import axios, { AxiosError, isAxiosError } from "axios";
 
-import { MigrationPlan, MigrationPlanRequest } from "@app/agentic";
+import {
+  MigrationPlan,
+  MigrationPlanRequest,
+  ResolvePlanSkillsRequest,
+} from "@app/agentic";
 import {
   AGENTIC_ENDPOINTS,
   approveStageRun,
@@ -470,39 +474,107 @@ describe("plans", () => {
           requiresApproval: false,
         },
       ],
-      migrationPath: {
-        archetype: { id: 1 },
-        targetProfiles: [{ id: 11 }],
-        isDefault: false,
-      },
     });
     expect(created.runCount).toBe(0);
-    // The saved plan resolves: the target profile reaches every stage.
+    expect(created.migrationPaths).toEqual([]);
+    // The preview with a target profile: it reaches every stage.
     const { everyStage } = await resolvePlanSkills({
       stages: created.stages.map(({ agent }) => ({ agent: { id: agent.id } })),
-      migrationPath: created.migrationPath && {
-        archetype: { id: created.migrationPath.archetype.id },
-        targetProfiles: created.migrationPath.targetProfiles,
-      },
+      targetProfiles: [{ id: 11 }],
     });
     expect(everyStage[0].skills.length).toBeGreaterThan(0);
   });
 
-  it("assigns a Plan to a target profile atomically", async () => {
+  it("assigns a Plan to one target profile, touching no other profile", async () => {
     await assignPlanToTargetProfile({
       archetypeId: 1,
       targetProfileId: 11,
-      planId: "3",
+      planId: "2",
     });
     const plans = await getMigrationPlans();
-    const holders = plans.filter((p) =>
-      p.migrationPath?.targetProfiles.some((tp) => tp.id === 11)
-    );
-    // Plan 3 becomes the default; Plan 1 keeps its path as a non-default Plan.
-    expect(holders.map((p) => [p.id, p.migrationPath?.isDefault])).toEqual([
-      ["1", false],
-      ["3", true],
+    const pathsOf = (id: string) =>
+      plans.find((p) => p.id === id)?.migrationPaths;
+    // Plan 1 loses the profile; Plan 2 now serves two archetypes, sorted by
+    // archetype name.
+    expect(pathsOf("1")).toEqual([]);
+    expect(pathsOf("2")).toEqual([
+      {
+        archetype: { id: 1, name: "Java EE Application" },
+        targetProfile: { id: 11, name: "Quarkus 3.x" },
+      },
+      {
+        archetype: { id: 2, name: "Spring Boot Application" },
+        targetProfile: { id: 21, name: "Quarkus 3.x" },
+      },
     ]);
+    // The other plans keep theirs.
+    expect(pathsOf("5")?.map(({ targetProfile }) => targetProfile.id)).toEqual([
+      31,
+    ]);
+    // Same validation as before.
+    expect(
+      await statusOf(
+        assignPlanToTargetProfile({
+          archetypeId: 2,
+          targetProfileId: 11,
+          planId: "2",
+        })
+      )
+    ).toBe(404);
+    expect(
+      await statusOf(
+        assignPlanToTargetProfile({
+          archetypeId: 1,
+          targetProfileId: 11,
+          planId: "9999",
+        })
+      )
+    ).toBe(400);
+  });
+
+  it("refuses to delete a Plan that target profiles use, naming them", async () => {
+    // A new plan has no runs, so only its target profiles block it.
+    const created = await createMigrationPlan({
+      name: "Shared plan",
+      description: "",
+      stages: [
+        {
+          name: "Only",
+          agent: { id: "2" },
+          instructions: "",
+          requiresApproval: false,
+        },
+      ],
+    });
+    await assignPlanToTargetProfile({
+      archetypeId: 2,
+      targetProfileId: 21,
+      planId: created.id,
+    });
+    await assignPlanToTargetProfile({
+      archetypeId: 1,
+      targetProfileId: 11,
+      planId: created.id,
+    });
+    expect(await statusOf(deleteMigrationPlan(created.id))).toBe(409);
+    expect(await messageOf(deleteMigrationPlan(created.id))).toBe(
+      'Plan "Shared plan" is used by target profiles Quarkus 3.x (Java EE Application), Quarkus 3.x (Spring Boot Application). Assign them another plan first.'
+    );
+    await assignPlanToTargetProfile({
+      archetypeId: 1,
+      targetProfileId: 11,
+      planId: "1",
+    });
+    expect(await messageOf(deleteMigrationPlan(created.id))).toBe(
+      'Plan "Shared plan" is used by target profile Quarkus 3.x (Spring Boot Application). Assign it another plan first.'
+    );
+    await assignPlanToTargetProfile({
+      archetypeId: 2,
+      targetProfileId: 21,
+      planId: "2",
+    });
+    await deleteMigrationPlan(created.id);
+    expect(await statusOf(getMigrationPlanById(created.id))).toBe(404);
   });
 });
 
@@ -518,19 +590,23 @@ describe("plan skill review", () => {
       instructions: stage.instructions,
       requiresApproval: stage.requiresApproval,
     })),
-    migrationPath: plan.migrationPath && {
-      archetype: { id: plan.migrationPath.archetype.id },
-      targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
-        id,
-      })),
-      isDefault: plan.migrationPath.isDefault,
-    },
+  });
+
+  /**
+   * A saved Plan as the preview request its pages send: the request plus
+   * its target profiles (`migrationPaths`).
+   */
+  const previewFor = (plan: MigrationPlan): ResolvePlanSkillsRequest => ({
+    ...requestFor(plan),
+    targetProfiles: plan.migrationPaths?.map(({ targetProfile }) => ({
+      id: targetProfile.id,
+    })),
   });
 
   it("resolves a draft's skills per stage and for every stage", async () => {
     // A full MigrationPlanRequest is a valid resolve body.
     const plan = await getMigrationPlanById("5");
-    const { stages, everyStage } = await resolvePlanSkills(requestFor(plan));
+    const { stages, everyStage } = await resolvePlanSkills(previewFor(plan));
     const idsOf = (entries: { skill: { id: string } }[]) =>
       entries.map(({ skill }) => skill.id);
     // Each stage: its agent's skills, then its collections' skills.
@@ -550,7 +626,8 @@ describe("plan skill review", () => {
         collection: { id: "2", name: "OpenShift delivery checks" },
       },
     ]);
-    // Every stage: the plan's archetype, then its target profile.
+    // Every stage: the archetype of the plan's target profile, then the
+    // profile.
     expect(everyStage).toHaveLength(1);
     expect(idsOf(everyStage[0].skills)).toEqual(["8", "9", "14", "15", "7"]);
     expect(everyStage[0].skills.find((e) => e.skill.id === "9")?.from).toEqual([
@@ -603,13 +680,14 @@ describe("plan skill review", () => {
 
   it("is the resolution the application views read", async () => {
     // An application view resolves its plan's stages the same way, with
-    // its own context instead of the plan's.
-    const migrations = await getApplicationMigrations([1]);
-    const view = migrations[1];
+    // its own context instead of the plan's (Order Service: one path with a
+    // plan, its default).
+    const migrations = await getApplicationMigrations([4]);
+    const view = migrations[4];
     const plan = await getMigrationPlanById(view.plan!.id);
     const forApplication = await resolvePlanSkills({
       ...requestFor(plan),
-      applications: [{ id: 1 }],
+      applications: [{ id: 4 }],
     });
     expect(view.skills?.stages).toEqual(
       forApplication.stages.map((group, index) => ({
@@ -637,12 +715,18 @@ describe("plan skill review", () => {
         )
         .map(({ skill }) => skill.id);
     };
-    // Absent: the default profile (Quarkus 3.x); the same profile picked
-    // explicitly answers the same; null: none.
-    const byDefault = await profileSkills();
-    expect(byDefault.length).toBeGreaterThan(0);
-    expect(await profileSkills({ id: 11 })).toEqual(byDefault);
+    // Customer Management has two paths with a plan, so no default: absent
+    // and null resolve no target profile skills; a pick resolves its own.
+    expect(await profileSkills()).toEqual([]);
     expect(await profileSkills(null)).toEqual([]);
+    const quarkus = await profileSkills({ id: 11 });
+    expect(quarkus.length).toBeGreaterThan(0);
+    expect(await profileSkills({ id: 12 })).toEqual(["7"]);
+    expect(quarkus).not.toContain("7");
+    // With only Quarkus 3.x on a plan, absent is its profile (the default
+    // path).
+    delete db.targetProfilePlans[12];
+    expect(await profileSkills()).toEqual(quarkus);
     // Spring Boot Application's profile is not one of Customer Management's.
     expect(
       await statusOf(
@@ -655,7 +739,7 @@ describe("plan skill review", () => {
   });
 
   it("flags excluded skills and ignores ids that reference nothing", async () => {
-    const draft = requestFor(await getMigrationPlanById("5"));
+    const draft = previewFor(await getMigrationPlanById("5"));
     const excludedDraft = await resolvePlanSkills({
       ...draft,
       excludedSkills: [{ id: "9" }, { id: "9" }, { id: "9999" }],
@@ -672,11 +756,8 @@ describe("plan skill review", () => {
 
     const plain = await resolvePlanSkills(draft);
     const withUnknown = await resolvePlanSkills({
+      ...draft,
       stages: [...draft.stages, { agent: { id: "9999" }, name: "Unknown" }],
-      migrationPath: {
-        archetype: draft.migrationPath!.archetype,
-        targetProfiles: [...draft.migrationPath!.targetProfiles, { id: 9999 }],
-      },
     });
     // The unknown agent's stage is listed, with nothing in it.
     expect(withUnknown).toEqual({
@@ -694,10 +775,24 @@ describe("plan skill review", () => {
     expect(
       await resolvePlanSkills({
         stages: [],
-        migrationPath: { archetype: { id: 9999 }, targetProfiles: [] },
+        targetProfiles: [],
         applications: undefined,
       })
     ).toEqual({ stages: [], everyStage: [{ skills: [] }] });
+    // A target profile deleted meanwhile adds nothing; a malformed id is a
+    // 400.
+    expect(
+      await resolvePlanSkills({ stages: [], targetProfiles: [{ id: 9999 }] })
+    ).toEqual({ stages: [], everyStage: [{ skills: [] }] });
+    expect(
+      await statusOf(
+        resolvePlanSkills({
+          stages: [],
+          // Malformed on purpose: the body is not type checked on the wire.
+          targetProfiles: [{ id: "x" } as unknown as { id: number }],
+        })
+      )
+    ).toBe(400);
     expect(
       await resolvePlanSkills({ stages: [], applications: [{ id: 9999 }] })
     ).toEqual({ stages: [], everyStage: [] });
@@ -716,9 +811,10 @@ describe("plan skill review", () => {
       statusOf(axios.post(AGENTIC_ENDPOINTS.planSkillsResolve, body));
     expect(await post({})).toBe(400);
     expect(await post({ stages: [{ agent: "2" }] })).toBe(400);
-    expect(
-      await post({ stages: [], migrationPath: { archetype: { id: "3" } } })
-    ).toBe(400);
+    expect(await post({ stages: [], targetProfiles: [{ id: "31" }] })).toBe(
+      400
+    );
+    expect(await post({ stages: [], targetProfiles: {} })).toBe(400);
     expect(await post({ stages: [], excludedSkills: ["9"] })).toBe(400);
     expect(await post({ stages: [], applications: [{ id: "1" }] })).toBe(400);
     expect(await post({ stages: [], applications: {} })).toBe(400);
@@ -743,7 +839,7 @@ describe("plan skill review", () => {
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
     const plan5 = plans.find(({ plan }) => plan.id === "5");
     const preview = await resolvePlanSkills({
-      ...draft,
+      ...previewFor(await getMigrationPlanById("5")),
       excludedSkills: [{ id: "3" }],
     });
     expect(plan5).toEqual({
@@ -774,7 +870,7 @@ describe("plan skill review", () => {
     // Every plan, the same as resolving it.
     for (const plan of db.plans) {
       const { stages, everyStage } = await resolvePlanSkills({
-        ...requestFor(await getMigrationPlanById(plan.id)),
+        ...previewFor(await getMigrationPlanById(plan.id)),
         excludedSkills: plan.excludedSkills?.map(({ id }) => ({ id })),
       });
       // The plan preview has one every-stage group.
@@ -819,7 +915,6 @@ describe("plan skill review", () => {
     const created = await createMigrationPlan({
       ...requestFor(seeded),
       name: "Plan with an exclusion",
-      migrationPath: { ...requestFor(seeded).migrationPath!, isDefault: false },
       excludedSkills: [{ id: "9" }, { id: "9" }, { id: "9999" }, { id: "3" }],
     });
     const excluded = [
@@ -937,12 +1032,12 @@ describe("execution: one source of truth", () => {
 
   it("starts one run per resolved Plan and returns the created runs", async () => {
     const { planRuns } = await startApplicationMigrations({
-      applicationIds: [1, 4],
+      applicationIds: [4, 15],
       planSelection: "recommended",
       targetBranch: "feature/x",
     });
     expect(planRuns).toHaveLength(2);
-    const migrations = await getApplicationMigrations([1, 4]);
+    const migrations = await getApplicationMigrations([4, 15]);
     for (const ref of planRuns) {
       const run = await getPlanRunById(ref.id);
       expect(run.targetBranch).toBe("feature/x");
@@ -952,11 +1047,11 @@ describe("execution: one source of truth", () => {
       });
     }
     // The started applications are no longer startable: no duplicate runs.
-    expect(migrations[1].preflight).toBe("blocked");
+    expect(migrations[4].preflight).toBe("blocked");
     expect(
       await statusOf(
         startApplicationMigrations({
-          applicationIds: [1],
+          applicationIds: [4],
           planSelection: "recommended",
           targetBranch: "main",
         })

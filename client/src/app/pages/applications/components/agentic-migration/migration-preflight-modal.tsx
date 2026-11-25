@@ -18,7 +18,6 @@ import {
   ModalFooter,
   ModalHeader,
   Radio,
-  Skeleton,
   Stack,
   StackItem,
 } from "@patternfly/react-core";
@@ -331,20 +330,18 @@ export const MigrationPreflightModal: React.FC<
       ? targetProfileChoice(
           migration,
           { planSelection, planId },
-          selectedPlan,
           targetProfilePicks[application.id]
         )
       : undefined;
   const hasChoice = (choice: TargetProfileChoice | undefined) =>
     (choice?.kind === "picked" || choice?.kind === "required") &&
     choice.candidates.length > 1;
-  // Ready rows that still need a target profile (picked, or the plan's
-  // path to load): Run waits for them. With each application's plan they
-  // are in no plan run yet, so the Run label counts them on top.
-  const awaitingProfile = startRows.filter((row) => {
-    const kind = choiceOf(row)?.kind;
-    return kind === "required" || kind === "loading";
-  });
+  // Ready rows that still need a target profile pick: Run waits for them.
+  // With each application's plan they are in no plan run yet, so the Run
+  // label counts them on top.
+  const awaitingProfile = startRows.filter(
+    (row) => choiceOf(row)?.kind === "required"
+  );
   const isTargetProfileMissing = awaitingProfile.length > 0;
   // Resolved while the preview is open, and whenever a plan run excludes
   // skills (a rerun's), so Run sends only exclusions that still resolve.
@@ -417,10 +414,14 @@ export const MigrationPreflightModal: React.FC<
       />
     );
 
-  // From a plan, the column appears only when some application has a
-  // choice: the description names the plan's target profile otherwise.
+  // From a plan with one target profile, the description names it, so the
+  // column appears only when some application has a choice. From a plan
+  // with several (the description names none) it shows the profile each
+  // row runs on: picked for it, or a select where a pick is needed.
   const showsTargetProfile =
-    !isFixedPlan || rows.some((row) => hasChoice(choiceOf(row)));
+    !isFixedPlan ||
+    fixedPlan.targetProfile == null ||
+    rows.some((row) => hasChoice(choiceOf(row)));
   const none = <EmptyTextMessage message={t("agentic.execution.none")} />;
 
   const targetProfileCell = (
@@ -430,17 +431,22 @@ export const MigrationPreflightModal: React.FC<
     if (isPlanMissing) {
       return <EmptyTextMessage message={t("agentic.execution.notSelected")} />;
     }
-    if (choice == null) return migration.targetProfile?.name ?? none;
+    if (choice == null) {
+      // A row that cannot start: with one plan for all, the profile it
+      // would run on when only one of its profiles uses the plan.
+      const using =
+        planSelection === "single"
+          ? migration.migrationPaths?.filter(({ plan }) => plan?.id === planId)
+          : undefined;
+      return (
+        (using?.length === 1
+          ? using[0].targetProfile.name
+          : migration.targetProfile?.name) ?? none
+      );
+    }
     switch (choice.kind) {
       case "server":
         return choice.path?.targetProfile.name ?? none;
-      case "loading":
-        return (
-          <Skeleton
-            width="8rem"
-            screenreaderText={t("agentic.runSkills.loadingTargetProfile")}
-          />
-        );
       default:
         if (hasChoice(choice)) {
           return (
@@ -465,8 +471,8 @@ export const MigrationPreflightModal: React.FC<
         if (choice.kind === "picked" && choice.path != null) {
           return choice.path.targetProfile.name;
         }
-        // One plan for all, without a target profile on this application's
-        // archetypes: the run gets none, so no target profile skills.
+        // One plan for all, and none of this application's target profiles
+        // uses it: the run gets none, so no target profile skills.
         return planSelection === "single" ? (
           <>
             {none}

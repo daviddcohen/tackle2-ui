@@ -50,11 +50,12 @@ const basePlan: MigrationPlan = {
       order: 1,
     },
   ],
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
-    isDefault: true,
-  },
+  migrationPaths: [
+    {
+      archetype: { id: 1, name: "Java EE Application" },
+      targetProfile: { id: 11, name: "Quarkus 3.x" },
+    },
+  ],
   applicationImpact: {
     matching: 3,
     applications: [
@@ -146,36 +147,27 @@ describe("MigrationPlansPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("says Not assigned when no target profile uses the plan", async () => {
+  it("says Not assigned when no target profile uses the plan, Unavailable when unknown", async () => {
     useEndpoints({
       plans: [
-        { ...basePlan, migrationPath: undefined },
-        {
-          ...basePlan,
-          id: "2",
-          name: "Not the default",
-          migrationPath: { ...basePlan.migrationPath!, isDefault: false },
-        },
-        {
-          ...basePlan,
-          id: "3",
-          name: "No profiles",
-          migrationPath: { ...basePlan.migrationPath!, targetProfiles: [] },
-        },
+        { ...basePlan, migrationPaths: undefined },
+        { ...basePlan, id: "3", name: "No profiles", migrationPaths: [] },
       ],
     });
     renderList();
-    for (const name of [
-      "Java EE to Quarkus",
-      "Not the default",
-      "No profiles",
-    ]) {
-      const plan = await row(name);
-      expect(
-        within(plan).getByText("agentic.execution.notAssigned")
-      ).toBeInTheDocument();
-      expect(within(plan).getAllByRole("link")).toHaveLength(1);
-    }
+    const none = await row("No profiles");
+    expect(
+      within(none).getByText("agentic.execution.notAssigned")
+    ).toBeInTheDocument();
+    expect(within(none).getAllByRole("link")).toHaveLength(1);
+    // Not reported (the real backend): unknown, never "Not assigned".
+    const unknown = await row("Java EE to Quarkus");
+    expect(
+      within(unknown).getByText("agentic.common.unavailable")
+    ).toBeInTheDocument();
+    expect(
+      within(unknown).queryByText("agentic.execution.notAssigned")
+    ).toBeNull();
   });
 
   it("counts several target profiles and lists them in a popover", async () => {
@@ -184,13 +176,13 @@ describe("MigrationPlansPage", () => {
       plans: [
         {
           ...basePlan,
-          migrationPath: {
-            ...basePlan.migrationPath!,
-            targetProfiles: [
-              { id: 12, name: "Spring Boot 3" },
-              { id: 11, name: "Quarkus 3.x" },
-            ],
-          },
+          migrationPaths: [
+            ...basePlan.migrationPaths!,
+            {
+              archetype: { id: 2, name: "Spring Boot Application" },
+              targetProfile: { id: 21, name: "Spring Boot 3" },
+            },
+          ],
         },
       ],
     });
@@ -221,11 +213,11 @@ describe("MigrationPlansPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("marks no plan for having no migration path", async () => {
-    // Plans without a path run when someone picks them: not an issue.
+  it("marks no plan for having no target profile", async () => {
+    // Plans no target profile uses run when someone picks them: not an issue.
     useEndpoints({
       plans: [
-        { ...basePlan, migrationPath: undefined },
+        { ...basePlan, migrationPaths: [] },
         { ...basePlan, id: "9", name: "No stages yet", stages: [] },
       ],
     });
@@ -458,27 +450,31 @@ describe("MigrationPlansPage", () => {
           ...basePlan,
           id: "2",
           name: "Spring Boot upgrade",
-          migrationPath: {
-            archetype: { id: 2, name: "Spring Boot Application" },
-            targetProfiles: [{ id: 21, name: "Spring Boot 3" }],
-            isDefault: true,
-          },
+          migrationPaths: [
+            {
+              archetype: { id: 2, name: "Spring Boot Application" },
+              targetProfile: { id: 21, name: "Spring Boot 3" },
+            },
+          ],
         },
-        {
-          ...basePlan,
-          id: "3",
-          name: "Draft plan",
-          migrationPath: {
-            archetype: { id: 3, name: "Node.js Service" },
-            targetProfiles: [{ id: 31, name: "Node 22" }],
-            isDefault: false,
-          },
-        },
+        { ...basePlan, id: "3", name: "Draft plan", migrationPaths: [] },
+        // Target profiles not reported: unknown, in no option.
+        { ...basePlan, id: "5", name: "Unreported", migrationPaths: undefined },
         {
           ...basePlan,
           id: "4",
-          name: "Java EE lift and shift",
-          migrationPath: undefined,
+          name: "Java lift and shift",
+          // Shared by target profiles of two archetypes.
+          migrationPaths: [
+            {
+              archetype: { id: 1, name: "Java EE Application" },
+              targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+            },
+            {
+              archetype: { id: 2, name: "Spring Boot Application" },
+              targetProfile: { id: 22, name: "Spring Boot on OpenShift" },
+            },
+          ],
         },
       ],
     });
@@ -510,22 +506,26 @@ describe("MigrationPlansPage", () => {
       screen.queryByRole("link", { name: "Spring Boot upgrade" })
     ).toBeNull();
     // The rows the column says Not assigned for.
-    for (const name of ["Draft plan", "Java EE lift and shift"]) {
-      expect(
-        within(await row(name)).getByText("agentic.execution.notAssigned")
-      ).toBeInTheDocument();
-    }
+    expect(
+      within(await row("Draft plan")).getByText("agentic.execution.notAssigned")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Java lift and shift" })
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Unreported" })).toBeNull();
     await user.click(within(options[2]).getByRole("checkbox"));
     await user.click(within(options[1]).getByRole("checkbox"));
     await waitFor(() =>
       expect(screen.queryByRole("link", { name: "Draft plan" })).toBeNull()
     );
-    expect(
-      screen.getByRole("link", { name: "Spring Boot upgrade" })
-    ).toBeInTheDocument();
+    // A plan matches every archetype one of its target profiles belongs to.
+    for (const name of ["Spring Boot upgrade", "Java lift and shift"]) {
+      expect(screen.getByRole("link", { name })).toBeInTheDocument();
+    }
     expect(
       screen.queryByRole("link", { name: "Java EE to Quarkus" })
     ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Unreported" })).toBeNull();
   });
 
   it("disables Edit and Delete of a plan managed by Konveyor", async () => {

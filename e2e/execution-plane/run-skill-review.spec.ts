@@ -4,12 +4,13 @@
  * keeps its snapshot of excluded skills, and the application Skills tab and
  * the skill page agree. No fixture excludes a skill and a reload resets the
  * mock, so each test saves an exclusion on plan 5 (the plan of application
- * 13) through the API and then navigates inside the app.
+ * 13's Java 17 on OpenShift target profile) through the API and then
+ * navigates inside the app. Application 13's other target profile runs
+ * another plan, so the dialog asks which one it runs on.
  */
 import type { Locator, Page } from "@playwright/test";
 
 import {
-  addTargetProfile,
   agenticGet,
   agenticRequest,
   appPath,
@@ -20,6 +21,7 @@ import {
   openBulkRunMigration,
   personaSelect,
   pickMenuOption,
+  pickRunTargetProfile,
   spaNavigate,
   test,
   waitForInventory,
@@ -27,6 +29,10 @@ import {
 
 const PLAN_ID = "5";
 const APPLICATION_ID = 13;
+const APPLICATION = "Branch Operations";
+/** Application 13's target profile that uses plan 5. */
+const TARGET_PROFILE_ID = 31;
+const TARGET_PROFILE = "Java 17 on OpenShift";
 const EXCLUDED_SKILL_ID = "8";
 /** Reaches plan 5 only through its agents' skill collection. */
 const COLLECTION_SKILL_ID = "3";
@@ -52,15 +58,9 @@ interface StoredPlan {
     instructions: string;
     requiresApproval: boolean;
   }[];
-  migrationPath: {
-    archetype: Ref;
-    targetProfiles: Ref[];
-    isDefault?: boolean;
-  };
 }
 interface MigrationView {
-  plan?: Ref;
-  skills?: { stages: SkillGroup[]; everyStage: SkillGroup[] };
+  migrationPaths?: { targetProfile: { id: number }; plan?: Ref }[];
 }
 
 /** Saves plan 5 with one excluded skill, as the plan wizard does. */
@@ -76,13 +76,6 @@ const savePlanExclusion = async (page: Page, skillId: string) => {
       instructions: stage.instructions,
       requiresApproval: stage.requiresApproval,
     })),
-    migrationPath: {
-      archetype: { id: plan.migrationPath.archetype.id },
-      targetProfiles: plan.migrationPath.targetProfiles.map(({ id }) => ({
-        id,
-      })),
-      isDefault: plan.migrationPath.isDefault,
-    },
     excludedSkills: [{ id: skillId }],
   });
   expect(saved.status, "PUT plan").toBeLessThan(300);
@@ -99,19 +92,24 @@ const excludeSkillOnPlan = async (page: Page) => {
     page,
     `/application-migrations?applicationIds=${APPLICATION_ID}`
   );
-  const view = views[APPLICATION_ID];
-  expect(view.plan?.id).toBe(PLAN_ID);
-  const excluded = [
-    ...(view.skills?.stages ?? []),
-    ...(view.skills?.everyStage ?? []),
-  ]
-    .flatMap((group) => group.skills)
-    .filter((entry) => entry.excluded);
-  expect(new Set(excluded.map(({ skill }) => skill.id))).toEqual(
-    new Set([EXCLUDED_SKILL_ID])
+  const path = views[APPLICATION_ID].migrationPaths?.find(
+    ({ targetProfile }) => targetProfile.id === TARGET_PROFILE_ID
   );
-  return { skillName: excluded[0].skill.name };
+  expect(path?.plan?.id).toBe(PLAN_ID);
+  const plan = await agenticGet<{ excludedSkills?: Ref[] }>(
+    page,
+    `/plans/${PLAN_ID}`
+  );
+  expect(plan.excludedSkills?.map(({ id }) => id)).toEqual([EXCLUDED_SKILL_ID]);
+  return { skillName: plan.excludedSkills![0].name };
 };
+
+/**
+ * Picks application 13's target profile on plan 5 in the open dialog: its
+ * archetype has two target profiles with a plan, so Run waits for a pick.
+ */
+const pickTargetProfile = (page: Page, preflight: Locator) =>
+  pickRunTargetProfile(page, preflight, APPLICATION, TARGET_PROFILE);
 
 /**
  * Skills by stage on the plan run page, the Migration tab and the Run
@@ -130,6 +128,8 @@ const stageSkillsTable = (
 /** Opens every collapsed group of a Skills by stage table (the dialog's). */
 const expandAllGroups = async (table: Locator) => {
   const collapsed = table.locator('button[aria-expanded="false"]');
+  // Groups start collapsed: wait for the (re)loaded table's first one.
+  await expect(collapsed.first()).toBeVisible();
   while ((await collapsed.count()) > 0) await collapsed.first().click();
 };
 
@@ -167,6 +167,7 @@ test.describe("Skills in the run dialog and on the run pages", () => {
       .click();
     const preflight = dialog(page, "Run migration plan");
     await expect(preflight).toBeVisible();
+    await pickTargetProfile(page, preflight);
 
     // Collapsed until asked for; every group in it collapsed too.
     const toggle = preflight.getByRole("button", { name: "Skills by stage" });
@@ -197,8 +198,12 @@ test.describe("Skills in the run dialog and on the run pages", () => {
     const readiness = preflight.getByRole("grid", {
       name: "Selected applications",
     });
-    const offset = async () =>
-      (await onePlan.boundingBox())!.y - (await readiness.boundingBox())!.y;
+    // Measured from the table's bottom: the row's Target profile cell
+    // changes height with the choice (a select, or the plan's profile).
+    const offset = async () => {
+      const table = (await readiness.boundingBox())!;
+      return (await onePlan.boundingBox())!.y - (table.y + table.height);
+    };
     const before = await offset();
     await onePlan.check();
     await expect(
@@ -315,6 +320,7 @@ test.describe("Skills in the run dialog and on the run pages", () => {
       "Branch Operations",
       "Claims Processing",
     ]);
+    await pickTargetProfile(page, preflight);
     await preflight.getByRole("button", { name: "Skills by stage" }).click();
     // Each application on its own plan: one table per run.
     await expect(
@@ -379,7 +385,10 @@ const resourceName = (name: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-/** Opens the Run dialog from application 13's Migration tab. */
+/**
+ * Opens the Run dialog from an application's Migration tab; for application
+ * 13 (the default) it also picks the target profile on plan 5.
+ */
 const openRunDialog = async (page: Page, applicationId = APPLICATION_ID) => {
   await spaNavigate(page, `/applications/${applicationId}?tab=migration`);
   await main(page)
@@ -387,6 +396,8 @@ const openRunDialog = async (page: Page, applicationId = APPLICATION_ID) => {
     .click();
   const preflight = dialog(page, "Run migration plan");
   await expect(preflight).toBeVisible();
+  if (applicationId === APPLICATION_ID)
+    await pickTargetProfile(page, preflight);
   return preflight;
 };
 
@@ -503,41 +514,109 @@ test.describe("Excluding skills and picking the target profile for a run", () =>
     expect(rows.every(({ excluded }) => excluded)).toBe(true);
   });
 
-  test("an archetype with two target profiles: the pick decides the plan", async ({
+  test("an application with two runnable target profiles: Run waits for a pick, and the pick decides the plan", async ({
     page,
   }) => {
+    // Customer Management (Java EE Application) runs Java EE to Quarkus on
+    // Quarkus 3.x or Java lift and shift on OpenJDK 21 on OpenShift.
     await bootMockApi(page);
-    // A second profile on Java EE Application (Customer Management's), with
-    // Java EE lift and shift assigned to it: runtime data, not a fixture.
-    const profile = { id: 19, name: "OpenJDK 21 on OpenShift" };
-    await addTargetProfile(page, 1, profile);
-    const assigned = await agenticRequest(
-      page,
-      "PUT",
-      `/archetypes/1/target-profiles/${profile.id}/plan`,
-      { planId: "3" }
-    );
-    expect(assigned.status, "PUT target profile plan").toBeLessThan(300);
-
     const preflight = await openRunDialog(page, 1);
     const select = preflight.getByRole("button", {
       name: /^Target profile for Customer Management/,
     });
-    // The server's default is preselected.
+    const run = preflight.getByRole("button", {
+      name: "Run on 1 application",
+    });
+    // No default: nothing preselected, and Run is off until a pick.
     await expect(select).toHaveAccessibleName(
-      "Target profile for Customer Management Quarkus 3.x"
+      "Target profile for Customer Management Select a target profile"
     );
+    await expect(select).toHaveAccessibleDescription(
+      "Select a target profile to run this application."
+    );
+    await expect(run).toBeDisabled();
     await select.click();
-    await pickMenuOption(page, profile.name);
+    // Each option says the plan it runs.
+    await expect(
+      page.getByRole("option", { name: /^Quarkus 3\.x/ })
+    ).toContainText("Runs Java EE to Quarkus");
+    await expect(
+      page.getByRole("option", { name: /^OpenJDK 21 on OpenShift/ })
+    ).toContainText("Runs Java lift and shift");
+    await pickMenuOption(page, /^OpenJDK 21 on OpenShift/);
     await expect(select).toHaveAccessibleName(
-      `Target profile for Customer Management ${profile.name}`
+      "Target profile for Customer Management OpenJDK 21 on OpenShift"
     );
     const row = preflight.getByRole("row", { name: /Customer Management/ });
     await expect(
-      row.getByRole("link", { name: "Java EE lift and shift" })
+      row.getByRole("link", { name: "Java lift and shift" })
     ).toBeVisible();
+    await expect(run).toBeEnabled();
 
-    const run = await runAndOpen(page, preflight);
-    expect(run.name).toMatch(/: Java EE lift and shift$/);
+    const created = await runAndOpen(page, preflight);
+    expect(created.name).toMatch(/: Java lift and shift$/);
+  });
+
+  test("from a plan shared by two archetypes, each application gets the target profile that uses it", async ({
+    page,
+  }) => {
+    await bootMockApi(page);
+    await spaNavigate(page, "/migration-plans/3");
+    await expect(main(page).getByRole("heading", { level: 1 })).toHaveText(
+      "Java lift and shift"
+    );
+    await main(page).getByRole("button", { name: "Actions" }).click();
+    await page.getByRole("menuitem", { name: "Run migration plan" }).click();
+    const preflight = dialog(page, "Run migration plan");
+    // Two target profiles use the plan: the description names neither.
+    await expect(preflight).toContainText(
+      "Runs Java lift and shift on the applications you select."
+    );
+    await expect(preflight).not.toContainText("Target profile: ");
+    const table = preflight.getByRole("grid", {
+      name: "Applications of Java lift and shift",
+    });
+    // The Target profile column says which: each application runs on the
+    // one target profile of its archetype that uses the plan, as text, so
+    // no pick is asked for.
+    await expect(
+      table.getByRole("columnheader", { name: "Target profile" })
+    ).toBeVisible();
+    await expect(
+      table.getByRole("gridcell", { name: "OpenJDK 21 on OpenShift" }).first()
+    ).toBeVisible();
+    await expect(
+      table.getByRole("gridcell", { name: "Java 8 on OpenShift" }).first()
+    ).toBeVisible();
+    await expect(
+      table.getByRole("button", { name: /^Target profile for / })
+    ).toHaveCount(0);
+    await expect(
+      preflight.getByText("Select a target profile to run this application.")
+    ).toHaveCount(0);
+    await expect(
+      preflight.getByRole("button", { name: /^Run on \d+ applications/ })
+    ).toBeEnabled();
+    // The preview shows which: each application's own target profile skills.
+    await preflight.getByRole("button", { name: "Skills by stage" }).click();
+    const preview = stageSkillsTable(preflight);
+    await expandAllGroups(preview);
+    await expect(
+      preview
+        .getByText(
+          "Target profile: OpenJDK 21 on OpenShift (Java EE Application)"
+        )
+        .first()
+    ).toBeVisible();
+    await expect(
+      preview
+        .getByText(
+          "Target profile: Java 8 on OpenShift (Legacy Java Application)"
+        )
+        .first()
+    ).toBeVisible();
+    await expect(
+      preview.getByText(/^Target profile: Quarkus 3\.x/)
+    ).toHaveCount(0);
   });
 });

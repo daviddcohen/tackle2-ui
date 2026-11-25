@@ -451,8 +451,7 @@ export const getMigrationPlanById = async (planId: EntityId) => {
 };
 
 /**
- * `migrationPath`, `description` and `excludedSkills` have no backend and are
- * not stored.
+ * `description` and `excludedSkills` have no backend and are not stored.
  */
 export const createMigrationPlan = async (request: MigrationPlanRequest) =>
   toMigrationPlan(

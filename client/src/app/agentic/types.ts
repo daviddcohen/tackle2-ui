@@ -329,16 +329,13 @@ export interface PlanStageRequest {
   requiresApproval: boolean;
 }
 
-export interface MigrationPathAssociation {
+/**
+ * A migration path: one target profile and the archetype that owns it (a
+ * target profile belongs to exactly one archetype).
+ */
+export interface MigrationPath {
   archetype: HubRef;
-  targetProfiles: HubRef[];
-  isDefault: boolean;
-}
-
-export interface MigrationPathRequest {
-  archetype: IdRef<number>;
-  targetProfiles: IdRef<number>[];
-  isDefault: boolean;
+  targetProfile: HubRef;
 }
 
 /** Where one skill a stage gets comes from. Refs only; the UI writes the words. */
@@ -383,7 +380,8 @@ export interface StageSkillsGroup {
 export interface EveryStageSkillsGroup {
   /**
    * The application these belong to. Absent in a plan preview: then they
-   * come from the plan's archetype and target profiles.
+   * come from the preview's target profiles and their archetypes
+   * (`ResolvePlanSkillsRequest.targetProfiles`).
    */
   application?: HubRef;
   /** Archetype, target profile and application skills. */
@@ -404,15 +402,18 @@ export interface SkillsByStage {
 export interface ResolvePlanSkillsRequest {
   /** In stage order; `name` labels the stage group (absent: ""). */
   stages: { agent: IdRef; name?: string }[];
-  migrationPath?: {
-    archetype: IdRef<number>;
-    targetProfiles: IdRef<number>[];
-  };
+  /**
+   * The plan preview's context: these target profiles and the archetypes
+   * that own them (a saved plan sends its `migrationPaths`). Absent or empty:
+   * no archetype or target profile skills. Ignored with `applications`.
+   */
+  targetProfiles?: IdRef<number>[];
   excludedSkills?: IdRef[];
   /**
    * Resolve for these applications: one `everyStage` group per application,
-   * from its own archetypes, target profile and attachments. Absent: the plan
-   * preview (one `everyStage` group from `migrationPath`).
+   * from its archetypes, the target profile picked for it and its own
+   * attachments. Absent: the plan preview (one `everyStage` group from
+   * `targetProfiles`).
    */
   applications?: ResolvePlanSkillsApplication[];
 }
@@ -422,9 +423,9 @@ export interface ResolvePlanSkillsApplication extends IdRef<number> {
   /**
    * The target profile a run picks for this application: a profile of one of
    * its archetypes (`ApplicationMigrationView.migrationPaths`). Absent: the
-   * server's default (`ApplicationMigrationView.targetProfile`). Null: no
-   * target profile, so no target profile skills (a plan without a migration
-   * path on this application's archetype).
+   * application's default path (`ApplicationMigrationView.targetProfile`),
+   * or none when it has no default. Null: no target profile, so no target
+   * profile skills (a plan that none of the application's profiles uses).
    */
   targetProfile?: IdRef<number> | null;
 }
@@ -473,14 +474,24 @@ export interface MigrationPlan {
   name: string;
   description: string;
   stages: PlanStage[];
-  migrationPath?: MigrationPathAssociation;
+  /**
+   * Server-derived, read-only: the target profiles whose migration plan is
+   * this plan, each with its archetype, sorted by archetype name, then
+   * profile name. Empty: no target profile uses the plan. Absent when the
+   * backend does not report it. Set from the target profile side
+   * (`assignPlanToTargetProfile`), never by a plan write.
+   */
+  migrationPaths?: MigrationPath[];
   /**
    * Skills this Plan turns off: no stage of its runs gets them, whatever
    * source they come through. Absent when the Plan excludes nothing (and on a
    * backend without exclusions).
    */
   excludedSkills?: EntityRef[];
-  /** Server-derived: applications whose migration resolves to this Plan. */
+  /**
+   * Server-derived: applications with a migration path whose target profile
+   * uses this Plan (the applications it can migrate).
+   */
   applicationImpact?: PlanApplicationImpact;
   /** Server-derived: number of plan runs that use this Plan. */
   runCount?: number;
@@ -501,7 +512,6 @@ export interface MigrationPlanRequest {
   name: string;
   description: string;
   stages: PlanStageRequest[];
-  migrationPath?: MigrationPathRequest;
   /** Skills to turn off for every stage. Absent or empty: none. */
   excludedSkills?: IdRef[];
 }
@@ -607,8 +617,11 @@ export interface StartApplicationMigrationsRequest {
    * The target profile each listed application runs on, picked in the Run
    * migration plan dialog (`ResolvePlanSkillsApplication.targetProfile`:
    * null is none). With "recommended" the pick also decides the plan: the
-   * plan assigned to that target profile. An application left out runs on
-   * the server's default.
+   * plan that target profile uses. An application left out runs on its
+   * default path with "recommended" (409 when it has several runnable paths
+   * and so no default), and with "single" on its only path whose profile
+   * uses the plan (none: no target profile; several: 409, a pick is needed,
+   * as with "recommended").
    */
   targetProfiles?: {
     application: IdRef<number>;
@@ -628,25 +641,28 @@ export interface StartApplicationMigrationsResponse {
 }
 
 /**
- * A target profile an application can migrate on: a profile of one of its
- * archetypes, and the plan assigned to it.
+ * A migration path an application can migrate on (a target profile of one of
+ * its archetypes), with the plan that profile uses.
  */
-export interface ApplicationMigrationPath {
-  archetype: HubRef;
-  targetProfile: HubRef;
-  /** The plan assigned to the profile (`migrationPath.isDefault`); absent: none. */
+export interface ApplicationMigrationPath extends MigrationPath {
+  /** The migration plan the target profile uses; absent: none. */
   plan?: EntityRef;
 }
 
 export interface ApplicationMigrationView {
+  /** At least one of the application's migration paths has a plan. */
   configured: boolean;
-  /** The application's own target profile: its archetype's. */
+  /**
+   * The target profile of the application's default path: its only path
+   * whose target profile uses a plan. Absent when none or several do.
+   */
   targetProfile?: HubRef;
-  /** The archetype `targetProfile` belongs to. */
+  /** The archetype of the default path (`targetProfile`). */
   archetype?: HubRef;
   /**
-   * The plan the next run uses: the default plan of the application's
-   * archetype and target profile. Never the latest run's plan.
+   * The plan of the default path: what a run without a target profile pick
+   * uses. Absent when the application has no path with a plan, or several
+   * (then a run needs a pick). Never the latest run's plan.
    */
   plan?: EntityRef;
   /** The application's latest plan run, if it has one. */
@@ -655,7 +671,7 @@ export interface ApplicationMigrationView {
   planRunPlan?: EntityRef;
   /**
    * Every target profile of the application's archetypes (archetype order,
-   * then profile order), each with its assigned plan: what a run can pick
+   * then profile order), each with the plan it uses: what a run can pick
    * from. Absent when the server does not report it: the run uses
    * `targetProfile` and `plan`, with no choice.
    */
@@ -668,8 +684,9 @@ export interface ApplicationMigrationView {
   action?: ApplicationMigrationAction;
   /**
    * What each stage of `plan` gets for this application, with one
-   * `everyStage` group for this application. Without a plan, `stages` is
-   * empty and only the context skills are listed.
+   * `everyStage` group for this application (on the default path's target
+   * profile, none without a default). Without a plan, `stages` is empty and
+   * only the context skills are listed.
    */
   skills?: SkillsByStage;
   result?: ApplicationMigrationResult;

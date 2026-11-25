@@ -21,6 +21,7 @@ import { isAgenticEnabled } from "@app/Constants";
 import { DevPaths } from "@app/Paths";
 import { Archetype } from "@app/api/models";
 import { useHasSomeScopes } from "@app/auth";
+import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { DrawerTabContent } from "@app/components/detail-drawer";
 import { LabelsFromItems } from "@app/components/labels/labels-from-items/labels-from-items";
 import { useLinkComponent } from "@app/hooks/useLinkComponent";
@@ -162,7 +163,11 @@ export const TabTargetProfiles: React.FC<TabTargetProfilesProps> = ({
                         <LabelsFromItems items={profile.generators} />
                       </Td>
                       <Td dataLabel={t("terms.analysisProfile")}>
-                        {profile.analysisProfile?.name ?? "-"}
+                        {profile.analysisProfile?.name ?? (
+                          <EmptyTextMessage
+                            message={t("agentic.archetype.notAssigned")}
+                          />
+                        )}
                       </Td>
                     </>
                   )}

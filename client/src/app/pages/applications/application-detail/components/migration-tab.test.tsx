@@ -242,6 +242,68 @@ describe("MigrationTab", () => {
       ).toHaveAttribute("href", "/archetypes/3/target-profiles");
     });
 
+    it("names the archetype's only target profile from the paths", () => {
+      mockState.migration = unconfigured({
+        targetProfile: undefined,
+        archetype: undefined,
+        migrationPaths: [
+          {
+            archetype: { id: 4, name: "Java EE Application" },
+            targetProfile: { id: 11, name: "Quarkus 3.x" },
+          },
+        ],
+      });
+      renderTab(application([{ id: 4, name: "Java EE Application" }]));
+      expect(
+        screen.getByText("agentic.execution.noPlanForProfileBody")
+      ).toBeInTheDocument();
+      // The only path is the chain the facts show.
+      expect(
+        within(fact("agentic.execution.targetProfile")).getByRole("link", {
+          name: "Quarkus 3.x",
+        })
+      ).toHaveAttribute(
+        "href",
+        "/archetypes/4/target-profiles#target-profile-11"
+      );
+    });
+
+    it("says none of the archetype's target profiles has a plan", () => {
+      mockState.migration = unconfigured({
+        targetProfile: undefined,
+        archetype: undefined,
+        migrationPaths: [
+          {
+            archetype: { id: 4, name: "Java EE Application" },
+            targetProfile: { id: 11, name: "Quarkus 3.x" },
+          },
+          {
+            archetype: { id: 4, name: "Java EE Application" },
+            targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+          },
+        ],
+      });
+      renderTab(application([{ id: 4, name: "Java EE Application" }]));
+      expect(
+        screen.getByText("agentic.execution.noPlanForProfilesBody")
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("agentic.execution.noPlanForProfileBody")
+      ).toBeNull();
+      // Each path is listed; none can run, so no note about picking one.
+      expect(
+        within(fact("terms.targetProfiles")).getAllByRole("listitem")
+      ).toHaveLength(2);
+      expect(
+        screen.queryByText("agentic.execution.migrationPathsNote")
+      ).toBeNull();
+      expect(
+        screen.getByRole("link", {
+          name: "agentic.execution.viewTargetProfiles",
+        })
+      ).toHaveAttribute("href", "/archetypes/4/target-profiles");
+    });
+
     it("sends an application without an archetype to the archetypes", () => {
       renderTab(application([]));
       expect(
@@ -439,10 +501,85 @@ describe("MigrationTab", () => {
       ).toEqual(["Java EE Application", "Batch Jobs"]);
     });
 
+    describe("several target profiles with a plan", () => {
+      const javaEE = { id: 4, name: "Java EE Application" };
+      const noDefault = (overrides: Partial<ApplicationMigrationView> = {}) =>
+        view({
+          plan: undefined,
+          targetProfile: undefined,
+          archetype: undefined,
+          migrationPaths: [
+            {
+              archetype: javaEE,
+              targetProfile: { id: 11, name: "Quarkus 3.x" },
+              plan: { id: "1", name: "Java EE to Quarkus" },
+            },
+            {
+              archetype: javaEE,
+              targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+              plan: { id: "3", name: "Java lift and shift" },
+            },
+            {
+              archetype: javaEE,
+              targetProfile: { id: 13, name: "Payara 6" },
+            },
+          ],
+          ...overrides,
+        });
+
+      it("lists each target profile with its plan in one fact, and says a run picks one", () => {
+        mockState.migration = noDefault();
+        renderTab(application([javaEE]));
+        expect(
+          within(fact("terms.targetProfiles")).getAllByRole("listitem")
+        ).toHaveLength(3);
+        expect(
+          screen.getByText("agentic.execution.migrationPathsNote")
+        ).toBeInTheDocument();
+        // No single chain: no Target profile or Migration plan fact.
+        expect(
+          screen.queryByText("agentic.execution.targetProfile")
+        ).toBeNull();
+        expect(screen.queryByText("agentic.entity.migrationPlan")).toBeNull();
+      });
+
+      it("says the latest run ran a plan none of its target profiles uses", () => {
+        mockState.migration = noDefault({
+          planRun: { id: "4", name: "Run #4: .NET lift and shift" },
+          planRunPlan: { id: "7", name: ".NET lift and shift" },
+          runPhase: "Failed",
+        });
+        mockState.planRun = run("Failed", []);
+        renderTab(application([javaEE]));
+        expect(
+          screen.getByText("agentic.execution.latestRunUnusedPlan")
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText("agentic.execution.latestRunOtherPlan")
+        ).toBeNull();
+      });
+
+      it("says nothing when the latest run ran one of its target profiles' plans", () => {
+        mockState.migration = noDefault({
+          planRun: { id: "4", name: "Run #4: Java lift and shift" },
+          planRunPlan: { id: "3", name: "Java lift and shift" },
+          runPhase: "Failed",
+        });
+        mockState.planRun = run("Failed", []);
+        renderTab(application([javaEE]));
+        expect(
+          screen.queryByText("agentic.execution.latestRunUnusedPlan")
+        ).toBeNull();
+        expect(
+          screen.queryByText("agentic.execution.latestRunOtherPlan")
+        ).toBeNull();
+      });
+    });
+
     it("says which plan the latest run ran when it is not the application's", () => {
       mockState.migration = view({
-        planRun: { id: "4", name: "Run #4: Java EE lift and shift" },
-        planRunPlan: { id: "3", name: "Java EE lift and shift" },
+        planRun: { id: "4", name: "Run #4: Java lift and shift" },
+        planRunPlan: { id: "3", name: "Java lift and shift" },
         runPhase: "Failed",
       });
       mockState.planRun = run("Failed", []);

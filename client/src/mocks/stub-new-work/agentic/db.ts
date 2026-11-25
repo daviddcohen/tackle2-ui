@@ -19,6 +19,7 @@ import {
   HubRef,
   HubSkillAssociation,
   HubSkillAssociationScope,
+  MigrationPath,
   MigrationPlan,
   ModelProjection,
   Provider,
@@ -40,6 +41,7 @@ import {
   mockProviders,
   mockSkillCollections,
   mockSkills,
+  mockTargetProfilePlans,
 } from "./fixtures";
 
 // ---------------------------------------------------------------------------
@@ -69,7 +71,10 @@ export type StoredSkill = Omit<Skill, "associations"> & {
 };
 
 /** A Plan as stored: server-derived fields are computed on read. */
-export type StoredPlan = Omit<MigrationPlan, "applicationImpact" | "runCount">;
+export type StoredPlan = Omit<
+  MigrationPlan,
+  "migrationPaths" | "applicationImpact" | "runCount"
+>;
 
 export type EntityKind =
   | "skills"
@@ -88,6 +93,14 @@ interface AgenticDb {
   providers: Provider[];
   agents: Agent[];
   plans: StoredPlan[];
+  /**
+   * The migration plan each target profile uses: Hub target profile id ->
+   * plan id. The reference a Hub `TargetProfile.migrationPlan` would hold;
+   * plans derive their `migrationPaths` from it. Kept here, not on the Hub
+   * archetype stub, because an archetype PUT replaces whole profiles from
+   * the client's cache and would silently undo an assignment.
+   */
+  targetProfilePlans: Record<number, EntityId>;
   agentTestRuns: AgentTestRun[];
   executionPolicy: ExecutionPolicy;
   /** Ids that came from fixtures (used by the `initial` scenario). */
@@ -116,6 +129,7 @@ const toStoredSkill = (skill: Skill): StoredSkill => ({
 
 const toStoredPlan = (plan: MigrationPlan): StoredPlan => {
   const stored: MigrationPlan = { ...plan };
+  delete stored.migrationPaths;
   delete stored.applicationImpact;
   delete stored.runCount;
   return stored;
@@ -138,6 +152,7 @@ const createDb = (): AgenticDb => {
     providers,
     agents,
     plans,
+    targetProfilePlans: clone(mockTargetProfilePlans),
     agentTestRuns,
     executionPolicy: clone(mockExecutionPolicy),
     seeded: {
@@ -321,6 +336,32 @@ export const findTargetProfile = (id: number) => {
   }
   return undefined;
 };
+
+/**
+ * The migration paths whose target profile uses the Plan (the stored
+ * references), with current names, sorted by archetype name, then profile
+ * name. A reference to a profile that no longer exists (deleted by a Hub
+ * archetype write) drops out.
+ */
+export const migrationPathsOfPlan = (planId: EntityId): MigrationPath[] =>
+  Object.entries(db.targetProfilePlans)
+    .filter(([, referenced]) => referenced === planId)
+    .flatMap(([profileId]) => {
+      const found = findTargetProfile(Number(profileId));
+      return found != null
+        ? [
+            {
+              archetype: { id: found.archetype.id, name: found.archetype.name },
+              targetProfile: { id: found.profile.id, name: found.profile.name },
+            },
+          ]
+        : [];
+    })
+    .sort(
+      (a, b) =>
+        a.archetype.name.localeCompare(b.archetype.name) ||
+        a.targetProfile.name.localeCompare(b.targetProfile.name)
+    );
 
 /** Hub reference name for a Skill association scope, or undefined if unknown. */
 export const findHubResourceName = (

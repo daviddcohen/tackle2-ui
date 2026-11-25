@@ -68,7 +68,7 @@ test.describe("Plan run approval", () => {
 
   // Regression guard: a stage first rendered as Pending that later becomes AwaitingApproval on the
   // same, already-mounted page must bring back the Approve button.
-  // Run #4 (Java EE lift and shift) has a second approval gate on its last stage ("Review
+  // Run #4 (Java lift and shift) has a second approval gate on its last stage ("Review
   // security"); with the interactive policy the server stops there after ~12 s.
   test("a stage that transitions to awaiting approval gets the approval alert", async ({
     page,

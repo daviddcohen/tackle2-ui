@@ -54,7 +54,6 @@ import {
   findApplication,
   findArchetype,
   hubIdOf,
-  isSeeded,
   listNames,
   notFound,
   optionalArray,
@@ -71,12 +70,15 @@ import {
   getPrototypeStageIndex,
 } from "./prototype-state";
 import {
+  assignedPlanFor,
+  defaultPathOf,
   excludedSkillIdsOf,
+  migrationPathsOf,
+  pathsUsingPlan,
   presentSkillsByStage,
   resolveSkillsByStage,
   resolvedSkillIds,
   stagesOfPlan,
-  targetProfileFor,
   targetProfilePickOf,
   targetProfilesOf,
 } from "./skill-resolution";
@@ -439,8 +441,10 @@ type SeedPhase =
 
 /**
  * Membership of the seeded runs in the execution scenarios: every portfolio
- * app once, each on the plan it resolves to, except Run #4
- * (`SINGLE_PLAN_RUN_IDS`).
+ * app once, each on a plan that exactly one of its target profiles uses (its
+ * snapshot resolves with that profile, `seedPicksFor`). Java EE and Legacy
+ * Java applications have a second runnable path (Java lift and shift), so
+ * "each on its default plan" does not apply to them: they have none.
  */
 export const EXECUTION_MEMBERSHIP: Record<EntityId, number[]> = {
   "1": [1, 3, 8],
@@ -486,19 +490,43 @@ const seedStagesFor = (planId: EntityId): PlanStage[] =>
 
 /**
  * The skills snapshot of a seeded run: the resolver on the fixture Plan the
- * run was started with and the run's applications, as `createRun` does.
+ * run was started with and the run's applications, each on its target
+ * profile that uses the run's Plan (`seedPicksFor`), as `createRun` does.
  */
 const seedSkillsFor = (
   planId: EntityId,
   applications: PlanRun["applications"]
-): PlanRun["skills"] =>
-  resolveRunSkills(
+): PlanRun["skills"] => {
+  const plan = mockMigrationPlans.find((candidate) => candidate.id === planId);
+  return resolveRunSkills(
     {
       stages: seedStagesFor(planId),
-      excludedSkills: mockMigrationPlans.find((plan) => plan.id === planId)
-        ?.excludedSkills,
+      excludedSkills: plan?.excludedSkills,
     },
-    applications.map((application) => application.id)
+    applications.map((application) => application.id),
+    { targetProfileIds: seedPicksFor(planId, applications) }
+  );
+};
+
+/**
+ * The target profile each application of a seeded run ran on: its only path
+ * whose profile uses the run's Plan, as a start without a pick
+ * (`planPicksFor`); none when no path does. The fixtures never have several
+ * (a test checks it); after a user assigned the Plan to a second profile of
+ * the same archetypes, the seeded snapshot takes none instead of failing
+ * every read.
+ */
+export const seedPicksFor = (
+  planId: EntityId,
+  applications: PlanRun["applications"]
+): Map<number, number | null> =>
+  new Map(
+    applications.map((ref) => {
+      const application = findApplication(ref.id);
+      const using =
+        application != null ? pathsUsingPlan(application, planId) : [];
+      return [ref.id, using.length === 1 ? using[0].profile.id : null];
+    })
   );
 
 const applicationRefs = (ids: number[]) =>
@@ -888,52 +916,14 @@ export const portfolioApplications = () =>
   selectPortfolio(mockApplicationArray);
 
 /**
- * The Plan a migration of this application resolves to: the default Plan of
- * the application's archetype + target profile (`migrationPath.isDefault`),
- * or none (not configured). Non-default Plans on the same path are only used
- * when a run selects them explicitly. In the `initial` scenario the seeded
- * Plans are hidden from every read, so they do not resolve either.
+ * Number of portfolio applications that the Plan can migrate: one of their
+ * migration paths has a target profile that uses it (`pathsUsingPlan`),
+ * whatever their default path or latest run. An application with paths on
+ * two Plans counts for both. The inventory filtered by Plan matches the
+ * same applications (any path's plan, `ApplicationMigrationView.
+ * migrationPaths`), so the counts agree.
  */
-export const resolvePlanFor = (
-  application: Application
-): StoredPlan | undefined => {
-  const target = targetProfileFor(application);
-  return target != null
-    ? assignedPlanFor(target.archetypeId, target.profile.id)
-    : undefined;
-};
-
-/**
- * The Plan assigned to one target profile of an archetype: the default Plan
- * whose migration path has it (`migrationPath.isDefault`), hidden in the
- * `initial` scenario like every seeded Plan.
- */
-export const assignedPlanFor = (
-  archetypeId: number,
-  targetProfileId: number
-): StoredPlan | undefined => {
-  const hideSeeded = getPrototypeScenario() === "initial";
-  return db.plans.find(
-    (plan) =>
-      !(hideSeeded && isSeeded("plans", plan.id)) &&
-      plan.migrationPath?.isDefault === true &&
-      plan.migrationPath.archetype.id === archetypeId &&
-      plan.migrationPath.targetProfiles.some(
-        (profile) => profile.id === targetProfileId
-      )
-  );
-};
-
-/**
- * Number of portfolio applications whose migration resolves to the Plan
- * (`resolvePlanFor`, their archetype and target profile), whatever plan
- * their latest run used. This is the `plan` of the application migration
- * view, so the count matches the inventory filtered by Plan.
- */
-export const planImpact = (planId: EntityId) =>
-  portfolioApplications().filter(
-    (application) => resolvePlanFor(application)?.id === planId
-  ).length;
+export const planImpact = (planId: EntityId) => planApplications(planId).length;
 
 /**
  * The applications counted by `planImpact`, as refs in name order: what the
@@ -941,11 +931,32 @@ export const planImpact = (planId: EntityId) =>
  */
 export const planApplications = (planId: EntityId): HubRef[] =>
   portfolioApplications()
-    .filter(
-      (application) => getApplicationMigration(application).plan?.id === planId
-    )
+    .filter((application) => pathsUsingPlan(application, planId).length > 0)
     .map(({ id, name }) => ({ id, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
+
+/**
+ * The target profile each application runs on when the Plan runs for it
+ * without a pick ("Use one migration plan for all applications", seeded
+ * runs): its only path whose target profile uses the Plan, or none (null)
+ * when no path does. 409 when several do: the server's state makes the
+ * choice ambiguous, as with "recommended" and several runnable paths.
+ */
+const planPicksFor = (
+  plan: { id: EntityId; name: string },
+  applications: Application[]
+): Map<number, number | null> =>
+  new Map(
+    applications.map((application) => {
+      const using = pathsUsingPlan(application, plan.id);
+      if (using.length > 1) {
+        throw conflict(
+          `${application.name} has several target profiles that use ${plan.name}. Pick the target profile it runs on.`
+        );
+      }
+      return [application.id, using[0]?.profile.id ?? null];
+    })
+  );
 
 // ---------------------------------------------------------------------------
 // Application migration view
@@ -1014,7 +1025,10 @@ const stageExecution = (
 
 /** A run's own choices: target profile picks and exclusions. */
 export interface RunChoices {
-  /** By application id (null: none); an application left out gets its default. */
+  /**
+   * By application id (null: none). Runs pass one for every application;
+   * the application view passes none, so its default path's profile applies.
+   */
   targetProfileIds?: ReadonlyMap<number, number | null>;
   /** Added to the plan's exclusions, for every origin. */
   excludedSkillIds?: ReadonlySet<EntityId>;
@@ -1045,27 +1059,25 @@ const applicationSkillsFor = (
 });
 
 /**
- * The application's migration chain: its own target profile (its
- * archetype's), that profile's archetype, and the plan they resolve to;
- * and every target profile of its archetypes with its assigned plan, the
- * choices a run has.
+ * The application's migration paths (every target profile of its archetypes,
+ * with the Plan it uses: the choices a run has) and its default path
+ * (`defaultPathOf`): the target profile, archetype and Plan a run without a
+ * pick uses, absent when no path, or several, have a Plan.
  */
 const migrationChain = (
-  application: Application,
-  resolved: StoredPlan | undefined
+  application: Application
 ): Pick<
   ApplicationMigrationView,
   "targetProfile" | "archetype" | "plan" | "migrationPaths"
 > => {
-  const target = targetProfileFor(application);
+  const defaultPath = defaultPathOf(application);
   const archetype =
-    target != null ? findArchetype(target.archetypeId) : undefined;
+    defaultPath != null ? findArchetype(defaultPath.archetypeId) : undefined;
   return {
-    migrationPaths: targetProfilesOf(application).flatMap(
-      ({ archetypeId, profile }) => {
+    migrationPaths: migrationPathsOf(application).flatMap(
+      ({ archetypeId, profile, plan }) => {
         const owner = findArchetype(archetypeId);
         if (owner == null) return [];
-        const plan = assignedPlanFor(archetypeId, profile.id);
         return [
           {
             archetype: { id: owner.id, name: owner.name },
@@ -1075,46 +1087,49 @@ const migrationChain = (
         ];
       }
     ),
-    ...(target != null
+    ...(defaultPath?.plan != null && archetype != null
       ? {
-          targetProfile: { id: target.profile.id, name: target.profile.name },
+          targetProfile: {
+            id: defaultPath.profile.id,
+            name: defaultPath.profile.name,
+          },
+          archetype: { id: archetype.id, name: archetype.name },
+          plan: { id: defaultPath.plan.id, name: defaultPath.plan.name },
         }
-      : {}),
-    ...(archetype != null
-      ? { archetype: { id: archetype.id, name: archetype.name } }
-      : {}),
-    ...(resolved != null
-      ? { plan: { id: resolved.id, name: resolved.name } }
       : {}),
   };
 };
 
 /**
- * The migration view of an application. `plan` is always the plan its next
- * run uses (`resolvePlanFor`: its archetype and target profile), never the
- * plan of its latest run; that one is `planRunPlan`, beside `planRun`. The
- * skills are the resolved plan's, for this application.
+ * The migration view of an application. `configured`: at least one of its
+ * paths has a Plan. `plan` is the default path's Plan, the one its next run
+ * uses without a pick, never the plan of its latest run; that one is
+ * `planRunPlan`, beside `planRun`. The skills are the default Plan's for
+ * this application (only the context skills without a default).
  */
 export const getApplicationMigration = (
   application: Application
 ): ApplicationMigrationView => {
   const record = latestRecordFor(application.id);
-  const resolved = resolvePlanFor(application);
+  const configured = migrationPathsOf(application).some(
+    (path) => path.plan != null
+  );
+  const resolved = defaultPathOf(application)?.plan;
   if (!record) {
-    if (!resolved) {
+    if (!configured) {
       return {
         configured: false,
-        ...migrationChain(application, resolved),
+        ...migrationChain(application),
         intervention: "none",
         skills: applicationSkillsFor(undefined, application.id).skills,
         stages: [],
         preflightReason:
-          "No migration plan is assigned to this migration path.",
+          "No target profile of this application's archetypes has a migration plan.",
       };
     }
     return {
       configured: true,
-      ...migrationChain(application, resolved),
+      ...migrationChain(application),
       ...scenarioPreflight(application),
       intervention: "none",
       ...applicationSkillsFor(resolved, application.id),
@@ -1136,9 +1151,9 @@ export const getApplicationMigration = (
   const isActive = run.status !== "Succeeded" && run.status !== "Failed";
   const repositoryUrl = application.repository?.url;
   return {
-    // Configured means a plan resolves for the next run, run or not.
-    configured: resolved != null,
-    ...migrationChain(application, resolved),
+    // Configured means a path has a plan for the next run, run or not.
+    configured,
+    ...migrationChain(application),
     planRun: { id: run.id, name: run.name },
     planRunPlan: { id: run.planId, name: run.planName },
     ...(isActive
@@ -1265,12 +1280,16 @@ const createRun = (
  * POST /application-migrations. Validates the request completely, then
  * creates one run per resolved Plan and returns the created runs.
  *
- * Optional run choices (absent: the behaviour before them):
+ * Optional run choices:
  * - `targetProfiles`: one pick per listed application (an application of
  *   the request, once), a profile of its archetypes or null (400 otherwise).
- *   With "recommended" the pick decides the Plan: the one assigned to that
- *   profile (409 when none is, 400 for null). The snapshot resolves each
- *   application with its pick; one left out gets its default.
+ *   With "recommended" the pick decides the Plan: the one that profile uses
+ *   (409 when it uses none, 400 for null). An application left out runs on
+ *   its default path (409 when several of its paths have a Plan, so it
+ *   needs a pick, or none has); with "single" on its only path whose
+ *   profile uses the Plan (`planPicksFor`: none, no target profile; several,
+ *   409). Every application's target profile is settled before any run is
+ *   created, and its snapshot resolves with it.
  * - `excludedSkills`: per Plan the request runs (400 for another Plan), the
  *   Skills that run excludes on top of the Plan's, for every origin. Ids
  *   that are not Skills, or that the run's snapshot does not list, are
@@ -1342,14 +1361,30 @@ export const startApplicationMigrations = (
     );
   }
 
-  // "Use each application's migration plan": the plan of the application's
-  // own archetype and target profile, never the plan of its last run.
+  // The Plan and target profile of every application, explicit before any
+  // run is created, so a snapshot never falls back to a default. "Use each
+  // application's migration plan" never follows the plan of its last run.
+  const effectivePicks = new Map<number, number | null>();
   const groups = new Map<EntityId, { plan: StoredPlan; apps: Application[] }>();
+  const unpicked =
+    singlePlan != null
+      ? planPicksFor(
+          singlePlan,
+          applications.filter((application) => !picks.has(application.id))
+        )
+      : undefined;
   applications.forEach((application) => {
-    const plan = singlePlan ?? pickedPlanFor(application, picks);
-    if (!plan) {
-      throw conflict(`No Plan resolves for ${application.name}.`);
+    const pick = picks.get(application.id);
+    let plan: StoredPlan;
+    let targetProfileId: number | null;
+    if (singlePlan != null) {
+      plan = singlePlan;
+      targetProfileId =
+        pick !== undefined ? pick : (unpicked?.get(application.id) ?? null);
+    } else {
+      ({ plan, targetProfileId } = recommendedRunFor(application, pick));
     }
+    effectivePicks.set(application.id, targetProfileId);
     const group = groups.get(plan.id) ?? { plan, apps: [] };
     group.apps.push(application);
     groups.set(plan.id, group);
@@ -1375,7 +1410,7 @@ export const startApplicationMigrations = (
   const created: EntityRef[] = [];
   groups.forEach(({ plan, apps }) => {
     const record = createRun(plan, apps, targetBranch, now, {
-      targetProfileIds: picks,
+      targetProfileIds: effectivePicks,
       excludedSkillIds: runExclusions.get(plan.id),
     });
     current.records.unshift(record);
@@ -1385,15 +1420,32 @@ export const startApplicationMigrations = (
 };
 
 /**
- * "Use each application's migration plan" for one application: the Plan
- * assigned to its picked target profile, else its own (`resolvePlanFor`).
+ * "Use each application's migration plan" for one application: the Plan its
+ * picked target profile uses; without a pick, its default path's
+ * (`defaultPathOf`). 409 when the picked profile uses no Plan, when no path
+ * has one, or when several do and nothing is picked; 400 for a null pick.
  */
-const pickedPlanFor = (
+const recommendedRunFor = (
   application: Application,
-  picks: ReadonlyMap<number, number | null>
-): StoredPlan | undefined => {
-  const pick = picks.get(application.id);
-  if (pick === undefined) return resolvePlanFor(application);
+  pick: number | null | undefined
+): { plan: StoredPlan; targetProfileId: number } => {
+  if (pick === undefined) {
+    const defaultPath = defaultPathOf(application);
+    if (defaultPath?.plan != null) {
+      return {
+        plan: defaultPath.plan,
+        targetProfileId: defaultPath.profile.id,
+      };
+    }
+    const runnable = migrationPathsOf(application).filter(
+      (path) => path.plan != null
+    );
+    throw conflict(
+      runnable.length > 1
+        ? `${application.name} has several target profiles with a migration plan (${listNames(runnable.map((path) => path.profile.name))}). Pick the target profile it runs on.`
+        : `No Plan resolves for ${application.name}.`
+    );
+  }
   if (pick === null) {
     throw badRequest(
       `${application.name} needs a target profile when planSelection is "recommended".`
@@ -1402,14 +1454,13 @@ const pickedPlanFor = (
   const target = targetProfilesOf(application).find(
     ({ profile }) => profile.id === pick
   );
-  const plan =
-    target != null ? assignedPlanFor(target.archetypeId, pick) : undefined;
+  const plan = target != null ? assignedPlanFor(pick) : undefined;
   if (!plan) {
     throw conflict(
       `No migration plan is assigned to ${target?.profile.name ?? pick}, the target profile picked for ${application.name}.`
     );
   }
-  return plan;
+  return { plan, targetProfileId: pick };
 };
 
 /** POST /application-migrations/:id/requests/current */

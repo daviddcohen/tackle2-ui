@@ -142,33 +142,38 @@ describe("target profile picks", () => {
   const quarkus = { id: 11, name: "Quarkus 3.x" };
   const openJdk = { id: 19, name: "OpenJDK 21 on OpenShift" };
   const unassigned = { id: 18, name: "Payara 6" };
-  const java17 = { id: 31, name: "Java 17 on OpenShift" };
+  const java8 = { id: 32, name: "Java 8 on OpenShift" };
   const openJdkPlan = plan("8", "Java EE to OpenJDK 21");
-  const allPlans: MigrationPlan[] = [
-    ...plans,
-    openJdkPlan,
-    {
-      ...plan("9", "Two Java EE profiles"),
-      migrationPath: {
-        archetype: javaEE,
-        targetProfiles: [quarkus, openJdk],
-        isDefault: false,
-      },
-    },
-  ];
+  const sharedPlan = plan("9", "Java lift and shift");
+  const allPlans: MigrationPlan[] = [...plans, openJdkPlan, sharedPlan];
   const paths: ApplicationMigrationPath[] = [
     { archetype: javaEE, targetProfile: quarkus, plan: plans[0] },
     { archetype: javaEE, targetProfile: openJdk, plan: openJdkPlan },
     { archetype: javaEE, targetProfile: unassigned },
   ];
-  /** On Java EE to Quarkus by default (Quarkus 3.x), three profiles to pick. */
+  /** Two target profiles with a plan, one without: no default path. */
   const several = (overrides: Partial<ApplicationMigrationView> = {}) => ({
-    ...view("1"),
-    archetype: javaEE,
-    targetProfile: quarkus,
+    ...view(undefined),
+    configured: true,
     migrationPaths: paths,
     ...overrides,
   });
+  /** Only Quarkus 3.x has a plan: the default path. */
+  const oneRunnable = () => ({
+    ...view("1"),
+    archetype: javaEE,
+    targetProfile: quarkus,
+    migrationPaths: [paths[0], paths[2]],
+  });
+  /** Two target profiles, of two archetypes, use the shared plan. */
+  const sharing = () =>
+    several({
+      migrationPaths: [
+        paths[0],
+        { archetype: javaEE, targetProfile: openJdk, plan: sharedPlan },
+        { archetype: legacy, targetProfile: java8, plan: sharedPlan },
+      ],
+    });
   const recommended = { planSelection: "recommended", planId: "" } as const;
   const single = (planId: string) =>
     ({ planSelection: "single", planId }) as const;
@@ -178,7 +183,6 @@ describe("target profile picks", () => {
       targetProfileChoice(
         { ...view("1"), archetype: javaEE, targetProfile: quarkus },
         recommended,
-        undefined,
         19
       )
     ).toEqual({
@@ -191,64 +195,55 @@ describe("target profile picks", () => {
     });
   });
 
-  it("offers every profile with each application's plan, preselecting the default", () => {
-    expect(
-      targetProfileChoice(several(), recommended, undefined, undefined)
-    ).toEqual({ kind: "picked", path: paths[0], candidates: paths });
-    expect(targetProfileChoice(several(), recommended, undefined, 19)).toEqual({
+  it("offers each application's profiles with a plan, and requires a pick among several", () => {
+    const runnable = paths.slice(0, 2);
+    // No default: no silent choice.
+    expect(targetProfileChoice(several(), recommended, undefined)).toEqual({
+      kind: "required",
+      candidates: runnable,
+    });
+    expect(targetProfileChoice(several(), recommended, 19)).toEqual({
       kind: "picked",
       path: paths[1],
-      candidates: paths,
+      candidates: runnable,
     });
-    // A default that is not one of the profiles: a pick is required.
-    expect(
-      targetProfileChoice(
-        several({ targetProfile: undefined }),
-        recommended,
-        undefined,
-        undefined
-      )
-    ).toEqual({ kind: "required", candidates: paths });
-    // One profile: no choice.
-    expect(
-      targetProfileChoice(
-        several({ migrationPaths: [paths[0]] }),
-        recommended,
-        undefined,
-        undefined
-      )
-    ).toEqual({ kind: "picked", path: paths[0], candidates: [paths[0]] });
+    // A profile without a plan cannot run: picking it picks nothing.
+    expect(targetProfileChoice(several(), recommended, 18)).toEqual({
+      kind: "required",
+      candidates: runnable,
+    });
+    // One profile with a plan: it is used, the others are not offered.
+    expect(targetProfileChoice(oneRunnable(), recommended, undefined)).toEqual({
+      kind: "picked",
+      path: paths[0],
+      candidates: [paths[0]],
+    });
   });
 
-  it("offers a plan's own profiles with one plan for all, none for a plan without a path", () => {
-    const multi = allPlans.find(({ id }) => id === "9");
-    expect(targetProfileChoice(several(), single("9"), multi, 19)).toEqual({
+  it("offers the profiles that use the plan with one plan for all", () => {
+    // One profile uses it: used.
+    expect(targetProfileChoice(several(), single("8"), undefined)).toEqual({
       kind: "picked",
       path: paths[1],
-      candidates: paths.slice(0, 2),
+      candidates: [paths[1]],
     });
-    // Java EE lift and shift has no migration path: no target profile.
-    expect(targetProfileChoice(several(), single("7"), plans[2], 19)).toEqual({
+    // None uses it: no target profile.
+    expect(targetProfileChoice(several(), single("7"), 19)).toEqual({
       kind: "picked",
       path: null,
       candidates: [],
     });
-    // A path on another archetype: none either.
-    const onLegacy: MigrationPlan = {
-      ...plans[2],
-      migrationPath: {
-        archetype: legacy,
-        targetProfiles: [java17],
-        isDefault: true,
-      },
-    };
-    expect(
-      targetProfileChoice(several(), single("7"), onLegacy, undefined)
-    ).toMatchObject({ kind: "picked", path: null });
-    // The plans list has not loaded the plan yet.
-    expect(
-      targetProfileChoice(several(), single("9"), undefined, undefined)
-    ).toEqual({ kind: "loading" });
+    // Several use it (here across two archetypes): a pick is required.
+    const shared = sharing().migrationPaths.slice(1);
+    expect(targetProfileChoice(sharing(), single("9"), undefined)).toEqual({
+      kind: "required",
+      candidates: shared,
+    });
+    expect(targetProfileChoice(sharing(), single("9"), 32)).toEqual({
+      kind: "picked",
+      path: shared[1],
+      candidates: shared,
+    });
   });
 
   it("regroups the applications by the plan of the profile they pick", () => {
@@ -262,22 +257,16 @@ describe("target profile picks", () => {
         migration: several(),
       },
     ];
-    const byDefault = groupReadyApplicationsByPlan(
-      pickRows,
-      recommended,
-      allPlans
-    );
-    expect(byDefault.map((group) => group.plan.id)).toEqual(["1"]);
-    expect(startTargetProfiles(byDefault)).toEqual([
-      { application: { id: 1 }, targetProfile: { id: 11 } },
-      { application: { id: 2 }, targetProfile: { id: 11 } },
-    ]);
+    // Without picks neither starts.
+    expect(
+      groupReadyApplicationsByPlan(pickRows, recommended, allPlans)
+    ).toEqual([]);
 
     const picked = groupReadyApplicationsByPlan(
       pickRows,
       recommended,
       allPlans,
-      { 2: 19 }
+      { 1: 11, 2: 19 }
     );
     expect(
       picked.map((group) => [
@@ -295,14 +284,25 @@ describe("target profile picks", () => {
     ]);
   });
 
-  it("starts nothing for an application whose pick is missing, and flags a plan run waiting for one", () => {
+  it("sends the only profile, flags a plan run waiting for a pick, and sends none for a plan no profile uses", () => {
+    const [own] = groupReadyApplicationsByPlan(
+      [
+        {
+          application: { id: 1, name: "Customer Management" },
+          migration: oneRunnable(),
+        },
+      ],
+      recommended,
+      allPlans
+    );
+    expect(startTargetProfiles([own])).toEqual([
+      { application: { id: 1 }, targetProfile: { id: 11 } },
+    ]);
+
     const waiting: PreflightRow = {
       application: { id: 1, name: "Customer Management" },
-      migration: several({ targetProfile: undefined }),
+      migration: sharing(),
     };
-    expect(
-      groupReadyApplicationsByPlan([waiting], recommended, allPlans)
-    ).toEqual([]);
     const [group] = groupReadyApplicationsByPlan(
       [waiting],
       single("9"),
@@ -310,7 +310,7 @@ describe("target profile picks", () => {
     );
     expect(group.isTargetProfileMissing).toBe(true);
     expect(startTargetProfiles([group])).toBeUndefined();
-    // A plan without a path sends an explicit none.
+    // A plan no profile of the application uses sends an explicit none.
     const [none] = groupReadyApplicationsByPlan(
       [waiting],
       single("7"),

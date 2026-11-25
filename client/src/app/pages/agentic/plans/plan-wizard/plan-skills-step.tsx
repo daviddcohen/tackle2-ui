@@ -103,8 +103,11 @@ export interface PlanSkillsStepProps {
   query: PlanSkillsQuery;
   /** The request's stages, in order: the group titles. */
   stageTitles: DraftStageTitle[];
-  /** The draft's archetype: its target profiles need no archetype suffix. */
-  archetypeId?: number;
+  /**
+   * Target profiles use the plan (an edit of a plan they use): Every stage
+   * holds their skills and their archetypes'.
+   */
+  hasTargetProfiles: boolean;
   excludedIds: EntityId[];
   onIncludeChange: (skill: EntityRef, included: boolean) => void;
   isEdit: boolean;
@@ -120,7 +123,7 @@ export interface PlanSkillsStepProps {
 export const PlanSkillsStep: React.FC<PlanSkillsStepProps> = ({
   query,
   stageTitles,
-  archetypeId,
+  hasTargetProfiles,
   excludedIds,
   onIncludeChange,
   isEdit,
@@ -173,10 +176,9 @@ export const PlanSkillsStep: React.FC<PlanSkillsStepProps> = ({
         {/* The plan page's Every stage note, after the first sentence, as
             in the plan page's section description. */}
         {t("agentic.plan.skillsIntro", {
-          everyStage:
-            archetypeId != null
-              ? t("agentic.stageSkills.everyStagePlanNote")
-              : t("agentic.stageSkills.everyStageNoPath"),
+          everyStage: hasTargetProfiles
+            ? t("agentic.stageSkills.everyStagePlanNote")
+            : t("agentic.stageSkills.everyStageNoPath"),
         })}
       </Content>
     </StackItem>
@@ -329,7 +331,6 @@ export const PlanSkillsStep: React.FC<PlanSkillsStepProps> = ({
             groupHeadingLevel="h2"
             // Over the plan page (0 and 100) and the Review table (200).
             rowIndexOffset={300}
-            originOptions={{ archetypeId }}
             aria-label={t("agentic.stageSkills.title")}
           />
         </div>

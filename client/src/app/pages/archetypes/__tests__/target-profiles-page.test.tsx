@@ -70,11 +70,12 @@ const plans: MigrationPlan[] = [
     name: "Java EE to Quarkus",
     description: "",
     stages: [],
-    migrationPath: {
-      archetype: { id: 1, name: "Java EE Application" },
-      targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
-      isDefault: true,
-    },
+    migrationPaths: [
+      {
+        archetype: { id: 1, name: "Java EE Application" },
+        targetProfile: { id: 11, name: "Quarkus 3.x" },
+      },
+    ],
   },
 ];
 
@@ -294,7 +295,7 @@ describe("TargetProfilesPage", () => {
     expect(screen.queryByText(/There was an error retrieving data/)).toBeNull();
   });
 
-  it("orders the row actions and blocks Delete while a plan is assigned", async () => {
+  it("orders the row actions and keeps Delete on for a profile with a plan", async () => {
     serve();
     renderPage();
 
@@ -313,7 +314,8 @@ describe("TargetProfilesPage", () => {
       "Delete",
     ]);
     expect(screen.getByRole("separator")).toBeInTheDocument();
-    expect(items[5]).toHaveAttribute("aria-disabled", "true");
+    // The plan reference lives on the profile and goes with it.
+    expect(items[5]).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it("opens Manage skills for the profile, named with its archetype", async () => {
@@ -788,8 +790,14 @@ describe("TargetProfilesPage", () => {
     const otherPlan: MigrationPlan = {
       ...plans[0],
       id: "3",
-      name: "Java EE lift and shift",
-      migrationPath: { ...plans[0].migrationPath!, isDefault: false },
+      name: "Java lift and shift",
+      // Used by another archetype's profile: still offered.
+      migrationPaths: [
+        {
+          archetype: { id: 3, name: "Legacy Java Application" },
+          targetProfile: { id: 32, name: "Java 8 on OpenShift" },
+        },
+      ],
     };
 
     it("changes the plan with Save, and says so", async () => {
@@ -823,7 +831,7 @@ describe("TargetProfilesPage", () => {
       ).toBeInTheDocument();
       expect(
         within(dialog).getByText(
-          "Only plans for Java EE Application are listed."
+          "A target profile uses one migration plan. Target profiles of several archetypes can share a plan."
         )
       ).toBeInTheDocument();
       const save = within(dialog).getByRole("button", { name: "Save" });
@@ -853,7 +861,7 @@ describe("TargetProfilesPage", () => {
         "Assign migration plan"
       );
       expect(
-        within(dialog).getByText("No migration plans for Java EE Application")
+        within(dialog).getByText("No migration plans yet")
       ).toBeInTheDocument();
       expect(
         within(dialog).getByRole("link", { name: "Go to migration plans" })
@@ -931,6 +939,30 @@ describe("TargetProfilesPage", () => {
       expect(
         screen.getByRole("button", { name: "Create target profile" })
       ).toHaveFocus();
+    });
+
+    it("says the archetype's applications can no longer run the profile's plan on it", async () => {
+      serve({ skillsResolver: (_req, res, ctx) => res(ctx.json([])) });
+      renderPage();
+
+      const dialog = await openRowAction("Quarkus 3.x", "Delete");
+      expect(
+        within(dialog).getByText(
+          "Quarkus 3.x will be deleted, and applications in Java EE Application can no longer run Java EE to Quarkus on it. This action cannot be undone."
+        )
+      ).toBeInTheDocument();
+    });
+
+    it("names the plan and the skills consequence together", async () => {
+      serve();
+      renderPage();
+
+      const dialog = await openRowAction("Quarkus 3.x", "Delete");
+      expect(
+        within(dialog).getByText(
+          "Quarkus 3.x will be deleted, and applications in Java EE Application can no longer run Java EE to Quarkus on it. The 2 skills attached to it are not deleted, but agents no longer get them from this target profile. This action cannot be undone."
+        )
+      ).toBeInTheDocument();
     });
 
     it("omits the skills sentence when the profile has no skills", async () => {

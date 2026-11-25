@@ -20,17 +20,15 @@ import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths } from "@app/Paths";
 import {
-  MigrationPlan,
+  MigrationPath,
   ResolvePlanSkillsRequest,
   getPlanConfigurationChecks,
-  getPlanTargetProfiles,
 } from "@app/agentic";
 import { useHasSomeScopes } from "@app/auth";
 import { adminViewScopes } from "@app/auth/roles-to-scopes";
 import { EmptyTextMessage } from "@app/components/EmptyTextMessage";
 import { PageHeader } from "@app/components/PageHeader";
 import { BreadcrumbEntry, breadcrumbTo } from "@app/hooks/useBreadcrumbs";
-import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import { tabPanelId, useUrlTab } from "@app/hooks/useUrlTab";
 import {
   DetailTabPanel,
@@ -38,10 +36,7 @@ import {
   EntityDetailLoading,
   EntityDetailUnavailable,
 } from "@app/pages/agentic/entity-detail";
-import {
-  targetProfilePath,
-  targetProfilesPath,
-} from "@app/pages/agentic/entity-paths";
+import { targetProfilePath } from "@app/pages/agentic/entity-paths";
 import { useEntityBreadcrumbs } from "@app/pages/agentic/useEntityBreadcrumbs";
 import {
   planSkillsState,
@@ -97,52 +92,38 @@ const PANEL_PREFIX = "plan-detail";
 const panelId = (tab: PlanDetailTab) => tabPanelId(PANEL_PREFIX, tab);
 
 /**
- * Every archetype + target profile pair of the plan's path as link labels
- * ("Quarkus 3.x (Java EE Application)"), plus the unassigned cue. A path
- * without target profiles reads Not assigned too: no profile can use it.
+ * Every migration path that uses the plan as link labels ("Quarkus 3.x
+ * (Java EE Application)"), "Not assigned" when no target profile uses it,
+ * or "Unavailable" when the server does not report them.
  */
 const TargetProfilesFact: React.FC<{
-  plan: MigrationPlan;
+  migrationPaths: MigrationPath[] | undefined;
   linkCrumbs: BreadcrumbEntry[];
-}> = ({ plan, linkCrumbs }) => {
+}> = ({ migrationPaths, linkCrumbs }) => {
   const { t } = useTranslation();
-  const pairs = getPlanTargetProfiles(plan);
-  // The cue opens the Target profiles page of the path's archetype.
-  const profilesLink = useLinkComponent(
-    pairs.length === 0
-      ? undefined
-      : breadcrumbTo(targetProfilesPath(pairs[0].archetype.id), "", linkCrumbs)
-  );
-  if (pairs.length === 0) {
-    // A plan without a migration path runs when someone picks it: "Not
+  if (migrationPaths == null) {
+    return <EmptyTextMessage message={t("agentic.common.unavailable")} />;
+  }
+  if (migrationPaths.length === 0) {
+    // A plan no target profile uses runs when someone picks it: "Not
     // assigned", not a failed read.
     return <EmptyTextMessage message={t("agentic.execution.notAssigned")} />;
   }
   return (
-    <>
-      <LinkLabels
-        items={pairs.map(({ archetype, targetProfile }) => ({
-          id: `${archetype.id}-${targetProfile.id}`,
-          name: t("agentic.skill.targetProfileOption", {
-            profile: targetProfile.name,
-            archetype: archetype.name,
-          }),
-          to: breadcrumbTo(
-            targetProfilePath(archetype.id, targetProfile.id),
-            "",
-            linkCrumbs
-          ),
-        }))}
-      />
-      {plan.migrationPath?.isDefault === false && (
-        <Content component="small" className={textStyles.textColorSubtle}>
-          {t("agentic.plan.notAssignedCue")}{" "}
-          <Button variant="link" isInline component={profilesLink}>
-            {t("agentic.plan.viewTargetProfiles")}
-          </Button>
-        </Content>
-      )}
-    </>
+    <LinkLabels
+      items={migrationPaths.map(({ archetype, targetProfile }) => ({
+        id: `${archetype.id}-${targetProfile.id}`,
+        name: t("agentic.skill.targetProfileOption", {
+          profile: targetProfile.name,
+          archetype: archetype.name,
+        }),
+        to: breadcrumbTo(
+          targetProfilePath(archetype.id, targetProfile.id),
+          "",
+          linkCrumbs
+        ),
+      }))}
+    />
   );
 };
 
@@ -184,16 +165,9 @@ const PlanDetailsPage: React.FC = () => {
                 agent: { id: stage.agent.id },
                 name: stage.name,
               })),
-            migrationPath:
-              migrationPlan.migrationPath != null
-                ? {
-                    archetype: { id: migrationPlan.migrationPath.archetype.id },
-                    targetProfiles:
-                      migrationPlan.migrationPath.targetProfiles.map(
-                        (profile) => ({ id: profile.id })
-                      ),
-                  }
-                : undefined,
+            targetProfiles: (migrationPlan.migrationPaths ?? []).map(
+              ({ targetProfile }) => ({ id: targetProfile.id })
+            ),
             excludedSkills: (migrationPlan.excludedSkills ?? []).map(
               (skill) => ({ id: skill.id })
             ),
@@ -236,7 +210,7 @@ const PlanDetailsPage: React.FC = () => {
     );
   }
 
-  const path = migrationPlan.migrationPath;
+  const migrationPaths = migrationPlan.migrationPaths;
   const impact = migrationPlan.applicationImpact;
   const runCount = migrationPlan.runCount;
   const isLoadingConfiguration = isLoadingAgents || isLoadingModels;
@@ -291,7 +265,7 @@ const PlanDetailsPage: React.FC = () => {
       t("terms.targetProfiles"),
       <TargetProfilesFact
         key="profiles"
-        plan={migrationPlan}
+        migrationPaths={migrationPaths}
         linkCrumbs={planChildCrumbs}
       />,
     ],
@@ -454,7 +428,7 @@ const PlanDetailsPage: React.FC = () => {
               // every context shows.
               description={t("agentic.planDetail.skillsByStageDescription", {
                 everyStage:
-                  path != null
+                  (migrationPaths ?? []).length > 0
                     ? t("agentic.stageSkills.everyStagePlanNote")
                     : t("agentic.stageSkills.everyStageNoPath"),
               })}
@@ -467,7 +441,6 @@ const PlanDetailsPage: React.FC = () => {
                 }
                 context="plan"
                 linkTo={skillLinkTo}
-                originOptions={{ archetypeId: path?.archetype.id }}
                 // The Stages table above uses 0 and up.
                 rowIndexOffset={100}
                 unavailableText={t("agentic.planDetail.skillsNotAvailable")}

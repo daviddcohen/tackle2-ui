@@ -35,8 +35,8 @@ export interface AssignMigrationPlanModalProps {
   profile: TargetProfile;
   /** The plan assigned to the profile today, if any. */
   assignedPlan: MigrationPlan | undefined;
-  /** Plans for this archetype (or with no migration path yet). */
-  eligiblePlans: MigrationPlan[];
+  /** Every migration plan: any plan can be assigned to any target profile. */
+  plans: MigrationPlan[];
   isPlansError: boolean;
   linkTo: (pathname: string) => LocationDescriptor;
   onClose: () => void;
@@ -53,7 +53,7 @@ export const AssignMigrationPlanModal: React.FC<
   archetype,
   profile,
   assignedPlan,
-  eligiblePlans,
+  plans,
   isPlansError,
   linkTo,
   onClose,
@@ -80,7 +80,7 @@ export const AssignMigrationPlanModal: React.FC<
         })
     );
 
-  const canSubmit = !isPlansError && eligiblePlans.length > 0;
+  const canSubmit = !isPlansError && plans.length > 0;
   const isUnchanged = planId == null || planId === assignedPlan?.id;
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -101,14 +101,12 @@ export const AssignMigrationPlanModal: React.FC<
         title={t("agentic.archetype.plansLoadFailed")}
       />
     );
-  } else if (eligiblePlans.length === 0) {
+  } else if (plans.length === 0) {
     body = (
       <Alert
         variant="info"
         isInline
-        title={t("agentic.archetype.noPlansTitle", {
-          archetype: archetype.name,
-        })}
+        title={t("agentic.archetype.noPlansTitle")}
         actionLinks={
           <AlertActionLink component={PlansLink}>
             {t("agentic.archetype.goToPlans")}
@@ -136,7 +134,7 @@ export const AssignMigrationPlanModal: React.FC<
               label={t("agentic.archetype.selectPlan")}
               isDisabled
             />
-            {eligiblePlans.map((plan) => (
+            {plans.map((plan) => (
               <FormSelectOption
                 key={plan.id}
                 value={plan.id}
@@ -147,13 +145,7 @@ export const AssignMigrationPlanModal: React.FC<
           <FormHelperText>
             <HelperText>
               <HelperTextItem>
-                {eligiblePlans.some((plan) => !plan.migrationPath)
-                  ? t("agentic.archetype.assignPlanHelperWithUnassigned", {
-                      archetype: archetype.name,
-                    })
-                  : t("agentic.archetype.assignPlanHelper", {
-                      archetype: archetype.name,
-                    })}
+                {t("agentic.archetype.assignPlanHelper")}
               </HelperTextItem>
             </HelperText>
           </FormHelperText>

@@ -139,10 +139,10 @@ test.describe("Plan runs list", () => {
     await expect(
       runRows(page).filter({ hasText: "Archetype: Java EE Application" })
     ).not.toHaveCount(0);
-    // Partner Portal's run used a plan without a migration path: it still
-    // belongs to Java EE, its application's archetype.
+    // Partner Portal's run used a plan that target profiles of two
+    // archetypes share: it belongs to Java EE, its application's archetype.
     const expected = await runsOfArchetype(page, "Java EE Application");
-    expect(expected).toContain("Run #4: Java EE lift and shift");
+    expect(expected).toContain("Run #4: Java lift and shift");
 
     await page.getByRole("button", { name: "Name" }).first().click();
     await page.getByRole("menuitem", { name: "Archetype" }).click();
@@ -372,11 +372,11 @@ test.describe("Status consistency across surfaces", () => {
     await expect(
       page.getByRole("row", { name: /Notification Service/ })
     ).toContainText("Spring Boot to Quarkus");
-    // Partner Portal runs Java EE lift and shift, picked for all applications,
-    // while its own plan is Java EE to Quarkus: the row shows the run's plan.
+    // Partner Portal runs Java lift and shift on one of its two target
+    // profiles (the other uses Java EE to Quarkus): the row shows the run's plan.
     await expect(
       page.getByRole("row", { name: /Partner Portal/ })
-    ).toContainText("Java EE lift and shift");
+    ).toContainText("Java lift and shift");
   });
 
   // Regression guard: every application of a seeded run (Claims Processing is in Run #1) must be in
@@ -498,5 +498,33 @@ test.describe("Plan run stages: context and failed stage logs", () => {
     await expect(
       page.getByRole("tab", { name: "Details", exact: true })
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  // Regression guard: seeded snapshots gave every application its first
+  // target profile's skills, whatever the run's plan, so Run #4 (Java lift
+  // and shift) listed Quarkus 3.x skills.
+  test("a seeded run's snapshot has the skills of the target profile on the run's plan", async ({
+    page,
+  }) => {
+    await page.goto(protoUrl("/plan-runs/4", { scenario: "configured" }));
+    await expect(main(page).getByRole("heading", { level: 1 })).toContainText(
+      "Run #4: Java lift and shift"
+    );
+    const skills = main(page).getByRole("grid", {
+      name: "Skills by stage",
+      exact: true,
+    });
+    const collapsed = skills.locator('button[aria-expanded="false"]');
+    await expect(skills).toBeVisible();
+    while ((await collapsed.count()) > 0) await collapsed.first().click();
+    const everyStage = skills
+      .getByRole("row")
+      .filter({ hasText: "OpenShift deployment conventions" })
+      .filter({ hasText: "Target profile:" });
+    await expect(everyStage).toHaveCount(1);
+    await expect(everyStage).toContainText(
+      "Target profile: OpenJDK 21 on OpenShift (Java EE Application)"
+    );
+    await expect(skills).not.toContainText("Quarkus 3.x");
   });
 });

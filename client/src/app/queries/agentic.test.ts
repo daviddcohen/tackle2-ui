@@ -143,11 +143,7 @@ describe("plan skill resolution key", () => {
           requiresApproval: false,
         },
       ],
-      migrationPath: {
-        archetype: { id: 3 },
-        targetProfiles: [{ id: 32 }, { id: 31 }],
-        isDefault: false,
-      },
+      targetProfiles: [{ id: 32 }, { id: 31 }],
       excludedSkills: [{ id: "9" }, { id: "13" }, { id: "9" }],
     };
     const normalized = {
@@ -156,10 +152,7 @@ describe("plan skill resolution key", () => {
         { agent: { id: "1" }, name: "Plan" },
         { agent: { id: "2" }, name: "Again" },
       ],
-      migrationPath: {
-        archetype: { id: 3 },
-        targetProfiles: [{ id: 31 }, { id: 32 }],
-      },
+      targetProfiles: [{ id: 31 }, { id: 32 }],
       excludedSkills: [{ id: "13" }, { id: "9" }],
     };
     expect(normalizeResolvePlanSkillsRequest(draft)).toEqual(normalized);
@@ -170,10 +163,7 @@ describe("plan skill resolution key", () => {
           { agent: { id: "1" }, name: "Plan" },
           { agent: { id: "2" }, name: "Again" },
         ],
-        migrationPath: {
-          archetype: { id: 3 },
-          targetProfiles: [{ id: 32 }, { id: 31 }, { id: 31 }],
-        },
+        targetProfiles: [{ id: 32 }, { id: 31 }, { id: 31 }],
         excludedSkills: [{ id: "9" }, { id: "13" }],
       })
     ).toEqual(normalized);
@@ -238,6 +228,10 @@ describe("plan skill resolution key", () => {
       stages: [],
       excludedSkills: [],
     });
+    // No target profiles, absent or empty, is one key.
+    expect(
+      normalizeResolvePlanSkillsRequest({ stages: [], targetProfiles: [] })
+    ).toEqual({ stages: [], excludedSkills: [] });
   });
 
   it("refreshes resolved plan skills after agent, skill, collection and plan writes", () => {

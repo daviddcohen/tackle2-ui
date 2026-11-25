@@ -12,20 +12,13 @@ const plan: MigrationPlan = {
   name: "Java EE to Quarkus",
   description: "",
   stages: [],
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: [
-      { id: 11, name: "Quarkus 3.x" },
-      { id: 12, name: "OpenShift" },
-    ],
-    isDefault: false,
-  },
+  migrationPaths: [],
   applicationImpact: { matching: 0 },
   runCount: 0,
 };
 
 describe("getPlanDeleteBlocker", () => {
-  it("allows deleting an unused, unassigned plan", () => {
+  it("allows deleting a plan without runs that no target profile uses", () => {
     expect(getPlanDeleteBlocker(plan, t)).toBeUndefined();
   });
 
@@ -36,30 +29,44 @@ describe("getPlanDeleteBlocker", () => {
     expect(getPlanDeleteBlocker({ ...plan, runCount: undefined }, t)).toBe(
       "agentic.common.usageUnchecked"
     );
+    // Target profiles not reported: they may use it.
+    expect(
+      getPlanDeleteBlocker({ ...plan, migrationPaths: undefined }, t)
+    ).toBe("agentic.common.usageUnchecked");
   });
 
-  it("names runs first, then matching applications, then the assignment", () => {
+  it("names runs first, then the target profiles that use the plan", () => {
+    const shared: MigrationPlan = {
+      ...plan,
+      migrationPaths: [
+        {
+          archetype: { id: 1, name: "Java EE Application" },
+          targetProfile: { id: 12, name: "OpenJDK 21 on OpenShift" },
+        },
+        {
+          archetype: { id: 3, name: "Legacy Java Application" },
+          targetProfile: { id: 32, name: "Java 8 on OpenShift" },
+        },
+      ],
+    };
+    const profiles = [
+      'agentic.skill.targetProfileOption {"profile":"OpenJDK 21 on OpenShift","archetype":"Java EE Application"}',
+      'agentic.skill.targetProfileOption {"profile":"Java 8 on OpenShift","archetype":"Legacy Java Application"}',
+    ];
     expect(
       getPlanDeleteBlocker(
-        { ...plan, runCount: 2, applicationImpact: { matching: 3 } },
+        { ...shared, runCount: 2, applicationImpact: { matching: 3 } },
         t
       )
     ).toBe('agentic.plan.deleteUsedByRuns {"count":2}');
     expect(
-      getPlanDeleteBlocker({ ...plan, applicationImpact: { matching: 3 } }, t)
+      getPlanDeleteBlocker({ ...shared, applicationImpact: { matching: 3 } }, t)
     ).toBe(
-      'agentic.plan.deleteMatchingApplications {"count":3,"profile":"Quarkus 3.x, OpenShift"}'
+      `agentic.plan.deleteMatchingApplications ${JSON.stringify({ count: 3, profiles })}`
     );
-    expect(
-      getPlanDeleteBlocker(
-        {
-          ...plan,
-          migrationPath: { ...plan.migrationPath!, isDefault: true },
-        },
-        t
-      )
-    ).toBe(
-      'agentic.plan.deleteAssigned {"archetype":"Java EE Application","profile":"Quarkus 3.x, OpenShift"}'
+    // Target profiles whose archetypes have no applications still block.
+    expect(getPlanDeleteBlocker(shared, t)).toBe(
+      `agentic.plan.deleteAssigned ${JSON.stringify({ count: 2, profiles })}`
     );
   });
 });

@@ -15,18 +15,6 @@ const openCreateWizard = async (page: Page) => {
 const next = (dialog: Locator) =>
   dialog.getByRole("button", { name: "Next", exact: true });
 
-const fillPath = async (page: Page, dialog: Locator) => {
-  await dialog.getByRole("button", { name: /^Archetype/ }).click();
-  await pickMenuOption(page, "Java EE Application");
-  await dialog.locator("#plan-target-profiles-input").click();
-  await pickMenuOption(page, "Quarkus 3.x");
-  // Close the menu (click outside it); the selection shows as a chip.
-  await dialog.getByText(/^Applications in this archetype/).click();
-  await expect(
-    dialog.getByRole("list", { name: "Current selections" })
-  ).toContainText("Quarkus 3.x");
-};
-
 /** Fills the open stage card (new stages open, the others are collapsed). */
 const fillOpenStage = async (
   page: Page,
@@ -72,21 +60,32 @@ test.describe("Plan wizard", () => {
     await expect(next(dialog)).toBeEnabled();
   });
 
-  test("migration path: target profiles wait for an archetype", async ({
+  // Target profiles reference plans (Assign migration plan on an archetype's
+  // target profiles page), so the wizard has no Migration path step.
+  test("the wizard steps are plan details, stages, skills and review", async ({
     page,
   }) => {
     const dialog = await openCreateWizard(page);
-    await dialog.getByRole("textbox", { name: /^Name/ }).fill("Path E2E plan");
-    await next(dialog).click();
-    await expect(dialog.getByText("Select an archetype first")).toBeVisible();
-    await expect(next(dialog)).toBeDisabled();
-    await fillPath(page, dialog);
     await expect(
       dialog.getByText(
-        "Changing the archetype clears the selected target profiles."
+        "Define the stages that run in order and review the skills each stage gets."
       )
     ).toBeVisible();
-    await expect(next(dialog)).toBeEnabled();
+    const steps = dialog.getByRole("navigation").getByRole("button");
+    await expect(steps).toHaveText([
+      "Plan details",
+      "Stages",
+      "Skills",
+      "Review",
+    ]);
+    await expect(
+      dialog.getByRole("button", { name: "Migration path" })
+    ).toHaveCount(0);
+    await dialog.getByRole("textbox", { name: /^Name/ }).fill("Steps E2E plan");
+    await next(dialog).click();
+    await expect(
+      dialog.getByRole("textbox", { name: "Stage name" })
+    ).toBeVisible();
   });
 
   test("create a plan: add, reorder, remove stages, review, back/next, submit", async ({
@@ -96,8 +95,6 @@ test.describe("Plan wizard", () => {
     await dialog
       .getByRole("textbox", { name: /^Name/ })
       .fill("E2E wizard plan");
-    await next(dialog).click();
-    await fillPath(page, dialog);
     await next(dialog).click();
 
     await expect(next(dialog)).toBeDisabled();
@@ -163,14 +160,14 @@ test.describe("Plan wizard", () => {
     await expect(rows.nth(0)).toContainText("Build Validator");
     await expect(rows.nth(1)).toContainText("Stage B");
     await expect(rows.nth(1)).toContainText("Code Migrator");
-    await expect(dialog).toContainText("Quarkus 3.x");
+    // No archetype or target profile rows: a plan does not pick them.
+    await expect(dialog).not.toContainText("Quarkus 3.x");
 
-    for (let step = 0; step < 4; step += 1)
+    for (let step = 0; step < 3; step += 1)
       await dialog.getByRole("button", { name: "Back" }).click();
     await expect(dialog.getByRole("textbox", { name: /^Name/ })).toHaveValue(
       "E2E wizard plan"
     );
-    await next(dialog).click();
     await next(dialog).click();
     expect(await stageTitles(dialog)).toEqual([
       "Stage 1: Stage C",
@@ -182,17 +179,29 @@ test.describe("Plan wizard", () => {
 
     await expect(dialog).toBeHidden();
     await expect(page.getByText("Migration plan created")).toBeVisible();
+    // The toast says where a new plan gets its target profiles.
+    await expect(
+      page.getByText(
+        "To use it, assign it to target profiles on an archetype's target profiles page."
+      )
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Go to archetypes" })
+    ).toHaveAttribute("href", /\/archetypes$/);
     await page.getByRole("link", { name: "E2E wizard plan" }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "E2E wizard plan" })
     ).toBeVisible();
     await expect(page.getByRole("main")).toContainText("Stage C");
-    // A new plan is not assigned to its target profiles yet.
+    // No target profile uses a new plan yet.
+    // The fact's definition follows its term (as stage-application-select).
     await expect(
-      page.getByText(
-        "Not assigned. Applications get this plan once it is assigned."
-      )
-    ).toBeVisible();
+      page
+        .getByRole("main")
+        .getByRole("term")
+        .filter({ hasText: /^Target profiles$/ })
+        .locator("xpath=following-sibling::*[1]")
+    ).toHaveText("Not assigned");
   });
 
   test("cancel discards the draft", async ({ page }) => {
@@ -226,10 +235,10 @@ test.describe("Plan wizard", () => {
       "Spring Boot to Quarkus"
     );
     // Every step can be opened while editing.
-    await dialog.getByRole("button", { name: "Migration path" }).click();
+    await dialog.getByRole("button", { name: "Review", exact: true }).click();
     await expect(
-      dialog.getByRole("button", { name: /^Archetype/ })
-    ).toContainText("Spring Boot Application");
+      dialog.getByRole("grid", { name: "Stages to review" })
+    ).toBeVisible();
     await dialog.getByRole("button", { name: "Stages", exact: true }).click();
     expect(await stageTitles(dialog)).toEqual([
       "Stage 1: Analyze",
@@ -254,11 +263,14 @@ test.describe("Plan wizard", () => {
     const dialog = await openCreateWizard(page);
     await dialog.getByRole("textbox", { name: /^Name/ }).fill("Escape test");
     await next(dialog).click();
-    await dialog.getByRole("button", { name: /^Archetype/ }).click();
-    await pickMenuOption(page, "Java EE Application");
-    await dialog.locator("#plan-target-profiles-input").click();
+    await dialog.getByRole("button", { name: /^Agent/ }).click();
+    await expect(page.getByRole("option").first()).toBeVisible();
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("option")).toHaveCount(0);
     await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("textbox", { name: "Stage name" })
+    ).toBeVisible();
   });
 
   // Regression guard: PF Modal sets aria-hidden on every <body> child on each update, including the Select
@@ -269,9 +281,9 @@ test.describe("Plan wizard", () => {
     const dialog = await openCreateWizard(page);
     await dialog.getByRole("textbox", { name: /^Name/ }).fill("A11y");
     await next(dialog).click();
-    await dialog.getByRole("button", { name: /^Archetype/ }).click();
+    await dialog.getByRole("button", { name: /^Agent/ }).click();
     await expect(
-      page.getByRole("option", { name: "Java EE Application" })
+      page.getByRole("option", { name: /^Code Migrator/ })
     ).toBeVisible();
   });
 
@@ -279,8 +291,6 @@ test.describe("Plan wizard", () => {
   test("the agent menu is not clipped by its stage card", async ({ page }) => {
     const dialog = await openCreateWizard(page);
     await dialog.getByRole("textbox", { name: /^Name/ }).fill("Menu E2E plan");
-    await next(dialog).click();
-    await fillPath(page, dialog);
     await next(dialog).click();
     await dialog.getByRole("button", { name: /^Agent/ }).click();
     const options = page.getByRole("option");

@@ -181,6 +181,13 @@ export const MUTATION_EFFECTS = {
     "plans",
     "agentRunObservability",
   ],
+  /**
+   * A Hub target profile created, renamed or deleted (an archetype write):
+   * plans derive their `migrationPaths` and application counts from target
+   * profiles, application views list every profile, and previews resolve
+   * the skills of the profiles a plan uses.
+   */
+  targetProfile: ["plans", "planSkills", "skillPlans", "applicationMigrations"],
   runDecision: ["planRuns", "applicationMigrations", "agentRunObservability"],
   executionPolicy: ["executionPolicy", "applicationMigrations", "planRuns"],
 } as const satisfies Record<string, readonly AgenticQueryGroup[]>;
@@ -1014,14 +1021,12 @@ export const normalizeResolvePlanSkillsRequest = (
       agent: { id: stage.agent.id },
       ...(stage.name != null ? { name: stage.name } : {}),
     })),
-    ...(request.migrationPath
+    // Absent and empty both mean no target profiles.
+    ...(request.targetProfiles && request.targetProfiles.length > 0
       ? {
-          migrationPath: {
-            archetype: { id: request.migrationPath.archetype.id },
-            targetProfiles: uniqueSorted(
-              request.migrationPath.targetProfiles.map((profile) => profile.id)
-            ).map((profileId) => ({ id: profileId })),
-          },
+          targetProfiles: uniqueSorted(
+            request.targetProfiles.map((profile) => profile.id)
+          ).map((profileId) => ({ id: profileId })),
         }
       : {}),
     excludedSkills: uniqueSorted(

@@ -21,11 +21,12 @@ const plan: MigrationPlan = {
       order: 1,
     },
   ],
-  migrationPath: {
-    archetype: { id: 1, name: "Java EE Application" },
-    targetProfiles: [{ id: 11, name: "Quarkus 3.x" }],
-    isDefault: true,
-  },
+  migrationPaths: [
+    {
+      archetype: { id: 1, name: "Java EE Application" },
+      targetProfile: { id: 11, name: "Quarkus 3.x" },
+    },
+  ],
   applicationImpact: {
     matching: 1,
     applications: [{ id: 1, name: "Customer Management" }],
@@ -34,17 +35,17 @@ const plan: MigrationPlan = {
 };
 
 describe("getRunBlocker", () => {
-  it("lets a plan with a path, stages and applications run", () => {
+  it("lets a plan with target profiles, stages and applications run", () => {
     expect(getRunBlocker(plan, true, t)).toBeUndefined();
     expect(getRunBlocker(plan, false, t)).toBeUndefined();
   });
 
-  it("names a missing migration path first, whatever else is wrong", () => {
+  it("names a plan no target profile uses first, whatever else is wrong", () => {
     expect(
       getRunBlocker(
         {
           ...plan,
-          migrationPath: undefined,
+          migrationPaths: [],
           stages: [],
           applicationImpact: undefined,
         },
@@ -52,6 +53,21 @@ describe("getRunBlocker", () => {
         t
       )
     ).toBe("agentic.plan.runBlocked.notAssigned");
+  });
+
+  it("never reads target profiles the server does not report as not assigned", () => {
+    // The real backend: no paths and no applications reported.
+    expect(
+      getRunBlocker(
+        { ...plan, migrationPaths: undefined, applicationImpact: undefined },
+        true,
+        t
+      )
+    ).toBe("agentic.plan.runBlocked.unavailable");
+    // Applications reported: the plan can run.
+    expect(
+      getRunBlocker({ ...plan, migrationPaths: undefined }, true, t)
+    ).toBeUndefined();
   });
 
   it("names a plan without stages before its applications, with the edit fix only for editors", () => {
@@ -72,9 +88,8 @@ describe("getRunBlocker", () => {
     );
   });
 
-  it("names the archetype when no application uses the plan", () => {
-    const noApplications =
-      'agentic.plan.runBlocked.noApplications {"archetype":"Java EE Application"}';
+  it("says so when no application can run the plan", () => {
+    const noApplications = "agentic.plan.runBlocked.noApplications";
     expect(
       getRunBlocker(
         { ...plan, applicationImpact: { matching: 0, applications: [] } },
@@ -99,14 +114,26 @@ describe("getRunBlocker", () => {
 });
 
 describe("preflightPlanOf", () => {
-  it("names the plan and its target profiles", () => {
+  it("names the plan, and its target profile only when exactly one uses it", () => {
     expect(preflightPlanOf(plan)).toEqual({
       id: "1",
       name: "Java EE to Quarkus",
       targetProfile: "Quarkus 3.x",
     });
     expect(
-      preflightPlanOf({ ...plan, migrationPath: undefined }).targetProfile
+      preflightPlanOf({ ...plan, migrationPaths: undefined }).targetProfile
+    ).toBeUndefined();
+    expect(
+      preflightPlanOf({
+        ...plan,
+        migrationPaths: [
+          ...plan.migrationPaths!,
+          {
+            archetype: { id: 2, name: "Spring Boot Application" },
+            targetProfile: { id: 21, name: "Spring Boot 3" },
+          },
+        ],
+      }).targetProfile
     ).toBeUndefined();
   });
 });

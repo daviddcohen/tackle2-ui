@@ -14,11 +14,15 @@ import {
   pickMenuOption,
   rowActions,
   rowByText,
+  spaNavigate,
   test,
   toast,
 } from "../support";
 
 const PROFILE = "Quarkus 3.x";
+// Used by OpenJDK 21 on OpenShift (Java EE Application) and Java 8 on
+// OpenShift (Legacy Java Application).
+const SHARED_PLAN = "Java lift and shift";
 const PAGE = "/archetypes/1/target-profiles";
 
 const menuItem = (page: Page, name: string) =>
@@ -186,7 +190,7 @@ test.describe("Target profile row actions", () => {
     diagnostics,
   }) => {
     await gotoProto(page, PAGE);
-    // Fixture profiles have a plan, which blocks Delete: create one first.
+    // A profile of its own, so the fixture profiles stay for other checks.
     const create = main(page).getByRole("button", {
       name: "Create target profile",
     });
@@ -242,6 +246,127 @@ test.describe("Target profile row actions", () => {
     await expect(cell(row, "Analysis profile")).toHaveText(
       "Java EE lift and shift"
     );
+    expectHealthy(diagnostics);
+  });
+  test("Delete is offered on a profile that uses a migration plan, and says what it ends", async ({
+    page,
+    diagnostics,
+  }) => {
+    await gotoProto(page, PAGE);
+    const profile = "OpenJDK 21 on OpenShift";
+    const row = rowByText(page, profile);
+    await expect(cell(row, "Migration plan")).toHaveText(SHARED_PLAN);
+    await openAction(page, rowActions(row), "Delete");
+    const confirm = dialog(page, "Confirm dialog");
+    await expect(confirm).toContainText(
+      `${profile} will be deleted, and applications in Java EE Application can no longer run ${SHARED_PLAN} on it.`
+    );
+    await confirm.getByRole("button", { name: "Delete" }).click();
+    await expect(toast(page, "Target profile deleted")).toBeVisible();
+    await expect(row).toHaveCount(0);
+
+    // The plan keeps its other target profile.
+    await spaNavigate(page, "/migration-plans");
+    await expect(
+      main(page)
+        .getByRole("row")
+        .filter({
+          has: page.getByRole("link", { name: SHARED_PLAN, exact: true }),
+        })
+    ).toContainText("Java 8 on OpenShift (Legacy Java Application)");
+    expectHealthy(diagnostics);
+  });
+
+  // The Hub assigns target profile ids; the mock gives each new profile its
+  // own, so row actions act on the profile they belong to.
+  test("two profiles created in one session get their own ids", async ({
+    page,
+    diagnostics,
+  }) => {
+    await gotoProto(page, PAGE);
+    const create = main(page).getByRole("button", {
+      name: "Create target profile",
+    });
+    for (const name of ["First new profile", "Second new profile"]) {
+      await create.click();
+      const form = dialog(page, "Create target profile");
+      await form.getByRole("textbox", { name: /^Name/ }).fill(name);
+      await form.getByRole("button", { name: "Create" }).click();
+      await expect(form).toHaveCount(0);
+      await expect(rowByText(page, name)).toHaveCount(1);
+    }
+    const ids = await main(page)
+      .locator("tr[id^='target-profile-']")
+      .evaluateAll((rows) => rows.map((row) => row.id));
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+
+    // Renaming the second leaves the first alone.
+    const second = page.locator(
+      `#${await rowByText(page, "Second new profile").getAttribute("id")}`
+    );
+    await openAction(page, rowActions(second), "Edit");
+    const edit = dialog(page, "Edit target profile");
+    await edit.getByRole("textbox", { name: /^Name/ }).fill("Renamed profile");
+    await edit.getByRole("button", { name: "Save" }).click();
+    await expect(toast(page, "Target profile updated")).toBeVisible();
+    await expect(cell(second, "Name")).toHaveText("Renamed profile");
+    await expect(rowByText(page, "First new profile")).toHaveCount(1);
+
+    // Deleting the first leaves the renamed one.
+    await openAction(
+      page,
+      rowActions(rowByText(page, "First new profile")),
+      "Delete"
+    );
+    await dialog(page, "Confirm dialog")
+      .getByRole("button", { name: "Delete" })
+      .click();
+    await expect(toast(page, "Target profile deleted")).toBeVisible();
+    await expect(rowByText(page, "First new profile")).toHaveCount(0);
+    await expect(rowByText(page, "Renamed profile")).toHaveCount(1);
+    expectHealthy(diagnostics);
+  });
+
+  test("assigning a shared plan here leaves it on the other archetype's profile", async ({
+    page,
+    diagnostics,
+  }) => {
+    await gotoProto(page, PAGE);
+    const row = rowByText(page, PROFILE);
+    await expect(cell(row, "Migration plan")).toHaveText("Java EE to Quarkus");
+    await openAction(page, rowActions(row), "Change migration plan");
+    const change = dialog(page, "Change migration plan");
+    await expect(change).toContainText(
+      "A target profile uses one migration plan. Target profiles of several archetypes can share a plan."
+    );
+    const select = change.getByRole("combobox", { name: /^Migration plan/ });
+    // Every plan is offered, another archetype's plan too.
+    await expect(
+      select.getByRole("option", { name: "Spring Boot to Quarkus" })
+    ).toHaveCount(1);
+    await select.selectOption({ label: SHARED_PLAN });
+    await change.getByRole("button", { name: "Save" }).click();
+    await expect(toast(page, "Migration plan assigned")).toBeVisible();
+    await expect(cell(row, "Migration plan")).toHaveText(SHARED_PLAN);
+    await expect(
+      cell(rowByText(page, "OpenJDK 21 on OpenShift"), "Migration plan")
+    ).toHaveText(SHARED_PLAN);
+
+    // Legacy Java Application's profile keeps it.
+    await spaNavigate(page, "/archetypes/3/target-profiles");
+    await expect(
+      cell(rowByText(page, "Java 8 on OpenShift"), "Migration plan")
+    ).toHaveText(SHARED_PLAN);
+    await spaNavigate(page, "/migration-plans");
+    const planRow = (name: string) =>
+      main(page)
+        .getByRole("row")
+        .filter({ has: page.getByRole("link", { name, exact: true }) });
+    await expect(
+      planRow(SHARED_PLAN).getByRole("button", { name: "3 target profiles" })
+    ).toBeVisible();
+    await expect(planRow("Java EE to Quarkus")).toContainText("Not assigned");
     expectHealthy(diagnostics);
   });
 });

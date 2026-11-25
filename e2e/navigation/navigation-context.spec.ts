@@ -14,6 +14,7 @@ import {
   main,
   mainHeading,
   personaSelect,
+  pickRunTargetProfile,
   protoUrl,
   scenarioSelect,
   sidebar,
@@ -257,6 +258,13 @@ test("launching a migration keeps the global scenario when returning to Inventor
   await page
     .getByRole("menuitem", { name: "Run migration plan", exact: true })
     .click();
+  // Two of its target profiles have a migration plan: pick one.
+  await pickRunTargetProfile(
+    page,
+    page.getByRole("dialog"),
+    "Customer Management",
+    "Quarkus 3.x"
+  );
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Run on 1 application", exact: true })

@@ -4,9 +4,11 @@ import { mockArchetypes } from "@mocks/stub-new-work/archetypes";
 
 import { StoredSkill, db, resetAgenticDb } from "./db";
 import {
+  defaultPathOf,
+  migrationPathsOf,
+  pathsUsingPlan,
   placementsOf,
   resolveSkillsByStage,
-  targetProfileFor,
   targetProfilePickOf,
   targetProfilesOf,
 } from "./skill-resolution";
@@ -14,8 +16,10 @@ import {
 /**
  * Test entities on top of the fixtures, so the rules are checked on data
  * whose every attachment the test knows. Archetype 1 (Java EE Application,
- * target profile 11 Quarkus 3.x) and applications 1 (Customer Management)
- * and 3 (Claims Processing) are fixture Hub entities.
+ * target profiles 11 Quarkus 3.x and 12 OpenJDK 21 on OpenShift) and
+ * applications 1 (Customer Management) and 3 (Claims Processing) are fixture
+ * Hub entities. OpenJDK 21 on OpenShift uses no plan here (see `beforeEach`),
+ * so Quarkus 3.x is the default path of Java EE applications.
  */
 const skill = (
   id: string,
@@ -32,6 +36,7 @@ const skill = (
 
 const ARCHETYPE = { id: 1, name: "Java EE Application" };
 const PROFILE = { id: 11, name: "Quarkus 3.x" };
+const OPENJDK = 12;
 const CLAIMS = { id: 3, name: "Claims Processing" };
 const CUSTOMERS = { id: 1, name: "Customer Management" };
 
@@ -58,6 +63,9 @@ const ids = (entries: { skill: { id: string } }[]) =>
 
 beforeEach(() => {
   resetAgenticDb();
+  // The fixtures give Java EE applications a second path with a plan (Java
+  // lift and shift), so no default path; these tests need one.
+  delete db.targetProfilePlans[OPENJDK];
   db.skills.push(
     skill("t-own", [], "rule"),
     skill("t-collected"),
@@ -187,12 +195,11 @@ describe("per stage", () => {
 });
 
 describe("every stage", () => {
-  it("in a plan preview, comes from the plan's archetype and target profiles, without an application", () => {
+  it("in a plan preview, comes from the target profiles and their archetypes, without an application", () => {
     const { everyStage } = resolveSkillsByStage({
       stages,
       context: {
         kind: "plan",
-        archetypeId: ARCHETYPE.id,
         targetProfileIds: [PROFILE.id],
       },
     });
@@ -210,7 +217,26 @@ describe("every stage", () => {
     ]);
   });
 
-  it("for an application, comes from its archetype, its own target profile and itself", () => {
+  it("in a plan preview, adds the archetype of several target profiles once", () => {
+    const { everyStage } = resolveSkillsByStage({
+      stages: [],
+      context: { kind: "plan", targetProfileIds: [PROFILE.id, 21, PROFILE.id] },
+    });
+    const skills = everyStage[0].skills;
+    expect(skills.find((e) => e.skill.id === "t-archetype")?.from).toEqual([
+      { kind: "archetype", archetype: ARCHETYPE },
+    ]);
+    // Spring Boot Application (the archetype of profile 21) adds its own.
+    expect(
+      skills.some((e) =>
+        e.from.some(
+          (origin) => origin.kind === "archetype" && origin.archetype.id === 2
+        )
+      )
+    ).toBe(true);
+  });
+
+  it("for an application, comes from its archetype, its default path's target profile and itself", () => {
     const { everyStage } = resolveSkillsByStage({
       stages,
       context: { kind: "applications", applicationIds: [CLAIMS.id] },
@@ -233,7 +259,7 @@ describe("every stage", () => {
     ]);
   });
 
-  it("counts only the application's own target profile", () => {
+  it("counts only the default path's target profile", () => {
     const archetype = mockArchetypes[ARCHETYPE.id];
     const profiles = archetype.profiles;
     archetype.profiles = [
@@ -248,8 +274,8 @@ describe("every stage", () => {
           resource: { id: 19, name: "Second profile" },
         });
       const application = mockApplicationArray.find((a) => a.id === CLAIMS.id)!;
-      // The archetype's first profile is the application's own.
-      expect(targetProfileFor(application)?.profile.id).toBe(PROFILE.id);
+      // Profile 19 uses no plan, so Quarkus 3.x is the default path.
+      expect(defaultPathOf(application)?.profile.id).toBe(PROFILE.id);
       const forApplication = resolveSkillsByStage({
         stages: [],
         context: { kind: "applications", applicationIds: [CLAIMS.id] },
@@ -262,7 +288,6 @@ describe("every stage", () => {
         stages: [],
         context: {
           kind: "plan",
-          archetypeId: ARCHETYPE.id,
           targetProfileIds: [PROFILE.id, 19],
         },
       });
@@ -296,8 +321,9 @@ describe("every stage", () => {
       const found = everyStage[0].skills.map(({ skill: ref }) => ref.id);
       expect(found).toContain("t-legacy");
       expect(found).toContain("t-archetype");
-      // Its target profile: the first of its archetypes that has one.
-      expect(targetProfileFor(application)?.archetypeId).toBe(3);
+      // Two of its paths have a plan (31 and 11): no default path, so no
+      // target profile skills without a pick.
+      expect(defaultPathOf(application)).toBeUndefined();
       expect(found).not.toContain("t-profile");
     } finally {
       mockApplicationArray.splice(mockApplicationArray.indexOf(application), 1);
@@ -318,7 +344,6 @@ describe("exclusions", () => {
       stages,
       context: {
         kind: "plan",
-        archetypeId: ARCHETYPE.id,
         targetProfileIds: [PROFILE.id],
       },
       excludedSkillIds,
@@ -374,6 +399,64 @@ describe("exclusions", () => {
         (e) => e.skill.id === "t-archetype-and-application"
       )?.excluded
     ).toBe(false);
+  });
+});
+
+describe("an application's default path", () => {
+  const SECOND = { id: 19, name: "Second profile" };
+  const archetype = mockArchetypes[ARCHETYPE.id];
+  let profiles: typeof archetype.profiles;
+  beforeEach(() => {
+    profiles = archetype.profiles;
+    archetype.profiles = [...(profiles ?? []), { ...SECOND, generators: [] }];
+  });
+  afterEach(() => {
+    archetype.profiles = profiles;
+  });
+  const claims = () => mockApplicationArray.find((a) => a.id === CLAIMS.id)!;
+
+  it("is the only path whose target profile uses a plan, whatever its position", () => {
+    // Quarkus 3.x uses plan 1; the second profile none.
+    expect(
+      migrationPathsOf(claims()).map(({ profile, plan }) => [
+        profile.id,
+        plan?.id,
+      ])
+    ).toEqual([
+      [PROFILE.id, "1"],
+      [OPENJDK, undefined],
+      [SECOND.id, undefined],
+    ]);
+    expect(defaultPathOf(claims())?.profile.id).toBe(PROFILE.id);
+    // Only the second profile uses a plan: it is the default, though last.
+    delete db.targetProfilePlans[PROFILE.id];
+    db.targetProfilePlans[SECOND.id] = "3";
+    expect(defaultPathOf(claims())?.profile.id).toBe(SECOND.id);
+  });
+
+  it("is absent with no path that uses a plan, or with several", () => {
+    delete db.targetProfilePlans[PROFILE.id];
+    expect(defaultPathOf(claims())).toBeUndefined();
+    db.targetProfilePlans[PROFILE.id] = "1";
+    db.targetProfilePlans[SECOND.id] = "3";
+    expect(defaultPathOf(claims())).toBeUndefined();
+    // Then the application view resolves no target profile skills.
+    expect(
+      resolveSkillsByStage({
+        stages: [],
+        context: { kind: "applications", applicationIds: [CLAIMS.id] },
+      })
+        .everyStage[0].skills.flatMap(({ from }) => from)
+        .filter((origin) => origin.kind === "targetProfile")
+    ).toEqual([]);
+  });
+
+  it("lists the paths whose profile uses a given plan", () => {
+    db.targetProfilePlans[SECOND.id] = "1";
+    expect(
+      pathsUsingPlan(claims(), "1").map(({ profile }) => profile.id)
+    ).toEqual([PROFILE.id, SECOND.id]);
+    expect(pathsUsingPlan(claims(), "3")).toEqual([]);
   });
 });
 
@@ -433,6 +516,7 @@ describe("a run's target profile pick", () => {
         ])
       ).toEqual([
         [ARCHETYPE.id, PROFILE.id],
+        [ARCHETYPE.id, OPENJDK],
         [ARCHETYPE.id, SECOND.id],
       ]);
       expect(targetProfilePickOf({ id: SECOND.id }, application, "f")).toBe(
@@ -531,7 +615,6 @@ describe("unknown references", () => {
       stages: [{ agentId: "missing-agent", name: "Lost" }],
       context: {
         kind: "plan",
-        archetypeId: 999,
         targetProfileIds: [998],
       },
     });

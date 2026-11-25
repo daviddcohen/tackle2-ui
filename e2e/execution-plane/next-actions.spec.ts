@@ -1,7 +1,7 @@
 /**
  * Every inventory Migration status leads somewhere actionable: its link opens the application's
  * Migration tab (blockers, pending decision, failure evidence + new run, the plan run, the
- * migration path configuration), and a ready application starts from its row actions.
+ * target profile and plan configuration), and a ready application starts from its row actions.
  */
 import type { Page } from "@playwright/test";
 
@@ -36,15 +36,17 @@ test.describe("Migration next actions", () => {
   }) => {
     await page.goto(protoUrl("/applications", { scenario: "configured" }));
     await waitForInventory(page);
+    // Order Service has one target profile with a migration plan, so it
+    // runs without a pick.
     await page
-      .getByRole("row", { name: /Customer Management/ })
+      .getByRole("row", { name: /Order Service/ })
       .getByRole("button", { name: "Row actions" })
       .click();
     await page.getByRole("menuitem", { name: "Run migration plan" }).click();
     const dialog = page.getByRole("dialog", { name: "Run migration plan" });
     await expect(dialog).toBeVisible();
     await expect(
-      dialog.getByRole("row", { name: /Customer Management/ })
+      dialog.getByRole("row", { name: /Order Service/ })
     ).toBeVisible();
     await expect(
       dialog.getByRole("button", { name: "Run on 1 application" })
@@ -187,11 +189,19 @@ test.describe("Migration next actions", () => {
     await expect(
       dialog.getByRole("row", { name: /Customer Management/ })
     ).toBeVisible();
-    // The application still resolves to the run's plan, even though
-    // the run covers other applications this tab does not load.
+    // Customer Management has two target profiles with a plan, so the new
+    // run keeps the failed run's plan for all applications, and the one
+    // profile that uses it, even though the run covers other applications
+    // this tab does not load.
     await expect(
-      dialog.getByLabel("Use each application's migration plan")
+      dialog.getByLabel("Use one migration plan for all applications")
     ).toBeChecked();
+    await expect(
+      dialog.getByRole("combobox", { name: "Migration plan to run" })
+    ).toHaveValue("Java EE to Quarkus");
+    await expect(
+      dialog.getByRole("button", { name: "Run on 1 application" })
+    ).toBeEnabled();
   });
 
   for (const [scenario, title] of [
@@ -289,10 +299,11 @@ test.describe("Migration next actions", () => {
     await expect(
       page.getByRole("heading", { name: "No migration plan" })
     ).toBeVisible();
-    // The chain facts and the body name the missing link: no plan on the profile.
+    // The body names the missing link: no plan on any of the archetype's
+    // target profiles (Java EE Application has two).
     await expect(
       page.getByText(
-        "Quarkus 3.x has no migration plan assigned. Assign one on the target profiles page of Java EE Application."
+        "None of the target profiles of Java EE Application has a migration plan assigned. Assign one on its target profiles page."
       )
     ).toBeVisible();
     await page
