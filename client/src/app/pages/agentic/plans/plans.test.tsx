@@ -306,7 +306,7 @@ describe("MigrationPlansPage", () => {
       )
     ).toBeInTheDocument();
     expect(
-      await within(dialog).findByRole("link", { name: "Inventory Service" })
+      await within(dialog).findByText("Inventory Service")
     ).toBeInTheDocument();
   });
 

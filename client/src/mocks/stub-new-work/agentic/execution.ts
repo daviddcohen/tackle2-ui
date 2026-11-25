@@ -1503,7 +1503,7 @@ export const startApplicationMigrations = (
 };
 
 /**
- * "Use each application's migration plan" for one application: the Plan its
+ * "Use the migration plan of each target profile" for one application: the Plan its
  * picked target profile uses; without a pick, its default path's
  * (`defaultPathOf`). 409 when the picked profile uses no Plan, when no path
  * has one, or when several do and nothing is picked; 400 for a null pick.

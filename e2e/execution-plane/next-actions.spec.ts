@@ -232,7 +232,7 @@ test.describe("Migration next actions", () => {
     const dialog = page.getByRole("dialog", { name: "Run migration plan" });
     // Every application still resolves to the run's plan: keep their own.
     await expect(
-      dialog.getByLabel("Use each application's migration plan")
+      dialog.getByLabel("Use the migration plan of each target profile")
     ).toBeChecked();
     await expect(
       dialog.getByRole("textbox", { name: /Target branch/ })

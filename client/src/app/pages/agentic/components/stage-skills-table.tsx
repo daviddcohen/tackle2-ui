@@ -11,7 +11,9 @@ import {
   Label,
   Skeleton,
   Title,
+  Tooltip,
 } from "@patternfly/react-core";
+import a11yStyles from "@patternfly/react-styles/css/utilities/Accessibility/accessibility";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
@@ -82,13 +84,20 @@ export interface StageSkillsTableProps {
      */
     isLocked?: (entry: StageSkill) => boolean;
     /**
-     * The label of an excluded row, for example why it cannot be included
-     * again (undefined: "Excluded"). It also describes a locked row's
-     * checkbox.
+     * The checkbox's accessible name. Default (plan wizard): "Include
+     * {skill} in stage {n}" or "in every stage", the group it sits in.
      */
-    excludedLabel?: (entry: StageSkill) => string | undefined;
+    label?: (skill: EntityRef) => string;
   };
-  /** "all" (default, pages), "none" (Run dialog), "stages" (stage groups only). */
+  /**
+   * The label of an excluded row (undefined: "Excluded"), for example who
+   * excluded it, with an optional tooltip that says why or what to do. The
+   * label and tooltip also describe a locked row's checkbox.
+   */
+  excludedLabel?: (
+    entry: StageSkill
+  ) => { text: string; tooltip?: string } | undefined;
+  /** "all" (default), "none" (every group collapsed), "stages" (stage groups only). */
   defaultExpanded?: "all" | "none" | "stages";
   /** "h3" under an h2 section (default); "h2" in the wizard and the dialog. */
   groupHeadingLevel?: "h2" | "h3";
@@ -138,8 +147,8 @@ const sortedSkills = (skills: StageSkill[]) =>
  * names the toggle "{title} Details" through PF's `simple-node{n}`), and,
  * while collapsed, how many skills it has. Its skill rows line up with the
  * header: [Include] · Skill · From · How agents use it. An excluded skill
- * shows the outline "Excluded" label (or `include.excludedLabel`) in the
- * last column.
+ * shows the outline "Excluded" label (or `excludedLabel`) in the last
+ * column.
  */
 export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
   skills,
@@ -147,6 +156,7 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
   filter,
   linkTo,
   include,
+  excludedLabel,
   defaultExpanded = "all",
   groupHeadingLevel = "h3",
   originOptions,
@@ -313,12 +323,14 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
   );
 
   const includeLabel = (group: Group, skill: EntityRef) =>
-    group.kind === "stage"
-      ? t("agentic.stageSkills.includeInStage", {
-          skill: skill.name,
-          number: group.group.order,
-        })
-      : t("agentic.stageSkills.includeInEveryStage", { skill: skill.name });
+    include?.label != null
+      ? include.label(skill)
+      : group.kind === "stage"
+        ? t("agentic.stageSkills.includeInStage", {
+            skill: skill.name,
+            number: group.group.order,
+          })
+        : t("agentic.stageSkills.includeInEveryStage", { skill: skill.name });
 
   // A run page's Every stage group names its application in its title, so
   // its own skills read "This application", as on the Migration tab.
@@ -336,6 +348,9 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
     const { skill, loadPolicy, excluded, from } = entry;
     const isLocked = (include?.isLocked ?? isAttachedToApplication)(entry);
     const excludedLabelId = `${id}-excluded-${group.key}-${skill.id}`;
+    const tooltipId = `${excludedLabelId}-tooltip`;
+    const label = excluded ? excludedLabel?.(entry) : undefined;
+    const labelText = label?.text ?? t("agentic.skillsTable.excluded");
     return (
       <Tr key={`${group.key}-${skill.id}`} isExpanded={isExpanded}>
         <Td />
@@ -345,7 +360,11 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
               id={`${id}-include-${group.key}-${skill.id}`}
               aria-label={includeLabel(group, skill)}
               aria-describedby={
-                isLocked && excluded ? excludedLabelId : undefined
+                isLocked && excluded
+                  ? [excludedLabelId, label?.tooltip != null ? tooltipId : null]
+                      .filter((ref) => ref != null)
+                      .join(" ")
+                  : undefined
               }
               isChecked={!excluded}
               isDisabled={include.isDisabled || isLocked}
@@ -367,10 +386,27 @@ export const StageSkillsTable: React.FC<StageSkillsTableProps> = ({
           />
         </Td>
         <Td dataLabel={columns.loadPolicy} modifier="nowrap">
-          {excluded ? (
+          {excluded && label?.tooltip != null ? (
+            <>
+              {/* Focusable so keyboard users reach the tooltip; the hidden
+                  copy describes a locked checkbox. */}
+              <Tooltip content={label.tooltip}>
+                <Label
+                  variant="outline"
+                  isCompact
+                  id={excludedLabelId}
+                  tabIndex={0}
+                >
+                  {labelText}
+                </Label>
+              </Tooltip>
+              <span id={tooltipId} className={a11yStyles.screenReader}>
+                {label.tooltip}
+              </span>
+            </>
+          ) : excluded ? (
             <Label variant="outline" isCompact id={excludedLabelId}>
-              {include?.excludedLabel?.(entry) ??
-                t("agentic.skillsTable.excluded")}
+              {labelText}
             </Label>
           ) : (
             t(`agentic.skill.loadPolicy.${loadPolicy}`)

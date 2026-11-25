@@ -1,8 +1,6 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  HelperText,
-  HelperTextItem,
   MenuToggle,
   Select,
   SelectList,
@@ -11,37 +9,48 @@ import {
 import a11yStyles from "@patternfly/react-styles/css/utilities/Accessibility/accessibility";
 
 import { ApplicationMigrationPath } from "@app/agentic";
-import { Ref } from "@app/api/models";
 
 export interface TargetProfileSelectProps {
-  application: Ref;
-  /** Two or more target profiles the application can run on, in order. */
+  /** Unique in the dialog: the base of the select's element ids. */
+  id: string;
+  /** The accessible name, before the toggle's text. */
+  label: string;
+  /** Two or more target profiles to choose from, in order. */
   candidates: ApplicationMigrationPath[];
-  /** The profile picked (or preselected); undefined while one is required. */
+  /** The profile picked (or preselected); undefined while none is. */
   selectedId?: number;
-  /** "Use each application's migration plan": each option says the plan it runs. */
+  /** In a table row: the small toggle. */
+  isCompact?: boolean;
+  /** Without a pick, the accessible description says one is required. */
+  isRequired?: boolean;
+  /** "Use the migration plan of each target profile": each option says the plan it runs. */
   showsPlans: boolean;
   onSelect: (targetProfileId: number) => void;
 }
 
 /**
- * The compact target profile picker of one row of the Run migration plan
- * dialog's readiness table. Its accessible name is "Target profile for
- * {application}" followed by the toggle's text (the picked profile or the
- * placeholder). Without a pick, a helper text says one is required (Run
- * stays disabled meanwhile). An archetype name is added to each option
- * when the candidates come from several archetypes.
+ * A target profile picker of the Run migration plan dialog: compact in a
+ * row of the readiness table ("Target profile for {application}"), or one
+ * per archetype in the form, which sets every row of that archetype. Its
+ * accessible name is `label` followed by the toggle's text (the picked
+ * profile or the placeholder). A required one without a pick says so in its
+ * accessible description (Run stays disabled meanwhile, and the table
+ * caption counts the rows that need one). An archetype name is added to
+ * each option when the candidates come from several archetypes.
  */
 export const TargetProfileSelect: React.FC<TargetProfileSelectProps> = ({
-  application,
+  id,
+  label,
   candidates,
   selectedId,
+  isCompact = false,
+  isRequired = false,
   showsPlans,
   onSelect,
 }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(false);
-  const baseId = `run-target-profile-${application.id}`;
+  const baseId = `run-target-profile-${id}`;
   const labelId = `${baseId}-label`;
   const toggleId = `${baseId}-toggle`;
   const helperId = `${baseId}-helper`;
@@ -70,9 +79,7 @@ export const TargetProfileSelect: React.FC<TargetProfileSelectProps> = ({
   return (
     <>
       <span id={labelId} className={a11yStyles.screenReader}>
-        {t("agentic.runSkills.targetProfileFor", {
-          application: application.name,
-        })}
+        {label}
       </span>
       <Select
         id={`${baseId}-select`}
@@ -89,9 +96,11 @@ export const TargetProfileSelect: React.FC<TargetProfileSelectProps> = ({
           <MenuToggle
             ref={toggleRef}
             id={toggleId}
-            size="sm"
+            size={isCompact ? "sm" : "default"}
             aria-labelledby={`${labelId} ${toggleId}`}
-            aria-describedby={selected == null ? helperId : undefined}
+            aria-describedby={
+              isRequired && selected == null ? helperId : undefined
+            }
             onClick={() => setIsOpen(!isOpen)}
             isExpanded={isOpen}
           >
@@ -100,11 +109,7 @@ export const TargetProfileSelect: React.FC<TargetProfileSelectProps> = ({
           </MenuToggle>
         )}
       >
-        <SelectList
-          aria-label={t("agentic.runSkills.targetProfileFor", {
-            application: application.name,
-          })}
-        >
+        <SelectList aria-label={label}>
           {candidates.map((path) => (
             <SelectOption
               key={path.targetProfile.id}
@@ -116,12 +121,11 @@ export const TargetProfileSelect: React.FC<TargetProfileSelectProps> = ({
           ))}
         </SelectList>
       </Select>
-      {selected == null && (
-        <HelperText id={helperId}>
-          <HelperTextItem>
-            {t("agentic.runSkills.targetProfileRequired")}
-          </HelperTextItem>
-        </HelperText>
+      {/* The table caption says how many rows still need a pick. */}
+      {isRequired && selected == null && (
+        <span id={helperId} className={a11yStyles.screenReader}>
+          {t("agentic.runSkills.targetProfileRequired")}
+        </span>
       )}
     </>
   );

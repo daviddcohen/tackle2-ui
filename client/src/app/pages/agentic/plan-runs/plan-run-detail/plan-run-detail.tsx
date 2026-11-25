@@ -2,13 +2,7 @@ import * as React from "react";
 import { LocationDescriptor } from "history";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, generatePath, useParams } from "react-router-dom";
-import {
-  Button,
-  Content,
-  List,
-  ListItem,
-  PageSection,
-} from "@patternfly/react-core";
+import { Button, List, ListItem, PageSection } from "@patternfly/react-core";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import { DevPaths, PlanRunDetailsRoute } from "@app/Paths";
@@ -210,26 +204,10 @@ const PlanRunDetail: React.FC = () => {
     [{ title: t("sidebar.planRuns"), path: DevPaths.planRuns }]
   );
 
-  // The run's own exclusions, said apart from the plan's: "in addition"
-  // only when the snapshot also excludes a skill the run did not.
+  // The run's own exclusions: a fact, and the label of their rows. Every
+  // other excluded row of the snapshot is the plan's.
   const runExcluded = planRun?.excludedSkills ?? [];
   const runExcludedIds = new Set(runExcluded.map((skill) => skill.id));
-  const isPlanExcluding =
-    planRun?.skills != null &&
-    [...planRun.skills.stages, ...planRun.skills.everyStage].some((group) =>
-      group.skills.some(
-        ({ skill, excluded }) => excluded && !runExcludedIds.has(skill.id)
-      )
-    );
-  const runExclusionsText =
-    planRun?.skills != null && runExcluded.length > 0
-      ? t(
-          isPlanExcluding
-            ? "agentic.runSkills.runExcluded"
-            : "agentic.runSkills.runExcludedOnly",
-          { skills: runExcluded.map((skill) => skill.name) }
-        )
-      : undefined;
 
   const runMigrationPlan = useRunMigrationPlanLauncher({
     rerunOf: planRun,
@@ -323,6 +301,32 @@ const PlanRunDetail: React.FC = () => {
         {planRun.targetBranch}
       </span>,
     ],
+    // Only with a snapshot: without one the server does not say what the
+    // run left out (Skills by stage reads "Unavailable").
+    ...(planRun.skills != null
+      ? [
+          [
+            t("agentic.runSkills.excludedForRun"),
+            runExcluded.length > 0 ? (
+              <LinkLabels
+                key="excluded"
+                items={runExcluded.map((skill) => ({
+                  id: skill.id,
+                  name: skill.name,
+                  to: runLink(
+                    generatePath(DevPaths.skillDetails, {
+                      skillId: skill.id,
+                    }),
+                    `?from=run-${runId}`
+                  ),
+                }))}
+              />
+            ) : (
+              <EmptyTextMessage key="excluded" message={t("terms.none")} />
+            ),
+          ] as [string, React.ReactNode],
+        ]
+      : []),
     [
       t("agentic.planRun.duration"),
       duration != null ? (
@@ -426,11 +430,6 @@ const PlanRunDetail: React.FC = () => {
                 : t("agentic.planRun.skillsByStageDescription")
           }
         >
-          {/* What the run left out on its own; its rows carry the Excluded
-              label like the plan's. */}
-          {runExclusionsText != null && (
-            <Content component="p">{runExclusionsText}</Content>
-          )}
           <StageSkillsTable
             skills={planRun.skills}
             context="run"
@@ -444,6 +443,12 @@ const PlanRunDetail: React.FC = () => {
                 ? "stages"
                 : "all"
             }
+            // Who left each excluded row out: the run, or its plan.
+            excludedLabel={({ skill }) => ({
+              text: runExcludedIds.has(skill.id)
+                ? t("agentic.runSkills.excludedForRun")
+                : t("agentic.runSkills.excludedByPlan"),
+            })}
             unavailableText={t("agentic.planRun.skillsUnavailable")}
             aria-label={t("agentic.stageSkills.title")}
           />

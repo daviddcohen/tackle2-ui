@@ -84,10 +84,15 @@ const openRunSkillsPreview = async (page: Page) => {
     APPLICATION,
     "Java 17 on OpenShift"
   );
-  await preflight.getByRole("button", { name: "Skills by stage" }).click();
   await preflight
-    .getByRole("button", { name: new RegExp(`Every stage: ${APPLICATION}`) })
+    .getByRole("button", { name: "Review skills by stage" })
     .click();
+  // One application: every group of the review starts open.
+  await expect(
+    preflight.getByRole("button", {
+      name: new RegExp(`Every stage: ${APPLICATION}`),
+    })
+  ).toHaveAttribute("aria-expanded", "true");
   return preflight;
 };
 

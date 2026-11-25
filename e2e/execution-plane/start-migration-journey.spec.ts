@@ -1,7 +1,7 @@
 /**
  * Journey 1 (configured): pick apps -> preflight -> start -> plan run detail, all via clicks.
  * Customer Management (Java EE Application) has two target profiles with a
- * migration plan, so with "Use each application's migration plan" the
+ * migration plan, so with "Use the migration plan of each target profile" the
  * journey picks the one it runs on (Quarkus 3.x, Java EE to Quarkus).
  */
 
@@ -60,7 +60,9 @@ test.describe("Start migration journey", () => {
       "Order Service",
     ]);
     await pickRunTargetProfile(page, dialog, "Customer Management", QUARKUS);
-    const toggle = dialog.getByRole("button", { name: "Skills by stage" });
+    const toggle = dialog.getByRole("button", {
+      name: "Review skills by stage",
+    });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
     await expect(
@@ -81,13 +83,8 @@ test.describe("Start migration journey", () => {
       name: "Every stage: Customer Management",
     });
     await expect(everyStage).toBeVisible();
-    // Groups start collapsed; names are plain text in the dialog.
-    await expect(
-      quarkus.getByRole("row", { name: /Corporate coding standards/ })
-    ).toBeHidden();
-    await quarkus
-      .getByRole("button", { name: /Every stage: Customer Management/ })
-      .click();
+    // Groups start open, as on the plan run page; names are plain text in
+    // the dialog.
     const row = quarkus.getByRole("row", {
       name: /Corporate coding standards/,
     });
@@ -137,7 +134,7 @@ test.describe("Start migration journey", () => {
     );
   });
 
-  // Regression guard: with "Use each application's migration plan", each app resolves to its own Plan but the mock creates a
+  // Regression guard: with "Use the migration plan of each target profile", each app resolves to its own Plan but the mock creates a
   // single PlanRun for the first Plan whose archetype matches ANY selected app.
   test("recommended Plan run matches the Plan resolved in preflight", async ({
     page,

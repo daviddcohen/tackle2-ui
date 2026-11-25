@@ -334,7 +334,9 @@ test.describe("Migration plans list and running a plan", () => {
       .filter({ has: page.getByRole("rowheader", { name: left.name }) })
       .getByRole("checkbox")
       .uncheck();
-    await preflight.getByRole("button", { name: "Skills by stage" }).click();
+    await preflight
+      .getByRole("button", { name: "Review skills by stage" })
+      .click();
     // One run of the fixed plan: the kept applications, never the left one.
     const preview = preflight.getByRole("grid", {
       name: "Skills by stage",

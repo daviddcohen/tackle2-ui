@@ -7,6 +7,7 @@ import {
   StackItem,
   Title,
 } from "@patternfly/react-core";
+import spacing from "@patternfly/react-styles/css/utilities/Spacing/spacing";
 import textStyles from "@patternfly/react-styles/css/utilities/Text/text";
 
 import {
@@ -16,7 +17,10 @@ import {
   ResolvePlanSkillsRequest,
   SkillsByStage,
 } from "@app/agentic";
-import { StageSkillsTable } from "@app/pages/agentic/components/stage-skills-table";
+import {
+  EVERY_STAGE_COLLAPSE_AFTER,
+  StageSkillsTable,
+} from "@app/pages/agentic/components/stage-skills-table";
 import { skillStagesText } from "@app/pages/agentic/plans/plan-wizard/plan-skills-step";
 import {
   isResolveEndpointMissing,
@@ -52,6 +56,14 @@ export interface RunGroupSkills {
   onRetry?: () => void;
 }
 
+/** The plans list the dialog's groups take their stages from. */
+export interface RunPlansStatus {
+  isLoading: boolean;
+  /** The list failed to load: no group can say its plan is gone. */
+  isError: boolean;
+  refetch: () => void;
+}
+
 /**
  * The skills of each plan run Run starts, in group order. One application
  * on its own plan and its default target profile reads the skills its
@@ -63,7 +75,7 @@ export interface RunGroupSkills {
 export const useRunGroupSkills = (
   groups: StartGroup[],
   migrations: Record<number, ApplicationMigrationView | undefined>,
-  isLoadingPlans: boolean,
+  plansStatus: RunPlansStatus,
   enabled: boolean
 ): RunGroupSkills[] => {
   const inputs = groups.map((group) => {
@@ -115,22 +127,30 @@ export const useRunGroupSkills = (
       fetchError != null && isResolveEndpointMissing(fetchError);
     const isLoading =
       ownSkills == null &&
-      ((request == null && isLoadingPlans) ||
+      ((request == null && plansStatus.isLoading) ||
         (request != null &&
           isFetching &&
           (skillsByStage == null || fetchError != null)));
-    // The plans list loaded without this plan (deleted meanwhile): nothing
-    // can be resolved for it, which is an error, not a server that does not
-    // report skills.
-    const isPlanGone =
-      ownSkills == null && group.migrationPlan == null && !isLoadingPlans;
+    // Without its plan nothing can be resolved for the group, which is an
+    // error, not a server that does not report skills. When the plans list
+    // failed, retrying it can help; when it loaded without this plan
+    // (deleted meanwhile), nothing can.
+    const isPlanMissing =
+      ownSkills == null &&
+      group.migrationPlan == null &&
+      !plansStatus.isLoading;
+    const isPlanGone = isPlanMissing && !plansStatus.isError;
     return {
       skills: ownSkills ?? (isMissing ? undefined : skillsByStage),
       isLoading,
       isError:
-        isPlanGone ||
+        isPlanMissing ||
         (ownSkills == null && fetchError != null && !isMissing && !isLoading),
-      onRetry: isPlanGone ? undefined : () => void refetch(),
+      onRetry: isPlanGone
+        ? undefined
+        : isPlanMissing
+          ? plansStatus.refetch
+          : () => void refetch(),
     };
   });
 };
@@ -170,6 +190,8 @@ export interface RunSkillsPreviewProps {
  * until asked for (its toggle counts the run's exclusions), and every
  * group in it starts collapsed. Names are plain text: a link would close
  * the dialog and lose its choices. Loading and errors never block Run.
+ * The toggle reads as an action ("Review skills by stage") and counts the
+ * run's exclusions.
  */
 export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
   groups,
@@ -191,17 +213,8 @@ export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
   );
   const isSeveral = groups.length > 1;
 
-  const only =
-    groups.length === 1 && groups[0].applications.length === 1
-      ? groups[0]
-      : undefined;
-  const sentences = [
-    only != null
-      ? t("agentic.execution.previewOneDescription", {
-          plan: only.plan.name,
-          application: only.applications[0].name,
-        })
-      : null,
+  // One paragraph, like the wizard's Skills step.
+  const intro = [
     t("agentic.runSkills.intro"),
     isRerun ? t("agentic.execution.previewRerun") : null,
     isRerun && hasRerunExclusions ? t("agentic.runSkills.rerunExcluded") : null,
@@ -209,7 +222,9 @@ export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
     applicationCount > 1
       ? t("agentic.stageSkills.everyStagePerApplication")
       : null,
-  ].filter((sentence): sentence is string => sentence != null);
+  ]
+    .filter((sentence): sentence is string => sentence != null)
+    .join(" ");
 
   return (
     <ExpandableSection
@@ -218,7 +233,7 @@ export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
       toggleText={
         excludedCount > 0
           ? t("agentic.runSkills.toggleExcluded", { count: excludedCount })
-          : t("agentic.stageSkills.title")
+          : t("agentic.runSkills.toggle")
       }
       isExpanded={isExpanded}
       onToggle={(_event, expanded) => onExpandedChange(expanded)}
@@ -236,13 +251,11 @@ export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
             </StackItem>
           ) : (
             <>
-              {sentences.map((sentence) => (
-                <StackItem key={sentence}>
-                  <Content component="p" className={textStyles.textColorSubtle}>
-                    {sentence}
-                  </Content>
-                </StackItem>
-              ))}
+              <StackItem>
+                <Content component="p" className={textStyles.textColorSubtle}>
+                  {intro}
+                </Content>
+              </StackItem>
               {groups.map((group, index) => (
                 <StackItem key={group.plan.id}>
                   <RunGroupPreview
@@ -297,14 +310,6 @@ const RunGroupPreview: React.FC<{
     plan: group.plan.name,
     count: group.applications.length,
   });
-  const heading = isSeveral ? (
-    <StackItem>
-      <Title headingLevel="h2" size="md">
-        {title}
-      </Title>
-    </StackItem>
-  ) : null;
-
   const canInclude = skills != null && !isLoading && !isError;
   const isPlanExcluded = isPlanExcludedRow(
     skills != null ? planExcludedSkillIds(skills) : new Set()
@@ -325,25 +330,54 @@ const RunGroupPreview: React.FC<{
           }
         )
       : undefined;
+  const excludedTotal = runExclusionsToSend(skills, excludedIds).length;
   const totalText = t("agentic.runSkills.excludedTotal", {
-    count: runExclusionsToSend(skills, excludedIds).length,
+    count: excludedTotal,
   });
+  // With several plan runs, "No skills excluded" under each heading says
+  // nothing the toggle does not: the line waits for a change. It stays
+  // mounted, so the change is announced.
+  const liveText =
+    changeText != null
+      ? `${changeText} ${totalText}`
+      : isSeveral && excludedTotal === 0
+        ? ""
+        : totalText;
+  const liveLine =
+    canInclude && shown != null && shown.stages.length > 0 ? (
+      <Content
+        component="p"
+        aria-live="polite"
+        className={isSeveral && liveText !== "" ? spacing.mtSm : undefined}
+      >
+        {liveText}
+      </Content>
+    ) : null;
 
   return (
     <Stack hasGutter>
-      {heading}
-      {canInclude && shown != null && shown.stages.length > 0 && (
+      {isSeveral ? (
         <StackItem>
-          <Content component="p" aria-live="polite">
-            {changeText != null ? `${changeText} ${totalText}` : totalText}
-          </Content>
+          <Title headingLevel="h2" size="md">
+            {title}
+          </Title>
+          {liveLine}
         </StackItem>
+      ) : (
+        liveLine != null && <StackItem>{liveLine}</StackItem>
       )}
       <StackItem>
         <StageSkillsTable
           skills={shown}
           context="run"
-          defaultExpanded="none"
+          // As on the plan run page: the review is already the "show me"
+          // gesture, so the groups are open; many applications' Every stage
+          // groups start collapsed.
+          defaultExpanded={
+            group.applications.length > EVERY_STAGE_COLLAPSE_AFTER
+              ? "stages"
+              : "all"
+          }
           groupHeadingLevel={isSeveral ? "h3" : "h2"}
           rowIndexOffset={rowIndexOffset}
           include={
@@ -354,12 +388,19 @@ const RunGroupPreview: React.FC<{
                     onIncludeChange(skill, included);
                   },
                   isLocked: isPlanExcluded,
-                  excludedLabel: (entry) =>
-                    isPlanExcluded(entry)
-                      ? t("agentic.runSkills.excludedByPlan")
-                      : undefined,
+                  // One decision per skill: clearing any row clears them all.
+                  label: (skill) =>
+                    t("agentic.runSkills.includeInRun", { skill: skill.name }),
                 }
               : undefined
+          }
+          excludedLabel={(entry) =>
+            isPlanExcluded(entry)
+              ? {
+                  text: t("agentic.runSkills.excludedByPlan"),
+                  tooltip: t("agentic.runSkills.excludedByPlanTooltip"),
+                }
+              : { text: t("agentic.runSkills.excludedForRun") }
           }
           unavailableText={t("agentic.execution.previewSkillsUnavailable")}
           aria-label={

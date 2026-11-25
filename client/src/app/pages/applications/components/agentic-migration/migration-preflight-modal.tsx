@@ -1,9 +1,7 @@
 import * as React from "react";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { LocationDescriptor } from "history";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation } from "react-router-dom";
 import { object, string } from "yup";
 import {
   Alert,
@@ -32,7 +30,6 @@ import {
   Tr,
 } from "@patternfly/react-table";
 
-import { DevPaths } from "@app/Paths";
 import {
   ApplicationMigrationMap,
   ApplicationMigrationView,
@@ -50,7 +47,6 @@ import {
   HookFormPFGroupController,
   HookFormPFTextInput,
 } from "@app/components/HookFormPFFields";
-import { useLinkComponent } from "@app/hooks/useLinkComponent";
 import {
   MigrationStatus,
   preflightDisplayStatus,
@@ -61,7 +57,6 @@ import {
 } from "@app/queries/agentic";
 import { universalComparator } from "@app/utils/utils";
 
-import { applicationDetailsPath, planRunPath } from "./paths";
 import { runExclusionsToSend } from "./run-exclusions";
 import { RunSkillsPreview, useRunGroupSkills } from "./run-skills-preview";
 import {
@@ -69,7 +64,10 @@ import {
   PreflightRow,
   TargetProfileChoice,
   TargetProfilePicks,
+  archetypeTargetProfiles,
   groupReadyApplicationsByPlan,
+  pickForArchetype,
+  sharedTargetProfilePick,
   startApplicationIds,
   startTargetProfiles,
   targetProfileChoice,
@@ -119,55 +117,20 @@ interface MigrationPreflightModalProps {
    */
   plan?: PreflightFixedPlan;
   isStarting?: boolean;
-  /** Builds a link that carries the caller's breadcrumb trail. */
-  linkTo: (pathname: string, search?: string) => LocationDescriptor;
   onClose: () => void;
   onStartReady: (request: StartApplicationMigrationsRequest) => void;
 }
 
 /**
- * Why an application cannot start, as the server says it. A run the reason
- * names becomes a link by splitting at the view's run name; never by
- * guessing from the text.
+ * Why an application cannot start, as the server says it. Plain text, like
+ * every name in the dialog: a link would close it and lose its choices.
  */
-const PreflightReason: React.FC<{
-  migration: ApplicationMigrationView;
-  linkTo: MigrationPreflightModalProps["linkTo"];
-}> = ({ migration: { preflightReason: reason, planRun }, linkTo }) => {
-  const { t } = useTranslation();
-  const { pathname } = useLocation();
-  // No link to the page the dialog was opened from: it would change nothing.
-  const runTo =
-    planRun != null && planRunPath(planRun.id) !== pathname
-      ? linkTo(planRunPath(planRun.id))
-      : undefined;
-  const RunLink = useLinkComponent(runTo);
-  if (!reason) return null;
-  let content: React.ReactNode = reason;
-  if (planRun != null && runTo != null) {
-    const at = reason.indexOf(planRun.name);
-    content =
-      at >= 0 ? (
-        <>
-          {reason.slice(0, at)}
-          <Link to={runTo}>{planRun.name}</Link>
-          {reason.slice(at + planRun.name.length)}
-        </>
-      ) : (
-        <>
-          {reason}{" "}
-          <Button variant="link" isInline component={RunLink}>
-            {t("agentic.execution.viewPlanRun")}
-          </Button>
-        </>
-      );
-  }
-  return (
+const PreflightReason: React.FC<{ reason?: string }> = ({ reason }) =>
+  reason ? (
     <HelperText>
-      <HelperTextItem>{content}</HelperTextItem>
+      <HelperTextItem>{reason}</HelperTextItem>
     </HelperText>
-  );
-};
+  ) : null;
 
 /**
  * "Run migration plan": the
@@ -184,12 +147,10 @@ export const MigrationPreflightModal: React.FC<
   initialExcludedSkills,
   plan: fixedPlan,
   isStarting = false,
-  linkTo: to,
   onClose,
   onStartReady,
 }) => {
   const { t } = useTranslation();
-  const { pathname } = useLocation();
   // Here, not in the preview, so it survives the preview hiding and showing.
   const [isSkillsExpanded, setSkillsExpanded] = React.useState(false);
   // The target profile picked per application, and the skills each plan run
@@ -220,8 +181,12 @@ export const MigrationPreflightModal: React.FC<
     providedMigrations ? [] : applications.map((application) => application.id)
   );
   const migrations = providedMigrations ?? fetchedMigrations;
-  const { migrationPlans: plans, isLoading: isLoadingPlans } =
-    useFetchMigrationPlans();
+  const {
+    migrationPlans: plans,
+    isLoading: isLoadingPlans,
+    fetchError: plansFetchError,
+    refetch: refetchPlans,
+  } = useFetchMigrationPlans();
   const schema = object({
     planSelection: string().oneOf(["recommended", "single"]).required(),
     planId: string().when("planSelection", {
@@ -292,14 +257,6 @@ export const MigrationPreflightModal: React.FC<
     value: plan.id,
     label: plan.name,
   }));
-  const planLink = (plan: { id: EntityId; name: string }) => (
-    <Link
-      to={to(DevPaths.migrationPlanDetails.replace(":planId", String(plan.id)))}
-    >
-      {plan.name}
-    </Link>
-  );
-
   // The plan runs Run starts: the skills preview and submit both read
   // these, so the preview shows exactly what Run sends. From a fixed plan
   // only the selected ready rows start (otherwise runIds is every ready row).
@@ -336,6 +293,16 @@ export const MigrationPreflightModal: React.FC<
   const hasChoice = (choice: TargetProfileChoice | undefined) =>
     (choice?.kind === "picked" || choice?.kind === "required") &&
     choice.candidates.length > 1;
+  // One select per archetype that sets every row of it at once, when two or
+  // more rows that start choose among its target profiles.
+  const archetypePicks = archetypeTargetProfiles(
+    startRows.flatMap((row) => {
+      const choice = choiceOf(row);
+      return choice != null && choice.kind !== "server" && hasChoice(choice)
+        ? [{ applicationId: row.application.id, candidates: choice.candidates }]
+        : [];
+    })
+  );
   // Ready rows that still need a target profile pick: Run waits for them.
   // With each application's plan they are in no plan run yet, so the Run
   // label counts them on top.
@@ -349,7 +316,11 @@ export const MigrationPreflightModal: React.FC<
   const groupSkills = useRunGroupSkills(
     startGroups,
     migrations,
-    isLoadingPlans,
+    {
+      isLoading: isLoadingPlans,
+      isError: plansFetchError != null,
+      refetch: () => void refetchPlans(),
+    },
     isSkillsExpanded ||
       startGroups.some((group) => excludedOf(group.plan.id).length > 0)
   );
@@ -423,21 +394,28 @@ export const MigrationPreflightModal: React.FC<
     fixedPlan.targetProfile == null ||
     rows.some((row) => hasChoice(choiceOf(row)));
   const none = <EmptyTextMessage message={t("agentic.execution.none")} />;
+  const notSelected = (
+    <EmptyTextMessage message={t("agentic.execution.notSelected")} />
+  );
+  // The paths a row could run on for the plan choice: with one plan for
+  // all, its profiles that use that plan; with each target profile's plan,
+  // its profiles that have one. Undefined when the view reports no paths.
+  const runnablePaths = (migration: ApplicationMigrationView) =>
+    migration.migrationPaths?.filter(({ plan }) =>
+      planSelection === "single" ? plan?.id === planId : plan != null
+    );
 
   const targetProfileCell = (
     { application, migration }: PreflightRow,
     choice: TargetProfileChoice | undefined
   ): React.ReactNode => {
-    if (isPlanMissing) {
-      return <EmptyTextMessage message={t("agentic.execution.notSelected")} />;
-    }
+    if (isPlanMissing) return notSelected;
     if (choice == null) {
-      // A row that cannot start: with one plan for all, the profile it
-      // would run on when only one of its profiles uses the plan.
-      const using =
-        planSelection === "single"
-          ? migration.migrationPaths?.filter(({ plan }) => plan?.id === planId)
-          : undefined;
+      // A row that cannot start: the profile it would run on when only one
+      // of its profiles fits the plan choice; with several, a run would ask
+      // for a pick, so none is selected yet.
+      const using = runnablePaths(migration);
+      if (using != null && using.length > 1) return notSelected;
       return (
         (using?.length === 1
           ? using[0].targetProfile.name
@@ -451,7 +429,12 @@ export const MigrationPreflightModal: React.FC<
         if (hasChoice(choice)) {
           return (
             <TargetProfileSelect
-              application={application}
+              id={String(application.id)}
+              label={t("agentic.runSkills.targetProfileFor", {
+                application: application.name,
+              })}
+              isCompact
+              isRequired
               candidates={choice.candidates}
               selectedId={
                 choice.kind === "picked"
@@ -494,23 +477,58 @@ export const MigrationPreflightModal: React.FC<
   ): React.ReactNode => {
     if (planSelection === "single") {
       return selectedPlan ? (
-        planLink(selectedPlan)
+        selectedPlan.name
       ) : (
         // An override without a pick is not the recommended plan.
         <EmptyTextMessage message={t("agentic.execution.notSelected")} />
       );
     }
-    if (choice?.kind === "required") {
-      return <EmptyTextMessage message={t("agentic.execution.notSelected")} />;
+    if (
+      choice?.kind === "required" ||
+      (choice == null && (runnablePaths(migration)?.length ?? 0) > 1)
+    ) {
+      return notSelected;
     }
     // The plan of the picked target profile, else the server's.
     const plan = choice?.kind === "picked" ? choice.path?.plan : migration.plan;
     return plan != null ? (
-      planLink(plan)
+      plan.name
     ) : (
       <EmptyTextMessage message={t("agentic.execution.notAssigned")} />
     );
   };
+
+  // One application without a selection: its row says whether it is
+  // ready, so the caption speaks only when Run waits for a pick.
+  const isSingle = !isSelectable && total === 1;
+  const caption =
+    isFixedPlan && readyCount === 0
+      ? ""
+      : [
+          isSelectable
+            ? t("agentic.execution.selectedCaption", {
+                selected: runCount,
+                count: readyCount,
+              })
+            : isSingle
+              ? null
+              : t("agentic.execution.readyCaption", {
+                  ready: readyCount,
+                  count: total,
+                }),
+          !isSelectable && !isSingle && readyCount > 0 && readyCount < total
+            ? t("agentic.execution.readyOnly")
+            : null,
+          // Why Run is disabled, where the rows are: one place for every
+          // row that needs a pick, however long the table.
+          isTargetProfileMissing
+            ? t("agentic.runSkills.needsProfileCaption", {
+                count: awaitingProfile.length,
+              })
+            : null,
+        ]
+          .filter((sentence): sentence is string => sentence != null)
+          .join(" ");
 
   const readinessTable = (
     <Table
@@ -521,26 +539,7 @@ export const MigrationPreflightModal: React.FC<
       }
       variant="compact"
     >
-      {!(isFixedPlan && readyCount === 0) && (
-        <Caption>
-          {isSelectable ? (
-            t("agentic.execution.selectedCaption", {
-              selected: runCount,
-              count: readyCount,
-            })
-          ) : (
-            <>
-              {t("agentic.execution.readyCaption", {
-                ready: readyCount,
-                count: total,
-              })}
-              {readyCount > 0 && readyCount < total
-                ? ` ${t("agentic.execution.readyOnly")}`
-                : null}
-            </>
-          )}
-        </Caption>
-      )}
+      {caption !== "" && <Caption>{caption}</Caption>}
       <Thead>
         <Tr>
           {isSelectable && (
@@ -596,15 +595,7 @@ export const MigrationPreflightModal: React.FC<
                 // A row header names the row's checkbox for table navigation.
                 {...(isFixedPlan && { component: "th", scope: "row" })}
               >
-                {applicationDetailsPath(application.id) === pathname ? (
-                  // Opened from this application's page: a link would change
-                  // nothing and leave the dialog open.
-                  application.name
-                ) : (
-                  <Link to={to(applicationDetailsPath(application.id))}>
-                    {application.name}
-                  </Link>
-                )}
+                {application.name}
               </Td>
               {showsTargetProfile && (
                 <Td dataLabel={t("agentic.execution.targetProfile")}>
@@ -623,7 +614,7 @@ export const MigrationPreflightModal: React.FC<
                       preflightDisplayStatus[migration.preflight ?? "blocked"]
                     }
                   />
-                  <PreflightReason migration={migration} linkTo={to} />
+                  <PreflightReason reason={migration.preflightReason} />
                 </div>
               </Td>
             </Tr>
@@ -702,6 +693,31 @@ export const MigrationPreflightModal: React.FC<
           )}
         />
       )}
+      {archetypePicks.map((group) => {
+        const label = t("agentic.runSkills.archetypeTargetProfile", {
+          archetype: group.archetype.name,
+        });
+        return (
+          <FormGroup
+            key={group.archetype.id}
+            label={label}
+            fieldId={`run-target-profile-archetype-${group.archetype.id}-toggle`}
+          >
+            <TargetProfileSelect
+              id={`archetype-${group.archetype.id}`}
+              label={label}
+              candidates={group.profiles}
+              selectedId={sharedTargetProfilePick(group, targetProfilePicks)}
+              showsPlans={planSelection === "recommended"}
+              onSelect={(targetProfileId) =>
+                setTargetProfilePicks((current) =>
+                  pickForArchetype(group, targetProfileId, current)
+                )
+              }
+            />
+          </FormGroup>
+        );
+      })}
       <HookFormPFTextInput
         control={control}
         name="targetBranch"

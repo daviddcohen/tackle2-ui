@@ -115,7 +115,6 @@ const renderModal = (
       <MigrationPreflightModal
         applications={[branch]}
         migrations={migrations}
-        linkTo={(pathname) => pathname}
         onClose={jest.fn()}
         onStartReady={onStartReady}
         {...props}
@@ -126,13 +125,15 @@ const renderModal = (
 };
 
 const skillsToggle = () =>
-  screen.getByRole("button", { name: "Skills by stage" });
+  screen.getByRole("button", { name: "Review skills by stage" });
 
 const openPreview = async (user: ReturnType<typeof userEvent.setup>) => {
   await waitFor(() => expect(skillsToggle()).toBeInTheDocument());
   await user.click(skillsToggle());
 };
 
+const INTRO =
+  "Clear a skill to leave it out of this plan run: it is removed from every stage and every application that has it. Skills the migration plan excludes stay excluded.";
 const ATTRIBUTION =
   "An application's archetype, target profile and own skills go to that application only.";
 
@@ -167,6 +168,18 @@ describe("MigrationPreflightModal, skills by stage", () => {
     );
   });
 
+  it("says what it runs in the header, and no readiness caption for one ready application", async () => {
+    renderModal({ 13: view() });
+    expect(
+      await screen.findByText("Runs a migration plan on Branch Operations.")
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Run on / })).toBeEnabled()
+    );
+    // The row says it is ready.
+    expect(screen.queryByText(/application is ready/)).toBeNull();
+  });
+
   it("starts collapsed, after the plan choice, and asks for nothing until opened", async () => {
     renderModal({ 13: view() });
     await waitFor(() =>
@@ -184,21 +197,20 @@ describe("MigrationPreflightModal, skills by stage", () => {
     expect(resolveRequests).toHaveLength(0);
   });
 
-  it("previews one application on its own plan from its view, groups collapsed, names as text", async () => {
+  it("previews one application on its own plan from its view, groups open, names as text", async () => {
     const user = userEvent.setup();
     renderModal({ 13: view() });
     await openPreview(user);
-    expect(
-      screen.getByText(
-        "The skills each stage's agent gets when Legacy Java to RHEL runs on Branch Operations."
-      )
-    ).toBeInTheDocument();
-    expect(screen.queryByText(ATTRIBUTION)).toBeNull();
+    // One intro paragraph; one application needs no attribution sentence.
+    expect(screen.getByText(INTRO)).toBeInTheDocument();
+    expect(screen.queryByText(ATTRIBUTION, { exact: false })).toBeNull();
     const table = screen.getByRole("grid", { name: "Skills by stage" });
-    // Collapsed: the title rows carry the counts.
+    // Open, as on the plan run page: the review is already the "show me".
     expect(within(table).getByText("Stage 1: Migrate")).toBeInTheDocument();
-    expect(within(table).getAllByText("1 skill")).toHaveLength(2);
-    expect(within(table).getByText("Quarkus patterns")).not.toBeVisible();
+    expect(within(table).getByText("Quarkus patterns")).toBeVisible();
+    expect(
+      within(table).queryAllByRole("button", { expanded: false })
+    ).toHaveLength(0);
     // One run: the group titles are h2 under the dialog's h1.
     expect(
       within(table).getByRole("heading", { level: 2, name: "Stage 1: Migrate" })
@@ -248,7 +260,7 @@ describe("MigrationPreflightModal, skills by stage", () => {
     );
     await openPreview(user);
     const table = await screen.findByRole("grid", { name: "Skills by stage" });
-    expect(screen.getAllByText(ATTRIBUTION)).toHaveLength(1);
+    expect(screen.getAllByText(ATTRIBUTION, { exact: false })).toHaveLength(1);
     expect(
       await within(table).findByRole("heading", {
         name: "Every stage: Branch Operations",
@@ -282,7 +294,7 @@ describe("MigrationPreflightModal, skills by stage", () => {
       { applications: [branch, claims, orders] }
     );
     await openPreview(user);
-    expect(screen.getAllByText(ATTRIBUTION)).toHaveLength(1);
+    expect(screen.getAllByText(ATTRIBUTION, { exact: false })).toHaveLength(1);
     // Runs by plan name, each with its own heading and table.
     expect(
       screen
@@ -312,6 +324,12 @@ describe("MigrationPreflightModal, skills by stage", () => {
     ).toHaveAttribute("id", "simple-node500");
     // The blocked application is in no table.
     expect(screen.queryByText("Every stage: Claims Processing")).toBeNull();
+    // Several plan runs: no "No skills excluded" under each heading, but
+    // the live line is there for a change.
+    expect(screen.queryByText("No skills excluded for this run.")).toBeNull();
+    expect(
+      document.querySelectorAll('[aria-live="polite"]').length
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("says a rerun resolves the skills again", async () => {
@@ -320,7 +338,8 @@ describe("MigrationPreflightModal, skills by stage", () => {
     await openPreview(user);
     expect(
       screen.getByText(
-        "The new run uses the migration plan as it is now, so a stage can get different skills than in the failed run."
+        "The new run uses the migration plan as it is now, so a stage can get different skills than in the failed run.",
+        { exact: false }
       )
     ).toBeInTheDocument();
   });
@@ -373,13 +392,35 @@ describe("MigrationPreflightModal, skills by stage", () => {
     expect(screen.getByRole("button", { name: /^Run on / })).toBeEnabled();
   });
 
+  it("offers a retry of the plans list when it failed to load", async () => {
+    const user = userEvent.setup();
+    let plansStatus = 400;
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.plans, (_req, res, ctx) =>
+        plansStatus === 200
+          ? res(ctx.json([plan5, plan6]))
+          : res(ctx.status(plansStatus), ctx.json({}))
+      )
+    );
+    renderModal({ 13: view({ skills: undefined }) });
+    await openPreview(user);
+    expect(
+      await screen.findByText("Skills could not be loaded.")
+    ).toBeInTheDocument();
+    expect(resolveRequests).toHaveLength(0);
+    plansStatus = 200;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(resolveRequests).toHaveLength(1));
+    expect(screen.queryByText("Skills could not be loaded.")).toBeNull();
+  });
+
   it("shows no preview when no application is ready", async () => {
     renderModal({
       13: view({ preflight: "blocked", preflightReason: "No credentials." }),
     });
     await act(async () => {});
     expect(
-      screen.queryByRole("button", { name: "Skills by stage" })
+      screen.queryByRole("button", { name: "Review skills by stage" })
     ).toBeNull();
   });
 });
@@ -455,10 +496,17 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
   });
 
   const runButton = () => screen.getByRole("button", { name: /^Run on / });
-  const include = (name: string) => screen.getByRole("checkbox", { name });
+  /** A skill's Include checkbox in one group ("Stage 1", "Every stage"). */
+  const include = (skill: string, group: RegExp) =>
+    within(
+      screen
+        .getByRole("heading", { name: group })
+        .closest("tbody") as HTMLElement
+    ).getByRole("checkbox", { name: `Include ${skill} in this plan run` });
   const expandGroups = async (user: ReturnType<typeof userEvent.setup>) => {
     const table = screen.getByRole("grid", { name: "Skills by stage" });
-    for (const toggle of within(table).getAllByRole("button", {
+    // Groups a few applications' run starts with are open already.
+    for (const toggle of within(table).queryAllByRole("button", {
       expanded: false,
     })) {
       await user.click(toggle);
@@ -481,27 +529,31 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
     });
     await openPreview(user);
     await expandGroups(user);
-    expect(
-      screen.getByText(
-        "Clear a skill to leave it out of every stage and every application of that plan run. Skills the migration plan excludes stay excluded."
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByText(INTRO)).toBeInTheDocument();
     const live = screen.getByText("No skills excluded for this run.");
     expect(live).toHaveAttribute("aria-live", "polite");
 
-    await user.click(include("Include Quarkus patterns in stage 1"));
-    expect(include("Include Quarkus patterns in stage 1")).not.toBeChecked();
+    await user.click(include("Quarkus patterns", /^Stage 1/));
+    expect(include("Quarkus patterns", /^Stage 1/)).not.toBeChecked();
+    // Told apart from the rows the plan excludes.
+    expect(
+      within(
+        screen
+          .getByRole("heading", { name: /^Stage 1/ })
+          .closest("tbody") as HTMLElement
+      ).getByText("Excluded for this run")
+    ).toBeInTheDocument();
     expect(live).toHaveTextContent(
       "Quarkus patterns excluded from stage 1. 1 skill excluded for this run."
     );
     expect(
       screen.getByRole("button", {
-        name: "Skills by stage (1 skill excluded)",
+        name: "Review skills by stage (1 skill excluded)",
       })
     ).toBeInTheDocument();
 
     // An application's own skill can be excluded at run time.
-    const own = include("Include Corporate coding standards in every stage");
+    const own = include("Corporate coding standards", /^Every stage/);
     expect(own).toBeEnabled();
     await user.click(own);
     expect(live).toHaveTextContent(
@@ -516,23 +568,26 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
 
   it("keeps the plan's exclusions locked and says why", async () => {
     const user = userEvent.setup();
+    // The label, then its tooltip: why, and what to do.
+    const LOCKED_DESCRIPTION =
+      "Excluded by plan The migration plan excludes this skill. To include it, edit the migration plan.";
     const { onStartReady } = renderModal({
       13: view({ skills: withPlanExclusion }),
     });
     await openPreview(user);
     await expandGroups(user);
-    const locked = include("Include Containerization standards in stage 1");
+    const locked = include("Containerization standards", /^Stage 1/);
     expect(locked).toBeDisabled();
     expect(locked).not.toBeChecked();
-    expect(locked).toHaveAccessibleDescription("Excluded by plan");
+    expect(locked).toHaveAccessibleDescription(LOCKED_DESCRIPTION);
 
     // Its application row is not the plan's to exclude: the run can, and
     // that marks every row of the skill.
-    const own = include("Include Containerization standards in every stage");
+    const own = include("Containerization standards", /^Every stage/);
     expect(own).toBeChecked();
     await user.click(own);
     expect(own).not.toBeChecked();
-    expect(locked).toHaveAccessibleDescription("Excluded by plan");
+    expect(locked).toHaveAccessibleDescription(LOCKED_DESCRIPTION);
     await user.click(own);
     expect(own).toBeChecked();
     expect(
@@ -558,13 +613,16 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
     // Counted before the preview opens.
     expect(
       await screen.findByRole("button", {
-        name: "Skills by stage (1 skill excluded)",
+        name: "Review skills by stage (1 skill excluded)",
       })
     ).toHaveAttribute("aria-expanded", "false");
-    await user.click(screen.getByRole("button", { name: /^Skills by stage/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Review skills by stage/ })
+    );
     expect(
       screen.getByText(
-        "The skills the failed run excluded on its own are excluded again."
+        "The skills the failed run excluded on its own are excluded again.",
+        { exact: false }
       )
     ).toBeInTheDocument();
     const request = await submitted(user, onStartReady);
@@ -580,17 +638,19 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       { rerunPlanId: "5", initialExcludedSkills: { "5": ["gone"] } }
     );
     const toggle = await screen.findByRole("button", {
-      name: "Skills by stage",
+      name: "Review skills by stage",
     });
     await user.click(toggle);
     expect(
       screen.getByText(
-        "The new run uses the migration plan as it is now, so a stage can get different skills than in the failed run."
+        "The new run uses the migration plan as it is now, so a stage can get different skills than in the failed run.",
+        { exact: false }
       )
     ).toBeInTheDocument();
     expect(
       screen.queryByText(
-        "The skills the failed run excluded on its own are excluded again."
+        "The skills the failed run excluded on its own are excluded again.",
+        { exact: false }
       )
     ).toBeNull();
     const request = await submitted(user, onStartReady);
@@ -634,9 +694,9 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
           ],
         }),
       });
-      const row = (
-        await screen.findByRole("link", { name: "Branch Operations" })
-      ).closest("tr") as HTMLElement;
+      const row = (await screen.findByText("Branch Operations")).closest(
+        "tr"
+      ) as HTMLElement;
       expect(row).toHaveTextContent("Quarkus 3.x");
       expect(
         screen.queryByRole("button", {
@@ -653,6 +713,27 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       });
     });
 
+    it("reads Not selected for a row that cannot start and has several runnable target profiles", async () => {
+      renderModal({
+        13: noDefault({
+          preflight: "blocked",
+          preflightReason: "Run #7 is in progress.",
+        }),
+      });
+      const row = (await screen.findByText("Branch Operations")).closest(
+        "tr"
+      ) as HTMLElement;
+      // Target profile and Migration plan.
+      expect(within(row).getAllByText("Not selected")).toHaveLength(2);
+      expect(row).not.toHaveTextContent("Not assigned");
+      expect(row).not.toHaveTextContent("None");
+      expect(
+        screen.queryByRole("button", {
+          name: /^Target profile for Branch Operations/,
+        })
+      ).toBeNull();
+    });
+
     it("requires a pick without a default, then runs that profile's plan", async () => {
       const user = userEvent.setup();
       const { onStartReady } = renderModal({ 13: noDefault() });
@@ -662,6 +743,10 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       expect(profileSelect()).toHaveAccessibleDescription(
         "Select a target profile to run this application."
       );
+      // Said once, in the caption, not under each row.
+      expect(
+        screen.getByText(/1 needs a target profile before it can run\./)
+      ).toBeVisible();
       expect(runButton()).toBeDisabled();
       expect(runButton()).toHaveTextContent("Run on 1 application");
       await openPreview(user);
@@ -679,7 +764,7 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       await user.click(option);
       // The row now runs the profile's plan, and the preview resolves it.
       const row = profileSelect().closest("tr") as HTMLElement;
-      expect(within(row).getByRole("link", { name: plan6.name })).toBeVisible();
+      expect(within(row).getByText(plan6.name)).toBeVisible();
       await waitFor(() =>
         expect(resolveRequests).toContainEqual(
           expect.objectContaining({
@@ -715,6 +800,47 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
       ).toHaveTextContent(
         `Archetype: Legacy Java Application · Runs ${plan6.name}`
       );
+    });
+
+    it("sets every row of an archetype from one select, and each row can still change", async () => {
+      const user = userEvent.setup();
+      const { onStartReady } = renderModal(
+        { 13: noDefault(), 14: noDefault() },
+        { applications: [branch, claims] }
+      );
+      const archetypeSelect = () =>
+        screen.getByRole("button", {
+          name: /^Target profile for all applications of Java EE Application/,
+        });
+      await user.click(await screen.findByLabelText(/^Target profile for all/));
+      await user.click(screen.getByRole("option", { name: /Quarkus 3\.x/ }));
+      expect(archetypeSelect()).toHaveTextContent("Quarkus 3.x");
+      expect(profileSelect()).toHaveTextContent("Quarkus 3.x");
+      expect(
+        screen.getByRole("button", {
+          name: /^Target profile for Claims Processing/,
+        })
+      ).toHaveTextContent("Quarkus 3.x");
+      expect(runButton()).toBeEnabled();
+      // One row on another profile: the archetype select no longer names one.
+      await user.click(profileSelect());
+      await user.click(screen.getByRole("option", { name: /OpenJDK 21/ }));
+      expect(archetypeSelect()).toHaveTextContent("Select a target profile");
+      const request = await submitted(user, onStartReady);
+      expect(request.targetProfiles).toEqual(
+        expect.arrayContaining([
+          { application: { id: 13 }, targetProfile: { id: 19 } },
+          { application: { id: 14 }, targetProfile: { id: 11 } },
+        ])
+      );
+    });
+
+    it("offers no archetype select for one application", async () => {
+      renderModal({ 13: noDefault() });
+      await screen.findByRole("button", {
+        name: /^Target profile for Branch Operations/,
+      });
+      expect(screen.queryByText(/^Target profile for all/)).toBeNull();
     });
 
     it("from a plan, offers the choice only on the rows that start", async () => {
@@ -794,9 +920,9 @@ describe("MigrationPreflightModal, run exclusions and target profiles", () => {
         { 13: noDefault() },
         { initialValues: { planSelection: "single", planId: "6" } }
       );
-      const row = (
-        await screen.findByRole("link", { name: "Branch Operations" })
-      ).closest("tr") as HTMLElement;
+      const row = (await screen.findByText("Branch Operations")).closest(
+        "tr"
+      ) as HTMLElement;
       expect(row).toHaveTextContent("OpenJDK 21 on OpenShift");
       expect(
         screen.queryByRole("button", {

@@ -561,9 +561,7 @@ describe("PlanDetailsPage", () => {
         "agentic.execution.preflightDescriptionPlanProfile"
       )
     ).toBeInTheDocument();
-    expect(
-      await within(dialog).findByRole("link", { name: "Billing" })
-    ).toBeInTheDocument();
+    expect(await within(dialog).findByText("Billing")).toBeInTheDocument();
   });
 
   it("disables Run migration plan with the reason", async () => {

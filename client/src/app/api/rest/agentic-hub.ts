@@ -35,7 +35,8 @@
  * - run skill review (`ApplicationMigrationView.migrationPaths`, a run's
  *   target profile picks and own exclusions on the start request,
  *   `PlanRun.excludedSkills`, `PlanRun.targetProfiles`): no CRD field;
- *   starts drop the picks and exclusions (`toWorkflowRunInputs`).
+ *   starts write neither the picks nor the exclusions on the run
+ *   (`toWorkflowRunInputs`).
  * - `updateArchetypeSkills`, `updateTargetProfileSkills` and
  *   `updateApplicationSkills` (Hub-scope Skill associations have no Hub
  *   table; `updateSkill` refuses them too).
