@@ -54,7 +54,7 @@ describe("formatSkillOrigin", () => {
     expect(formatSkillOrigin(archetype)).toEqual({
       i18nKey: "agentic.stageSkills.origin.archetype",
       values: { name: "Java EE Application" },
-      // The archetype drawer, on its Skills tab.
+      // The archetype drawer; its Details tab lists the skills.
       path: "/archetypes?ar%3AactiveItem=1",
     });
     expect(formatSkillOrigin(application)).toEqual({

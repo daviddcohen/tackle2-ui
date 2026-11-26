@@ -44,9 +44,18 @@ const FullHeightView: React.FC<{
 const TestRunDetail: React.FC = () => {
   const { t } = useTranslation();
   const { agentId, runId } = useParams<AgentTestRunDetailsRoute>();
-  const { agentTestRuns, isLoading, fetchError } =
+  const { agentTestRuns, isLoading, isFetching, fetchError } =
     useFetchAgentTestRuns(agentId);
   const run = agentTestRuns.find((candidate) => candidate.id === runId);
+  // The cached list can predate a new run (opened from the queued toast while
+  // the list refetches): a missing run waits for the fetch made on opening the
+  // page. Later polls do not bring the spinner back.
+  const [settledRunId, setSettledRunId] = React.useState<string>();
+  React.useEffect(() => {
+    if (!isFetching) {
+      setSettledRunId(runId);
+    }
+  }, [isFetching, runId]);
 
   // The agent's Runs tab lists its test runs.
   const agentRunsPath = `${generatePath(DevPaths.agentDetails, { agentId })}?tab=runs`;
@@ -60,7 +69,7 @@ const TestRunDetail: React.FC = () => {
   );
 
   if (run == null) {
-    if (isLoading) {
+    if (isLoading || (isFetching && settledRunId !== runId)) {
       return <EntityDetailLoading breadcrumbs={breadcrumbs} />;
     }
     return (

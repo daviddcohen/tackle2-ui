@@ -126,7 +126,21 @@ test("the Migration tab names both plans when the latest run ran another one", a
   // Spring Boot to Quarkus; its latest run runs Java lift and shift.
   await bootMockApi(page);
   await startPlan(page, 4, "3");
+  // The run count comes from the plan runs list, which the tab does not
+  // wait for: read the list before saying nothing about other runs.
+  const planRunsRead = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      // The unfiltered list, not one filtered by plan.
+      /\/hub\/prototype\/agentic\/plan-runs$/.test(response.url())
+  );
   await spaNavigate(page, "/applications/4?tab=migration");
+  const planRuns = (await (await planRunsRead).json()) as {
+    applications: { id: number }[];
+  }[];
+  expect(
+    planRuns.filter((run) => run.applications.some(({ id }) => id === 4))
+  ).toHaveLength(1);
   const latest = main(page).getByRole("region", { name: "Latest plan run" });
   await expect(latest).toContainText(
     "This plan run used Java lift and shift. The next run uses Spring Boot to Quarkus unless you pick another."

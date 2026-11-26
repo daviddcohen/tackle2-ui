@@ -185,10 +185,12 @@ export interface RunSkillsPreviewProps {
  * row. Clearing a skill excludes it from that plan run only, in every stage
  * and for every application; the plan's own exclusions stay. Collapsed
  * until asked for; the toggle reads as an action ("Review skills by stage")
- * and counts the run's exclusions. Opening it scrolls it to the top of the
- * modal body, so the table is what the user sees. Names are plain text: a
- * link would close the dialog and lose its choices. Loading and errors
- * never block Run.
+ * and counts the run's exclusions. Opened, its stage groups are open; in a
+ * plan run on 2 or more applications each application's Every stage group
+ * starts collapsed. Opening it scrolls it to the top of the modal body, so
+ * the table is what the user sees (not when it only asks for a plan or a
+ * target profile). Names are plain text: a link would close the dialog and
+ * lose its choices. Loading and errors never block Run.
  */
 export const RunSkillsPreview: React.FC<RunSkillsPreviewProps> = ({
   groups,

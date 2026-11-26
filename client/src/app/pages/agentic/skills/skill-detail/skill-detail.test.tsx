@@ -520,7 +520,8 @@ describe("SkillDetail, Usage tab", () => {
     expect(
       section.getByRole("link", { name: "Code Migrator" })
     ).toHaveAttribute("href", "/agents/2");
-    // Every archetype link from a skills surface opens its Skills tab.
+    // Every archetype link from a skills surface opens its drawer, whose
+    // Details tab lists the skills.
     expect(
       section.getByRole("link", { name: "Spring Boot Application" })
     ).toHaveAttribute("href", "/archetypes?ar%3AactiveItem=1");

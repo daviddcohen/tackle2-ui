@@ -12,9 +12,9 @@ import { universalComparator } from "@app/utils/utils";
  * `migrationPaths` lists the profile. Any plan can be assigned to any
  * target profile: profiles of several archetypes can share one.
  *
- * Without the agentic API there is no plans query. A server that does not
- * report `migrationPaths` for any plan (the real Hub today) leaves every
- * profile's plan unknown (`isUnknown`): never read that as "Not assigned". Plans come
+ * Without the agentic API there is no plans query. A plan list where any
+ * plan lacks `migrationPaths` (the real Hub today) leaves every profile's
+ * plan unknown (`isUnknown`): never read that as "Not assigned". Plans come
  * sorted by name, for the Assign migration plan select.
  */
 export const useTargetProfilePlans = (archetypeId: number | undefined) => {
