@@ -1,10 +1,12 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { rest } from "msw";
 import { MemoryRouter, Route } from "react-router-dom";
 
 import { DevPaths } from "@app/Paths";
 import { AgentTestRun } from "@app/agentic";
 import { AGENTIC_ENDPOINTS } from "@app/api/rest/agentic";
-import { render, screen, within } from "@app/test-config/test-utils";
+import { agenticKeys } from "@app/queries/agentic";
+import { act, render, screen, within } from "@app/test-config/test-utils";
 import { server } from "@mocks/server";
 
 import TestRunDetail from "./test-run-detail";
@@ -78,14 +80,34 @@ const useTranscript = (agentMessage: string) =>
     )
   );
 
-const renderPage = (runId = "9003", search = "") =>
-  render(
+const renderPage = (runId = "9003", search = "", queryClient?: QueryClient) => {
+  const page = (
     <MemoryRouter initialEntries={[`/agents/2/test-runs/${runId}${search}`]}>
       <Route path={DevPaths.agentTestRunDetails}>
         <TestRunDetail />
       </Route>
     </MemoryRouter>
   );
+  return render(
+    queryClient ? (
+      <QueryClientProvider client={queryClient}>{page}</QueryClientProvider>
+    ) : (
+      page
+    )
+  );
+};
+
+/** A client whose cached test runs list predates the runs started since. */
+const clientWithCachedRuns = (runs: AgentTestRun[]) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, cacheTime: 1000 } },
+  });
+  queryClient.setQueryData(
+    agenticKeys.list("agentTestRuns", { agentId: "2" }),
+    runs
+  );
+  return queryClient;
+};
 
 describe("TestRunDetail", () => {
   beforeEach(() => {
@@ -156,6 +178,50 @@ describe("TestRunDetail", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Go to test runs" })
+    ).toBeInTheDocument();
+  });
+
+  it("waits for the list to refetch when the cached list does not have the run yet", async () => {
+    useTestRuns([testRun(), testRun({ id: "9004", name: "Test run #4" })]);
+    renderPage("9004", "", clientWithCachedRuns([testRun()]));
+    expect(screen.queryByText("Test run not found")).toBeNull();
+    expect(screen.getByText("Loading")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Test run #4" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Test run not found")).toBeNull();
+  });
+
+  it("says not found once the refetch does not have the run either", async () => {
+    useTestRuns([testRun()]);
+    renderPage("9004", "", clientWithCachedRuns([testRun()]));
+    expect(screen.queryByText("Test run not found")).toBeNull();
+    expect(
+      await screen.findByRole("heading", { name: "Test run not found" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps saying not found while the list refreshes later", async () => {
+    useTestRuns([testRun()]);
+    const queryClient = clientWithCachedRuns([testRun()]);
+    renderPage("9004", "", queryClient);
+    expect(
+      await screen.findByRole("heading", { name: "Test run not found" })
+    ).toBeInTheDocument();
+    // A slow refresh, seen while it is still on its way.
+    server.use(
+      rest.get(AGENTIC_ENDPOINTS.agentRuns, (_req, res, ctx) =>
+        res(ctx.delay(300), ctx.json([testRun()]))
+      )
+    );
+    await act(async () => {
+      void queryClient.invalidateQueries();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(queryClient.isFetching()).toBeGreaterThan(0);
+    expect(screen.queryByText("Loading")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Test run not found" })
     ).toBeInTheDocument();
   });
 

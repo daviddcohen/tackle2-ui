@@ -1800,7 +1800,6 @@
       "archetype": "Archetype",
       "archetypes": "Archetypes",
       "latestPlanRun": "Latest plan run",
-      "latestOfPlanRuns_one": "The only plan run on this application.",
       "latestOfPlanRuns_other": "The latest of {{count}} plan runs on this application.",
       "latestRunOtherPlan": "This plan run used <planLink>{{plan}}</planLink>. The next run uses <ownPlanLink>{{ownPlan}}</ownPlanLink> unless you pick another.",
       "latestRunUnusedPlan": "This plan run used <planLink>{{plan}}</planLink>, which none of this application's target profiles uses.",

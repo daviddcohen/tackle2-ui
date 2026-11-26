@@ -178,7 +178,7 @@ A prototype data change that changes existing mock data (its own commit). Before
 
 Additive mock content (its own commit) so the chat-style Transcript tab has a multi-line tool output and a Markdown message to show. Every stage that succeeds now ends, just before its existing "{stage} is done. Pushing the branch." message, with:
 
-- a tool call `developer__shell: git status --short && git diff --stat` (kind `execute`, `completed`). For an application whose agent run made commits in that stage (`isCommitOf`), its output is five lines: two modified files of the stage's ecosystem, their diff stat and the summary line. Without commits (the plan step says "0 commits") it has no output, a clean working tree;
+- a tool call titled `shell · git status --short && git diff --stat` (kind `execute`, `completed`; the agent log prints it as `shell: ...`). For an application whose agent run made commits in that stage (`isCommitOf`), its output is five lines: two modified files of the stage's ecosystem, their diff stat and the summary line. Without commits (the plan step says "0 commits") it has no output, a clean working tree;
 - an agent message in Markdown (emphasis, a list, inline code): `*Final check passed:*` and the build command, then either the two changed files as a nested list or "The working tree is clean: this stage changed no files, so there is nothing to commit."
 
 They are plain ACP frames (`tool_call`, `tool_call_update`, `agent_message_chunk`) in the closing 1.3 s of the script, with matching `tool:` lines in the agent log. They add no turn, usage or plan change, so every other value (turns, tokens, cost, the plan ladder, commits) is as before; entry ids after them shift by two, as entries are numbered in fold order. Real backend: nothing new; this is what a recorded goose session already contains.
@@ -570,9 +570,9 @@ How the migration plan pages read these fields:
   it names each row, and the checkboxes should not be replaced with custom ones to rename them.
 - **Target profiles on the plans list and plan page.** Both show a plan's archetype + target profile pairs
   ("Quarkus 3.x (Java EE Application)") from `migrationPaths`. One archetype has several target profiles, and several
-  profiles, across archetypes, can use one plan. Backend need: a migration plan ref on Hub `TargetProfile` (like
-  `analysisProfile`); the client then derives each plan's pairs from `GET /hub/archetypes` (profiles are inline) with no
-  new query, or the server returns them on the plan.
+  profiles, across archetypes, can use one plan. Backend need: a plan reference (workflow name) on Hub `TargetProfile`
+  (a name field, not a Ref like `analysisProfile`); the client then derives each plan's pairs from `GET /hub/archetypes`
+  (profiles are inline) with no new query, or the server returns them on the plan.
 - **Skill review.** The wizard and the plan page resolve a plan's skills per stage with `resolvePlanSkills`, which includes the
   agents' collection skills, and the skill page lists the plans that resolve a skill with
   `getSkillPlans`, from the same resolver. With the real backend the call is unwired (7.7, checklist step 8)
@@ -861,7 +861,7 @@ Not checked yet: approving through ACP needs `agentic.agentruns.acp:post` (`agen
 ### Backend contract missing
 
 1. **Application migration aggregate** (`GET /application-migrations`): resolved Plan, preflight, latest run, intervention, effective skills, results, for every application. Prefer a POST body or server-side filter over the `applicationIds` query string.
-2. **Plan resolution and migration paths**: target profile → Plan (`assignPlanToTargetProfile`, a `migrationPlan` ref on Hub `TargetProfile`, server-derived `MigrationPlan.migrationPaths`, the default path and "Use recommended Plan"; see [Shared migration plans](#shared-migration-plans-the-reference-on-the-target-profile)).
+2. **Plan resolution and migration paths**: target profile → Plan (`assignPlanToTargetProfile`, a plan reference (workflow name) on Hub `TargetProfile`, server-derived `MigrationPlan.migrationPaths`, the default path and "Use recommended Plan"; see [Shared migration plans](#shared-migration-plans-the-reference-on-the-target-profile)).
 3. **Preflight** (`preflight`, `preflightReason`) and duplicate-run protection.
 4. **Provider** resource and **available models** per provider.
 5. **Organization default Model** (`isOrganizationDefault`, `setDefaultModel`).

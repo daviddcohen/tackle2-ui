@@ -1,4 +1,4 @@
-import { useContext, useRef } from "react";
+import { useContext, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
@@ -182,22 +182,46 @@ export const useArchetypeMutations = ({
   };
 
   // Delete target profile mutation with its own success handler
-  const { mutate: deleteTargetProfileMutation } = useUpdateArchetypeMutation(
-    onDeleteTargetProfileSuccess,
-    onError
-  );
+  const { mutateAsync: deleteTargetProfileMutation } =
+    useUpdateArchetypeMutation(onDeleteTargetProfileSuccess, onError);
+
+  // Deletes are sent one after another, each built when it is sent from the
+  // archetype as last cached, minus the profiles earlier deletes removed (a
+  // fetch that started before one of them may land after it). What a delete
+  // sends is cached when its turn comes, and a fetch in flight is cancelled,
+  // so the row leaves before the hub answers. A failed delete reloads the
+  // archetype before the next one is sent, so the next keeps its profile.
+  const deleteQueue = useRef<Promise<void>>(Promise.resolve());
+  const deletedProfileIds = useRef(new Set<number>());
 
   // Delete target profile function
   const deleteTargetProfile = (
     archetype: Archetype,
     profile: TargetProfile
   ) => {
-    const updatedProfiles = archetype.profiles?.filter(
-      (p) => p.id !== profile.id
-    );
-    const updatedArchetype = { ...archetype, profiles: updatedProfiles };
-    deletedProfileNames.current.set(updatedArchetype, profile.name);
-    deleteTargetProfileMutation(updatedArchetype);
+    const queryKey = [ARCHETYPE_QUERY_KEY, String(archetype.id)];
+    deleteQueue.current = deleteQueue.current
+      .then(async () => {
+        const latest =
+          queryClient.getQueryData<Archetype>(queryKey) ?? archetype;
+        const updatedArchetype = {
+          ...latest,
+          profiles: latest.profiles?.filter(
+            (p) => p.id !== profile.id && !deletedProfileIds.current.has(p.id)
+          ),
+        };
+        void queryClient.cancelQueries({ queryKey });
+        queryClient.setQueryData(queryKey, updatedArchetype);
+        deletedProfileNames.current.set(updatedArchetype, profile.name);
+        try {
+          await deleteTargetProfileMutation(updatedArchetype);
+          deletedProfileIds.current.add(profile.id);
+        } catch {
+          await queryClient.refetchQueries({ queryKey });
+        }
+      })
+      // A turn that throws must not stop the deletes after it.
+      .catch(() => {});
   };
 
   return {
@@ -222,7 +246,8 @@ export type TargetProfileChanges = Partial<Omit<TargetProfile, "id">>;
  * After a change is saved, the archetype as sent is written to its query
  * cache, so a second save made before the refetch arrives starts from the
  * saved state, not from the copy read before the first save. A new profile
- * is not written there: the hub assigns its id, so the refetch brings it.
+ * is not written there: the hub assigns its id, so a create succeeds once
+ * the refetch has brought it (pending until then).
  * Each save takes what its success means (a toast, closing the modal); a
  * failure is a toast and the modal stays open with its input.
  */
@@ -239,6 +264,8 @@ export const useTargetProfileMutation = () => {
         variant: "danger",
       })
   );
+  // A create waits for the archetype's refetch before it succeeds.
+  const [isRefetching, setIsRefetching] = useState(false);
 
   const createTargetProfile = (
     archetype: Archetype,
@@ -252,9 +279,16 @@ export const useTargetProfileMutation = () => {
         profiles: [...(archetype.profiles ?? []), { ...profile, id: 0 }],
       },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           // A new migration path for the archetype's applications.
           void invalidateAgentic(queryClient, "targetProfile");
+          // Until the archetype with the new profile is cached, a save from
+          // another row's modal would PUT the archetype without it.
+          setIsRefetching(true);
+          await queryClient.refetchQueries({
+            queryKey: [ARCHETYPE_QUERY_KEY, String(archetype.id)],
+          });
+          setIsRefetching(false);
           onSuccess();
         },
       }
@@ -300,5 +334,9 @@ export const useTargetProfileMutation = () => {
     });
   };
 
-  return { createTargetProfile, updateTargetProfile, isPending };
+  return {
+    createTargetProfile,
+    updateTargetProfile,
+    isPending: isPending || isRefetching,
+  };
 };
